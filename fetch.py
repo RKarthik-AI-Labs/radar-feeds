@@ -242,6 +242,26 @@ def hf_daily(cutoff):
     return out
 
 
+LICENSE_RE = re.compile(
+    r"creativecommons\.org/(?:licenses/(by(?:-nc)?(?:-sa|-nd)?)|publicdomain/(zero))/", re.I)
+
+
+def arxiv_license(pid):
+    """Read the license link from the paper's arXiv abstract page.
+    Returns a short code ('by', 'by-sa', 'by-nc-nd', 'zero', ...), 'arxiv-default'
+    for arXiv's non-exclusive distribution license, or None if it can't be read."""
+    try:
+        r = http_get(f"https://arxiv.org/abs/{pid}", timeout=45, tries=2)
+        m = LICENSE_RE.search(r.text)
+        if m:
+            return (m.group(1) or m.group(2)).lower()
+        if "arxiv.org/licenses/nonexclusive-distrib" in r.text:
+            return "arxiv-default"
+        return None
+    except Exception:  # noqa: BLE001
+        return None
+
+
 def fulltext(paper, max_chars):
     """Try arXiv HTML, then PDF. Returns (text, how) or (None, reason)."""
     pid = paper["id"]
@@ -314,29 +334,46 @@ def collect_papers(cfg, scorer, seen):
         p["first_seen"] = first or NOW.isoformat()
         seen["arxiv"][p["id"]] = p["first_seen"]
 
-    # full text for the highest-scoring new papers
+    # Full text for the highest-scoring new papers, ONLY when the paper's own
+    # license allows redistribution. arXiv's API terms forbid serving e-prints
+    # from your own servers otherwise, and this repo is public. Metadata and
+    # abstracts are CC0, so those are always fine to publish.
     ft_dir = os.path.join(ROOT, "data", "fulltext")
     os.makedirs(ft_dir, exist_ok=True)
-    targets = sorted([p for p in papers if p["is_new"] and p["score"] > 0],
-                     key=lambda p: -p["score"])[: pc["fulltext_top_n"]]
-    t0, got = time.time(), 0
-    for p in targets:
+    allowed = set(pc.get("fulltext_allowed_licenses", ["by", "by-sa", "zero"]))
+    candidates = sorted([p for p in papers if p["is_new"] and p["score"] > 0],
+                        key=lambda p: -p["score"])[: pc.get("fulltext_check_max", 30)]
+    t0, got, checked, blocked = time.time(), 0, 0, 0
+    for p in candidates:
+        if got >= pc["fulltext_top_n"]:
+            break
         path = os.path.join(ft_dir, f"{p['id']}.txt")
         if os.path.exists(path):
             p["fulltext"] = f"data/fulltext/{p['id']}.txt"
             got += 1
             continue
+        lic = arxiv_license(p["id"])
+        checked += 1
+        time.sleep(ARXIV_DELAY)
+        p["license"] = lic or "unknown"
+        if lic not in allowed:
+            blocked += 1
+            p["fulltext_error"] = (f"not stored: license is {lic or 'unknown'}, which does not allow "
+                                   "redistribution; read it on arXiv")
+            continue
         text, how = fulltext(p, pc["fulltext_max_chars"])
         time.sleep(ARXIV_DELAY)
         if text:
             with open(path, "w") as f:
-                f.write(f"{p['title']}\n{p['abs_url']}\n(source: arXiv {how})\n\n{text}")
+                f.write(f"{p['title']}\n{p['abs_url']}\nLicense: CC {lic} (redistribution permitted)\n"
+                        f"(source: arXiv {how})\n\n{text}")
             p["fulltext"] = f"data/fulltext/{p['id']}.txt"
             got += 1
         else:
             p["fulltext_error"] = how
-    record("arXiv full text", "papers", got > 0 or not targets, got,
-           f"{got}/{len(targets)} top new papers saved", time.time() - t0)
+    record("arXiv full text", "papers", True, got,
+           f"{got} saved; {blocked} of {checked} checked not stored because of their license",
+           time.time() - t0)
     papers.sort(key=lambda p: (-int(p["is_new"]), -p["score"], p["published"] or ""))
     return papers
 
