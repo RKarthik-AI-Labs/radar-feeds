@@ -307,9 +307,10 @@ def collect_papers(cfg, scorer, seen):
                 merge(p, False)
 
     papers = list(by_id.values())
+    new_cut = (NOW - dt.timedelta(hours=cfg.get("new_window_hours", 18))).isoformat()
     for p in papers:
         first = seen["arxiv"].get(p["id"])
-        p["is_new"] = first is None
+        p["is_new"] = first is None or first >= new_cut
         p["first_seen"] = first or NOW.isoformat()
         seen["arxiv"][p["id"]] = p["first_seen"]
 
@@ -569,12 +570,13 @@ def collect_news(cfg, scorer, seen):
         merged[key] = dict(it)
 
     out = []
+    new_cut = (NOW - dt.timedelta(hours=cfg.get("new_window_hours", 18))).isoformat()
     for key, it in merged.items():
         src_first = seen["sources"].get(it["source"])
         first = seen["news"].get(key)
-        it["is_new"] = first is None
+        it["is_new"] = first is None or first >= new_cut
         # first time we ever see an undated page source: treat as baseline, not news
-        if it["is_new"] and not it["published"] and it["via"] == "page" and src_first is None:
+        if first is None and not it["published"] and it["via"] == "page" and src_first is None:
             it["is_new"] = False
             it["baseline"] = True
         it["first_seen"] = first or NOW.isoformat()
@@ -596,7 +598,7 @@ def write_papers_md(papers, scorer, path, max_with_abstract=60):
     older = [p for p in papers if not p["is_new"]]
     L = [f"# Paper candidates — {TODAY_IST} (IST)",
          "",
-         f"Generated {NOW:%Y-%m-%d %H:%M} UTC. NEW = first seen in this run (i.e. since the previous run).",
+         f"Generated {NOW:%Y-%m-%d %H:%M} UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).",
          f"Totals: {len(new_hits)} new topic matches · {len(new_core_rest)} other new cs.IR · {len(older)} seen in earlier runs.",
          "Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.",
          ""]
@@ -627,7 +629,7 @@ def write_papers_md(papers, scorer, path, max_with_abstract=60):
     L += ["", f"## Other new cs.IR papers, title only ({len(new_core_rest)})"]
     for p in new_core_rest:
         L.append(f"- {p['title']} — {p['abs_url']}")
-    L += ["", f"## Seen in earlier runs, still inside the look-back window ({len(older)})"]
+    L += ["", f"## Already listed on an earlier day, still inside the look-back window ({len(older)})"]
     for p in older:
         if p["score"] > 0:
             L.append(f"- {p['title']} — {p['abs_url']} (score {p['score']})")
@@ -640,7 +642,7 @@ def write_news_md(news, scorer, path, fresh_hours=30):
     Shows items that are NEW since the previous run or published in the last
     `fresh_hours`. news.json keeps the full 3-day window with summaries."""
     groups = ["mentions", "fanout", "agents", "crawl", "ads", "search", "labs", "b2b", "sitewatch"]
-    names = {"fanout": "Fan-out", "agents": "Agents", "crawl": "Crawl", "ads": "Ads",
+    names = {"fanout": "Query fan-out", "agents": "Agents", "crawl": "Crawl", "ads": "Ads",
              "search": "Search / AEO / GEO", "labs": "Model & lab launches (news search)",
              "b2b": "B2B buyer AI / adoption", "mentions": "Mentions of you",
              "sitewatch": "Sites with no usable feed (via Google News site: search)"}
@@ -659,7 +661,7 @@ def write_news_md(news, scorer, path, fresh_hours=30):
         tags = ", ".join(scorer.label(t) for t in it["topics"] if t != "rag")
         s = f"- [{fmt_date(it['published'])}] {it['title']} — {it['source']} — {url}"
         if not it["is_new"]:
-            s += " · (seen in an earlier run)"
+            s += " · (already listed on an earlier day)"
         if tags:
             s += f" · {tags}"
         if it.get("also_in"):
@@ -667,8 +669,8 @@ def write_news_md(news, scorer, path, fresh_hours=30):
         return s
 
     L = [f"# News candidates — {TODAY_IST} (IST)", "",
-         f"Generated {NOW:%Y-%m-%d %H:%M} UTC. Showing {len(shown)} items that are new since the "
-         f"previous fetch run or published in the last {fresh_hours} h; {hidden} older items from the "
+         f"Generated {NOW:%Y-%m-%d %H:%M} UTC. Showing {len(shown)} items first seen in the last 18 h "
+         f"or published in the last {fresh_hours} h; {hidden} older items from the "
          "3-day window are only in news.json.",
          "Each item appears once, in the first section it matches. Dates are as reported by the source "
          "(\"date unknown\" = page with no date).", ""]
