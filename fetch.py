@@ -444,6 +444,42 @@ def bing_real_url(link):
         return link
 
 
+STOPWORDS = {"or", "and", "launches", "launch", "releases", "release", "introduces", "model",
+             "new", "survey", "search", "ai", "tool", "agent", "the", "for", "with"}
+
+
+def relevance_terms(query):
+    """What a hit's headline/snippet must contain to count as on-topic.
+    - quoted phrases: all of them if the query has no OR, else any one
+    - bare words (minus stopwords): at least one, if the query has any
+    Returns None for site: queries (everything from that site is relevant)."""
+    if "site:" in query:
+        return None
+    phrases = [p.lower() for p in re.findall(r'"([^"]+)"', query)]
+    rest = re.sub(r'"[^"]*"', " ", query)
+    words = [w.lower() for w in re.findall(r"[A-Za-z][A-Za-z0-9.\-]+", rest)
+             if w.lower() not in STOPWORDS and len(w) >= 3]
+    return {"phrases": phrases, "words": words, "any_phrase": " OR " in query}
+
+
+def _norm(s):
+    return " " + re.sub(r"[^a-z0-9.]+", " ", s.lower()) + " "
+
+
+def is_relevant(text, terms):
+    if terms is None:
+        return True
+    t = _norm(text)
+    ph = [_norm(p) for p in terms["phrases"]]
+    if ph:
+        hit = any(p in t for p in ph) if terms["any_phrase"] else all(p in t for p in ph)
+        if not hit:
+            return False
+    if terms["words"]:
+        return any(f" {w} " in t or f" {w}s " in t for w in terms["words"])
+    return True
+
+
 def news_search(engine, query, window, group, scorer, max_items=10):
     t0 = time.time()
     name = f"{'Google News' if engine == 'google_news' else 'Bing News'}: {query}"
@@ -456,9 +492,20 @@ def news_search(engine, query, window, group, scorer, max_items=10):
                 {"q": query, "format": "rss", "qft": 'interval="8"'}))
         r = http_get(url, browser=True, tries=2)
         feed = feedparser.parse(r.content)
-        items = []
-        for e in feed.entries[:max_items]:  # engines return most relevant first
+        items, dropped = [], 0
+        terms = relevance_terms(query)
+        for e in feed.entries:
+            if len(items) >= max_items:  # engines return most relevant first
+                break
             title = clean(e.get("title"))
+            text = f"{title} {clean(e.get('summary'))}"
+            # Google News matches on article bodies, so a headline that hits one of
+            # the topic patterns is kept too. Bing results must match the query itself.
+            topic_hit = engine == "google_news" and group in scorer.topics and \
+                group in scorer.score(title)[1]
+            if not (is_relevant(text, terms) or topic_hit):
+                dropped += 1
+                continue
             source = (e.get("source") or {}).get("title") if engine == "google_news" else None
             link = e.get("link")
             if engine == "bing_news":
@@ -474,7 +521,8 @@ def news_search(engine, query, window, group, scorer, max_items=10):
                           "summary": clean(e.get("summary"), 400) if engine == "bing_news" else "",
                           "topics": sorted(set(tags) | ({group} if group in scorer.topics else set())),
                           "score": s, "via": engine})
-        record(name, "news search", True, len(items), "", time.time() - t0)
+        record(name, "news search", True, len(items),
+               f"{dropped} off-topic hits dropped" if dropped else "", time.time() - t0)
         return items
     except Exception as e:  # noqa: BLE001
         record(name, "news search", False, 0, str(e), time.time() - t0)
