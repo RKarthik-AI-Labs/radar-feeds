@@ -655,6 +655,8 @@ def write_papers_md(papers, scorer, path, max_with_abstract=60):
             L.append(f"- Journal ref: {p['journal_ref']}")
         if p.get("fulltext"):
             L.append(f"- Full text: {p['fulltext']}")
+        elif p.get("fulltext_error", "").startswith("not stored"):
+            L.append(f"- Full text: {p['fulltext_error']}")
         elif p.get("fulltext_error"):
             L.append(f"- Full text: not saved ({p['fulltext_error']})")
         L += ["", f"> {p['abstract']}"]
