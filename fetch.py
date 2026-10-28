@@ -200,7 +200,10 @@ def arxiv_query(search_query, max_results, cutoff, label):
                     "found_via": [label],
                 })
             start += len(entries)
-            if oldest and oldest < cutoff:
+            # stop once the newest-first listing has passed the cutoff; judge by the
+            # last entry, not the single oldest one (one odd cross-list would stop early)
+            last = parse_iso(entries[-1].get("published"))
+            if last and last < cutoff:
                 break
         kept = [p for p in out if p["published"] and parse_iso(p["published"]) >= cutoff]
         record(f"arXiv {label}", "papers", True, len(kept),
@@ -441,7 +444,7 @@ def bing_real_url(link):
         return link
 
 
-def news_search(engine, query, window, group, scorer):
+def news_search(engine, query, window, group, scorer, max_items=10):
     t0 = time.time()
     name = f"{'Google News' if engine == 'google_news' else 'Bing News'}: {query}"
     try:
@@ -454,7 +457,7 @@ def news_search(engine, query, window, group, scorer):
         r = http_get(url, browser=True, tries=2)
         feed = feedparser.parse(r.content)
         items = []
-        for e in feed.entries:
+        for e in feed.entries[:max_items]:  # engines return most relevant first
             title = clean(e.get("title"))
             source = (e.get("source") or {}).get("title") if engine == "google_news" else None
             link = e.get("link")
@@ -484,9 +487,11 @@ def collect_news(cfg, scorer, seen):
         items += fetch_rss(src, scorer) if src["type"] == "rss" else fetch_html(src, scorer)
     ns = cfg.get("news_searches", {})
     for group, queries in ns.get("queries", {}).items():
+        engines = ns.get("engines_override", {}).get(group, ns.get("engines", ["google_news"]))
         for q in queries:
-            for engine in ns.get("engines", ["google_news"]):
-                items += news_search(engine, q, ns.get("window", "2d"), group, scorer)
+            for engine in engines:
+                items += news_search(engine, q, ns.get("window", "2d"), group, scorer,
+                                     ns.get("max_per_query", 10))
                 time.sleep(1.0)
 
     window_days = 3
@@ -526,8 +531,8 @@ def collect_news(cfg, scorer, seen):
             it["baseline"] = True
         it["first_seen"] = first or NOW.isoformat()
         seen["news"][key] = it["first_seen"]
-        if it["via"] == "page" and it["published"] is None and not it["is_new"] and not it.get("baseline"):
-            continue  # old undated page links: drop, they are not news
+        if it["via"] == "page" and it["published"] is None and not it["is_new"]:
+            continue  # undated page links seen before (or on the first visit) are not news
         out.append(it)
     for src in cfg.get("feeds", []):
         seen["sources"].setdefault(src["name"], NOW.isoformat())
@@ -582,40 +587,58 @@ def write_papers_md(papers, scorer, path, max_with_abstract=60):
         f.write("\n".join(L) + "\n")
 
 
-def write_news_md(news, scorer, path):
-    groups = ["fanout", "agents", "crawl", "ads", "search", "labs", "b2b", "mentions"]
+def write_news_md(news, scorer, path, fresh_hours=30):
+    """Compact digest input: each item appears once, in its first matching section.
+    Shows items that are NEW since the previous run or published in the last
+    `fresh_hours`. news.json keeps the full 3-day window with summaries."""
+    groups = ["mentions", "fanout", "agents", "crawl", "ads", "search", "labs", "b2b", "sitewatch"]
     names = {"fanout": "Fan-out", "agents": "Agents", "crawl": "Crawl", "ads": "Ads",
-             "search": "Search / AEO / GEO", "labs": "Model & lab launches",
-             "b2b": "B2B buyer AI / adoption", "mentions": "Mentions of you"}
-    bucket_names = {"labs": "Labs (official + trackers)", "search": "Search engines (official)",
+             "search": "Search / AEO / GEO", "labs": "Model & lab launches (news search)",
+             "b2b": "B2B buyer AI / adoption", "mentions": "Mentions of you",
+             "sitewatch": "Sites with no usable feed (via Google News site: search)"}
+    bucket_names = {"labs": "Labs (official feeds + trackers)", "search": "Search engines (official)",
                     "seo_press": "SEO / search press", "agents_crawl": "Agents & crawler access",
                     "tools": "Tools", "b2b": "B2B research"}
-    L = [f"# News candidates — {TODAY_IST} (IST)", "",
-         f"Generated {NOW:%Y-%m-%d %H:%M} UTC. Window: last 3 days. NEW = first seen since the previous run.",
-         "Google News links are redirects; search the headline to open the publisher page.", ""]
+    fresh_cut = NOW - dt.timedelta(hours=fresh_hours)
+    shown = [i for i in news if i["is_new"] or (parse_iso(i["published"]) or NOW) >= fresh_cut
+             and i["published"]]
+    hidden = len(news) - len(shown)
 
     def line(it):
-        new = " **NEW**" if it["is_new"] else ""
-        tags = ", ".join(scorer.label(t) for t in it["topics"])
-        extra = f" · also in: {'; '.join(it['also_in'][:3])}" if it.get("also_in") else ""
-        s = f"- [{fmt_date(it['published'])}] {it['title']} — {it['source']} — {it['url']}{new}"
+        url = it["url"] or ""
+        if "news.google.com" in url:
+            url = "(Google News link; search the headline)"
+        tags = ", ".join(scorer.label(t) for t in it["topics"] if t != "rag")
+        s = f"- [{fmt_date(it['published'])}] {it['title']} — {it['source']} — {url}"
+        if not it["is_new"]:
+            s += " · (seen in an earlier run)"
         if tags:
-            s += f" · topics: {tags}"
-        return s + extra
+            s += f" · {tags}"
+        if it.get("also_in"):
+            s += f" · +{len(it['also_in'])} other hits"
+        return s
 
-    L.append("## By priority topic (date-filtered news searches + any feed item tagged with the topic)")
+    L = [f"# News candidates — {TODAY_IST} (IST)", "",
+         f"Generated {NOW:%Y-%m-%d %H:%M} UTC. Showing {len(shown)} items that are new since the "
+         f"previous fetch run or published in the last {fresh_hours} h; {hidden} older items from the "
+         "3-day window are only in news.json.",
+         "Each item appears once, in the first section it matches. Dates are as reported by the source "
+         "(\"date unknown\" = page with no date).", ""]
+    used = set()
+    L.append("## By priority topic")
     for g in groups:
-        rows = [i for i in news if g in i.get("groups", []) or g in i["topics"]]
-        L += ["", f"### {names[g]} ({len(rows)})"]
-        L += [line(i) for i in rows] or ["- nothing in window"]
-    L += ["", "## Source feeds, by bucket"]
+        rows = [i for i in shown if id(i) not in used
+                and (g in i.get("groups", []) or g in i["topics"])]
+        used.update(id(i) for i in rows)
+        if rows or g in ("fanout", "agents", "crawl", "ads", "mentions"):
+            L += ["", f"### {names[g]} ({len(rows)})"]
+            L += [line(i) for i in rows] or ["- nothing new"]
+    L += ["", "## Other items from source feeds"]
     for b, label in bucket_names.items():
-        rows = [i for i in news if i["bucket"] == b]
-        L += ["", f"### {label} ({len(rows)})"]
-        for i in rows:
-            L.append(line(i) + (f"\n  {i['summary'][:300]}" if i.get("summary") else ""))
-        if not rows:
-            L.append("- nothing in window")
+        rows = [i for i in shown if id(i) not in used and i["bucket"] == b]
+        used.update(id(i) for i in rows)
+        if rows:
+            L += ["", f"### {label} ({len(rows)})"] + [line(i) for i in rows]
     with open(path, "w") as f:
         f.write("\n".join(L) + "\n")
 
@@ -681,7 +704,8 @@ def main():
             news = collect_news(cfg, scorer, seen)
             with open(os.path.join(latest, "news.json"), "w") as f:
                 json.dump({"generated_utc": NOW.isoformat(), "items": news}, f, indent=1)
-            write_news_md(news, scorer, os.path.join(latest, "news.md"))
+            write_news_md(news, scorer, os.path.join(latest, "news.md"),
+                          cfg.get("news_searches", {}).get("fresh_hours", 30))
         except Exception:  # noqa: BLE001
             record("news pipeline", "internal", False, 0, traceback.format_exc()[-300:])
 
