@@ -1,0 +1,4423 @@
+LinMix: Data Mixing as Linear Domain Attribution
+https://arxiv.org/abs/2610.37390
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+\workshoptitle
+
+Attributing Model Behavior at Scale
+
+\tl_set:Ne
+\impboxg
+impboxg
+
+\tl_set:Ne
+\impboxr
+impboxr
+
+LinMix: Data Mixing as Linear Domain Attribution
+
+Hubert Baniecki
+
+Affiliation: 
+University of Warsaw
+
+Affiliation: 
+Centre for Credible AI, Warsaw University of Technology
+
+  
+
+Przemyslaw Biecek
+
+Affiliation: 
+University of Warsaw
+
+Affiliation: 
+Centre for Credible AI, Warsaw University of Technology
+
+  
+
+Martin Pawelczyk
+
+Affiliation: 
+Faculty of Computer Science, University of Vienna
+
+Abstract
+
+Language model performance depends strongly on the mixture of domains in the pretraining data corpus.
+Popular data mixing methods select these domain weights by training many small proxy models on random mixes and then fitting a regression model to predict performance from the mix.
+We recognize this practice as a domain attribution problem, where the regression measures each domain’s contribution to the target metric.
+Through this lens, the standard Dirichlet sampling of proxy data mixes is a poor regression design that requires tuning and cannot support a linear fit for hundreds of domains.
+Building on classical optimal experimental design, we introduce 
+LinMix
+, which samples mixes at the vertices of the capped simplex so that each domain is at its cap or absent.
+This hyperparameter-free vertex sampling decorrelates domain effects, enabling an interpretable linear model whose coefficients are the domain attributions.
+The optimal mix given by 
+LinMix
+ provably keeps only domains with positive attribution values and requires no search over candidate mixes.
+We further establish the optimality of vertex sampling, and prove that Dirichlet sampling inflates the attribution error when its mixes concentrate around the prior data mix.
+Pretraining experiments with 1B-parameter OLMo2 and 4B Qwen3.5 language models show that 
+LinMix
+ outperforms Dirichlet-based data mixing across reasoning, code, and math benchmarks, with relative gains of 46% on MBPP and 14% on GSM8K.
+At 288 fine-grained domains, only vertex sampling supports a linear fit, and 
+LinMix
+ improves benchmark accuracy by 11% on average over the best nonlinear baseline.
+
+  
+Models and Data
+
+  
+
+ 
+Code
+
+1 
+Introduction
+
+The composition of a pretraining dataset, drawn from an ever-growing data corpus, is one of the most decisive factors governing the downstream capabilities of large foundation models 
+(
+Gadre et al., 2023
+; 
+Team Olmo, 2025
+)
+.
+Given the impressive gains in model training efficiency and benchmark performance obtained by curating an optimal dataset, 
+data mixing
+ has emerged as a well-founded optimization problem.
+Naturally, a source dataset can be split into the so-called 
+domain
+ subsets based on their web origin 
+(
+Fan et al., 2024
+, e.g., GitHub, arXiv,)
+, semantic type 
+(
+Li et al., 2024
+, e.g., code, math,)
+, or statistical profile 
+(
+Diao et al., 2025
+, e.g., by clustering data representations,)
+.
+Data mixing is then commonly formulated as a domain-weighting problem, where each domain receives a fraction of the target model’s token budget and the model is pretrained on the resulting mixture 
+(
+Xie et al., 2023
+; 
+Li et al., 2024
+; 
+Thudi et al., 2025
+; 
+Xie et al., 2025
+; 
+Tan et al., 2026
+)
+.
+
+In this work, we study 
+regression
+-based data mixing 
+(
+Liu et al., 2025
+; 
+Wettig et al., 2025
+; 
+Ye et al., 2025
+; 
+Chen et al., 2026
+)
+, which consists of two stages:
+(i) training a swarm of small 
+proxy models
+ on randomly sampled mixes, and
+(ii) selecting the target mix by optimizing a regression model fit to predict performance from the mix.
+This procedure improves both the benchmark performance and the training efficiency of language models, yet two of its design choices remain poorly understood and are addressed ad hoc in practice.
+First, it is unclear from which distribution the proxy mixes should be drawn, a question we frame as the classic problem of 
+regression design
+ 
+(
+Kiefer and Wolfowitz, 1959
+)
+, where the sampled mixes govern how much a fixed budget of proxy runs reveals about each domain’s effect.
+Second, we show that popular methods do not scale to hundreds of fine-grained domains, where their Dirichlet sampling and optimization hyperparameters lack working defaults and require per-setup heuristic tuning, which becomes increasingly difficult as the number of domains increases.
+
+Figure 1: 
+
+Data mixing for language model pretraining with linear domain attribution.
+
+We show that an interpretable linear regression model suffices for data mixing under vertex sampling.
+
+Domain attribution.
+
+In parallel, data attribution quantifies how much a model’s behavior depends on its training data 
+(
+Koh and Liang, 2017
+; 
+Ghorbani and Zou, 2019
+)
+.
+We formalize regression-based data mixing as a form of data attribution, in which domains replace individual training samples.
+A linear fit to the proxy runs thus yields a domain-level datamodel 
+(
+Ilyas et al., 2022
+)
+, whose coefficients measure each domain’s marginal contribution to the target outcome.
+Consequently, a reliable regression design identifies these interpretable domain weights, an objective this work addresses from first principles.
+
+Contributions.
+
+We introduce 
+LinMix
+ as a simple and effective data mixing method whose vertex proxy sampling scheme enables selection of the optimal mix for language model pretraining via an interpretable linear model (§
+3
+).
+Figure 
+1
+ illustrates its design.
+Pretraining experiments with 1B-parameter OLMo2 and 4B Qwen3.5 language models demonstrate that 
+LinMix
+ outperforms data mixing methods relying on Dirichlet sampling across reasoning, code, and math benchmarks (§
+4
+).
+Furthermore, our theoretical analysis reveals fundamental limitations of Dirichlet-based mixing (§
+5
+).
+Beyond requiring heuristic hyperparameter tuning, it severely inflates attribution error whenever proxy mixes concentrate around the prior or when the prior becomes skewed (Theorem 
+1
+).
+Finally, we formally establish the theoretical optimality of vertex sampling in 
+LinMix
+ (Theorem 
+2
+).
+
+2 
+Background
+
+Language models are pretrained on a corpus of 
+ sequences partitioned into 
+ domains 
+ with 
+ sequences each.
+The natural proportions 
+ define the prior data mix, a point on the probability simplex 
+.
+Whereas training on the corpus as-is draws data according to 
+, data mixing seeks to reweight this prior into domain weights 
+ that maximize the downstream performance of the 
+target
+ model 
+(
+Xie et al., 2023
+; 
+Fan et al., 2024
+; 
+Albalak et al., 2024
+)
+.
+However, evaluating even a single candidate mix at the target scale would require a full pretraining run over 
+ sequences.
+Instead, data mixing techniques train a swarm of 
+ small 
+proxy
+ models, each on 
+ sequences drawn according to a candidate mix 
+, and use their performance to predict 
+; the candidate mixes form the rows of the design matrix 
+.
+
+Sampling 
+.
+
+State-of-the-art approaches such as 
+RegMix
+ 
+(
+Liu et al., 2025
+)
+ and 
+Olmix
+ 
+(
+Chen et al., 2026
+)
+ populate the rows of 
+ via Dirichlet sampling, drawing mixes from a tempered version of the prior for each 
+:
+
+(1)
+
+The scale 
+ is the total concentration of the Dirichlet distribution, where small 
+ produces sparse mixes dominated by a few domains, and large 
+ tight perturbations of the tempered prior.
+The temperature 
+ flattens the prior so that dominant domains (e.g., CommonCrawl) do not absorb most of the probability mass, with 
+ by default 
+(
+Liu et al., 2025
+; 
+Wettig et al., 2025
+)
+.
+
+Up-weighting a domain far beyond its prior share can only be realized at the target scale by repeating that domain’s data, which brings diminishing returns beyond a few passes 
+(
+Muennighoff et al., 2025
+)
+.
+Recent methods therefore restrict mixes to the truncated simplex 
+ with per-domain caps 
+ for an up-sampling factor 
+.
+A mix at the cap makes at most 
+ passes over any domain’s data; in practice, 
+Liu et al. (2025)
+ hardcode 
+, 
+Wettig et al. (2025)
+ derive 
+ so that no data repeats at the target model scale, and 
+Chen et al. (2026)
+ set 
+, i.e., at most four passes.
+
+Optimizing 
+.
+
+Each proxy model 
+ is trained on its mix 
+ and evaluated to obtain outcome 
+, e.g., validation loss or bits-per-byte, yielding the proxy dataset 
+ with 
+.
+Regression-based data mixing methods fit a parameterized model 
+ to predict the outcome from the mix, and then predict the target mix by minimizing the fitted model over the truncated simplex:
+
+(2)
+
+In practice, 
+RegMix
+ solves this optimization approximately, evaluating a gradient-boosted 
+ on a large pool of Dirichlet-sampled candidate mixes and averaging the Top-
+ best-predicted ones for robustness 
+(
+Liu et al., 2025
+)
+.
+
+Olmix
+ 
+(
+Chen et al., 2026
+)
+ adopts the exponential mixing law of 
+Ye et al. (2025)
+ as 
+, which is convex in 
+ and can hence be minimized exactly over 
+.
+Finally, 
+ is constructed by drawing 
+ sequences from each domain 
+ and the target model is trained on this dataset.
+Note that every step of this approach inherits its quality from the design 
+, which determines how well 
+ can be identified from only 
+ runs; yet how to sample 
+ has received little attention, which we address in this paper.
+
+3 
+Data Mixing as Linear Domain Attribution
+
+We formalize data mixing as a 
+domain attribution
+ problem seeking an interpretable linear model whose coefficients measure each domain’s contribution to the target outcome.
+We empirically find that such a linear fit cannot be supported using Dirichlet-sampled proxy runs, and prior work compensates by using nonlinear surrogates and per-setup hyperparameter tuning, which we report in Section 
+4
+.
+Instead of changing the surrogate model, we change the design by sampling 
+ to maximize the information the proxy runs carry about the domain effects, after which nonlinear models offer no better fit than the linear one.
+Reliable attribution in turn enables the constrained optimization of 
+, where Dirichlet-based methods degrade once 
+ reaches hundreds of fine-grained domains.
+
+Sampling 
+.
+
+Unlike prior work, we sample the 
+ mixes at the 
+vertices
+ of 
+, aiming to maximize their spread measured by 
+ without sampling hyperparameters.
+This choice follows the D-optimality principle of experimental design 
+(
+Kiefer and Wolfowitz, 1959
+)
+, which we elaborate on in Appendix 
+A
+.
+For each run 
+, we draw a uniform random permutation 
+ of domains 
+ and fill domains greedily in that order, saturating each at its cap until the unit budget is exhausted:
+
+(3)
+
+Each resulting 
+ has at most one strictly interior coordinate, with the rest pinned to 
+ or 
+.
+Such a sparse design is near-orthogonal in expectation, rather than centered at 
+, as in Dirichlet sampling.
+To further improve 
+, we pair the proxy runs, letting run 
+ reuse the permutation of run 
+ in reverse, i.e. 
+, so that domains left empty by one fill are saturated first by its counterpart.
+The paired fills are anti-correlated by construction, with largely disjoint supports, and thus contribute near-orthogonal directions to 
+, keeping 
+ well conditioned.
+
+Optimizing 
+.
+
+Fitting the linear model 
+ in Eq. (
+2
+) by least squares yields the attribution estimate 
+, whose covariance scales with 
+.
+We always center 
+ to zero mean so that 
+ measures the marginal value of domain 
+ relative to the average.
+We also negate 
+ for target metrics where lower is better, so that a positive 
+ indicates a domain of above-average value.
+The mix selection then becomes a linear program over the truncated simplex,
+
+(4)
+
+solved by filling domains to their caps in decreasing order of 
+ until the budget is exhausted, so the solution is itself a vertex of 
+.
+This allocation inherently treats each additional domain sequence as equally valuable, which is appropriate for most cases, especially quality-filtered data.
+
+Transforming the utility of 
+.
+
+Beyond sampling 
+ and optimizing 
+, a third design choice worth studying is the utility assigned to each domain weight, which can capture the diminishing returns of repeating data from a given domain.
+For example, if we assume that data value decays with domain repetition, the linear utility 
+ can be transformed to the logarithmic one 
+, so that each additional sequence of a domain is worth less than the previous one.
+Theoretically, these two extremes can be framed as special cases of the general isoelastic objective
+
+(5)
+
+which recovers the linear objective in Eq. (
+4
+) as 
+ and the log-linear form 
+ at 
+.
+Proposition 
+1
+ establishes that positive domain attribution determines the support of the optimal mix, while the curvature 
+ only allocates the budget within it (see an example in App. Figure 
+9
+).
+We discuss the classical roots of this theory and its closest data selection counterpart in Appendix 
+A
+.
+
+Proposition 1
+ 
+(
+Domain support and uniqueness of the optimal mix
+)
+.
+
+Let 
+ be the set of domains with positive estimated attribution, and assume their caps can absorb the whole budget, i.e. 
+.
+At 
+, the objective of Eq. (
+5
+) reads as 
+, its log-linear form with the sum restricted to 
+.
+Then, for every 
+, its maximizer 
+ is unique and satisfies 
+ for all 
+ and 
+ for all 
+.
+At 
+, in contrast, a maximizer may assign zero weight to domains in 
+.
+
+Corollary 1
+ 
+(
+Closed form of the optimal mix
+)
+.
+
+Under the assumptions of Proposition 
+1
+ and for 
+, the objective of Eq. (
+5
+) restricted to its positively attributed support 
+ is strictly concave.
+Then, the maximizer takes the closed form
+
+ for 
+ and 
+ otherwise,
+where 
+ is the unique scalar enforcing 
+.
+
+As 
+, the solution in Corollary 
+1
+ collapses to the greedy fill of Eq. (
+3
+) with domains ordered by decreasing 
+ (for distinct 
+).
+Optimal mixes thus saturate the caps of their top domains, such as our sampled vertices, and predicting with 
+ interpolates rather than extrapolates. Unlike in Dirichlet sampling, optima here do not fall outside the convex hull of mixes clustered around the prior.
+
+4 
+Experiments
+
+Data.
+
+We use the 200B-token WebOrganizer corpus 
+(
+Wettig et al., 2025
+)
+ built from CommonCrawl web data and cleaned for language model pretraining.
+Each document is assigned one of 24 topics (e.g., science, politics) and one of 24 formats (e.g., academic writing, news), and we split the corpus into 2048-token sequences, each drawn from a single domain.
+We study two mixing granularities: 24 coarse domains given by the topics alone, and 288 fine-grained domains formed by the larger half of the 
+ topic–format pairs, covering 94% of the corpus (cf. App. Figure 
+5
+).
+Removing the practically empty tail from the prior data mix reduces noise when estimating domain weights.
+
+Language models.
+
+Following 
+Chen et al. (2026)
+, we build on the open source OLMo 2 implementation 
+(
+Team OLMo et al., 2025
+)
+ to train 30M and 60M proxy models and 1B target models.
+All models are trained past the 
+ tokens-per-parameter Chinchilla ratio 
+(
+Hoffmann et al., 2022
+)
+ to avoid undertraining 
+(
+Chen et al., 2025b
+)
+, on 1B, 2B, and 32B tokens, respectively.
+This setup is comparable to prior work that pairs 27M 
+(
+Liu et al., 2025
+)
+ and 50M 
+(
+Wettig et al., 2025
+)
+ proxies with 1B targets.
+Following 
+Wettig et al. (2025)
+, we set the up-sampling cap to 
+ so that no sequence repeats at the target scale, a non-arbitrary choice shared by all sampling methods we compare.
+Hyperparameters and further training details are given in Appendix 
+C
+.
+
+Target benchmarks.
+
+We optimize data mixes for three targets: ARC 
+(
+Clark et al., 2018
+, easy and challenge,)
+ for scientific question answering; HellaSwag 
+(
+Zellers et al., 2019
+)
+ for commonsense reasoning; and HellaSwag combined with PIQA 
+(
+Bisk et al., 2020
+)
+ as a two-benchmark target.
+In each case, we optimize the mix against proxy-model bits-per-byte 
+(
+Gao et al., 2021
+, BPB,)
+ metric on the benchmark’s training split and report the target model’s accuracy on a held-out set: test for ARC, and validation for HellaSwag and PIQA, whose test labels are withheld.
+We also optimize for BPB validation loss on the Common Pile 
+(
+Kandpal et al., 2025
+, CPile,)
+ data corpus to diversify the setup.
+
+4.1 
+Dirichlet sampling of proxy data mixes requires tuning hyperparameters
+
+Figure 2: 
+
+Dirichlet sampling with default 
+ hyperparameters does not converge for 288 domains.
+
+Fraction of Dirichlet-sampled domain mixes that violate the target model cap constraint.
+We choose new Dirichlet hyperparameters by minimizing the condition number of matrix 
+ (blue star).
+
+Before training proxy models, we need to sample the design matrix 
+.
+Figure 
+2
+ shows the fraction of Dirichlet-sampled domain mixes that violate the cap constraint of 
+ and must be rejected.
+For 288 domains, the baseline algorithm does not converge with the default hyperparameters 
+, or even 
+ (cf. the hatched area in Figure 
+2
+).
+Since related work gives no guidance on how to tune them, we set 
+ and propose to select 
+ by minimizing the condition number of 
+, which yields mixes much closer to the prior at 
+ and 
+.
+
+4.2 
+Vertex sampling outperforms Dirichlet, enabling a linear model fit
+
+Figure 3: 
+
+Optimizer performance under the vertex and Dirichlet samplers.
+
+Spearman correlation is averaged across 5 random repetitions of 10-fold cross-validation under a fixed proxy model budget.
+Nonlinear is implemented using LightGBM, as in 
+RegMix
+, and exponential fits the exponential law to the target, as in 
+Olmix
+.
+The corresponding 
+ values are reported in App. Figure 
+6
+.
+
+We train 
+ 30M and 
+ 60M proxy models per sampler for 24 and 288 domains, respectively.
+Figure 
+3
+ shows the cross-validated fit between predicted and observed benchmark BPB (Spearman 
+) under each design as the number of proxy models grows.
+At 24 domains, every surrogate fits well under both samplers, but at 288 domains, no surrogate helps Dirichlet sampling even when 
+ is tuned (
+ at 
+).
+Conversely, our hyperparameter-free vertex sampling puts the interpretable linear model on par with the best nonlinear alternative (see also 
+ in App. Figure 
+6
+).
+Half of the vertex swarm already fits better than the full Dirichlet swarm, because near-prior Dirichlet mixes vary HellaSwag BPB five times less than vertex mixes, leaving little signal to regress on.
+As an ablation in App. Figure 
+8
+, we train 30M and 100M models on 288 domains, fit a linear model from the 30M swarm, and use it to rank the outcomes of 60M and 100M models at 
+, while the Dirichlet fit does not transfer (
+).
+We visualize the optimized domain weights in App. Figure 
+9
+, where relaxing curvature 
+ retains the full positively attributed support (Prop. 
+1
+).
+Based on it, we transform the utility on 24 domains with 
+ for HellaSwag, which adds Social Life, Fashion & Beauty, Games, and Industrial to the four domains at their caps (Health, Home & Hobbies, Food & Dining, Adult); and with 
+ for CPile, which adds a sixth Hardware domain to the data mix.
+
+4.3 
+LinMix
+ outperforms data mixing baselines on a 1B target model benchmark
+
+We compare 
+LinMix
+ to a nonlinear 
+RegMix
+, which outperforms several data selection methods and was applied in WebOrganizer, as well as 
+Olmix
+, which benchmarks several data mixing approaches and finds the exponential model to be state-of-the-art.
+Table 
+1
+ shows target benchmark performance where 
+LinMix
+ with a linear model significantly improves data mixing with 288 domains, and is on par or better with 24 domains.
+This result is consistent with the proxy metric values reported in Section 
+4.2
+, which here translate into downstream performance.
+An interpretable linear regression suffices for data mixing that targets the CPile validation loss under vertex sampling, i.e. it is on par with or better than complex Dirichlet sampling with nonlinear regression.
+We ablate on two optimization factors in Appendix 
+D
+: Table 
+6
+ indicates that scaling the linear model coefficients by standard error could improve performance, and Table 
+6
+ demonstrates how transforming the utility of 
+ towards 
+ relaxes the 24-domain support for HellaSwag (Proposition 
+1
+), yielding better results.
+
+4.4 
+Scaling to a 4B Qwen3.5 model benchmarked on code and math capabilities
+
+Figure 4: 
+
+Domain weights relative to the prior mix across data mixing methods and target benchmarks.
+
+LinMix
+ downweights math and code domains for language modeling (blue in HellaSwag), upweights programming languages and software domains for coding (red in MBPP), as well as math and science domains for math capabilities (red in GSM8K).
+
+We demonstrate the broader applicability of 
+LinMix
+ by doubling the data corpus and training a target model with ten times more compute.
+The 24-topic WebOrganizer dataset is extended with Nemotron-CC-Math 
+(
+Karimi Mahabadi et al., 2026
+)
+ and Stack-Edu 
+(
+Allal et al., 2025
+)
+ split into 15 programming languages, yielding a 416B-token corpus spanning 40 domains.
+We pretrain 4B Qwen3.5 
+(
+Qwen Team, 2026
+)
+ target models on 80B tokens at a 
+ ratio to allow for more diverse experiments.
+We train 
+ 100M proxy models per sampler to prevent under-parametrization, given the more challenging coding and math capabilities.
+Mixes are optimized towards training splits of HellaSwag, MBPP 
+(
+Austin et al., 2021
+)
+, and GSM8K 
+(
+Cobbe et al., 2021
+)
+.
+Figure 
+4
+ shows an example of optimized domain weights targeting three diverse model capabilities.
+It illustrates that 
+RegMix
+ obtains similar mixes across the three target capabilities, while the exponential law of 
+Olmix
+ differentiates between targets, but to a lesser degree than 
+LinMix
+.
+Table 
+2
+ shows that 
+LinMix
+ delivers strong performance across the language, coding, and math benchmarks, transferring these capabilities to held-out benchmarks such as HumanEval 
+(
+Chen et al., 2021
+)
+ and MATH 
+(
+Hendrycks et al., 2021
+; 
+Lewkowycz et al., 2022
+)
+.
+We additionally train a 1B-parameter Qwen3.5-like model on 32B tokens targeting CPile from the same proxy model swarm and report its results in the last column.
+
+Table 1: 
+
+Performance comparison of data mixing methods across 
+ 1B par. OLMo2 target models pretrained on 32B tokens.
+
+Normalized accuracy and bits-per-byte (BPB) are measured on a held-out set per target benchmark.
+Color denotes relative difference to the best baseline.
+
+24 domains
+ (
+ 30M models)
+
+288 domains
+ (
+ 60M proxy models)
+
+ARC
+
+HellaSwag
+
+CPile
+
+ARC
+
+HellaSwag
+
+HS + PIQA
+
+CPile
+
+Method
+
+Acc
+
+BPB
+
+Acc
+
+BPB
+
+BPB
+
+Acc
+
+BPB
+
+Acc
+
+BPB
+
+Acc
+
+BPB
+
+BPB
+
+Prior
+
+.437
+
+.864
+
+.543
+
+.788
+
+.888
+
+.436
+
+.870
+
+.541
+
+.788
+
+.634
+
+.902
+
+.890
+
+RegMix
+
+.496
+
+.780
+
+.563
+
+.781
+
+.842
+
+.449
+
+.850
+
+.547
+
+.784
+
+.638
+
+.896
+
+.878
+
+Olmix
+
+.486
+
+.785
+
+.550
+
+.782
+
+.860
+
+.435
+
+.872
+
+.550
+
+.783
+
+.641
+
+.892
+
+.850
+
+LinMix
+
+.510
+
+.785
+
+.568
+
+.785
+
+.847
+
+.511
+
+.757
+
+.615
+
+.758
+
+.690
+
+.855
+
+.834
+
+\impboxg
++2.8%
+
+\impboxr
+0.6%
+
+\impboxg
++0.9%
+
+\impboxr
+0.5%
+
+\impboxr
+0.6%
+
+\impboxg
++13.8%
+
+\impboxg
++10.9%
+
+\impboxg
++11.8%
+
+\impboxg
++3.2%
+
+\impboxg
++7.6%
+
+\impboxg
++4.1%
+
+\impboxg
++1.9%
+
+Table 2: 
+
+Performance of data mixing methods across 
+ 4B Qwen3.5 target models pretrained on 80B tokens.
+
+Mixes are optimized with 40 domains for each target benchmark and evaluated on its held-out set and a held-out benchmark.
+The additional CPile column reports 
+ 1B Qwen3.5 models optimized for held-out Common Pile validation loss.
+Color denotes relative diff. to the best baseline.
+
+Target: HellaSwag
+
+Target: MBPP
+ (code)
+
+Target: GSM8K
+ (math)
+
+CPile
+
+HellaSwag
+
+PIQA
+
+MBPP
+
+HumanEval
+
+GSM8K
+
+MATH
+
+CPile
+
+Method
+
+Acc
+
+BPB
+
+Acc
+
+BPB
+
+P@1
+
+BPB
+
+P@1
+
+BPB
+
+EM
+
+BPB
+
+EM
+
+BPB
+
+BPB
+
+Prior
+
+.632
+
+.743
+
+.764
+
+.952
+
+.304
+
+.375
+
+.213
+
+.285
+
+.214
+
+.403
+
+.162
+
+.463
+
+.814
+
+RegMix
+
+.659
+
+.735
+
+.775
+
+.933
+
+.304
+
+.379
+
+.213
+
+.290
+
+.135
+
+.418
+
+.124
+
+.487
+
+.808
+
+Olmix
+
+.667
+
+.731
+
+.783
+
+.932
+
+.302
+
+.368
+
+.244
+
+.277
+
+.294
+
+.391
+
+.202
+
+.446
+
+.801
+
+LinMix
+
+.696
+
+.716
+
+.782
+
+.920
+
+.444
+
+.334
+
+.280
+
+.258
+
+.337
+
+.383
+
+.266
+
+.427
+
+.797
+
+\impboxg
++4.4%
+
+\impboxg
++2.0%
+
+\impboxr
+0.1%
+
+\impboxg
++1.3%
+
+\impboxg
++46.1%
+
+\impboxg
++9.3%
+
+\impboxg
++15.0%
+
+\impboxg
++7.0%
+
+\impboxg
++14.4%
+
+\impboxg
++2.1%
+
+\impboxg
++31.6%
+
+\impboxg
++4.3%
+
+\impboxg
++0.5%
+
+5 
+Theoretical Analysis
+
+We formalize the domain attribution view of data mixing from first principles in Appendix 
+E
+ and summarize these results here.
+Starting from linear datamodels 
+(
+Ilyas et al., 2022
+)
+, we show that the expected outcome of a proxy run is linear in its domain mix, with coefficients that average sample-level attribution scores (Proposition 
+2
+, Corollary 
+2
+).
+Domain attribution thus interpolates between data attribution and a single-domain corpus, preserving the linear structure in between.
+We further relate it to the Shapley and Banzhaf data values of cooperative game theory in Remark 
+1
+.
+
+With a finite budget of proxy runs, estimating the domain attribution is a linear regression whose error is governed by the design 
+ (Lemma 
+1
+).
+Dirichlet sampling inflates this error as the concentration 
+ grows and keeps its mixes close to the prior (Theorem 
+1
+).
+With many domains, Dirichlet mixes cannot stay far from the prior because sparse mixes at a small 
+ violate the per-domain caps and are rejected.
+We therefore tune 
+ empirically to a near-prior range (Section 
+4.1
+), for which the expected error of Dirichlet sampling is theoretically several times the lowest error possible with equal caps (Appendix 
+E.3
+).
+This matches Figure 
+3
+, where both samplers lead to reliable fits at 24 domains, but no surrogate fits the Dirichlet design well at 288 domains.
+In theory, vertex sampling without caps trains each proxy model on a single domain and thus estimates every domain attribution independently and equally well, which no other design can improve on (Proposition 
+3
+).
+In practice, the caps force every mix to spread over several domains and reveal less about each of them, but vertex sampling remains the best possible design in expectation for equal caps (Theorem 
+2
+).
+
+Under these idealizations, Theorems 
+1
+ and 
+2
+ help explain why the linear fit of 
+LinMix
+ can be more reliable than one based on Dirichlet sampling.
+Dirichlet mixes concentrate around the prior, while vertices carry as much evenly spread information as the caps allow.
+
+6 
+Conclusion
+
+We demonstrate that an interpretable linear model suffices for data mixing under vertex sampling and validate it across language model pretraining benchmarks.
+We further develop the theoretical foundations of 
+LinMix
+ and relate data mixing to the attribution literature.
+While this paper contributes to the interpretability of data mixing, our results suggest that optimizing a vertex-sampled matrix with a nonlinear model could yield even better target model performance, which we leave for future work.
+We discuss limitations of our work in Appendix 
+F
+, most importantly the cost of training a proxy swarm and the single training run per target model.
+
+Acknowledgments and Disclosure of Funding
+
+Hubert Baniecki was supported by the Foundation for Polish Science
+(FNP), and the state budget within the Polish Ministry of Education and Science program “Pearls of Science” project number PN/01/0087/2022.
+Work on this project is financially supported by the Foundation for Polish Science (FNP) grant ‘Centre for Credible AI’ No. FENG.02.01-IP.05-0058/24, and we gratefully acknowledge the Polish high-performance computing infrastructure PLGrid (HPC Center: ACK Cyfronet AGH) for providing computer facilities and support within the computational grant no. PLG/2026/019857.
+
+References
+
+Albalak 
+et al.
+ (2024)
+
+A. Albalak, Y. Elazar, S. M. Xie, S. Longpre, N. Lambert, X. Wang, N. Muennighoff, B. Hou, L. Pan, H. Jeong, C. Raffel, S. Chang, T. Hashimoto, and W. Y. Wang
+
+A survey on data selection for language models
+.
+
+Transactions on Machine Learning Research
+.
+
+Cited by: 
+§2
+.
+
+Allal 
+et al.
+ (2025)
+
+L. B. Allal, A. Lozhkov, E. Bakouch, G. M. Blazquez, G. Penedo, L. Tunstall, A. Marafioti, A. P. Lajarín, H. Kydlíček, V. Srivastav, J. Lochner, C. Fahlgren, X. S. NGUYEN, B. Burtenshaw, C. Fourrier, H. Zhao, H. Larcher, M. Morlon, C. Zakka, C. Raffel, L. V. Werra, and T. Wolf
+
+SmolLM2: When smol goes big — data-centric training of a fully open small language model
+.
+
+In 
+COLM
+,
+
+Cited by: 
+Appendix C
+,
+
+§4.4
+.
+
+Austin 
+et al.
+ (2021)
+
+J. Austin, A. Odena, M. Nye, M. Bosma, H. Michalewski, D. Dohan, E. Jiang, C. Cai, M. Terry, Q. Le, and C. Sutton
+
+Program synthesis with large language models
+.
+
+arXiv preprint arXiv:2108.07732
+.
+
+Cited by: 
+§4.4
+.
+
+Bai 
+et al.
+ (2025)
+
+T. Bai, L. Yang, Z. H. Wong, F. Sun, X. Zhuang, J. Peng, C. Zhang, L. Wu, Q. Jiantao, W. Zhang, B. Yuan, and C. He
+
+Efficient pretraining data selection for language models via multi-actor collaboration
+.
+
+In 
+ACL
+,
+
+Cited by: 
+Appendix A
+.
+
+Bisk 
+et al.
+ (2020)
+
+Y. Bisk, R. Zellers, R. Le Bras, J. Gao, and Y. Choi
+
+PIQA: Reasoning about physical commonsense in natural language
+.
+
+In 
+AAAI
+,
+
+Cited by: 
+§4
+.
+
+Black 
+et al.
+ (2022)
+
+S. Black, S. Biderman, E. Hallahan, Q. Anthony, L. Gao, L. Golding, H. He, C. Leahy, K. McDonell, J. Phang, M. Pieler, U. S. Prashanth, S. Purohit, L. Reynolds, J. Tow, B. Wang, and S. Weinbach
+
+GPT-NeoX-20B: An open-source autoregressive language model
+.
+
+In 
+ACL Workshop on Challenges & Perspectives in Creating Large Language Models
+,
+
+Cited by: 
+Appendix C
+.
+
+Boyd and Vandenberghe (2004)
+
+S. Boyd and L. Vandenberghe
+
+Convex optimization
+.
+
+ 
+Cambridge University Press
+.
+
+Cited by: 
+Appendix A
+,
+
+Appendix B
+.
+
+Chen 
+et al.
+ (2021)
+
+M. Chen, J. Tworek, H. Jun, Q. Yuan, H. P. de Oliveira Pinto, J. Kaplan, H. Edwards, Y. Burda, N. Joseph, G. Brockman, A. Ray, R. Puri, G. Krueger, M. Petrov, H. Khlaaf, G. Sastry, P. Mishkin, B. Chan, S. Gray, N. Ryder, M. Pavlov, A. Power, L. Kaiser, M. Bavarian, C. Winter, P. Tillet, F. P. Such, D. Cummings, M. Plappert, F. Chantzis, E. Barnes, A. Herbert-Voss, W. H. Guss, A. Nichol, A. Paino, N. Tezak, J. Tang, I. Babuschkin, S. Balaji, S. Jain, W. Saunders, C. Hesse, A. N. Carr, J. Leike, J. Achiam, V. Misra, E. Morikawa, A. Radford, M. Knight, M. Brundage, M. Murati, K. Mayer, P. Welinder, B. McGrew, D. Amodei, S. McCandlish, I. Sutskever, and W. Zaremba
+
+Evaluating large language models trained on code
+.
+
+arXiv preprint arXiv:2107.03374
+.
+
+Cited by: 
+§4.4
+.
+
+Chen 
+et al.
+ (2026)
+
+M. F. Chen, T. Murray, D. Heineman, M. Jordan, H. Hajishirzi, C. Ré, L. Soldaini, and K. Lo
+
+Olmix: A framework for data mixing throughout LM development
+.
+
+In 
+ICML
+,
+
+Cited by: 
+Appendix A
+,
+
+§1
+,
+
+§2
+,
+
+§2
+,
+
+§2
+,
+
+§4
+.
+
+Chen 
+et al.
+ (2025a)
+
+S. Chen, X. Ouyang, M. A. L. Pearce, T. Hartvigsen, and J. R. Schwarz
+
+ADMIRE-BayesOpt: Accelerated data MIxture RE-weighting for language models with bayesian optimization
+.
+
+Transactions on Machine Learning Research
+.
+
+Cited by: 
+Appendix A
+.
+
+Chen 
+et al.
+ (2025b)
+
+Z. Chen, S. Wang, T. Xiao, Y. Wang, S. Chen, X. Cai, J. He, and J. Wang
+
+Revisiting scaling laws for language models: The role of data quality and training strategies
+.
+
+In 
+ACL
+,
+
+Cited by: 
+§4
+.
+
+Clark 
+et al.
+ (2018)
+
+P. Clark, I. Cowhey, O. Etzioni, T. Khot, A. Sabharwal, C. Schoenick, and O. Tafjord
+
+Think you have solved question answering? Try ARC, the AI2 reasoning challenge
+.
+
+arXiv preprint arXiv:1803.05457
+.
+
+Cited by: 
+§4
+.
+
+Cobbe 
+et al.
+ (2021)
+
+K. Cobbe, V. Kosaraju, M. Bavarian, M. Chen, H. Jun, L. Kaiser, M. Plappert, J. Tworek, J. Hilton, R. Nakano, C. Hesse, and J. Schulman
+
+Training verifiers to solve math word problems
+.
+
+arXiv preprint arXiv:2110.14168
+.
+
+Cited by: 
+§4.4
+.
+
+Cochran (1977)
+
+W. G. Cochran
+
+Sampling techniques
+.
+
+3rd edition
+,  
+John Wiley & Sons
+.
+
+Cited by: 
+§E.1
+.
+
+Diao 
+et al.
+ (2025)
+
+S. Diao, Y. Yang, Y. Fu, X. Dong, D. SU, M. Kliegl, Z. Chen, P. Belcak, Y. Suhara, H. Yin, M. Patwary, Y. (. Lin, J. Kautz, and P. Molchanov
+
+Nemotron-CLIMB: Clustering-based iterative data mixture bootstrapping for language model pre-training
+.
+
+In 
+NeurIPS
+,
+
+Cited by: 
+Appendix A
+,
+
+§1
+.
+
+Engstrom 
+et al.
+ (2024)
+
+L. Engstrom, A. Feldmann, and A. Madry
+
+Dsdm: model-aware dataset selection with datamodels
+.
+
+ICML
+.
+
+Cited by: 
+Appendix A
+.
+
+Fan 
+et al.
+ (2024)
+
+S. Fan, M. Pagliardini, and M. Jaggi
+
+DOGE: domain reweighting with generalization estimation
+.
+
+In 
+ICML
+,
+
+Cited by: 
+Appendix A
+,
+
+§1
+,
+
+§2
+.
+
+Fan 
+et al.
+ (2026)
+
+Z. Fan, Y. Xian, Y. Sun, K. Shen, and L. Shen
+
+Joint selection for large-scale pre-training data via policy gradient-based mask learning
+.
+
+In 
+ICLR
+,
+
+Cited by: 
+Appendix A
+.
+
+Feldman and Zhang (2020)
+
+V. Feldman and C. Zhang
+
+What neural networks memorize and why: discovering the long tail via influence estimation
+.
+
+NeurIPS
+.
+
+Cited by: 
+Appendix A
+.
+
+Fumagalli 
+et al.
+ (2026)
+
+F. Fumagalli, L. Butler, J. S. Kang, K. Ramchandran, and R. T. Witter
+
+An odd estimator for Shapley values
+.
+
+In 
+ICML
+,
+
+Cited by: 
+Appendix A
+.
+
+Gadre 
+et al.
+ (2023)
+
+S. Y. Gadre, G. Ilharco, A. Fang, J. Hayase, G. Smyrnis, T. Nguyen, R. Marten, M. Wortsman, D. Ghosh, J. Zhang, E. Orgad, R. Entezari, G. Daras, S. M. Pratt, V. Ramanujan, Y. Bitton, K. Marathe, S. Mussmann, R. Vencu, M. Cherti, R. Krishna, P. W. Koh, O. Saukh, A. Ratner, S. Song, H. Hajishirzi, A. Farhadi, R. Beaumont, S. Oh, A. Dimakis, J. Jitsev, Y. Carmon, V. Shankar, and L. Schmidt
+
+DataComp: In search of the next generation of multimodal datasets
+.
+
+In 
+NeurIPS
+,
+
+Cited by: 
+Appendix A
+,
+
+§1
+.
+
+Gao 
+et al.
+ (2021)
+
+L. Gao, S. Biderman, S. Black, L. Golding, T. Hoppe, C. Foster, J. Phang, H. He, A. Thite, N. Nabeshima, S. Presser, and C. Leahy
+
+The Pile: An 800GB dataset of diverse text for language modeling
+.
+
+arXiv preprint arXiv:2101.00027
+.
+
+Cited by: 
+§4
+.
+
+Gao 
+et al.
+ (2024)
+
+L. Gao, J. Tow, B. Abbasi, S. Biderman, S. Black, A. DiPofi, C. Foster, L. Golding, J. Hsu, A. Le Noac’h, H. Li, K. McDonell, N. Muennighoff, C. Ociepa, J. Phang, L. Reynolds, H. Schoelkopf, A. Skowron, L. Sutawika, E. Tang, A. Thite, B. Wang, K. Wang, and A. Zou
+
+The language model evaluation harness
+.
+
+External Links: 
+Link
+
+Cited by: 
+Appendix C
+.
+
+Ghorbani and Zou (2019)
+
+A. Ghorbani and J. Y. Zou
+
+Data Shapley: Equitable valuation of data for machine learning
+.
+
+ICML
+.
+
+Cited by: 
+Appendix A
+,
+
+§1
+,
+
+Remark 1
+.
+
+Groves and Rothenberg (1969)
+
+T. Groves and T. Rothenberg
+
+A note on the expected value of an inverse matrix
+.
+
+Biometrika
+ 
+56
+ (
+3
+), 
+pp. 690–691
+.
+
+Cited by: 
+Lemma 3
+.
+
+Hammer and Holzman (1992)
+
+P. L. Hammer and R. Holzman
+
+Approximations of pseudo-Boolean functions; applications to game theory
+.
+
+ZOR – Methods and Models of Operations Research
+ 
+36
+ (
+1
+), 
+pp. 3–21
+.
+
+Cited by: 
+Remark 1
+.
+
+Hammersley and Morton (1956)
+
+J. M. Hammersley and K. W. Morton
+
+A new Monte Carlo technique: antithetic variates
+.
+
+Mathematical Proceedings of the Cambridge Philosophical Society
+ 
+52
+ (
+3
+), 
+pp. 449–475
+.
+
+Cited by: 
+Appendix A
+.
+
+Hendrycks 
+et al.
+ (2021)
+
+D. Hendrycks, C. Burns, S. Kadavath, A. Arora, S. Basart, E. Tang, D. Song, and J. Steinhardt
+
+Measuring mathematical problem solving with the MATH dataset
+.
+
+In 
+NeurIPS
+,
+
+Cited by: 
+§4.4
+.
+
+Hoffmann 
+et al.
+ (2022)
+
+J. Hoffmann, S. Borgeaud, A. Mensch, E. Buchatskaya, T. Cai, E. Rutherford, D. de las Casas, L. A. Hendricks, J. Welbl, A. Clark, T. Hennigan, E. Noland, K. Millican, G. van den Driessche, B. Damoc, A. Guy, S. Osindero, K. Simonyan, E. Elsen, O. Vinyals, J. W. Rae, and L. Sifre
+
+An empirical analysis of compute-optimal large language model training
+.
+
+In 
+NeurIPS
+,
+
+Cited by: 
+§4
+.
+
+Horn and Johnson (2013)
+
+R. A. Horn and C. R. Johnson
+
+Matrix analysis
+.
+
+2nd edition
+,  
+Cambridge University Press
+.
+
+Cited by: 
+§E.4
+.
+
+Ilyas 
+et al.
+ (2022)
+
+A. Ilyas, S. M. Park, L. Engstrom, G. Leclerc, and A. Madry
+
+Datamodels: understanding predictions with data and data with predictions
+.
+
+ICML
+.
+
+Cited by: 
+Appendix A
+,
+
+§E.1
+,
+
+§1
+,
+
+§5
+,
+
+Corollary 2
+.
+
+Kandpal 
+et al.
+ (2025)
+
+N. Kandpal, B. Lester, C. Raffel, S. Majstorovic, S. Biderman, B. Abbasi, L. Soldaini, E. Shippole, A. F. Cooper, A. Skowron, S. Longpre, L. Sutawika, A. Albalak, Z. Xu, G. Penedo, L. B. allal, E. Bakouch, J. D. Pressman, H. Fan, D. Stander, G. Song, A. Gokaslan, J. Kirchenbauer, T. Goldstein, B. R. Bartoldson, B. Kailkhura, and T. Murray
+
+The Common Pile v0.1: An 8TB dataset of public domain and openly licensed text
+.
+
+In 
+NeurIPS
+,
+
+Cited by: 
+Appendix C
+,
+
+§4
+.
+
+Kang 
+et al.
+ (2025)
+
+F. Kang, Y. Sun, B. Wen, S. Chen, D. Song, R. Mahmood, and R. Jia
+
+AutoScale: Scale-aware data mixing for pre-training LLMs
+.
+
+In 
+COLM
+,
+
+Cited by: 
+Appendix A
+.
+
+Karchmer 
+et al.
+ (2025)
+
+A. Karchmer, M. Pawelczyk, and S. Neel
+
+Efficiently verifiable proofs of data attribution
+.
+
+NeurIPS
+.
+
+Cited by: 
+§E.1
+.
+
+Karimi Mahabadi 
+et al.
+ (2026)
+
+R. Karimi Mahabadi, S. Satheesh, S. Prabhumoye, M. Patwary, M. Shoeybi, and B. Catanzaro
+
+Nemotron-CC-Math: A 133 billion-token-scale high quality math pretraining dataset
+.
+
+In 
+ICLR
+,
+
+Cited by: 
+Appendix C
+,
+
+§4.4
+.
+
+Khaddaj 
+et al.
+ (2025)
+
+A. Khaddaj, L. Engstrom, and A. Madry
+
+Small-to-large generalization: Training data influences models consistently across scale
+.
+
+In 
+ICLR
+,
+
+Cited by: 
+Appendix A
+.
+
+Kiefer and Wolfowitz (1959)
+
+J. Kiefer and J. Wolfowitz
+
+Optimum designs in regression problems
+.
+
+The Annals of Mathematical Statistics
+ 
+30
+ (
+2
+), 
+pp. 271–294
+.
+
+Cited by: 
+Appendix A
+,
+
+§E.2
+,
+
+§1
+,
+
+§3
+.
+
+Kiefer and Wolfowitz (1960)
+
+J. Kiefer and J. Wolfowitz
+
+The equivalence of two extremum problems
+.
+
+Canadian Journal of Mathematics
+ 
+12
+, 
+pp. 363–366
+.
+
+Cited by: 
+Appendix A
+.
+
+Kiefer (1961)
+
+J. Kiefer
+
+Optimum designs in regression problems, II
+.
+
+The Annals of Mathematical Statistics
+ 
+32
+ (
+1
+), 
+pp. 298–325
+.
+
+Cited by: 
+Appendix A
+,
+
+§E.4
+.
+
+Koh and Liang (2017)
+
+P. W. Koh and P. Liang
+
+Understanding black-box predictions via influence functions
+.
+
+In 
+ICML
+,
+
+Cited by: 
+§1
+.
+
+Lewkowycz 
+et al.
+ (2022)
+
+A. Lewkowycz, A. Andreassen, D. Dohan, E. Dyer, H. Michalewski, V. Ramasesh, A. Slone, C. Anil, I. Schlag, T. Gutman-Solo, Y. Wu, B. Neyshabur, G. Gur-Ari, and V. Misra
+
+Solving quantitative reasoning problems with language models
+.
+
+NeurIPS
+.
+
+Cited by: 
+§4.4
+.
+
+Li 
+et al.
+ (2024)
+
+J. Li, A. Fang, G. Smyrnis, M. Ivgi, M. Jordan, S. Y. Gadre, H. Bansal, E. K. Guha, S. Keh, K. Arora, S. Garg, R. Xin, N. Muennighoff, R. Heckel, J. Mercat, M. F. Chen, S. Gururangan, M. Wortsman, A. Albalak, Y. Bitton, M. Nezhurina, A. K. M. Abbas, C. Hsieh, D. Ghosh, J. P. Gardner, M. Kilian, H. Zhang, R. Shao, S. M. Pratt, S. Sanyal, G. Ilharco, G. Daras, K. Marathe, A. Gokaslan, J. Zhang, K. Chandu, T. Nguyen, I. Vasiljevic, S. M. Kakade, S. Song, S. Sanghavi, F. Faghri, S. Oh, L. Zettlemoyer, K. Lo, A. El-Nouby, H. Pouransari, A. T. Toshev, S. Wang, D. Groeneveld, L. Soldaini, P. W. Koh, J. Jitsev, T. Kollar, A. Dimakis, Y. Carmon, A. Dave, L. Schmidt, and V. Shankar
+
+DataComp-LM: In search of the next generation of training sets for language models
+.
+
+In 
+NeurIPS
+,
+
+Cited by: 
+Appendix A
+,
+
+§1
+.
+
+Li and Yu (2023)
+
+W. Li and Y. Yu
+
+Robust data valuation with weighted Banzhaf values
+.
+
+In 
+NeurIPS
+,
+
+Cited by: 
+Appendix A
+,
+
+Remark 1
+.
+
+Li 
+et al.
+ (2025)
+
+Z. Li, Y. Deng, P. Zhong, M. Razaviyayn, and V. Mirrokni
+
+PiKE: Adaptive data mixing for large-scale multi-task learning under low gradient conflicts
+.
+
+In 
+NeurIPS
+,
+
+Cited by: 
+Appendix A
+.
+
+Ling 
+et al.
+ (2025)
+
+Z. Ling, D. Chen, L. Yao, Q. Shen, Y. Li, and Y. Shen
+
+Diversity as a reward: Fine-tuning LLMs on a mixture of domain-undetermined data
+.
+
+In 
+NeurIPS
+,
+
+Cited by: 
+Appendix A
+.
+
+Liu 
+et al.
+ (2025)
+
+Q. Liu, X. Zheng, N. Muennighoff, G. Zeng, L. Dou, T. Pang, J. Jiang, and M. Lin
+
+RegMix: Data mixture as regression for language model pre-training
+.
+
+In 
+ICLR
+,
+
+Cited by: 
+Appendix A
+,
+
+§1
+,
+
+§2
+,
+
+§2
+,
+
+§2
+,
+
+§2
+,
+
+§4
+.
+
+Liu 
+et al.
+ (2026)
+
+Y. Liu, C. Chen, J. Yang, and R. Sun
+
+Rethinking data mixture for large language models: A comprehensive survey and new perspectives
+.
+
+In 
+Findings of EACL
+,
+
+Cited by: 
+Appendix A
+.
+
+Marichal and Mathonet (2011)
+
+J. Marichal and P. Mathonet
+
+Weighted Banzhaf power and interaction indexes through weighted approximations of games
+.
+
+European Journal of Operational Research
+ 
+211
+ (
+2
+), 
+pp. 352–358
+.
+
+Cited by: 
+Remark 1
+.
+
+McLean and Anderson (1966)
+
+R. A. McLean and V. L. Anderson
+
+Extreme vertices design of mixture experiments
+.
+
+Technometrics
+ 
+8
+ (
+3
+), 
+pp. 447–454
+.
+
+Cited by: 
+Appendix A
+.
+
+Mo and Walrand (2000)
+
+J. Mo and J. Walrand
+
+Fair end-to-end window-based congestion control
+.
+
+IEEE/ACM Transactions on Networking
+ 
+8
+ (
+5
+), 
+pp. 556–567
+.
+
+Cited by: 
+Appendix A
+.
+
+Moon 
+et al.
+ (2025)
+
+H. Moon, J. Seo, S. Koo, J. Kim, Y. Ham, J. Moon, and H. Lim
+
+LimaCost: Data valuation for instruction tuning of large language models
+.
+
+In 
+Findings of EMNLP
+,
+
+Cited by: 
+Appendix A
+.
+
+Muennighoff 
+et al.
+ (2025)
+
+N. Muennighoff, A. M. Rush, B. Barak, T. L. Scao, A. Piktus, N. Tazi, S. Pyysalo, T. Wolf, and C. Raffel
+
+Scaling data-constrained language models
+.
+
+Journal of Machine Learning Research
+ 
+26
+, 
+pp. 53:1–53:66
+.
+
+Cited by: 
+§2
+.
+
+Musco and Witter (2025)
+
+C. Musco and R. T. Witter
+
+Provably accurate Shapley value estimation via leverage score sampling
+.
+
+In 
+International Conference on Learning Representations (ICLR)
+,
+
+Cited by: 
+Appendix A
+.
+
+Park 
+et al.
+ (2023)
+
+S. M. Park, K. Georgiev, A. Ilyas, G. Leclerc, and A. Madry
+
+TRAK: Attributing model behavior at scale
+.
+
+In 
+ICML
+,
+
+Cited by: 
+Appendix A
+.
+
+Porian 
+et al.
+ (2024)
+
+T. Porian, M. Wortsman, J. Jitsev, L. Schmidt, and Y. Carmon
+
+Resolving discrepancies in compute-optimal scaling of language models
+.
+
+In 
+NeurIPS
+,
+
+Cited by: 
+Appendix C
+.
+
+Pukelsheim (2006)
+
+F. Pukelsheim
+
+Optimal design of experiments
+.
+
+ 
+SIAM
+.
+
+Cited by: 
+§E.2
+,
+
+§E.4
+.
+
+Qwen Team (2026)
+
+Qwen Team
+
+Qwen3.5: Towards native multimodal agents
+.
+
+External Links: 
+Link
+
+Cited by: 
+Appendix C
+,
+
+§4.4
+.
+
+Saunshi 
+et al.
+ (2023)
+
+N. Saunshi, A. Gupta, M. Braverman, and S. Arora
+
+Understanding influence functions and datamodels via harmonic analysis
+.
+
+ICLR
+.
+
+Cited by: 
+Appendix A
+.
+
+Scheffé (1958)
+
+H. Scheffé
+
+Experiments with mixtures
+.
+
+Journal of the Royal Statistical Society: Series B (Methodological)
+ 
+20
+ (
+2
+), 
+pp. 344–360
+.
+
+Cited by: 
+Appendix A
+,
+
+§E.4
+.
+
+Sherman and Morrison (1950)
+
+J. Sherman and W. J. Morrison
+
+Adjustment of an inverse matrix corresponding to a change in one element of a given matrix
+.
+
+The Annals of Mathematical Statistics
+ 
+21
+ (
+1
+), 
+pp. 124–127
+.
+
+Cited by: 
+§E.3
+.
+
+Shukor 
+et al.
+ (2025)
+
+M. Shukor, L. Bethune, D. Busbridge, D. Grangier, E. Fini, A. El-Nouby, and P. Ablin
+
+Scaling laws for optimal data mixtures
+.
+
+In 
+NeurIPS
+,
+
+Cited by: 
+Appendix A
+.
+
+Tan 
+et al.
+ (2026)
+
+H. Tan, S. Wu, Y. Chen, J. Xia, R. Xie, B. Xia, X. Sun, and X. Qi
+
+Fast data mixture optimization via gradient descent
+.
+
+In 
+ICLR
+,
+
+Cited by: 
+Appendix A
+,
+
+§1
+.
+
+Team OLMo 
+et al.
+ (2025)
+
+Team OLMo, P. Walsh, L. Soldaini, D. Groeneveld, K. Lo, S. Arora, A. Bhagia, Y. Gu, S. Huang, M. Jordan, N. Lambert, D. Schwenk, O. Tafjord, T. Anderson, D. Atkinson, F. Brahman, C. Clark, P. Dasigi, N. Dziri, A. Ettinger, M. Guerquin, D. Heineman, H. Ivison, P. W. Koh, J. Liu, S. Malik, W. Merrill, L. J. V. Miranda, J. Morrison, T. Murray, C. Nam, J. Poznanski, V. Pyatkin, A. Rangapur, M. Schmitz, S. Skjonsberg, D. Wadden, C. Wilhelm, M. Wilson, L. Zettlemoyer, A. Farhadi, N. A. Smith, and H. Hajishirzi
+
+2 OLMo 2 furious (COLM’s version)
+.
+
+In 
+COLM
+,
+
+Cited by: 
+Appendix C
+,
+
+§4
+.
+
+Team Olmo (2025)
+
+Team Olmo
+
+Olmo 3
+.
+
+arXiv preprint arXiv:2512.13961
+.
+
+Cited by: 
+§1
+.
+
+Thrush 
+et al.
+ (2025)
+
+T. Thrush, C. Potts, and T. Hashimoto
+
+Improving pretraining data using perplexity correlations
+.
+
+In 
+ICLR
+,
+
+Cited by: 
+Appendix A
+.
+
+Thudi 
+et al.
+ (2025)
+
+A. Thudi, E. Rovers, Y. Ruan, T. Thrush, and C. J. Maddison
+
+MixMin: Finding data mixtures via convex minimization
+.
+
+In 
+ICML
+,
+
+Cited by: 
+Appendix A
+,
+
+§1
+.
+
+Tropp (2012)
+
+J. A. Tropp
+
+User-friendly tail bounds for sums of random matrices
+.
+
+Foundations of Computational Mathematics
+ 
+12
+ (
+4
+), 
+pp. 389–434
+.
+
+Cited by: 
+§E.3
+.
+
+Wang and Jia (2023)
+
+J. T. Wang and R. Jia
+
+Data Banzhaf: A robust data valuation framework for machine learning
+.
+
+AISTATS
+.
+
+Cited by: 
+Appendix A
+,
+
+Remark 1
+.
+
+Wang 
+et al.
+ (2025)
+
+J. T. Wang, P. Mittal, D. Song, and R. Jia
+
+Data Shapley in one training run
+.
+
+In 
+ICLR
+,
+
+Cited by: 
+Appendix A
+.
+
+Wang 
+et al.
+ (2026a)
+
+J. T. Wang, T. Wu, K. Lyu, J. Zou, D. Song, R. Jia, and P. Mittal
+
+Can small training runs reliably guide data curation? rethinking proxy-model practice
+.
+
+In 
+ICLR
+,
+
+Cited by: 
+Appendix A
+.
+
+Wang 
+et al.
+ (2026b)
+
+S. Wang, X. Ouyang, T. Xu, Y. Hu, J. Liu, G. Chen, T. Zhang, J. Zheng, K. Yang, X. Ren, D. Liu, and L. Zhang
+
+OPUS: Towards efficient and principled data selection in large language model pre-training in every iteration
+.
+
+In 
+ICML
+,
+
+Cited by: 
+Appendix A
+.
+
+Wen 
+et al.
+ (2026)
+
+B. Wen, S. Salekin, F. Kang, B. Howe, L. L. Wang, J. Movellan, and M. Bilkhu
+
+MixAtlas: Uncertainty-aware data mixture for multimodal LLM midtraining
+.
+
+In 
+ICLR Workshop on Navigating and Addressing Data Problems for Foundation Models
+,
+
+Cited by: 
+Appendix A
+.
+
+Wettig 
+et al.
+ (2025)
+
+A. Wettig, K. Lo, S. Min, H. Hajishirzi, D. Chen, and L. Soldaini
+
+Organize the Web: Constructing domains enhances pre-training data curation
+.
+
+In 
+ICML
+,
+
+Cited by: 
+Appendix A
+,
+
+Appendix C
+,
+
+§1
+,
+
+§2
+,
+
+§2
+,
+
+§4
+,
+
+§4
+.
+
+Won 
+et al.
+ (2026)
+
+I. Won, H. Yoo, M. Cho, J. Park, H. Song, and K. Lim
+
+TREX: Tokenizer regression for optimal data mixture
+.
+
+In 
+EACL
+,
+
+Cited by: 
+Appendix A
+.
+
+Xie 
+et al.
+ (2023)
+
+S. M. Xie, H. Pham, X. Dong, N. Du, H. Liu, Y. Lu, P. S. Liang, Q. V. Le, T. Ma, and A. W. Yu
+
+DoReMi: Optimizing data mixtures speeds up language model pretraining
+.
+
+In 
+NeurIPS
+,
+
+Cited by: 
+Appendix A
+,
+
+§1
+,
+
+§2
+.
+
+Xie 
+et al.
+ (2025)
+
+W. Xie, F. Tonin, and V. Cevher
+
+Chameleon: A flexible data-mixing framework for language model pretraining and finetuning
+.
+
+In 
+ICML
+,
+
+Cited by: 
+Appendix A
+,
+
+§1
+.
+
+Ye 
+et al.
+ (2025)
+
+J. Ye, P. Liu, T. Sun, J. Zhan, Y. Zhou, and X. Qiu
+
+Data Mixing Laws: Optimizing data mixtures by predicting language modeling performance
+.
+
+In 
+ICLR
+,
+
+Cited by: 
+Appendix A
+,
+
+§1
+,
+
+§2
+.
+
+Yen 
+et al.
+ (2025)
+
+T. Yen, A. Siah, H. Chen, C. D. Guetta, T. Peng, and H. Namkoong
+
+Data Mixture Optimization: A multi-fidelity multi-scale bayesian framework
+.
+
+In 
+NeurIPS
+,
+
+Cited by: 
+Appendix A
+.
+
+Yu 
+et al.
+ (2025a)
+
+Y. Yu, K. Han, H. Zhou, Y. Tang, K. Huang, Y. Wang, and D. Tao
+
+LLM data selection and utilization via dynamic bi-level optimization
+.
+
+In 
+ICML
+,
+
+Cited by: 
+Appendix A
+.
+
+Yu 
+et al.
+ (2025b)
+
+Z. Yu, F. Peng, J. Lei, A. Overwijk, S. Yih, and C. Xiong
+
+Group-level data selection for efficient pretraining
+.
+
+In 
+NeurIPS
+,
+
+Cited by: 
+Appendix A
+.
+
+Zellers 
+et al.
+ (2019)
+
+R. Zellers, A. Holtzman, Y. Bisk, A. Farhadi, and Y. Choi
+
+HellaSwag: Can a machine really finish your sentence?
+.
+
+In 
+ACL
+,
+
+Cited by: 
+§4
+.
+
+Zhuang 
+et al.
+ (2025)
+
+X. Zhuang, J. Peng, R. Ma, Y. Wang, T. Bai, X. Wei, Q. Jiantao, C. Zhang, Y. Qian, and C. He
+
+Meta-rater: A multi-dimensional data selection method for pre-training language models
+.
+
+In 
+ACL
+,
+
+Cited by: 
+Appendix A
+.
+
+Zipf (1949)
+
+G. K. Zipf
+
+Human behavior and the principle of least effort
+.
+
+ 
+Addison-Wesley
+.
+
+Cited by: 
+§E.3
+.
+
+Appendix “LinMix: Data Mixing as Linear Domain Attribution”
+
+ 
+ 
+
+Appendix A 
+Related Work
+
+Design of experiments.
+
+Sampling 
+ is a classic problem in statistics.
+Because each row is a vector of domain proportions that sum to one, the proxy swarm is a mixture experiment 
+(
+Scheffé, 1958
+)
+.
+Choosing inputs that minimize the variance of a regression estimate is the subject of optimal experimental design.
+A design is 
+D-optimal
+ when it maximizes 
+, which minimizes the volume of the confidence ellipsoid of 
+ 
+(
+Kiefer and Wolfowitz, 1959
+)
+.
+For approximate designs, 
+Kiefer and Wolfowitz (1960)
+ show that maximizing this determinant also minimizes the worst-case prediction variance.
+The D-optimal design for the first-degree mixture model places equal weight on the vertices of the simplex 
+(
+Kiefer, 1961
+)
+.
+When upper bounds such as our caps 
+ truncate the simplex, the extreme vertices designs of 
+McLean and Anderson (1966)
+ likewise use the vertices of the constrained region.
+
+LinMix
+ follows this principle at a scale where computing exact optimal designs on 
+ is impractical, sampling vertices generated by uniformly random domain permutations.
+We prove that this sampling scheme is optimal in expectation on 
+ with equal caps (Theorem 
+2
+) and leave the case of unequal caps to future work.
+In Section 
+4.1
+, we tune Dirichlet sampling by minimizing the condition number of 
+, a criterion closely related to D-optimality and 
+.
+Both degrade together because nearly-collinear mixes reduce the smallest singular value of 
+, thereby collapsing the determinant and inflating the condition number.
+
+LinMix
+ also samples proxy mixes in pairs by filling domains in a random order and then in reverse order, following the idea of antithetic variates 
+(
+Hammersley and Morton, 1956
+)
+.
+This relates to pairing sampled coalitions with their complements that has improved Shapley value approximation 
+(
+Fumagalli et al., 2026
+)
+, though our capped mixes need not be exact complements.
+More broadly, regression design is of interest for improving attribution, e.g. 
+Musco and Witter (2025)
+ improve regression-based Shapley value approximation via leverage-score sampling of coalitions.
+
+Data mixing.
+
+Data mixing methods differ in how they estimate domain value and spend compute to choose a mix 
+(
+Liu et al., 2026
+)
+.
+Online methods adapt the mixture during training.
+DoReMi 
+(
+Xie et al., 2023
+)
+ learns weights during proxy training through group distributionally robust optimization, DoGE 
+(
+Fan et al., 2024
+)
+ and 
+Tan et al. (2026)
+ use gradient-based updates guided by generalization or validation performance, and PiKE 
+(
+Li et al., 2025
+)
+ re-weights data sources from their gradients.
+MixMin 
+(
+Thudi et al., 2025
+)
+ optimizes a weighted ensemble of proxy predictions, while Chameleon 
+(
+Xie et al., 2025
+)
+ derives weights from relationships between domain embeddings.
+Data Mixing Laws 
+(
+Ye et al., 2025
+)
+, AutoScale 
+(
+Kang et al., 2025
+)
+, and 
+Shukor et al. (2025)
+ use scaling relationships to predict mixture performance or select mixtures at larger training scales.
+Mixture optimization also extends to tokenizers 
+(
+Won et al., 2026
+)
+ and multimodal midtraining 
+(
+Wen et al., 2026
+)
+.
+Adaptive search allocates new proxy runs to promising mixtures through iterative predictor fitting 
+(
+Diao et al., 2025
+)
+ or Bayesian optimization 
+(
+Chen et al., 2025a
+; 
+Yen et al., 2025
+)
+.
+
+LinMix
+ instead fixes its proxy mixtures before observing their outcomes, using vertex sampling to estimate domain effects across the feasible region.
+This design enables a useful linear fit across hundreds of domains; combining it with adaptive search is a direction for future work.
+
+Theory of optimal regression-based data mixing.
+
+Regression-based data mixing methods select the target mix by minimizing a fitted surrogate model, offering little theoretical insight into the optimal mix itself 
+(
+Liu et al., 2025
+; 
+Wettig et al., 2025
+; 
+Chen et al., 2026
+)
+.
+Recently, 
+Chen et al. (2026)
+ bound the performance loss when a previously optimized mix is reused after the domain set changes, taking the mixing law and its exact minimization as given.
+
+Thrush et al. (2025)
+ rank domains by correlating the per-domain losses of public models with their benchmark scores instead, and prove that such rankings are optimally used by saturating the caps in rank order.
+In our framework, this rule is the vertex solution of Eq. (
+5
+) at 
+, with the ranking estimated from a designed experiment on training mixtures rather than a correlation across uncontrolled models.
+For 
+, the objective is a weighted 
+isoelastic
+ utility, also known as the alpha-fair family of resource allocation 
+(
+Mo and Walrand, 2000
+)
+, whose marginal utility grows unbounded at zero weight, so the maximizer places positive weight on every positively attributed domain (Proposition 
+1
+).
+Corollary 
+1
+ solves the KKT conditions in closed form, yielding a capped water-filling allocation 
+(
+Boyd and Vandenberghe, 2004
+, cf.)
+.
+
+Data attribution.
+
+Our work relates to the parallel literature on data attribution, which typically studies the influence of individual training examples rather than entire domains 
+(
+Ghorbani and Zou, 2019
+; 
+Feldman and Zhang, 2020
+; 
+Wang and Jia, 2023
+; 
+Li and Yu, 2023
+)
+.
+We identify a connection between regression-based data mixing and datamodels 
+(
+Ilyas et al., 2022
+; 
+Saunshi et al., 2023
+)
+, which predict model outputs from training-set membership and show that a linear model can capture these dependencies.
+DsDm 
+(
+Engstrom et al., 2024
+)
+ turns this predictive view into data selection, using gradient-based TRAK estimates 
+(
+Park et al., 2023
+)
+ to rank individual examples and select a fixed-size subset.
+
+LinMix
+ shares this principle but estimates domain proportions from proxy runs and allocates tokens under domain caps.
+Using these estimates for a larger target model requires that data effects transfer across scales, as studied by 
+Khaddaj et al. (2025)
+.
+Transfer depends on proxy training hyperparameters, as lower learning rates improve agreement with the dataset rankings of larger models 
+(
+Wang et al., 2026a
+)
+.
+With a limited number of runs 
+(
+Wang et al., 2025
+)
+, the question becomes which mixtures reveal enough about each domain to support the allocation, which vertex sampling answers by design.
+
+Data selection and filtering.
+
+Data quality and filtering methods improve training corpora by selecting or weighting individual examples.
+DataComp 
+(
+Gadre et al., 2023
+; 
+Li et al., 2024
+)
+ benchmarks how data curation affects large model performance.
+Methods that combine selection criteria include Meta-rater 
+(
+Zhuang et al., 2025
+)
+, which learns combinations of quality scores from proxy runs, and 
+Fan et al. (2026)
+, who jointly optimize quality and diversity through learned selection masks, while Group-MATES 
+(
+Yu et al., 2025b
+)
+ further accounts for interactions between examples.
+During training, selection can adapt by coordinating multiple criteria 
+(
+Bai et al., 2025
+)
+, updating example weights 
+(
+Yu et al., 2025a
+)
+, or scoring examples by their optimizer updates 
+(
+Wang et al., 2026b
+)
+.
+For fine-tuning, 
+Ling et al. (2025)
+ select data using a diversity reward, while LimaCost 
+(
+Moon et al., 2025
+)
+ measures instruction-data value against a reference dataset using gradients.
+Filtering and mixing can be combined by curating the corpus before optimizing its domain mix, as in our experiments.
+
+Appendix B 
+Proofs
+
+See 
+1
+
+Proof.
+
+Throughout, let 
+ denote the feasible mix that spreads the budget over 
+ in proportion to the caps, 
+ for 
+ and 
+ otherwise.
+Its entries sum to one and 
+ gives 
+, so it is feasible and puts positive weight on every domain in 
+.
+
+Existence.
+
+For 
+, the objective 
+ is continuous on the compact set 
+, so a maximizer exists.
+For 
+, the proposition defines the objective as 
+ with the convention 
+.
+This convention continues the case 
+, where all maximizers lie on the face 
+.
+On this face the omitted terms are constants that do not affect the maximizer, and the remaining sum converges pointwise to 
+ as 
+.
+
+ is upper semicontinuous and bounded above by zero, so it attains a finite maximum, as 
+.
+
+Positive weight on every domain in 
+.
+
+The utility of a domain in 
+ has an unbounded derivative at zero weight, so leaving such a domain empty cannot be optimal.
+To make this precise, let 
+ be any maximizer and suppose 
+ for some 
+.
+For 
+ this gives 
+, a contradiction.
+For 
+, pick any 
+ with 
+ and move a small weight 
+ from 
+ to 
+.
+Only two terms change.
+The 
+-th gains 
+.
+The 
+-th loses at most 
+ with 
+, by the mean value theorem on 
+.
+The gain is roughly 
+ while the loss is only proportional to 
+, so the move strictly improves the objective for small 
+, again a contradiction.
+Hence 
+ for all 
+.
+
+Zero weight outside 
+.
+
+Conversely, weight outside 
+ adds no value and is better spent inside.
+Suppose 
+ for some 
+.
+Because 
+, some domain 
+ sits strictly below its cap.
+Moving the weight 
+ from 
+ to 
+ is feasible.
+The 
+-th term does not decrease, since 
+ makes it non-increasing in 
+, and for 
+ it is absent from 
+ altogether.
+The 
+-th term strictly increases, a contradiction.
+Hence 
+ for all 
+.
+
+Uniqueness.
+
+By the two steps above, every maximizer lies in the convex set 
+ and is strictly positive on 
+.
+On 
+, the objective is a sum of strictly concave functions of the coordinates in 
+, since 
+ and 
+.
+Two distinct maximizers would therefore be beaten by their midpoint, so the maximizer is unique.
+
+Linear limit.
+
+At 
+, the objective 
+ is linear, so it is maximized at a vertex of the truncated simplex.
+The greedy fill solving Eq. (
+4
+) can then exhaust the budget before reaching the lowest-value domains in 
+ and leave them at zero weight.
+For example, 
+ with 
+ yields the optimum 
+.
+∎
+
+See 
+1
+
+Proof.
+
+Fix 
+.
+The claimed strict concavity on the support was established in the uniqueness step of Proposition 
+1
+, as each summand over 
+ is strictly concave.
+By Proposition 
+1
+, the maximizer 
+ is unique, lies in 
+, and satisfies 
+ for all 
+.
+On 
+, the problem maximizes this concave objective under the affine constraints 
+ and 
+.
+Because every 
+ is positive, the objective is differentiable at 
+ and the constraints 
+ are inactive, so 
+ satisfies the KKT conditions 
+(
+Boyd and Vandenberghe, 2004
+, cf.)
+ with a scalar 
+ for the budget and multipliers 
+ for the caps.
+The marginal utility of domain 
+ is 
+, so stationarity reads 
+ for every 
+.
+In words, the optimum equalizes marginal utilities at the common level 
+, except where a cap binds.
+Because 
+, some domain lies strictly below its cap.
+For this domain, complementary slackness gives 
+, so 
+.
+Now the closed form can be read off.
+If 
+, then 
+ and stationarity gives 
+.
+If 
+, then 
+ gives 
+.
+In both cases, 
+.
+Since 
+ is feasible, summing this form over 
+ shows that 
+ enforces the normalization 
+.
+Finally, 
+ is unique.
+The sum 
+ is continuous and non-increasing in 
+.
+At any 
+ where it equals 
+, some term lies strictly below its cap and there decreases strictly in 
+.
+Therefore the value 
+ is attained at exactly one 
+.
+∎
+
+Appendix C 
+Experimental Setup
+
+Pretraining data.
+
+We tokenize data into single-domain sequences of 2048 tokens with the GPT-NeoX-20B tokenizer 
+(
+Black et al., 2022
+)
+, which has a vocabulary of 50,277 tokens.
+This way, the WebOrganizer corpus 
+(
+Wettig et al., 2025
+)
+ yields 195B tokens, and the 40-domain corpus adds 168B tokens of Stack-Edu 
+(
+Allal et al., 2025
+)
+ across 15 programming languages, plus the 53B-token highest-quality subset of Nemotron-CC-Math 
+(
+Karimi Mahabadi et al., 2026
+)
+, bringing the total data size to 416B.
+Figure 
+5
+ shows the resulting prior data mixes.
+
+Figure 5: 
+
+Prior data mix distributions.
+
+Domain shares for the three setups: 24 domains (topics), 288 domains formed from topic and format pairs, and 40 domains extending topics with code and math data.
+The dashed line marks the removal of the distribution’s tail, where the kept larger half of all 576 pairs covers 94% of the corpus.
+
+Sampling data mixes.
+
+The caps 
+ become 
+ and 
+ for the 32B target token budget at 24 and 288 domains, and 
+ at 40 domains.
+We initially derived the latter for a 120B budget, allowing us to further train the models beyond the 80B tokens used.
+Dirichlet sampling uses 
+ and 
+, 
+, and 
+ at 24, 288, and 40 domains, respectively.
+The 40-domain range follows the criterion of Section 
+4.1
+: the default parameters reject over 99.9% of draws, and the condition number of 
+ is minimized near 
+.
+We keep the 
+ span of the tuned range, over which the rejection rate falls from 0.96 to 0.01.
+For both samplers, we draw 
+ designs and keep the best-conditioned 
+, which gives the most stable regression coefficients.
+
+Language models.
+
+Table 
+3
+ lists model architectures and hyperparameters.
+Both model families follow their reference implementations 
+(
+Team OLMo et al., 2025
+; 
+Qwen Team, 2026
+)
+; Qwen3.5 interleaves three gated DeltaNet layers per attention layer.
+All models use AdamW with 
+ and weight decay 
+.
+The peak learning rate scales with the inverse cube root of the model parameter count 
+(
+Porian et al., 2024
+)
+.
+The schedule warms up linearly over the first 10% of steps, decays by cosine to 10% of the peak, and then linearly to zero over the final 10%.
+
+Table 3: 
+
+Model architectures and training hyperparameters.
+
+Parameters include embeddings.
+Qwen3.5 layer counts list gated DeltaNet + full-attention layers.
+Batch gives sequences per step.
+
+Model
+
+Params
+
+Layers
+
+Heads
+
+Hidden size
+
+Batch
+
+Tokens
+
+Peak LR
+
+OLMo2 30M
+
+29.2M
+
+4
+
+8
+
+256
+
+64
+
+1B
+
+0.99
+
+OLMo2 60M
+
+57.6M
+
+8
+
+8
+
+384
+
+128
+
+2B
+
+0.98
+
+OLMo2 100M
+
+102.0M
+
+12
+
+8
+
+512
+
+128
+
+3.2B
+
+0.97
+
+OLMo2 1B
+
+1.41B
+
+18
+
+16
+
+2048
+
+512
+
+32B
+
+0.95
+
+Qwen3.5 100M
+
+104.5M
+
+9+3
+
+4
+
+576
+
+128
+
+3.2B
+
+0.97
+
+Qwen3.5 1B
+
+1.33B
+
+12+4
+
+16
+
+2048
+
+512
+
+32B
+
+0.95
+
+Qwen3.5 4B
+
+3.70B
+
+24+8
+
+16
+
+2560
+
+1024
+
+80B
+
+0.95
+
+Evaluation.
+
+We use the LM Evaluation Harness 
+(
+Gao et al., 2024
+)
+ for a standardized evaluation.
+Proxy models are scored by BPB on the training split of each benchmark, and target models by accuracy and BPB on their held-out set (Table 
+4
+).
+Shots are drawn from the training split, except MBPP and MATH, which use their standard fixed prompts, and HumanEval BPB, which relies on three hand-written examples.
+For the two-benchmark targets, ARC (easy and challenge) and HS+PIQA, we fit a surrogate per benchmark, minimize the mean of their predictions, and report the mean of the two target model scores.
+For the 4B models, math and code benchmarks are scored using greedy decoding, with exact match for math and pass@1 for code.
+We draw two disjoint held-out sets from the Common Pile dataset 
+(
+Kandpal et al., 2025
+)
+: a 150k-sequence split on which we score the proxy models to fit the surrogates, and a 300k-sequence split reserved for scoring the target models.
+
+Table 4: 
+
+Benchmark splits, sample sizes, and few-shot counts.
+
+Dashes mark benchmarks used only as held-out checks.
+
+Benchmark
+
+Proxy split (size)
+
+Held-out set (size)
+
+Shots
+
+Target metric
+
+ARC-Easy
+
+train (2,251)
+
+test (2,376)
+
+5
+
+normalized acc.
+
+ARC-Challenge
+
+train (1,119)
+
+test (1,172)
+
+5
+
+normalized acc.
+
+HellaSwag
+
+train (39,905)
+
+validation (10,042)
+
+5
+
+normalized acc.
+
+PIQA
+
+train (16,113)
+
+validation (1,838)
+
+5
+
+normalized acc.
+
+MBPP
+
+train (374)
+
+test (500)
+
+3
+
+pass@1
+
+GSM8K
+
+train (7,473)
+
+test (1,319)
+
+5
+
+exact match
+
+HumanEval
+
+—
+
+test (164)
+
+0
+
+pass@1
+
+MATH
+
+—
+
+test (5,000)
+
+4
+
+exact match
+
+Appendix D 
+Additional Results
+
+Figure 
+6
+ extends Figure 
+3
+ with 
+ measurements, and Figure 
+7
+ repeats it for the four targets of the 4B experiments at 40 domains, where vertex sampling reaches 
+ with every surrogate at 
+, while the tuned Dirichlet swarm stays at 
+ on the three benchmarks and 
+ on CPile.
+Figure 
+8
+ shows that the linear fit of the vertex swarm transfers across proxy scales.
+Figures 
+9
+ and 
+10
+ visualize the interpretable domain weights of the optimized mixes at 24 and 288 domains and for the Common Pile loss at 40 domains.
+
+Tables 
+6
+ and 
+6
+ ablate the two optimization choices of 
+LinMix
+ on the HellaSwag target.
+Table 
+6
+ tests our hypothesis that dividing the coefficients 
+ by their standard errors, which discounts uncertain domains, improves the mix.
+The gain is at most half a point of accuracy for both the vertex swarm and the tuned Dirichlet swarm with 
+.
+Table 
+6
+ shows that the interpretable transformation of 
+ matters at 24 domains, where 
+ (
+) concentrates the mix on four domains at their caps 
+.
+This support is too narrow for the target budget of 32B tokens, which a larger budget would spread through lower caps, and 
+ or 
+ (
+) spreads at the current one.
+
+Figure 6: 
+
+Performance of optimizers under Vertex and Dirichlet samplers.
+
+Extended Figure 
+3
+.
+Average Spearman correlation and 
+ across 5 random repetitions of 10-fold cross-validation under a fixed proxy model budget.
+Nonlinear is implemented using LightGBM, as in 
+RegMix
+, and exponential fits the exponential law to the target, as in 
+Olmix
+.
+
+Figure 7: 
+
+Optimizer performance on the targets of the 4B experiments.
+
+Figure 
+6
+ for the 40-domain setup, where 
+ 100M Qwen3.5 proxy models per sampler are fit to HellaSwag, MBPP, GSM8K, and the held-out Common Pile loss (CPile).
+Spearman correlation and 
+ are averaged across 5 random repetitions of 10-fold cross-validation.
+
+Figure 8: 
+
+The linear attribution fit transfers across proxy scales only under vertex sampling.
+
+A linear model is fit to predict HellaSwag BPB from the mix over the 
+ 30M proxy models at 288 domains, and predicts the outcomes of the 60M and 100M swarms trained on the same mixes.
+Absolute BPB drops with proxy scale, so we offset predictions by one constant per swarm without changing rankings.
+Dirichlet-sampled mixes yield a weak in-sample fit whose ranking does not transfer, whereas vertex sampling yields a ranking that transfers across model scales.
+
+Figure 9: 
+
+Domain weights optimized for the 1B target benchmarks.
+
+Domain weights relative to the prior mix across data mixing methods and targets on the 200B-token corpus split into 24 and 288 domains, including the held-out Common Pile loss (CPile).
+For 288 domains, rows retain the 24-topic order and sort each topic’s formats by increasing share of the prior data mix.
+Topic names are at the group centers, and since a topic group with few formats is shorter than its label, it can overlap vertically.
+Beyond 
+, the support of the target mix is the set of all positively attributed domains; the mixes at 
+ and 
+ thus share this support and differ only in the domain weight magnitudes (Proposition 
+1
+).
+Based on this, Table 
+1
+ trains the 
+LinMix
+ 
+ mix for HellaSwag at 24 domains, the 
+ mix for CPile at 24 domains, and the 
+ mix otherwise.
+
+Figure 10: 
+
+Domain weights optimized for validation loss at 40 domains.
+
+Domain weights relative to the prior mix across data mixing methods for BPB on the Common Pile.
+The three 
+LinMix
+ columns vary the utility transformation.
+
+Table 5: 
+Ablation of linear model scaling and proxy sampling at 288 domains on HellaSwag.
+
+Sampling
+
+Scaling
+
+Acc
+
+BPB
+
+Dirichlet
+
+.597
+
+.764
+
+.602
+
+.761
+
+Vertex
+
+.615
+
+.758
+
+.617
+
+.759
+
+Table 6: 
+Ablation of the utility transformation via curvature 
+ in 
+LinMix
+ on the HellaSwag target.
+
+24 domains
+
+288 domains
+
+Utility
+
+Acc
+
+BPB
+
+Acc
+
+BPB
+
+ (
+)
+
+.543
+
+.795
+
+.615
+
+.758
+
+ (
+)
+
+.565
+
+.782
+
+.611
+
+.758
+
+ (
+)
+
+.568
+
+.785
+
+.610
+
+.759
+
+Appendix E 
+Theoretical Analysis
+
+We formalize the domain attribution view of data mixing from first principles.
+Starting from linear datamodels, we show that the expected outcome of a proxy run is linear in its domain mix, with coefficients that average sample-level attribution scores (Proposition 
+2
+, Corollary 
+2
+), and that estimating them is a linear regression whose error is governed by the design 
+ (Lemma 
+1
+).
+Dirichlet sampling inflates this error as the concentration 
+ grows and keeps its mixes close to the prior, and also as the number of domains grows when the prior is more skewed than the temperature 
+ can flatten (Theorem 
+1
+).
+Vertex sampling is instead optimal on the simplex (Proposition 
+3
+) and, in expectation, on the simplex with equal caps (Theorem 
+2
+).
+
+E.1 
+From datamodels to domain attribution
+
+Datamodeling 
+(
+Ilyas et al., 2022
+)
+ attributes model outcomes to training data counterfactually, in a regime where many training runs on random subsets of the data are feasible.
+Fix a learning algorithm and a target input 
+, e.g. a benchmark question, and let 
+ denote the loss on 
+ of a model trained on a subset 
+ of the corpus 
+ of 
+ sequences.
+A datamodel is fit to the pairs 
+ collected over runs 
+, where 
+ indicates the sequences included in run 
+.
+Empirically, a linear fit predicts the outcomes of held-out runs well and motivates the model
+
+(6)
+
+where 
+ collects the attribution scores, i.e., the marginal effect of including each sequence on the loss at 
+, and 
+ is a noise term with zero mean given 
+ that captures the randomness of training.
+Follow-up work relies on this local linearity to relate attribution scores to model outcomes 
+(
+Karchmer et al., 2025
+)
+, and we adopt it as the assumption underlying this analysis.
+As all subsets considered below have the same size, an intercept can be absorbed into 
+ and is omitted.
+
+Consider a proxy run on the mix 
+ that trains on 
+ sequences, of which 
+ are drawn uniformly without replacement from domain 
+, independently across domains, where we assume that 
+ is an integer.
+Let its outcome 
+ be the benchmark loss, i.e., the average of 
+ over the set of benchmark inputs 
+.
+Let 
+ denote the benchmark-averaged attribution scores, and let 
+ and 
+ denote their mean and variance over the sequences of domain 
+.
+Proposition 
+2
+ formalizes the data attribution view of data mixing.
+
+Proposition 2
+ 
+(
+Datamodels coarsen to domain attribution
+)
+.
+
+Under the datamodel of Eq. (
+6
+), the expected outcome of a proxy run is linear in its mix.
+Specifically, with 
+,
+
+(7)
+
+where 
+ bounds the variance of the benchmark-averaged noise 
+ given 
+.
+
+Proof.
+
+Linearity.
+
+For a fixed subset 
+, averaging Eq. (
+6
+) over 
+ gives 
+ with 
+ and 
+, because the same subset produces the loss at every 
+ and the average commutes with the inner product.
+Given 
+, the subset 
+ contains 
+ sequences drawn uniformly without replacement from 
+, so every 
+ is included with probability 
+.
+By linearity of expectation,
+
+Evaluating this identity at 
+ identifies 
+ as the expected outcome of a run on domain 
+ alone, which is feasible whenever 
+.
+
+Variance.
+
+By the law of total variance and 
+,
+
+, where the second term is at most 
+.
+The domains are sampled independently, and within domain 
+ the sum of 
+ over a simple random sample of 
+ out of 
+ sequences has variance 
+ by the finite population variance formula 
+(
+Cochran, 1977
+)
+, where the fraction is read as zero for 
+.
+Summing over 
+ bounds the first term by 
+.
+∎
+
+The linear model 
+ fit in Eq. (
+2
+) is a datamodel whose units are domains instead of sequences, with coefficients that are budget-scaled averages of sample-level attribution scores.
+The partition into domains is arbitrary, since the only assumption is uniform sampling within each domain, and it affects only the noise, which stems from the randomness of training and from which sequences realize the mix, which we call the noise from sequence selection.
+Domains that are homogeneous in attribution reduce the latter, but their coefficients take more proxy runs to estimate, as the estimation error grows with 
+ (Lemma 
+1
+); the finest partition recovers data attribution itself.
+
+Corollary 2
+ 
+(
+Domain attribution at the finest granularity is data attribution
+)
+.
+
+Let every sequence form its own domain, 
+, so that a run trained on a subset 
+ of 
+ sequences has the mix 
+.
+Then 
+, so the domain model of Proposition 
+2
+ reduces to the benchmark-averaged datamodel of Eq. (
+6
+): 
+.
+The noise from sequence selection vanishes, leaving 
+.
+Further, with the equal caps 
+ (
+) that let no sequence repeat within a run, the greedy fill of Eq. (
+3
+) selects a uniformly random subset of 
+ sequences, so vertex sampling coincides with the subsampling design of 
+Ilyas et al. (2022)
+ with fraction 
+.
+
+Proof.
+
+With 
+ for every 
+, Proposition 
+2
+ applies with 
+ and 
+, and 
+ forces 
+.
+With caps 
+, the greedy fill of Eq. (
+3
+) assigns 
+ to the first 
+ sequences of a uniformly random permutation, which form a uniformly random subset of size 
+.
+∎
+
+Domain attribution thus interpolates between data attribution at 
+ and a single undifferentiated corpus at 
+, preserving the linear structure in between.
+Remark 
+1
+ relates domain attribution to the data values of cooperative game theory, such as the Shapley and Banzhaf values.
+
+Remark 1
+ 
+(
+Relation of domain attribution to Shapley and Banzhaf data values
+)
+.
+
+Data valuation scores a sequence 
+ by a weighted average of its marginal contributions 
+ over subsets 
+, with weights that define the Shapley value 
+(
+Ghorbani and Zou, 2019
+)
+, the Banzhaf value 
+(
+Wang and Jia, 2023
+)
+, or the weighted Banzhaf value 
+(
+Li and Yu, 2023
+)
+, which includes every other sequence in 
+ independently with probability 
+.
+If the linear Datamodel of Eq. (
+6
+) holds with an intercept for subsets of every size, these values coincide with the attribution score 
+, and by Proposition 
+2
+ the domain attribution 
+ is 
+ times the average value of the sequences in domain 
+, up to an additive constant shared by all domains.
+Without the linear assumption, the slope coefficients of the affine least squares approximation of 
+ over all subsets 
+ are the Banzhaf values 
+(
+Hammer and Holzman, 1992
+)
+, and under independent inclusion with probability 
+ they are the weighted Banzhaf values with weight 
+ 
+(
+Marichal and Mathonet, 2011
+)
+.
+Vertex sampling with equal caps resembles independent inclusion with probability about 
+, except that every run contains the same number of domains.
+For nonlinear outcomes, its least squares coefficients are therefore a fixed-size analogue of the weighted Banzhaf value.
+While a Banzhaf value captures the effect of adding a sequence to a random training set, differences between domain coefficients capture the effect of moving budget between domains at a fixed training size, which is the question that data mixing asks.
+
+E.2 
+The design matrix governs the estimation error
+
+By Proposition 
+2
+, the outcomes of 
+ proxy runs satisfy 
+ for a noise vector 
+, and the attribution estimate 
+ is the least squares estimator of 
+.
+We make the standard assumptions of linear regression, writing 
+ for the normalized information matrix, i.e., the Gram matrix of the mixes, whose inverse scales the covariance of 
+.
+
+Assumption 1
+.
+
+The noise is unbiased, 
+, its covariance 
+ satisfies 
+ for constants 
+, and the design has full column rank, 
+.
+
+Proposition 
+2
+ provides the first two conditions for independent proxy runs, where 
+ is admissible and, for homoscedastic noise 
+, 
+, while the third condition is a property of the design that we discuss below.
+The simplex is an affine hyperplane that avoids the origin, so 
+ mixes can span 
+, with one direction for the overall outcome level and 
+ for contrasts between domains.
+
+Lemma 1
+ 
+(
+Estimation error of linear domain attribution
+)
+.
+
+Under Assumption 
+1
+, 
+ is unbiased and its mean squared error satisfies
+
+(8)
+
+with equality in the first two when all runs share the same noise variance, 
+.
+
+Proof.
+
+This is the standard variance calculation for least squares.
+Substituting 
+ gives 
+, which has zero conditional mean and expected squared norm 
+.
+The semidefinite bounds on 
+ sandwich this trace between 
+ and 
+ times 
+, with equality for 
+.
+The last inequality holds as the 
+ eigenvalues of 
+ are at most 
+.
+∎
+
+The last inequality bounds the error by the smallest eigenvalue of 
+, which is small when some combination of domains barely varies across the proxy runs, i.e., when the runs leave a direction of the simplex unexplored.
+In optimal experimental design 
+(
+Kiefer and Wolfowitz, 1959
+; 
+Pukelsheim, 2006
+)
+, minimizing the trace in Eq. (
+8
+), maximizing this eigenvalue, and maximizing 
+ are known as the A-, E-, and D-criteria.
+This eigenvalue is what the condition number 
+ controls: every mix sums to one, so 
+ and 
+, hence 
+ and 
+.
+Minimizing the condition number of 
+, as in Section 
+4.1
+, therefore controls the last bound of Eq. (
+8
+) up to the factor 
+.
+The noise level and the number of domains are fixed by the data and its partition, so the number of runs 
+ and the design 
+ are the only two levers of a regression-based data mixing method.
+We next compare the designs of Dirichlet and vertex sampling on these quantities.
+
+E.3 
+Pitfalls of Dirichlet sampling
+
+Dirichlet sampling in Eq. (
+1
+) draws each mix as 
+ around the tempered prior 
+, with a log-uniform concentration 
+.
+We analyze it without the caps and the rounding of 
+ to integers, which keeps the moments in closed form, and start with the expected information matrix 
+.
+
+Lemma 2
+ 
+(
+Information matrix of Dirichlet sampling
+)
+.
+
+Under Eq. (
+1
+),
+
+(9)
+
+Consequently, 
+ and 
+, where 
+ and 
+ denote the smallest and the second smallest entry of 
+.
+
+Proof.
+
+Second moment.
+
+For 
+ with 
+, the moments 
+ for 
+ and 
+ read in matrix form as 
+.
+With 
+ and 
+, since 
+,
+
+The two weights sum to one, so averaging over 
+ gives Eq. (
+9
+) with 
+.
+For 
+ uniform on 
+, substituting 
+ and using 
+ yields the closed form
+
+Inverse.
+
+Let 
+, which is positive definite as 
+, so 
+.
+The Sherman–Morrison formula 
+(
+Sherman and Morrison, 1950
+)
+ applied to the rank-one update 
+, together with 
+ and 
+, gives
+
+and taking the trace yields 
+.
+
+Spectrum.
+
+The lower bound follows from 
+.
+For the upper bound, let 
+ index the two smallest entries of 
+ and pick a unit vector 
+ orthogonal to 
+, which exists as orthogonality is a single linear constraint on a two-dimensional space.
+Then 
+, and the Rayleigh principle gives 
+.
+∎
+
+Figure 11: 
+
+Two pitfalls of Dirichlet sampling.
+
+Order of the estimation error in Theorem 
+1
+ as a function of the Dirichlet concentration 
+ and the tempered tail exponent 
+ of the Zipfian prior.
+The concentration is fixed, so that 
+, and the boundaries at 
+ and 
+ are schematic.
+For 
+, the mixes cluster around the prior, and the error grows with 
+.
+For 
+, the rarest domains receive too little mass, and the error grows super-quadratically in 
+.
+
+By Lemma 
+2
+, 
+ averages two designs with weights 
+ and 
+: single-domain runs at 
+ drawn with probability 
+, and the tempered prior repeated in every run.
+These two terms lead to two pitfalls of Dirichlet sampling (Figure 
+11
+).
+(i) 
+Under-dispersion
+: a large concentration keeps the mixes close to the tempered prior, so 
+ is small and the information in every direction orthogonal to 
+ shrinks by the factor 
+.
+(ii) 
+Tail starvation
+: even at 
+, rare domains with a small share 
+ are seldom explored, so their attributions are estimated poorly and dominate the error, as 
+ in Lemma 
+2
+ grows with 
+.
+
+To quantify the second pitfall, we model the prior mix as Zipfian 
+(
+Zipf, 1949
+)
+, 
+ for domains ranked by size (Figure 
+12
+).
+Tempering preserves this form, as 
+, so the tempered prior is 
+ with the flatter exponent 
+ and the truncated zeta function 
+.
+Its rarest domain has the share 
+, which shrinks as 
+ grows, so by Lemma 
+2
+, 
+.
+To bound the error of a sampled design, which depends on 
+ rather than on 
+, we use the following auxiliary results.
+
+Figure 12: 
+
+Prior data mixes are approximately Zipfian.
+
+Domain share against rank on log-log axes for the three setups, with least-squares fits of Zipf’s law 
+ in log-log coordinates.
+The 288-domain setup retains the larger half of the 
+ topic–format pairs, which truncates its tail.
+
+Lemma 3
+ 
+(
+Jensen’s inequality for the inverse
+ 
+(
+Groves and Rothenberg, 1969
+)
+)
+.
+
+Let 
+ be a random positive definite matrix with 
+ positive definite.
+Then 
+ for every vector 
+, and in particular 
+.
+
+Proof.
+
+Expanding 
+ gives 
+, whose expectation is 
+; summing over 
+ gives the trace inequality.
+∎
+
+Lemma 4
+ 
+(
+Matrix Chernoff bound, lower tail
+)
+.
+
+Let 
+ be independent random positive semidefinite 
+ matrices with 
+ almost surely, and let 
+.
+Then, for every 
+,
+
+Proof.
+
+The first inequality is Theorem 1.1 of 
+Tropp (2012)
+.
+The second one follows from 
+ for 
+, which holds as both sides vanish at 
+ and the derivative of their difference, 
+, is nonnegative.
+∎
+
+Corollary 3
+ 
+(
+Concentration of the information matrix
+)
+.
+
+Let the rows of 
+ be independent with 
+ almost surely and a common expected information matrix 
+, and let the noise satisfy the first two conditions of Assumption 
+1
+.
+For any 
+, if 
+, then with probability at least 
+ over the draw of 
+,
+
+(10)
+
+Proof.
+
+The summands 
+ of 
+ are independent and positive semidefinite with 
+ and 
+, so Lemma 
+4
+ with 
+ and 
+ bounds the probability of 
+ by 
+, using the 

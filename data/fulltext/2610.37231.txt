@@ -1,0 +1,1874 @@
+TaskBridge: Technical Report for SIGIR 2026 eCommerce Challenge
+https://arxiv.org/abs/2610.37231
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+TaskBridge: Technical Report for SIGIR 2026 eCommerce Challenge
+
+Thanks: 
+ Project Leader: Zixu Li. ✉ Corresponding Author: Yupeng Hu.
+
+Zhiheng Fu
+1
+, Yupeng Hu
+, Zixu Li
+1,†
+, Zhiwei Chen
+1
+, Qinlei Huang
+1
+, Shaokun Wang
+2
+,
+
+Han Liu
+3
+, Fan Liu
+4
+, Weili Guan
+2
+, Liqiang Nie
+2
+
+1
+Shandong University, 
+2
+Harbin Institute of Technology (Shenzhen),
+
+3
+City University of Hong Kong, 
+4
+Southeast University
+
+© none
+
+Abstract.
+
+The Query Reformulation Task of the 2026 SIGIR Workshop on eCommerce assesses whether systems can reformulate task-oriented e-commerce queries that describe activities or goals into expressions better suited for product retrieval, and then retrieve the products required to complete the task through a standard BM25 pipeline. Unlike queries that directly specify products, task-oriented queries often encode product needs implicitly in activity-level semantics, creating a pronounced lexical gap between query terms and the product catalog. Moreover, the Automatic and Interactive protocols impose different requirements on the number of reformulations. A successful system must therefore preserve the original task intent while improving catalog-level retrievability, and select either a single query or multiple complementary queries according to the protocol.
+We present TaskBridge, a catalog-anchored query reformulation framework for task-oriented e-commerce search. TaskBridge consists of the 
+Catalog Semantic Anchoring
+ module, the 
+Unified Five-Candidate Rewriting
+ module, and the 
+Protocol-Aware Selection
+ module. Catalog Semantic Anchoring constructs a phrase lexicon and semantic anchors from the product corpus, providing task queries with searchable expressions grounded in catalog vocabulary. Unified Five-Candidate Rewriting generates multi-perspective candidates around the original query, preserving its task intent while covering different interpretations of the underlying product needs. Protocol-Aware Selection combines BM25 retrieval results, query–product reranking scores, and weighted Jaccard overlap to select one reformulation under the Automatic setting and up to four complementary reformulations under the Interactive setting. The selected queries are then executed independently using BM25 and converted into the six-column retrieval-result format required by the challenge. Experimental results show that TaskBridge effectively improves product retrieval for task-oriented queries. The multi-reformulation Interactive setting further exploits the complementarity among candidates, yielding additional gains in overall retrieval effectiveness.
+TaskBridge achieved 
+first place
+ on the SIGIR 2026 eCommerce Challenge.
+
+Keywords: 
+e-commerce search, query reformulation, BM25, interactive retrieval
+
+1. 
+Introduction
+
+Queries in e-commerce search do not always specify products explicitly. Users often express their needs through activities, scenarios, or desired outcomes. For example, “make lasagna” describes a cooking task without explicitly listing the baking dish, ingredients, or kitchenware required. Such task-oriented queries encode product needs in high-level intent, leaving no direct lexical correspondence between the query terms and product titles. Task-oriented query reformulation aims to preserve the original task intent while making relevant product expressions explicit, so that standard lexical retrieval can retrieve the products required to complete the task
+(
+Singh et al., 2012
+; 
+Gollapudi et al., 2012
+; 
+Wu et al., 2017
+; 
+Shah and White, 2021
+; 
+SIGIR Workshop on eCommerce Organizers, 2026
+; 
+Zhang et al., 2026b
+; 
+TREC Product Search and Recommendations Track, 2026
+)
+. The central challenge is therefore not simple query expansion, but the transformation of a query into catalog-matchable product expressions without changing its task meaning.
+
+This transformation involves two types of risk. When a query is under-reformulated, the original query may describe only the task goal and fail to reach the categories or entities that represent the required products in the catalog, making relevant products difficult to retrieve. When a query is over-reformulated, newly added terms may introduce products that the task does not require, weakening the original intent. Because product titles and category names in a catalog do not necessarily follow users’ everyday expressions, generating seemingly plausible product terms with a language model alone does not guarantee a match to the actual catalog. Reformulation must therefore bridge the lexical gap between task intent and catalog expressions while controlling the catalog grounding and extent of the added content
+(
+Maji et al., 2019
+; 
+Manchanda et al., 2019
+; 
+Hirsch et al., 2020
+)
+.
+
+More generally, automatic query-expansion research treats the mismatch between short keyword queries and underlying information needs as a central retrieval problem, and organizes solutions around expansion sources, term selection, and weighting strategies
+(
+Carpineto and Romano, 2012
+; 
+Azad and Deepak, 2019
+)
+. Neural information retrieval provides a complementary route by learning representations that bridge query and document vocabulary
+(
+Mitra and Craswell, 2018
+)
+. Related work also explores multimodal state-space fusion 
+(
+Li et al., 2024
+)
+. Sentence embeddings and dense dual-encoder retrieval represent text for semantic matching
+(
+Reimers and Gurevych, 2019
+; 
+Karpukhin et al., 2020
+)
+. Language-guided visual correspondence has also been studied 
+(
+Song et al., 2024
+)
+, whereas neural passage reranking estimates the relevance of retrieved candidates
+(
+Nogueira and Cho, 2019
+)
+. Recent advances in ranking calibration 
+(
+Huang et al., 2026b
+)
+ and adaptive composition strategies
+(
+Huang et al., 2026a
+)
+ further enhance retrieval quality through structure-aware optimization 
+(
+Ye et al., 2025
+)
+. More recently, Query2doc uses language-model-generated pseudo-documents to expand queries for sparse and dense retrieval
+(
+Wang et al., 2023
+)
+. And video-LLM research also studies fine-grained semantic understanding 
+(
+Hu et al., 2025
+)
+. These general approaches motivate the use of semantic anchors and a reranking proxy here, while TaskBridge keeps the final retrieval stage lexical and catalog-grounded.
+
+This issue is particularly pronounced in lexical product retrieval. BM25 primarily ranks products according to term-level matches between the query and product titles
+(
+Robertson and Walker, 1994
+; 
+Robertson and Zaragoza, 2009
+)
+; when a task-oriented query contains none of the product terms used in the catalog, BM25 cannot infer the required products from the task goal. Similar challenges arise in composed retrieval tasks, where multi-modal queries must be mapped to catalog items through semantic anchoring 
+(
+Chen et al., 2025
+)
+. Conversely, adding a large number of product terms to the query may increase term overlap, but can also introduce products that are related to the task yet unnecessary. Efficient hybrid search techniques
+(
+Yang et al., 2026a
+)
+ and robust noise-mitigation strategies
+(
+Yang et al., 2026b
+; 
+Hu et al., 2026
+)
+ address related challenges in bridging semantic gaps while maintaining retrieval efficiency. Task-oriented query reformulation therefore requires a controllable mapping between task semantics and catalog vocabulary
+(
+Maji et al., 2019
+; 
+Manchanda et al., 2019
+)
+.
+
+The Query Reformulation Task at the 2026 SIGIR Workshop on eCommerce evaluates this problem under the Automatic and Interactive settings
+(
+SIGIR Workshop on eCommerce Organizers, 2026
+; 
+TREC Product Search and Recommendations Track, 2026
+)
+. The Automatic setting requires one reformulation for each original query, whereas the Interactive setting permits up to four reformulations. These settings examine whether reformulated queries can support task-oriented product retrieval from single-query and multi-query perspectives, respectively, and provide an evaluation scenario for studying the transformation between task intent and product-catalog expressions.
+
+To address this task, we propose TaskBridge, a catalog-anchored reformulation framework for task-oriented e-commerce queries. TaskBridge constructs a phrase lexicon and semantic anchors from product titles, generates candidates with the original query, retrieval feedback, and lexicon constraints, and selects queries according to the submission setting. It then submits the catalog-grounded reformulations to standard BM25 retrieval.
+
+The main contributions of this paper are as follows:
+
+•
+
+We analyze the central challenge in task-oriented e-commerce query reformulation: preserving task intent while converting implicitly expressed product needs into vocabulary that matches catalog expressions;
+
+•
+
+We propose TaskBridge, a catalog-anchored reformulation framework that integrates Catalog Semantic Anchoring, Unified Five-Candidate Rewriting, and Protocol-Aware Selection under the Automatic and Interactive settings;
+
+•
+
+We validate the effectiveness of TaskBridge on the SIGIR eCom Query Reformulation benchmark. Under the Automatic setting, Task Completion NDCG@10, Essential Product Recall@100, and MAP reach 
+, 
+, and 
+, respectively; under the Interactive setting, they reach 
+, 
+, and 
+, respectively.
+
+2. 
+Method
+
+TaskBridge is an inference-time query reformulation framework for task-oriented e-commerce queries. It organizes catalog phrase resources, candidate query generation, and protocol-aware selection into a unified pipeline. First, it constructs catalog phrase resources for different downstream operations from the product corpus; it then generates candidate reformulations with complementary preferences around the original query; finally, it determines the submitted query set according to the Automatic or Interactive protocol. This design jointly considers task-intent preservation, catalog-vocabulary matching, and multi-query complementarity within a single selection framework. Figure 
+1
+ illustrates the overall architecture.
+
+TaskBridge does not involve model training. By default, it uses Qwen3.5-9B 
+(
+Qwen Team, 2026
+)
+ to generate query reformulations and make role-prompted judgments, Qwen3-VL-Embedding-8B 
+(
+Li et al., 2026a
+; 
+Bai et al., 2025
+; 
+Yang et al., 2025
+)
+ to retrieve query-relevant semantic anchors, and Qwen3-VL-Reranker-8B 
+(
+Li et al., 2026a
+; 
+Zhang et al., 2025a
+)
+ to estimate the relevance between the original query and product titles. These models respectively support candidate construction, anchor retrieval, and selection-agent scoring, while the final product ranking follows the BM25 retrieval pipeline specified by the challenge.
+
+Figure 1. 
+Overall workflow of TaskBridge. The product corpus is first converted into catalog phrase resources. The two 
+Phrases
+ nodes in the figure correspond to (a) and (b): the former is used to construct semantic anchors, whereas the latter supports constrained query reformulation. The original task query then produces five candidate reformulations. The Protocol-Aware Selection module retains the highest-quality candidate under a single-query budget and selects a candidate set that balances quality and result diversity under a multi-query budget. BM25 is finally executed independently for the selected queries.
+
+2.1. 
+Problem Definition
+
+Given a task-oriented query 
+ and a product-title corpus 
+, TaskBridge aims to generate a set of queries suitable for lexical product retrieval and to return products relevant to the task intent through BM25.
+
+BM25 is a probabilistic retrieval model based on term matching. Given a query 
+ and a product document 
+, its relevance score can be written as
+
+(1)
+
+where 
+ is the frequency of term 
+ in document 
+, 
+ and 
+ are the document length and average document length, respectively, 
+ and 
+ control term-frequency saturation and length normalization, and 
+ is computed from the document frequency of the term. By increasing the contribution of rare matching terms while suppressing the term-frequency bias of long documents, BM25 ranks product titles 
+(
+Robertson and Walker, 1994
+; 
+Robertson and Zaragoza, 2009
+)
+.
+
+Based on the retrieval definition above, the task can be formalized as follows. Given an input pair 
+, the system generates one or more catalog-oriented reformulated queries and constructs a product ranking list for each reformulation. Let 
+ denote the reformulation function and 
+ the BM25 retrieval function. Then,
+
+(2)
+
+The reformulated queries should preserve the task intent expressed by 
+ as much as possible while narrowing the lexical gap between the task description and product titles. 
+ denotes the product ranking returned by the corresponding reformulated query.
+
+2.2. 
+Catalog Semantic Anchoring
+
+Task-oriented queries typically describe activities, scenarios, or usage goals, whereas product catalogs primarily use category, entity, and attribute phrases 
+(
+Gollapudi et al., 2012
+; 
+Wu et al., 2017
+; 
+Maji et al., 2019
+)
+. The Catalog Semantic Anchoring module constructs two complementary catalog phrase resources from the product corpus: a title phrase lexicon for constructing and purifying semantic anchors, and a corpus-derived phrase lexicon for providing candidate vocabulary for constrained query reformulation. Both resources share the product catalog as their semantic source, but differ in phrase-extraction scope and downstream use.
+
+Let the product-title corpus be 
+, and let 
+ denote the set of candidate phrases extracted from the titles. The system filters two- to five-token phrases and ranks them using
+
+(3)
+
+where 
+ is the phrase length, 
+ is the number of product documents containing phrase 
+, and 
+ is the number of occurrences of the phrase in the corpus. This produces the title phrase lexicon
+
+(4)
+
+This lexicon provides stable category and entity expressions occurring in product titles and serves as the vocabulary source for semantic-anchor construction.
+
+In parallel, the system extracts candidate phrases from the title, name, body, description, and category fields in the product corpus. Let 
+ denote the resulting candidate phrase set. These phrases form the corpus-derived phrase lexicon
+
+(5)
+
+where the candidate phrases consist of one- to three-token phrases and are scored using
+
+(6)
+
+Here, 
+ is the phrase length, 
+ is the number of product documents containing phrase 
+, and 
+ is the number of occurrences of the phrase in the product corpus. The corpus-derived lexicon supplies catalog-constrained phrase candidates for conservative need-aware and compact product-oriented reformulation, whereas semantic-anchor construction uses 
+. Subsequent equations use 
+ or 
+ according to the operation.
+
+Based on the title phrase lexicon, the system uses a generative model to convert candidate phrases into catalog semantic anchors. For each 
+, the model determines whether it expresses a purchasable product category, object, or accessory and generates a concise normalized expression while preserving the product semantics. This process is written as
+
+(7)
+
+where 
+ is the semantic category of the candidate phrase and 
+ is its normalized expression. To prevent scene descriptions, brand information, or title noise from being mistaken for product retrieval terms, the system retains only three types of expressions: product categories, product objects, and product accessories. It filters brands, scenes, marketing phrases, model fragments, and other non-product phrases. The semantic-anchor set is therefore defined as
+
+(8)
+
+The purification process requires the model to return a structured category and normalized text for each input without generating additional explanations. This output is used directly to build the subsequent anchor index, excluding additional non-product terms and irrelevant details.
+
+The system then constructs an embedding vector 
+ for each anchor 
+ and computes a query vector 
+ for the original query 
+. It retrieves query-relevant anchors using cosine similarity:
+
+(9)
+
+Here, 
+ denotes the query-relevant semantic anchors. The title phrase lexicon provides stable catalog expressions for anchor construction, whereas the corpus-derived phrase lexicon provides broader vocabulary candidates for constrained reformulation. Both resources support candidate generation but neither replaces the final BM25 product retrieval. Related approaches disentangle complex semantics 
+(
+Li et al., 2026e
+; 
+Fu et al., 2025
+; 
+Huang et al., 2025
+)
+ or construct intermediate-grained aggregations to bridge modality gaps, while our work focuses on task-to-catalog vocabulary mapping through phrase anchoring.
+
+2.3. 
+Unified Five-Candidate Rewriting
+
+The Unified Five-Candidate Rewriting module takes the original query 
+, catalog phrase resources, and query-relevant semantic anchors as input and generates a candidate set with different preferences:
+
+(10)
+
+The candidate pool preserves the original intent, incorporates retrieval evidence, and applies different levels of catalog-vocabulary constraint. Its five candidates represent distinct reformulation hypotheses and are evaluated jointly by the Protocol-Aware Selection module.
+
+Original-query protection.
+
+The original-query candidate does not undergo generative reformulation and is defined as
+
+(11)
+
+It preserves the user’s original wording and task context, providing an intent reference for the other candidates. When generative reformulation introduces unnecessary product terms or deviates from the original scenario, this candidate allows the selection process to return to the original expression.
+
+Multi-round feedback reformulation.
+
+Relevance feedback uses retrieval evidence to revise queries 
+(
+Harman, 1992
+)
+; prior work also studies how to balance the original query with feedback information 
+(
+Lv and Zhai, 2009
+)
+. This candidate first generates an initial product expression from query-relevant semantic anchors and then iteratively revises it using product-title evidence returned by BM25. Let 
+ denote the initial reformulation, 
+ the product-title evidence returned by BM25 at round 
+, and 
+ the evidence-based feedback reformulator. Then,
+
+(12)
+
+The feedback reformulator proposes 
+Keep
+, 
+Add
+, 
+Drop
+, and 
+Replace
+ edits for the current candidate. Applying these edits to the current candidate produces the candidate set
+
+(13)
+
+The system re-runs retrieval and quality estimation for every query in the candidate set and selects the candidate with the highest proxy quality:
+
+(14)
+
+The update is accepted only when the aggregate reranking score of the new candidate exceeds that of the current candidate by more than a margin 
+:
+
+(15)
+
+Here, 
+ denotes the candidate’s reranking-quality proxy, and the candidate must not have been visited in any previous round. The update rule accepts a revision only when its proxy score exceeds the current score by more than 
+, thereby limiting changes during multi-round generation. Robustness to noisy signals during iterative refinement remains a challenge across retrieval paradigms
+(
+Chen et al., 2026
+; 
+Li et al., 2026d
+; 
+Fu et al., 2026
+)
+.
+
+Multi-role intent reformulation.
+
+This candidate uses one generative model with three role prompts in a two-stage process 
+(
+Zhang et al., 2025b
+; 
+Zhang et al., 2026c
+)
+. The conservative role focuses on query drift, the taxonomy role determines whether a candidate expression belongs to a purchasable product category or object, and the intent role determines whether the scene description implies a clear shopping goal. In the first stage, the three roles independently judge whether the original query requires additional product expressions. Let 
+ denote the reformulation vote of role 
+. The system activates anchor selection only when the consensus reaches threshold 
+:
+
+(16)
+
+When 
+, the three roles further select purchasable product categories or objects from 
+. Let 
+ indicate whether role 
+ supports candidate anchor 
+. The anchor support count and consensus-anchor set are respectively
+
+(17)
+
+Here, 
+ is the anchor-level consensus threshold. The final candidate is written as
+
+(18)
+
+Here, 
+ performs deduplication and length control, and 
+ denotes text concatenation. Role consensus separately determines whether reformulation is needed and which catalog terms to add. Hierarchical disambiguation strategies have been studied for ambiguous compositional queries
+(
+Li et al., 2026c
+)
+ provide related ways to refine query representations.
+
+Conservative need-aware reformulation.
+
+This candidate targets queries that already express a task scenario but lack product retrieval terms. The generator selects product phrases consistent with the task domain from the corpus-derived phrase lexicon and generates a bounded set of need terms. Let 
+ denote the set of need terms and 
+ the selected catalog phrases. The candidate can be written as
+
+(19)
+
+where 
+ denotes deduplication and length normalization, and 
+ denotes text concatenation. This route constrains the number of newly added need terms, the total query length, and the number of selected phrases. These constraints define the route’s conservative reformulation policy.
+
+Compact product-oriented reformulation.
+
+This candidate directly selects short product expressions from the corpus-derived phrase lexicon. Let 
+ denote the selected catalog phrases. Then,
+
+(20)
+
+Compared with conservative need-aware reformulation, this route selects shorter category and entity phrases from the corpus-derived lexicon. The two lexicon-constrained candidates differ in reformulation extent and phrase-selection policy, and both are passed to the subsequent quality–diversity selection. Dual-path compositional networks
+(
+Zhang et al., 2026a
+)
+ and modification frequency-rarity balancing
+(
+Qiu et al., 2026
+)
+ represent alternative strategies for controlling reformulation scope in retrieval tasks.
+
+2.4. 
+Protocol-Aware Selection
+
+After candidate generation, the Protocol-Aware Selection module scores the five candidates using a unified retrieval proxy. For a candidate query 
+, BM25 first returns the top 100 products, denoted by
+
+(21)
+
+The reranker then judges query–product relevance for the top 
+ products using the original query 
+ and the corresponding product title. The resulting proxy scores the match between task intent and retrieved product evidence. Let 
+ denote the reranking score of the 
+-th product. We take the top 
+ scores and use logarithmic rank discounts, following the position-discounting principle of discounted cumulative gain 
+(
+Järvelin and Kekäläinen, 2002
+)
+:
+
+(22)
+
+Here, 
+ is the proxy quality score of candidate 
+. This definition gives higher-ranked products greater influence on candidate scoring and connects BM25’s lexical recall with the reranker’s semantic judgment.
+
+Automatic single-candidate selection.
+
+The Automatic protocol permits one reformulation, so the selector returns the candidate with the highest quality proxy:
+
+(23)
+
+Automatic shares the candidate pool, BM25 retrieval, and reranking-quality estimation with Interactive selection.
+
+Interactive four-candidate selection.
+
+Interactive allows up to four reformulations to be submitted for each query. The selection objective must therefore consider both candidate quality and retrieval-result complementarity. This motivation relates to relevance–diversity trade-offs in MMR and proportional coverage 
+(
+Carbonell and Goldstein, 1998
+; 
+Dang and Croft, 2012
+)
+, query-aspect coverage through reformulations 
+(
+Santos et al., 2010
+)
+, and diverse product-query reformulations 
+(
+Agrawal et al., 2023
+)
+. For candidates 
+ and 
+, let 
+ denote the rank of product 
+ in 
+. If 
+ is absent from the list, its rank weight is set to zero. Define
+
+(24)
+
+then the weighted Jaccard overlap is
+
+(25)
+
+For any four-candidate subset 
+ with 
+, the system computes its average quality and maximum pairwise overlap:
+
+(26)
+
+The selection objective is to maximize 
+ and minimize 
+. If one subset has no lower average quality and no higher maximum overlap than another subset, with at least one objective strictly better, the latter is considered dominated and removed from the Pareto front. The system then selects one set from the non-dominated subsets using a deterministic rule that prioritizes quality and uses overlap as the secondary criterion, and outputs the four queries in descending order of their individual candidate quality.
+
+In summary, Automatic and Interactive share the candidate pool, BM25 retrieval, and reranking-quality estimation, and can be understood uniformly as Pareto selection under different query budgets. Automatic prioritizes the candidate with the highest quality proxy under a single-query budget, whereas Interactive reduces retrieval-result overlap while maintaining set quality to preserve complementary reformulation directions.
+
+2.5. 
+Final Retrieval Output
+
+After query selection, let the final set of retained reformulations be 
+. The system independently executes BM25 for each reformulation and retains the corresponding product ranking list:
+
+(27)
+
+Automatic produces one ranking list for each original query, whereas Interactive produces up to four independent ranking lists for each original query. Result lists corresponding to different reformulations are kept separate, allowing each reformulation to participate in evaluation as an independent retrieval direction. Finally, the system organizes the product rankings corresponding to the selected reformulations according to the applicable protocol and submits them in the evaluation format required by the challenge.
+
+3. 
+Experiments
+
+3.1. 
+Challenge Setup
+
+TaskBridge is evaluated on the Query Reformulation Task of the 2026 SIGIR Workshop on eCommerce. The task focuses on task-oriented e-commerce queries and requires systems to transform users’ descriptions of activities or goals into queries suitable for product retrieval, with reformulation quality assessed based on the retrieval results. The evaluation includes the Automatic and Interactive protocols: Automatic submits one reformulation for each original query, whereas Interactive permits up to four reformulations 
+(
+SIGIR Workshop on eCommerce Organizers, 2026
+; 
+TREC Product Search and Recommendations Track, 2026
+)
+. TaskBridge uses the same product collection, task queries, catalog semantic resources, Unified Five-Candidate Rewriting module, and BM25 retriever under both protocols; the final difference lies in the number of reformulations that each protocol permits the system to retain.
+
+3.2. 
+Implementation Details
+
+TaskBridge is an inference-time system with no training or fine-tuning. Candidate reformulations are generated by Qwen3.5-9B, semantic anchors are retrieved by Qwen3-VL-Embedding-8B, and relevance between queries and product titles is judged by Qwen3-VL-Reranker-8B 
+(
+Qwen Team, 2026
+; 
+Li et al., 2026a
+; 
+Li et al., 2026b
+)
+. Candidate generation performs at most two rounds of retrieval feedback; semantic-anchor retrieval retains the top 50 candidates; multi-role voting uses three roles and requires at least two votes to support reformulation; and the two lexicon-constrained routes each select phrases from at most 80 candidates. Candidate selection uses BM25 results with a depth of 100, reranks the top 10 products, and aggregates the top 5 reranking scores. Automatic retains one candidate, whereas Interactive retains at most four. Each selected reformulation is then executed independently with BM25, retaining the top 100 products.
+
+3.3. 
+Evaluation Metrics
+
+The challenge platform reports Task Completion NDCG@10, Essential Product Recall@100, and MAP. Task Completion NDCG@10 measures the extent to which the top ten products support task completion; Essential Product Recall@100 measures the coverage of essential products among the top 100 results; and MAP measures the average precision over the complete ranking list. These metrics reflect the quality of the result head, essential-product recall, and overall ranking performance, respectively 
+(
+SIGIR Workshop on eCommerce Organizers, 2026
+; 
+TREC Product Search and Recommendations Track, 2026
+)
+.
+
+3.4. 
+Performance Comparison
+
+Results are reported separately for the Open Phase and Closed Phase. Both tables use the same metric order: Task Completion NDCG@10, Recall@100, and MAP, and report results under both the Automatic and Interactive protocols.
+
+Table 1. 
+Evaluation results of the official original-query BM25 baseline and 
+TaskBridge (Ours)
+ in the Open Phase. The light-blue background marks our method; within each protocol and metric, bold indicates the best result and underlining indicates the second-best result.
+
+Method
+
+Automatic
+
+Interactive
+
+NDCG
+
+@10
+
+Recall
+
+@100
+
+MAP
+
+NDCG
+
+@10
+
+Recall
+
+@100
+
+MAP
+
+Original-query
+
+0.42
+
+0.30
+
+0.19
+
+0.42
+
+0.30
+
+0.19
+
+TaskBridge (Ours)
+
+0.49
+
+0.29
+
+0.20
+
+0.58
+
+0.33
+
+0.23
+
+As shown in Table 
+1
+, the official Open Phase baseline applies BM25 directly to the original queries and therefore yields identical results under the two protocols. TaskBridge obtains scores of 
+, 
+, and 
+ under Automatic, and 
+, 
+, and 
+ under Interactive. Compared with the original-query baseline, TaskBridge’s reformulations improve task-completion quality at the head of the results and overall ranking performance; Interactive further covers different product-expression directions by retaining multiple reformulations.
+
+Table 2. 
+Evaluation results of 
+TaskBridge (Ours)
+ in the Closed Phase. The light-blue background marks our method.
+
+Method
+
+Automatic
+
+Interactive
+
+NDCG
+
+@10
+
+Recall
+
+@100
+
+MAP
+
+NDCG
+
+@10
+
+Recall
+
+@100
+
+MAP
+
+TaskBridge (Ours)
+
+0.27
+
+0.16
+
+0.11
+
+0.31
+
+0.18
+
+0.12
+
+As shown in Table 
+2
+, TaskBridge obtains scores of 
+, 
+, and 
+ under Automatic, and 
+, 
+, and 
+ under Interactive in the Closed Phase. Within this phase, the Interactive metrics exceed the Automatic metrics by 
+, 
+, and 
+, respectively. Interactive retains up to four reformulations from the candidate pool, whereas Automatic retains one, so the two protocols use different submission budgets. The Open Phase and Closed Phase scores are platform records from separate phases and use different test sets; they are not directly comparable.
+
+4. 
+Conclusion
+
+This paper presented TaskBridge, a catalog-anchored framework for task-oriented e-commerce query reformulation. By combining catalog semantic anchoring, five complementary rewriting strategies, and protocol-aware selection, TaskBridge maps implicit product needs to catalog expressions for BM25 retrieval. Interactive achieves higher scores than Automatic in both evaluation phases, suggesting that complementary reformulations can better support task-oriented product retrieval.
+
+References
+
+[1]
+
+G. Singh, N. Parikh, and N. Sundaresan
+ (2012)
+
+Rewriting null e-commerce queries to recommend products
+.
+
+In 
+Proceedings of the 21st International Conference on World Wide Web
+,
+
+pp. 73–82
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+.
+
+[2]
+
+S. Gollapudi, S. Ieong, and A. Kannan
+ (2012)
+
+Structured query reformulations in commerce search
+.
+
+In 
+Proceedings of the 21st ACM International Conference on Information and Knowledge Management
+,
+
+pp. 1890–1894
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+,
+
+§2.2
+.
+
+[3]
+
+C. Wu, A. Ahmed, G. R. Kumar, and R. Datta
+ (2017)
+
+Predicting latent structured intents from shopping queries
+.
+
+In 
+Proceedings of the 26th International Conference on World Wide Web
+,
+
+pp. 1133–1141
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+,
+
+§2.2
+.
+
+[4]
+
+C. Shah and R. W. White
+ (2021)
+
+Bridging task expressions and search queries
+.
+
+In 
+Proceedings of the 2021 Conference on Human Information Interaction and Retrieval
+,
+
+pp. 319–323
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+.
+
+[5]
+
+SIGIR Workshop on eCommerce Organizers
+ (2026)
+
+2026 SIGIR Workshop on eCommerce: Data Challenge
+.
+
+Note: 
+https://sigir-ecom.github.io/
+Accessed 2026-09-23
+
+Cited by: 
+§1
+,
+
+§1
+,
+
+§3.1
+,
+
+§3.3
+.
+
+[6]
+
+X. Zhang, Y. Xiang, Y. Zhang, Z. Chen, J. Yu, and Z. Song
+ (2026)
+
+Too good to be real? diagnosing and reducing the gap between ai preference and real user engagement
+.
+
+arXiv preprint arXiv:2609.18282
+.
+
+Cited by: 
+§1
+.
+
+[7]
+
+TREC Product Search and Recommendations Track
+ (2026)
+
+Search: query reformulation task instructions
+.
+
+Note: 
+https://trec-product-search.github.io/search
+Accessed 2026-09-23
+
+Cited by: 
+§1
+,
+
+§1
+,
+
+§3.1
+,
+
+§3.3
+.
+
+[8]
+
+S. Maji, R. Kumar, M. Bansal, K. Roy, M. Kumar, and P. Goyal
+ (2019)
+
+Addressing vocabulary gap in e-commerce search
+.
+
+In 
+Proceedings of the 42nd International ACM SIGIR Conference on Research and Development in Information Retrieval
+,
+
+pp. 1073–1076
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+,
+
+§1
+,
+
+§2.2
+.
+
+[9]
+
+S. Manchanda, M. Sharma, and G. Karypis
+ (2019)
+
+Intent term weighting in e-commerce queries
+.
+
+In 
+Proceedings of the 28th ACM International Conference on Information and Knowledge Management
+,
+
+pp. 2345–2348
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+,
+
+§1
+.
+
+[10]
+
+S. Hirsch, I. Guy, A. Nus, A. Dagan, and O. Kurland
+ (2020)
+
+Query reformulation in e-commerce search
+.
+
+In 
+Proceedings of the 43rd International ACM SIGIR Conference on Research and Development in Information Retrieval
+,
+
+pp. 1319–1328
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+.
+
+[11]
+
+C. Carpineto and G. Romano
+ (2012)
+
+A survey of automatic query expansion in information retrieval
+.
+
+ACM Computing Surveys
+ 
+44
+ (
+1
+), 
+pp. 1:1–1:50
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+.
+
+[12]
+
+H. K. Azad and A. Deepak
+ (2019)
+
+Query expansion techniques for information retrieval: a survey
+.
+
+Information Processing and Management
+ 
+56
+ (
+5
+), 
+pp. 1698–1735
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+.
+
+[13]
+
+B. Mitra and N. Craswell
+ (2018)
+
+An introduction to neural information retrieval
+.
+
+Foundations and Trends in Information Retrieval
+ 
+13
+ (
+1
+), 
+pp. 1–126
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+.
+
+[14]
+
+W. Li, H. Zhou, J. Yu, Z. Song, and W. Yang
+ (2024)
+
+Coupled mamba: enhanced multimodal fusion with coupled state space model
+.
+
+Advances in Neural Information Processing Systems
+ 
+37
+, 
+pp. 59808–59832
+.
+
+Cited by: 
+§1
+.
+
+[15]
+
+N. Reimers and I. Gurevych
+ (2019)
+
+Sentence-BERT: sentence embeddings using siamese BERT-networks
+.
+
+In 
+Proceedings of the 2019 Conference on Empirical Methods in Natural Language Processing and the 9th International Joint Conference on Natural Language Processing
+,
+
+pp. 3982–3992
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+.
+
+[16]
+
+V. Karpukhin, B. Oguz, S. Min, P. Lewis, L. Wu, S. Edunov, D. Chen, and W. Yih
+ (2020)
+
+Dense passage retrieval for open-domain question answering
+.
+
+In 
+Proceedings of the 2020 Conference on Empirical Methods in Natural Language Processing
+,
+
+pp. 6769–6781
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+.
+
+[17]
+
+Z. Song, Y. Tang, R. Luo, L. Ma, J. Yu, Y. P. Chen, and W. Yang
+ (2024)
+
+Autogenic language embedding for coherent point tracking
+.
+
+In 
+Proceedings of the 32nd ACM International Conference on Multimedia
+,
+
+pp. 2021–2030
+.
+
+Cited by: 
+§1
+.
+
+[18]
+
+R. Nogueira and K. Cho
+ (2019)
+
+Passage re-ranking with BERT
+.
+
+arXiv preprint arXiv:1901.04085
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§1
+.
+
+[19]
+
+J. Huang, Z. Li, Z. Fu, Z. Chen, Q. Huang, and Y. Hu
+ (2026)
+
+RankVR: low-rank structure perception and value recalibration for robust composed image retrieval
+.
+
+In 
+Proceedings of the 2026 International Conference on Multimedia Retrieval
+,
+
+pp. 269–278
+.
+
+Cited by: 
+§1
+.
+
+[20]
+
+J. Huang, Z. Li, Z. Chen, Z. Fu, C. Wang, and Y. Hu
+ (2026)
+
+IMAGINE: adaptive schema-imagery enhanced composition for composed video retrieval
+.
+
+In 
+Proceedings of the 2026 International Conference on Multimedia Retrieval
+,
+
+pp. 288–297
+.
+
+Cited by: 
+§1
+.
+
+[21]
+
+L. Ye, Y. Zhang, Y. Wu, Y. P. Chen, J. Yu, W. Yang, and Z. Song
+ (2025)
+
+MVP: winning solution to smp challenge 2025 video track
+.
+
+arXiv preprint arXiv:2507.00950
+.
+
+Cited by: 
+§1
+.
+
+[22]
+
+L. Wang, N. Yang, and F. Wei
+ (2023)
+
+Query2doc: query expansion with large language models
+.
+
+In 
+Proceedings of the 2023 Conference on Empirical Methods in Natural Language Processing
+,
+
+pp. 9414–9423
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+.
+
+[23]
+
+Y. Hu, Z. Song, N. Feng, Y. Luo, J. Yu, Y. P. Chen, and W. Yang
+ (2025)
+
+SF2T: self-supervised fragment finetuning of video-llms for fine-grained understanding
+.
+
+arXiv preprint arXiv:2504.07745
+.
+
+Cited by: 
+§1
+.
+
+[24]
+
+S. E. Robertson and S. Walker
+ (1994)
+
+Some simple effective approximations to the 2-poisson model for probabilistic weighted retrieval
+.
+
+In 
+Proceedings of the 17th Annual International ACM SIGIR Conference on Research and Development in Information Retrieval
+,
+
+pp. 232–241
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+,
+
+§2.1
+.
+
+[25]
+
+S. Robertson and H. Zaragoza
+ (2009)
+
+The probabilistic relevance framework: bm25 and beyond
+.
+
+Foundations and Trends in Information Retrieval
+ 
+3
+ (
+4
+), 
+pp. 333–389
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+,
+
+§2.1
+.
+
+[26]
+
+Z. Chen, Y. Hu, Z. Li, Z. Fu, X. Song, and L. Nie
+ (2025)
+
+OFFSET: segmentation-based focus shift revision for composed image retrieval
+.
+
+In 
+ACM MM
+,
+
+pp. 6113–6122
+.
+
+Cited by: 
+§1
+.
+
+[27]
+
+Q. Yang, Z. Chen, Y. Hu, Z. Li, Z. Fu, and L. Nie
+ (2026)
+
+Stable: efficient hybrid nearest neighbor search via magnitude-uniformity and cardinality-robustness
+.
+
+IEEE Transactions on Knowledge and Data Engineering
+.
+
+Cited by: 
+§1
+.
+
+[28]
+
+Q. Yang, P. Lv, Y. Li, S. Zhang, Y. Chen, Z. Chen, Z. Li, and Y. Hu
+ (2026)
+
+ERASE: bypassing collaborative detection of ai counterfeit via comprehensive artifacts elimination
+.
+
+IEEE TDSC
+, 
+pp. 1–18
+.
+
+External Links: 
+ISSN 1941-0018
+,
+
+Document
+
+Cited by: 
+§1
+.
+
+[29]
+
+Y. Hu, Z. Li, Z. Chen, Q. Huang, Z. Fu, M. Xu, and L. Nie
+ (2026)
+
+Refine: composed video retrieval via shared and differential semantics enhancement
+.
+
+ACM Transactions on Multimedia Computing, Communications and Applications
+ 
+22
+ (
+7
+), 
+pp. 1–24
+.
+
+Cited by: 
+§1
+.
+
+[30]
+
+Qwen Team
+ (2026)
+
+Qwen3.5-9B
+.
+
+Note: 
+https://huggingface.co/Qwen/Qwen3.5-9B
+Official Hugging Face model card; accessed 2026-10-12
+
+Cited by: 
+§2
+,
+
+§3.2
+.
+
+[31]
+
+M. Li, Y. Zhang, D. Long, K. Chen, S. Song, S. Bai, Z. Yang, P. Xie, A. Yang, D. Liu, J. Zhou, and J. Lin
+ (2026)
+
+Qwen3-VL-Embedding and Qwen3-VL-Reranker: A Unified Framework for State-of-the-Art Multimodal Retrieval and Ranking
+.
+
+arXiv preprint arXiv:2601.04720
+.
+
+External Links: 
+Document
+
+Cited by: 
+§2
+,
+
+§3.2
+.
+
+[32]
+
+S. Bai, Y. Cai, R. Chen, K. Chen, X. Chen, Z. Cheng, L. Deng, W. Ding, C. Gao, C. Ge, W. Ge, Z. Guo, Q. Huang, J. Huang, F. Huang, B. Hui, S. Jiang, Z. Li, M. Li, M. Li, K. Li, Z. Lin, J. Lin, X. Liu, J. Liu, C. Liu, Y. Liu, D. Liu, S. Liu, D. Lu, R. Luo, C. Lv, R. Men, L. Meng, X. Ren, X. Ren, S. Song, Y. Sun, J. Tang, J. Tu, J. Wan, P. Wang, P. Wang, Q. Wang, Y. Wang, T. Xie, Y. Xu, H. Xu, J. Xu, Z. Yang, M. Yang, J. Yang, A. Yang, B. Yu, F. Zhang, H. Zhang, X. Zhang, B. Zheng, H. Zhong, J. Zhou, F. Zhou, J. Zhou, Y. Zhu, and K. Zhu
+ (2025)
+
+Qwen3-VL Technical Report
+.
+
+arXiv preprint arXiv:2511.21631
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+[33]
+
+A. Yang, A. Li, B. Yang, B. Zhang, B. Hui, B. Zheng, B. Yu, C. Gao, C. Huang, C. Lv, C. Zheng, D. Liu, F. Zhou, F. Huang, F. Hu, H. Ge, H. Wei, H. Lin, J. Tang, J. Yang, J. Tu, J. Zhang, J. Yang, J. Yang, J. Zhou, J. Zhou, J. Lin, K. Dang, K. Bao, K. Yang, L. Yu, L. Deng, M. Li, M. Xue, M. Li, P. Zhang, P. Wang, Q. Zhu, R. Men, R. Gao, S. Liu, S. Luo, T. Li, T. Tang, W. Yin, X. Ren, X. Wang, X. Zhang, X. Ren, Y. Fan, Y. Su, Y. Zhang, Y. Zhang, Y. Wan, Y. Liu, Z. Wang, Z. Cui, Z. Zhang, Z. Zhou, and Z. Qiu
+ (2025)
+
+Qwen3 Technical Report
+.
+
+arXiv preprint arXiv:2505.09388
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+[34]
+
+Y. Zhang, M. Li, D. Long, X. Zhang, H. Lin, B. Yang, P. Xie, A. Yang, D. Liu, J. Lin, F. Huang, and J. Zhou
+ (2025)
+
+Qwen3 Embedding: Advancing Text Embedding and Reranking Through Foundation Models
+.
+
+arXiv preprint arXiv:2506.05176
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+[35]
+
+Z. Li, Y. Hu, Z. Fu, Z. Chen, Y. Li, and L. Nie
+ (2026)
+
+Tema: anchor the image, follow the text for multi-modification composed image retrieval
+.
+
+In 
+Proceedings of the 64th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)
+,
+
+pp. 24421–24442
+.
+
+Cited by: 
+§2.2
+.
+
+[36]
+
+Z. Fu, Z. Li, Z. Chen, C. Wang, X. Song, Y. Hu, and L. Nie
+ (2025)
+
+Pair: complementarity-guided disentanglement for composed image retrieval
+.
+
+In 
+ICASSP
+,
+
+pp. 1–5
+.
+
+Cited by: 
+§2.2
+.
+
+[37]
+
+Q. Huang, Z. Chen, Z. Li, C. Wang, X. Song, Y. Hu, and L. Nie
+ (2025)
+
+Median: adaptive intermediate-grained aggregation network for composed image retrieval
+.
+
+In 
+ICASSP
+,
+
+pp. 1–5
+.
+
+Cited by: 
+§2.2
+.
+
+[38]
+
+D. K. Harman
+ (1992)
+
+Relevance feedback revisited
+.
+
+In 
+Proceedings of the 15th Annual International ACM SIGIR Conference on Research and Development in Information Retrieval
+,
+
+pp. 1–10
+.
+
+External Links: 
+Document
+
+Cited by: 
+§2.3
+.
+
+[39]
+
+Y. Lv and C. Zhai
+ (2009)
+
+Adaptive relevance feedback in information retrieval
+.
+
+In 
+Proceedings of the 18th ACM Conference on Information and Knowledge Management
+,
+
+pp. 255–264
+.
+
+External Links: 
+Document
+
+Cited by: 
+§2.3
+.
+
+[40]
+
+Z. Chen, Y. Hu, Z. Fu, Z. Li, J. Huang, Q. Huang, and Y. Wei
+ (2026)
+
+INTENT: invariance and discrimination-aware noise mitigation for robust composed image retrieval
+.
+
+In 
+AAAI
+,
+
+Vol. 
+40
+, 
+pp. 20463–20471
+.
+
+Cited by: 
+§2.3
+.
+
+[41]
+
+Z. Li, Y. Hu, Z. Chen, M. Zhang, Z. Fu, and L. Nie
+ (2026)
+
+Conesep: cone-based robust noise-unlearning compositional network for composed image retrieval
+.
+
+In 
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition
+,
+
+pp. 16897–16909
+.
+
+Cited by: 
+§2.3
+.
+
+[42]
+
+Z. Fu, Y. Hu, Q. Yang, S. Zhang, Z. Chen, and Z. Li
+ (2026)
+
+Air-know: arbiter-calibrated knowledge-internalizing robust network for composed image retrieval
+.
+
+In 
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition
+,
+
+pp. 2658–2670
+.
+
+Cited by: 
+§2.3
+.
+
+[43]
+
+Y. Zhang, Z. Song, H. Zhou, W. Ren, Y. P. Chen, J. Yu, and W. Yang
+ (2025)
+
+: Comprehensive social network simulation with group agents
+.
+
+In 
+Findings of the Association for Computational Linguistics: ACL 2025
+,
+
+pp. 8950–8970
+.
+
+Cited by: 
+§2.3
+.
+
+[44]
+
+Y. Zhang, X. Zhang, J. Sheng, W. Li, J. Yu, Y. P. Chen, W. Yang, and Z. Song
+ (2026)
+
+Semantic-aware logical reasoning via a semiotic framework
+.
+
+External Links: 
+2509.24765
+,
+
+Link
+
+Cited by: 
+§2.3
+.
+
+[45]
+
+Z. Li, Y. Hu, Z. Chen, Q. Huang, G. Qiu, Z. Fu, and M. Liu
+ (2026)
+
+ReTrack: evidence-driven dual-stream directional anchor calibration network for composed video retrieval
+.
+
+In 
+AAAI
+,
+
+Vol. 
+40
+, 
+pp. 23373–23381
+.
+
+Cited by: 
+§2.3
+.
+
+[46]
+
+M. Zhang, Z. Li, Z. Chen, Z. Fu, X. Zhu, J. Nie, Y. Wei, and Y. Hu
+ (2026)
+
+Hint: composed image retrieval with dual-path compositional contextualized network
+.
+
+In 
+ICASSP
+,
+
+pp. 13002–13006
+.
+
+Cited by: 
+§2.3
+.
+
+[47]
+
+G. Qiu, Z. Chen, Z. Li, Q. Huang, Z. Fu, X. Song, and Y. Hu
+ (2026)
+
+Melt: improve composed image retrieval via the modification frequentation-rarity balance network
+.
+
+In 
+ICASSP
+,
+
+pp. 13007–13011
+.
+
+Cited by: 
+§2.3
+.
+
+[48]
+
+K. Järvelin and J. Kekäläinen
+ (2002)
+
+Cumulated gain-based evaluation of ir techniques
+.
+
+ACM Transactions on Information Systems
+ 
+20
+ (
+4
+), 
+pp. 422–446
+.
+
+External Links: 
+Document
+
+Cited by: 
+§2.4
+.
+
+[49]
+
+J. Carbonell and J. Goldstein
+ (1998)
+
+The use of mmr, diversity-based reranking for reordering documents and producing summaries
+.
+
+In 
+Proceedings of the 21st Annual International ACM SIGIR Conference on Research and Development in Information Retrieval
+,
+
+pp. 335–336
+.
+
+External Links: 
+Document
+
+Cited by: 
+§2.4
+.
+
+[50]
+
+V. Dang and W. B. Croft
+ (2012)
+
+Diversity by proportionality: an election-based approach to search result diversification
+.
+
+In 
+Proceedings of the 35th International ACM SIGIR Conference on Research and Development in Information Retrieval
+,
+
+pp. 65–74
+.
+
+External Links: 
+Document
+
+Cited by: 
+§2.4
+.
+
+[51]
+
+R. L. T. Santos, C. Macdonald, and I. Ounis
+ (2010)
+
+Exploiting query reformulations for web search result diversification
+.
+
+In 
+Proceedings of the 19th International Conference on World Wide Web
+,
+
+pp. 881–890
+.
+
+External Links: 
+Document
+
+Cited by: 
+§2.4
+.
+
+[52]
+
+S. Agrawal, S. Merugu, and V. Sembium
+ (2023)
+
+Enhancing e-commerce product search through reinforcement learning-powered query reformulation
+.
+
+In 
+Proceedings of the 32nd ACM International Conference on Information and Knowledge Management
+,
+
+pp. 4488–4494
+.
+
+External Links: 
+Document
+
+Cited by: 
+§2.4
+.
+
+[53]
+
+W. Li, Z. Song, H. Zhou, J. Yu, Y. Zhang, and W. Yang
+ (2026)
+
+Lora-mixer: coordinate modular lora experts through serial attention routing
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Vol. 
+2026
+, 
+pp. 14694–14716
+.
+
+Cited by: 
+§3.2
+.
+

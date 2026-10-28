@@ -1,0 +1,1509 @@
+Mechanistic Failure Modes of Weight Pruning in Transformer Language Models
+https://arxiv.org/abs/2610.37126
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+Mechanistic Failure Modes of Weight Pruning in Transformer Language Models
+
+Nabeelah Faumi
+
+Affiliation: 
+Informatics Institute of Technology
+
+Affiliation: 
+57, Ramakrishna Road, Colombo 06,
+
+Affiliation: 
+Sri Lanka
+
+Email: 
+nabeelahfaumi@gmail.com 
+
+  
+
+Deshan Sumanathilaka
+
+Affiliation: 
+Informatics Institute of Technology
+
+Affiliation: 
+57, Ramakrishna Road, Colombo 06,
+
+Affiliation: 
+Sri Lanka
+
+Email: 
+deshan.s@iit.ac.lk
+
+Abstract
+
+Pruned language models are judged almost entirely by accuracy and perplexity, which assumes that preserved output behaviour implies preserved internal computation. We test this assumption with a factorial pruning study on GPT-2, crossing two importance criteria (magnitude, random), two component types (attention heads, MLP neurons) and three sparsity levels (30%, 50%, 70%). Using the fully characterised indirect object identification (IOI) circuit as ground truth, we measure circuit integrity with activation patching, path patching and direct logit attribution. We find two qualitatively distinct failure modes. Magnitude head pruning (
+50%) 
+zeroes
+ the circuit: output-facing heads are removed, and the model falls to near-chance. Magnitude neuron pruning at 30% 
+inverts
+ it: all 26 circuit heads remain intact, but Name Mover contributions flip sign, and the model systematically prefers the wrong name (17.7% accuracy). Perplexity ranks it as less damaged than random head pruning (74.6 vs 140.1). A replication of the Greater-Than circuit shows that the critical component type depends on the circuit’s architecture. These results show that output metrics and structural checks can both miss mechanistic damage, motivating circuit-level causal analysis as a complementary evaluation of compressed language models.
+
+1 
+Introduction
+
+Compression is now a default step in the language model deployment pipeline: pruning, quantisation, and distillation are routinely applied to reduce memory footprint and inference cost, often as a black-box post-processing stage after training 
+(
+Ding et al., 2023
+; 
+Bai et al., 2024
+)
+. Because these methods are judged almost entirely by their effect on downstream benchmarks, accuracy and perplexity, they are treated as behaviourally neutral whenever those numbers hold up. This paper asks whether that judgment is safe to make.
+The concern is not merely academic. A model can produce a correct answer for the wrong reason, and the pathways that mechanistic interpretability has isolated in unpruned models, such as the IOI circuit 
+(
+Wang et al., 2022
+)
+, give a concrete setting in which "correct reason" can actually be checked, rather than assumed. If pruning is capable of severing or inverting the specific components responsible for a behaviour while leaving redundant computation to paper over the loss at the output layer, then accuracy-based compression audits are measuring the wrong thing, and models cleared for deployment on that basis may carry mechanistic damage that only surfaces under distribution shift, adversarial input, or further fine-tuning.
+This risk is what our factorial pruning study is designed to expose. Rather than treating pruning as a single method to be validated once, we vary both 
+what
+ is removed (attention heads vs. MLP neurons) and 
+how
+ it is selected (magnitude-based vs. random), across a range of sparsities, and ask whether these choices leave distinguishable fingerprints on a well-characterised circuit’s internal structure, independent of whatever the accuracy metric reports.
+
+Our contributions are twofold. First, we identify two qualitatively distinct mechanistic failure modes of structured pruning in Transformer language models: circuit zeroing and circuit inversion. We show that MLP-neuron pruning can invert an otherwise structurally intact circuit, transforming a functioning circuit into an actively misleading circuit that produces systematic rather than random errors. Second, we demonstrate that standard behavioural and structural pruning evaluations can miss such mechanistic failures: for example, perplexity may rank an inverted model as less damaged, while checking whether circuit components remain present can falsely suggest that the circuit is intact. Our results therefore motivate circuit-level causal analysis as a complementary evaluation of compressed language models.
+
+In the following sections, we review related work, outline our experimental setup, present our results, and conclude with a discussion and conclusion.
+
+2 
+Background and Related Work
+
+2.1 
+Mechanistic Interpretability and Circuit Analysis
+
+Mechanistic interpretability reverse-engineers neural networks by identifying circuits, interpretable components that implement human-understandable algorithms 
+(
+Bereska and Gavves, 2024
+; 
+Cammarata et al., 2020
+)
+. In transformers, circuit analysis decomposes the residual stream into attention-head and MLP contributions, then uses causal interventions to test which are necessary and sufficient for a behaviour 
+(
+Wang et al., 2022
+; 
+Meng et al., 2022
+; 
+Geiger et al., 2021
+)
+. The Indirect Object Identification (IOI) task requires completing sentences such as 
+“When Mary and John went to the store, John gave a drink to __ ,”
+ with the indirect object (IO, 
+Mary
+) rather than the subject (S, 
+John
+). 
+Wang et al. (2022)
+ identified a 26-head circuit in GPT-2: Previous Token (PT) heads copy token positions; Duplicate Token (DT) and Induction (IND) heads detect repeated names; S-Inhibition (S-INH) heads suppress the subject; Name Mover (NM) heads copy the IO to the output; Negative Name Mover (NNM) heads suppress the IO signal as a self-correcting brake; and Backup Name Mover (BNM) heads compensate when NM heads fail. This gives a well-characterised ground truth against which compression-induced changes can be measured.
+
+We use two complementary tools: 
+activation patching
+, which replaces a head’s activations with those from a corrupted run to measure causal necessity, and 
+Direct Logit Attribution
+ (DLA), a non-interventional decomposition of the logit difference into per-head contributions that measures direct contribution 
+(
+Goldowsky-Dill et al., 2023
+; 
+Wang et al., 2022
+)
+.
+
+2.2 
+Weight Pruning
+
+Pruning assumes that many parameters are redundant: unstructured pruning removes individual weights, while structured pruning removes entire neurons, filters, or attention heads 
+(
+Ding et al., 2023
+; 
+Bai et al., 2024
+)
+. Magnitude-based pruning, the most widely used criterion, removes low-magnitude weights 
+(
+Han et al., 2015
+)
+; random pruning serves as a controlled baseline. From an interpretability perspective, the key distinction is between attention heads, which implement relational computation across token positions, and MLP neurons, which store features, knowledge and position-sensitive representations that downstream heads depend on 
+(
+Geva et al., 2021
+; 
+Rai et al., 2024
+)
+. This motivates our 
+ factorial design.
+
+2.3 
+Pruning and Circuit Integrity: Prior Work
+
+Attribution-guided pruning (Layer-wise Relevance Propagation, Integrated Gradients, gradient-based attribution) preferentially retains task-relevant subgraphs 
+(
+Hatefi et al., 2025
+; 
+Chhabra and Khalili, 2025
+)
+, and Attribution-based Parameter Decomposition shows that interpretable circuit components can survive substantial size reduction 
+(
+Braun et al., 2024
+)
+. In safety-aligned models, pruning may disproportionately erode safety-relevant circuits 
+(
+Chhabra and Khalili, 2025
+)
+. However, no prior work has characterised whether different pruning strategies produce qualitatively distinct circuit failures or shown that these failures are invisible to accuracy evaluation. We address both gaps.
+
+3 
+Experimental Setup
+
+3.1 
+Base Model
+
+All experiments use GPT-2 
+(
+Radford et al., 2019
+)
+: 117M parameters, 12 transformer layers, 12 attention heads per layer, and a hidden dimension of 768. GPT-2 is selected because it is the canonical platform for mechanistic interpretability research, with a fully characterised IOI circuit providing a ground-truth benchmark. All compressed variants are derived from a single pre-trained checkpoint with no weight updates after pruning, ensuring cross-variant comparisons are made at matched starting conditions. All experiments are implemented using TransformerLens 
+(
+Nanda and Bloom, 2022
+)
+, which provides hook-based access to residual stream activations, attention head outputs, and MLP intermediate states.
+
+3.2 
+Pruning Variants
+
+Twelve pruned variants are created by crossing two importance criteria (magnitude, random), two component types (attention heads, MLP neurons), and three sparsity levels (30%, 50%, 70%), yielding a 
+ factorial design.
+
+Attention head pruning.
+
+Heads are pruned by zeroing all weight slices corresponding to a given head in the 
+c_attn
+ projection matrix (Q, K, and V columns) and the corresponding rows of the 
+c_proj
+ output projection. For magnitude pruning, each head is scored by the L2-norm of its Q-weight slice, and the 
+ lowest-scoring heads across the entire model are removed. Random pruning assigns importance scores uniformly at random and removes a fixed proportion of heads per layer.
+
+MLP neuron pruning.
+
+Neurons are pruned by zeroing the corresponding columns of the first weight matrix
+(
+) and rows of the second weight matrix (
+) within each MLP
+sub-layer.
+For magnitude pruning, neurons are scored by the L2 norm of their 
+ column
+and the lowest-scoring neurons are removed globally.
+Random pruning removes a uniformly sampled fraction of neurons from each layer independently.
+
+3.3 
+Evaluation Datasets and Tasks
+
+Sentences follow the ABB/ABC design of 
+(
+Wang et al., 2022
+)
+, built from 15 templates , 14 objects and 28 single-token names, and each is paired with a corrupted counterpart in which the second subject is replaced by a foil name to support activation patching. The primary metric is the mean logit difference 
+: the difference in log-probability between the indirect object name and the subject name at the prediction position. Positive values indicate correct IO prediction; negative values indicate the model assigns a higher probability to the subject. Circuit analysis uses activation patching across all 26 IOI circuit heads and DLA decomposed by functional class. General language modelling performance is evaluated on TinyStories 
+(
+Li and Eldan, 2023
+)
+ via perplexity over 1000 sequences.
+
+3.4 
+Implementation Details
+
+All experiments use Python 3.10 with TransformerLens 
+(
+Nanda and Bloom, 2022
+)
+ and HuggingFace Transformers 
+(
+Wolf et al., 2020
+)
+. LayerNorm folding is explicitly disabled (
+fold_ln=False
+) to preserve activation scales. DLA is computed using a linear approximation of the final LayerNorm centred on the full residual stream, ensuring component contributions sum to the observed logit difference within numerical precision. Sparsity fractions are verified after TransformerLens conversion to ensure zero-valued entries are correctly propagated.
+All experiments are run on an NVIDIA L4/T4 GPU (Google Colab) with fixed random seed 42.
+
+4 
+Results
+
+4.1 
+Behavioural Baseline
+
+GPT-2 achieves a mean IOI logit difference of 
+ and IOI accuracy of 94.8% on the 300-sentence evaluation set. Perplexity on TinyStories is 11.54, serving as the reference baseline throughout. Table 
+1
+ reports performance across all compressed variants; Table 
+2
+ summarises the failure modes; Tables 
+9
+ and 
+2
+ give the head-level mechanistic evidence. Perplexity and representational-fidelity results for the same variants are given in Section 
+4.5
+.
+
+Table 1: 
+IOI task performance across all compressed models.
+Degradation 
+; values 
+ indicate a negative mean logit difference.
+
+Method
+
+Model
+
+Mean LD
+
+Acc (%)
+
+Degrad. (%)
+
+Base
+
+GPT-2 Small (FP32)
+
+,
+
+Pruning 30%
+
+Mag. Neurons
+
+Rand. Neurons
+
+Mag. Attn
+
+Rand. Attn
+
+Pruning 50%
+
+Mag. Neurons
+
+Mag. Attn
+
+Rand. Neurons
+
+Rand. Attn
+
+Pruning 70%
+
+Mag. Neurons
+
+Mag. Attn
+
+Rand. Neurons
+
+Rand. Attn
+
+4.2 
+Failure Mode I: Zeroing
+
+Magnitude attention head pruning at 50% and 70% sparsity physically eliminates the output-facing heads of the IOI circuit. At 50% sparsity, DLA scores for all four major circuit classes, NM, NNM, S-INH, and BNM, fall to exactly zero (Table 
+2
+). Weight norm verification confirms that circuit heads have been physically removed: pruned circuit heads collapse to uniform attention patterns (
+, 
+).
+At 30% sparsity, 10 of 26 circuit heads are removed; the surviving NM heads (L9H6 and L9H9) retain partial IO-preferring attention (L9H9: 
+, 
+), explaining the partial 9.2% NM retention at this sparsity.
+Despite the elimination of the circuit, the model retains 45.7%–47.9% IOI accuracy at 50%–70% sparsity. This residual accuracy derives from non-circuit computation: early-circuit heads and MLP layers are not targeted by magnitude attention head pruning (which removes lower-norm output-facing heads first), and their intact language-modelling signal incidentally favours the IO token over the S token on most sentences.
+Zeroing is the most interpretable and, from a safety perspective, the least dangerous failure mode: the circuit has been structurally removed, the cause of degraded performance is straightforwardly attributable to physical elimination of circuit components, and the model makes near-chance predictions rather than actively misdirecting.
+
+4.3 
+Failure Mode II: Inversion
+
+Magnitude neuron pruning at 30% sparsity produces a qualitatively distinct and more dangerous failure. All 26 IOI circuit heads remain structurally intact (weight norms all 
+), yet DLA analysis reveals that major circuit classes have flipped sign and actively harm correct performance.
+At 30% sparsity, the circuit exhibits severe inversion as Name Mover (NM) and Backup Name Mover (BNM) heads flip to negative DLA contributions, retaining 
+ (
+ DLA) and an extreme 
+ of their base function, respectively. Simultaneously, Negative Name Mover (NNM) heads lose their correct suppressive role (
+ retention), meaning the output mechanism actively harms predictive accuracy.
+The result is a mean IOI logit difference of 
+ and accuracy of 17.7%: the model is actively and confidently predicting the wrong name.
+The mechanism is 
+context poisoning
+. Magnitude pruning preferentially removes the largest MLP neurons, which implement the position-specific representations and name-identity encodings that attention heads depend on to locate the correct indirect object. The NM heads remain functional as copying mechanisms, but the corrupted residual stream directs them to the wrong entity. Attention pattern analysis confirms this: L9H6 shows 
+, 
+; L9H9 shows 
+, 
+. The heads are operational but pointed at the subject.
+At 30% sparsity, the residual stream is corrupted enough to invert the NM signal while still providing sufficient discriminability for consistent (though wrong) predictions.
+At 70% sparsity, the residual stream is so broadly degraded that attention patterns lose discriminability, weakening both correct and inverted signals and moving the logit difference back towards zero. The 30% model is 
+strongly wrong
+; the 70% model is 
+weakly wrong
+, a pattern invisible to accuracy evaluation, which shows only modestly reduced accuracy at 30% relative to the catastrophic underlying circuit failure.
+
+Table 2: 
+DLA retention (%) by circuit class across compressed models. Negative values indicate sign inversion (the class actively harms correct IO prediction). 
+ denotes exact zero from structurally eliminated heads.
+
+Method
+
+Model
+
+S-INH
+
+NM
+
+NNM
+
+BNM
+
+Failure Mode
+
+Pruning 30%
+
+Mag. Attn
+
+Zeroing (partial)
+
+Rand. Attn
+
+Inversion (partial)
+
+Mag. Neu
+
+Inversion
+
+Rand. Neu
+
+Inversion (partial)
+
+Pruning 50%
+
+Mag. Attn
+
+Zeroing
+
+Rand. Attn
+
+Inversion (partial)
+
+Mag. Neu
+
+Inversion (partial)
+
+Rand. Neu
+
+Inversion
+
+Pruning 70%
+
+Mag. Attn
+
+Zeroing
+
+Rand. Attn
+
+Inversion (mild)
+
+Mag. Neu
+
+Inversion (mild)
+
+Rand. Neu
+
+Strong Dampening
+
+4.4 
+High-Sparsity Limit of Inversion
+
+Random neuron pruning at 70% sparsity produces the weakest circuit signature in the study. No class shows a strong sign flip: NM (
+), NNM (
+) and BNM (
+) are indistinguishable from zero, and S-Inhibition retains only 6.9% of its baseline contribution (Table 
+2
+). Accuracy (47.9%) and mean logit difference (
+) match the zeroing profile at equivalent sparsity (Table 
+1
+), but the cause differs: neuron pruning does not touch the attention heads, so the circuit is not absent; its directional signal has faded. Activation patching shows a partial exception: S-Inhibition retains a moderate causal effect (
+), whereas NNM retains its paradoxical negative effect (
+). The same trajectory appears across sparsity levels, with the logit difference decreasing from 
+ at 30% to 
+ and 
+ at 50% and 70%, respectively. We therefore treat this regime as the terminal, noise-dominated end of inversion, in which context corruption is so broad that both the correct and the inverted signals fade, rather than as an independent mechanism.
+
+4.5 
+Perplexity and Representational Fidelity
+
+Table 
+3
+ places the circuit-level failures in the context of conventional and representational measures: TinyStories perplexity, hidden-state cosine similarity, and linear CKA between each pruned model and the base model, reported overall and for early (L0–L3) and late (L8–L11) layers.
+
+Table 3: 
+TinyStories perplexity and layer-wise representational similarity to the base model (base perplexity 11.54). Early 
+ L0–L3, Late 
+ L8–L11.
+
+Spar.
+
+Model
+
+PPL
+
+Cos.
+
+CKA
+
+CKA (early)
+
+CKA (late)
+
+30%
+
+Mag. Neu
+
+Rand. Neu
+
+Mag. Attn
+
+Rand. Attn
+
+50%
+
+Mag. Neu
+
+Rand. Neu
+
+Mag. Attn
+
+Rand. Attn
+
+70%
+
+Mag. Neu
+
+Rand. Neu
+
+Mag. Attn
+
+Rand. Attn
+
+Perplexity does not track circuit damage.
+
+Magnitude attention head pruning has the lowest perplexity at every sparsity (23.37 at 30%, against 140.10 for random attention heads at the same sparsity), and neuron pruning is far more damaging than head pruning at matched sparsity, with magnitude neurons at 70% reaching a perplexity of 18,934. At 30% sparsity, however, perplexity ranks magnitude neuron pruning (74.61) ahead of random attention head pruning (140.10), even though the former produces the worst IOI logit difference in the study (
+ against 
+; Table 
+1
+). The most strongly inverted circuit, therefore, belongs to a model that a perplexity audit would rank as the less damaged of the two.
+
+Component type and depth.
+
+Representational fidelity separates component types more sharply than selection criteria. At 70% sparsity, magnitude attention head pruning retains a CKA of 0.851, the highest of any pruned model at that sparsity, whereas magnitude neuron pruning retains only 0.500. For neuron pruning, cosine similarity (0.703) and CKA (0.500) diverge at 70%, indicating that the principal axes of variation in the MLP output space collapse while mean activation directions are partially preserved. All strategies preserve early layers (CKA 
+ in every condition) while late-layer CKA never exceeds 0.848 and falls as low as 0.260, so the representational bottleneck under pruning is a late-layer phenomenon, which is where the IOI output-stage heads sit.
+
+Criterion reversal for neurons.
+
+For attention heads, magnitude selection preserves more structure than random selection (CKA 0.917 against 0.817 at 50%). For neurons, the ordering reverses at low sparsity: random pruning at 30% reaches a CKA of 0.825 against 0.698 for magnitude pruning. This is consistent with the context-poisoning account in Inversion: magnitude selection removes the highest-weight neurons, creating localised representational voids, whereas random selection spreads the damage more evenly.
+
+4.6 
+Attention Diffusion and Sharpening
+
+We track head-averaged attention statistics (entropy, effective support, first-token mass, and head cosine similarity to the base model; full results in Table 
+8
+.
+
+Head pruning diffuses attention.
+
+Pruning entire heads produces systematic attention diffusion under both criteria. At 70% sparsity, entropy rises monotonically from 2.013 nats to 3.561 (magnitude) and 3.536 (random), effective support grows from 11.4 to roughly 51 tokens (a 4.5-fold increase), and first-token attention collapses from 0.421 to 0.098 (magnitude) and 0.146 (random), destroying the attention sink. This is a structural consequence of zeroing a head’s weights, which yields near-uniform softmax outputs regardless of how the head was selected, and it matches the uniform IO and S attention measured on the eliminated circuit heads (
+, 
+). Head cosine similarity falls heterogeneously (
+ and 
+ at 70%), reflecting damage concentrated in the removed heads.
+
+Neuron pruning does not diffuse attention.
+
+Neuron pruning leaves attention heads untouched, and its signature is opposite or weak. Random neuron pruning 
+sharpens
+ attention: entropy is below base at 30% and 70% (1.638 and 1.478 nats), effective support falls to 9.25 and 7.80 tokens, and first-token attention rises to 0.521 and 0.552. The 50% condition (2.050 nats) interrupts this trend and is likely a stochastic or threshold effect. Magnitude neuron pruning produces only a mild entropy increase (
+ to 
+). A plausible mechanism is a compensatory collapse of the residual stream: with fewer MLP neurons, hidden states become less diverse and attention concentrates on contextually dominant positions. At matched sparsity, random neuron pruning also preserves head routing better than random head pruning (
+ vs. 
+ at 30%; 
+ vs. 
+ at 70%).
+
+Implication for detection.
+
+Zeroing is visible in aggregate attention statistics, whereas the inverted model at 30% magnitude neuron pruning (
+) looks comparatively intact, even though its Name Mover heads attend sharply to the wrong token (
+ for L9H6). Aggregate entropy cannot distinguish a head that attends correctly from one that attends confidently to the subject, which is why head-level causal analysis is needed.
+
+4.7 
+Greater-Than Circuit Replication
+
+To test whether the taxonomy is specific to IOI, we apply the same twelve pruned variants to the Greater-Than (GT) circuit of 
+Hanna et al. (2023)
+.
+Each prompt has the form “The 
+noun
+ lasted from the year XXYY to the year XX” and requires a completion YY
+YY. The circuit comprises six heads in four classes: year encoding (L0H1, L1H5), year difference (L9H1), comparison (L10H7), and output computation (L11H0, L11H10). Unlike IOI, the GT computation is MLP-dominant: the largest direct logit attributions in GPT-2 come from the layer 9, 10 and 8 MLPs (0.867, 0.863 and 0.557), with L9H1 (0.551) the first attention component. The metric is the GT logit difference 
+, the mean logit of valid completions minus the mean logit of invalid ones. The base model achieves 
+ and an argmax accuracy of 94.0%.
+
+Table 4: 
+GT logit difference, accuracy and degradation under pruning. Degradation 
+ indicates a negative mean logit difference. Base 
+.
+
+Spar.
+
+Model
+
+Mean 
+
+Acc (%)
+
+Degrad. (%)
+
+30%
+
+Mag. Neu
+
+Rand. Neu
+
+Mag. Attn
+
+Rand. Attn
+
+50%
+
+Mag. Neu
+
+Rand. Neu
+
+Mag. Attn
+
+Rand. Attn
+
+70%
+
+Mag. Neu
+
+Rand. Neu
+
+Mag. Attn
+
+Rand. Attn
+
+Neuron pruning is the most destructive.
+
+Magnitude neuron pruning inverts 
+ at every sparsity level, with accuracy at or below 0.2%. Random neuron pruning retains a small positive logit difference at 30% (0.421, 33.8% accuracy) but inverts at 50% and 70%, and accuracy reaches exactly 0.0% by 50% under both criteria. Because the GT circuit relies on distributed MLP computation, the surviving attention heads cannot compensate for it. Magnitude selection is again more damaging than random selection for neurons at 30% (degradation 120.3% against 85.3%), plausibly because it removes the highest-activating neurons most likely to carry the ordinal comparison signal.
+
+Attention head pruning degrades gradually.
+
+Magnitude attention head pruning retains meaningful performance (accuracies of 66.1%, 53.5%, and 17.7%) and crosses the zero logit difference only at 70%. Random attention head pruning degrades more sharply, with accuracy falling to 1.0% at 50%, and the gap between the two criteria widens with sparsity (degradation 58.1% against 62.6% at 30%, and 67.7% against 92.5% at 50%).
+
+Circuit-level evidence.
+
+Head-level activation patching shows that L10H7 (comparison) and L11H0 and L11H10 (output) are the heads most affected by attention pruning. L9H1 (year difference) shows 
+increased
+ patching scores in pruned models, consistent with compensation as output heads fail and L9H1 absorbs a larger causal load, whereas in neuron-pruned models, the same heads show negative effect sizes because no recoverable signal is computed. Path patching (Table 
+5
+) shows CMP
+OUT and YE
+YD as the most consistently damaged paths. At 70% random attention pruning, all four paths degrade by more than 100%, indicating complete circuit dissolution, whereas under magnitude attention pruning at 70%, YD
+CMP (
+) and YD
+OUT (
+) show negative degradation, reflecting compensatory re-routing as the output heads fail.
+
+Relation to the IOI taxonomy.
+
+GT reproduces the asymmetry between component types, but with the roles reversed. For IOI the circuit is carried by attention heads, and neuron pruning is dangerous because it corrupts the context those heads read; for GT the circuit is carried by MLPs, so neuron pruning removes the computation itself. Which component type is critical, therefore, depends on the circuit’s architecture, but in both circuits, the choice of component type, rather than sparsity, determines the failure.
+
+Table 5: 
+GT residual path patching: mean degradation (%) and Cohen’s 
+. Negative degradation indicates increased causal potency in the compressed model.
+
+YE
+YD
+
+YD
+CMP
+
+YD
+OUT
+
+CMP
+OUT
+
+Spar.
+
+Model
+
+Deg.
+
+Deg.
+
+Deg.
+
+Deg.
+
+30%
+
+Mag. Neu
+
+Rand. Neu
+
+Mag. Attn
+
+Rand. Attn
+
+50%
+
+Mag. Neu
+
+Rand. Neu
+
+Mag. Attn
+
+Rand. Attn
+
+70%
+
+Mag. Neu
+
+Rand. Neu
+
+Mag. Attn
+
+Rand. Attn
+
+5 
+Discussion
+
+5.1 
+Component Type and Selection Criterion Jointly Determine Failure Mode
+
+Component type matters more than sparsity. Magnitude attention pruning at 70% (zeroing) retains 47.9% IOI accuracy, whereas magnitude neuron pruning at 30% (inversion) retains only 17.7%, despite zeroing far fewer parameters.
+Within a component type, however, the selection criterion changes the failure signature (Table 
+2
+). At 30% sparsity, magnitude attention pruning gives the expected zeroing profile (S-INH 17.6%, NM 9.2%, NNM 
+, BNM 
+). Random attention pruning at the same sparsity instead flips NM (
+), NNM (
+) and especially BNM (
+), a partial-inversion signature otherwise associated with neuron pruning.
+Path patching suggests why (Table 
+7
+). Low-norm heads are disproportionately the circuit’s own late-layer output heads, so magnitude selection is close to surgical: S-INH
+NM degrades most (87.4% vs. 36.6–66.5% upstream). Random selection also removes upstream PT, DT and IND heads that feed the surviving Name Movers, and degrades all four pathways (PT
+IND 201.3%, DT
+S-INH 122.0%, IND
+NM 143.2%, S-INH
+NM 91.2%).
+Inversion thus arises whenever the context Name Movers read is damaged while the Name Movers survive, whether via neurons or via randomly removed upstream heads.
+A practitioner choosing between magnitude and random head pruning is therefore choosing between a self-announcing failure and a silent one, even though the pruned component type is identical.
+One caveat: for neuron pruning, patching effect sizes fall with sparsity (magnitude: 
+ at 30% to 
+ at 70%) while performance worsens, indicating global disruption in which patching loses sensitivity, so 
+ should not be read as damage magnitude across sparsity levels.
+
+5.2 
+Why Inversion Is the Most Dangerous Failure Mode
+
+A zeroed model fails transparently: at 70% magnitude attention pruning every DLA class is exactly zero and attention over IO and S is near-uniform (0.067 vs. 0.133), so the residual accuracy comes from non-circuit computation.
+Inversion leaves no such structural trace. Under 30% magnitude neuron pruning, all 26 circuit heads remain intact (weight norms 
+), so an audit checking whether the circuit still exists would pass it. Yet the output mechanism has been redirected: NM contribution falls from 
+ to 
+, BNM from 
+ to 
+ (
+, the most extreme inversion in the study), and S-INH retains 21.2%. The mean logit difference is 
+ with 17.7% accuracy, the worst of all twelve variants, which is a systematic preference for the subject rather than undirected guessing.
+Perplexity misranks this model: at 30% sparsity it scores 74.61 against 140.10 for random attention pruning, yet its logit difference is far worse (
+ vs. 
+).
+Degradation is also non-monotonic in sparsity (184.1% at 30%, 123.5% at 70%), because heavier pruning degrades the residual stream until attention no longer discriminates between candidates. The model is thus most misdirected at the sparsity practitioners are most likely to consider conservative.
+Structural checks miss behavioural inversion, while accuracy and perplexity cannot distinguish uncertainty from systematic error. For safety mechanisms, the pruning method could determine whether failure merely reduces capability or reverses the intended behaviour.
+
+5.3 
+Structural Weak Points
+
+Two components are disrupted across conditions. The S-INH
+NM pathway is degraded in every condition we report (path-patching 
+–
+; Table 
+7
+), even under random neuron pruning at 30%, where all other pathways show reorganisation rather than damage. Because S-Inhibition is distributed across the MLP and attention components at layers 7–8, it is exposed to any pruning strategy, regardless of the target.
+NNM heads show negative patching 
+ in all twelve conditions (
+ to 
+; Table 
+9
+), i.e. their suppressive role is decoupled or inverted rather than merely weakened. We hypothesise that this reflects the precision NNM heads need to target the subject token specifically, compared with the more distributed IO-copying signal of NM heads; we do not test this directly.
+
+6 
+Conclusion
+
+We demonstrate that weight pruning disrupts transformer circuits through two distinct failure modes, driven primarily by component type rather than sparsity level. Magnitude attention head pruning eliminates output-facing heads outright, producing undirected, near-chance failure. Magnitude neuron pruning instead corrupts the MLP context that attention heads depend on, producing confident misdirection that accuracy metrics obscure. At high sparsity, random neuron pruning shows both correct- and incorrect-sign contributions fading toward zero together, a terminal, noise-dominated regime rather than a stable, independently characterisable third mechanism.
+
+Limitations
+
+Model and scale.
+
+All experiments use GPT-2 small (117M parameters). Larger models have more numerous heads and more distributed, redundant circuits, so the failure modes we report may not transfer directly, and replication at larger scales (e.g. GPT-2 Medium/Large or Pythia) is the most immediate extension.
+
+Circuit coverage and data.
+
+We analyse two circuits, IOI and Greater-Than, on synthetically generated prompts (300 IOI sentences). Synthetic data is standard in circuit analysis but limits ecological validity, and we do not test whether circuit damage affects natural-language tasks that reuse the same computation. The failure-mode taxonomy and the component-type asymmetry should therefore be read as hypotheses to be tested on other circuits (e.g. factual recall, syntactic parsing), not as general principles.
+
+Pruning protocol.
+
+We prune whole attention heads and MLP neurons by zeroing their weights, with no weight updates afterwards, and score importance with simple criteria (the L2 norm of a head’s Q-weight slice, or of a neuron’s 
+ column). We do not study weight-level unstructured pruning, removal of entire layers or blocks, gradient- or attribution-based criteria, or post-pruning fine-tuning, any of which may change or repair the failure modes we observe.
+
+Safety implications.
+
+GPT-2 small has no safety fine-tuning, so our remarks on refusal- or harm-avoidance mechanisms are an extrapolation from the S-Inhibition and Negative Name Mover circuits, not a measured result.
+
+Feature-level analysis.
+
+Our SAE analysis (Appendix 
+A.6
+) uses a SAE trained on the base model, so high reconstruction error shows only that activations leave the base model’s feature manifold, not what features the pruned model has. Layer 11 is excluded because the base model’s own reconstruction error exceeds the validity threshold.
+
+References
+
+Bai 
+et al.
+ (2024)
+
+G. Bai, Z. Chai, C. Ling, S. Wang, J. Lu, N. Zhang, T. Shi, Z. Yu, M. Zhu, Y. Zhang, 
+et al.
+
+Beyond efficiency: a systematic survey of resource-efficient large language models
+.
+
+arXiv preprint arXiv:2401.00625
+.
+
+Cited by: 
+§1
+,
+
+§2.2
+.
+
+Bereska and Gavves (2024)
+
+L. Bereska and E. Gavves
+
+Mechanistic interpretability for ai safety–a review
+.
+
+arXiv preprint arXiv:2404.14082
+.
+
+Cited by: 
+§2.1
+.
+
+Braun 
+et al.
+ (2024)
+
+D. Braun, J. Taylor, N. Goldowsky-Dill, and L. Sharkey
+
+Identifying functionally important features with end-to-end sparse dictionary learning
+.
+
+Advances in Neural Information Processing Systems
+ 
+37
+, 
+pp. 107286–107325
+.
+
+Cited by: 
+§2.3
+.
+
+Cammarata 
+et al.
+ (2020)
+
+N. Cammarata, S. Carter, G. Goh, C. Olah, M. Petrov, L. Schubert, C. Voss, B. Egan, and S. K. Lim
+
+Thread: circuits
+.
+
+Distill
+ 
+5
+ (
+3
+), 
+pp. e24
+.
+
+Cited by: 
+§2.1
+.
+
+Chhabra and Khalili (2025)
+
+V. K. Chhabra and M. M. Khalili
+
+Towards understanding and improving refusal in compressed models via mechanistic interpretability
+.
+
+arXiv preprint arXiv:2504.04215
+.
+
+Cited by: 
+§2.3
+.
+
+Ding 
+et al.
+ (2023)
+
+T. Ding, T. Chen, H. Zhu, J. Jiang, Y. Zhong, J. Zhou, G. Wang, Z. Zhu, I. Zharkov, and L. Liang
+
+The efficiency spectrum of large language models: an algorithmic survey
+.
+
+arXiv preprint arXiv:2312.00678
+.
+
+Cited by: 
+§1
+,
+
+§2.2
+.
+
+Geiger 
+et al.
+ (2021)
+
+A. Geiger, H. Lu, T. Icard, and C. Potts
+
+Causal abstractions of neural networks
+.
+
+Advances in Neural Information Processing Systems
+ 
+34
+, 
+pp. 9574–9586
+.
+
+Cited by: 
+§2.1
+.
+
+Geva 
+et al.
+ (2021)
+
+M. Geva, R. Schuster, J. Berant, and O. Levy
+
+Transformer feed-forward layers are key-value memories
+.
+
+In 
+Proceedings of the 2021 Conference on Empirical Methods in Natural Language Processing
+,
+
+pp. 5484–5495
+.
+
+Cited by: 
+§2.2
+.
+
+Goldowsky-Dill 
+et al.
+ (2023)
+
+N. Goldowsky-Dill, C. MacLeod, L. Sato, and A. Arora
+
+Localizing model behavior with path patching
+.
+
+arXiv preprint arXiv:2304.05969
+.
+
+Cited by: 
+§2.1
+.
+
+Han 
+et al.
+ (2015)
+
+S. Han, H. Mao, and W. J. Dally
+
+Deep compression: compressing deep neural networks with pruning, trained quantization and huffman coding
+.
+
+arXiv preprint arXiv:1510.00149
+.
+
+Cited by: 
+§2.2
+.
+
+Hanna 
+et al.
+ (2023)
+
+M. Hanna, O. Liu, and A. Variengien
+
+How does gpt-2 compute greater-than?: interpreting mathematical abilities in a pre-trained language model
+.
+
+Advances in Neural Information Processing Systems
+ 
+36
+, 
+pp. 76033–76060
+.
+
+Cited by: 
+§4.7
+.
+
+Hatefi 
+et al.
+ (2025)
+
+S. M. V. Hatefi, M. Dreyer, R. Achtibat, P. Kahardipraja, T. Wiegand, W. Samek, and S. Lapuschkin
+
+Attribution-guided pruning for compression, circuit discovery, and targeted correction in llms
+.
+
+arXiv preprint arXiv:2506.13727
+.
+
+Cited by: 
+§2.3
+.
+
+Li and Eldan (2023)
+
+Y. Li and R. Eldan
+
+TinyStories: how small can language models be and still speak coherent english
+.
+
+Cited by: 
+§3.3
+.
+
+Meng 
+et al.
+ (2022)
+
+K. Meng, D. Bau, A. Andonian, and Y. Belinkov
+
+Locating and editing factual associations in gpt
+.
+
+Advances in neural information processing systems
+ 
+35
+, 
+pp. 17359–17372
+.
+
+Cited by: 
+§2.1
+.
+
+Nanda and Bloom (2022)
+
+N. Nanda and J. Bloom
+
+TransformerLens
+.
+
+Note: 
+https://github.com/TransformerLensOrg/TransformerLens
+
+Cited by: 
+§3.1
+,
+
+§3.4
+.
+
+Radford 
+et al.
+ (2019)
+
+A. Radford, J. Wu, R. Child, D. Luan, D. Amodei, I. Sutskever, 
+et al.
+
+Language models are unsupervised multitask learners
+.
+
+OpenAI blog
+ 
+1
+ (
+8
+), 
+pp. 9
+.
+
+Cited by: 
+§3.1
+.
+
+Rai 
+et al.
+ (2024)
+
+D. Rai, Y. Zhou, S. Feng, A. Saparov, and Z. Yao
+
+A practical review of mechanistic interpretability for transformer-based language models
+.
+
+arXiv preprint arXiv:2407.02646
+.
+
+Cited by: 
+§2.2
+.
+
+Wang 
+et al.
+ (2022)
+
+K. Wang, A. Variengien, A. Conmy, B. Shlegeris, and J. Steinhardt
+
+Interpretability in the wild: a circuit for indirect object identification in gpt-2 small
+.
+
+arXiv preprint arXiv:2211.00593
+.
+
+Cited by: 
+§1
+,
+
+§2.1
+,
+
+§2.1
+,
+
+§3.3
+.
+
+Wolf 
+et al.
+ (2020)
+
+T. Wolf, L. Debut, V. Sanh, J. Chaumond, C. Delangue, A. Moi, P. Cistac, T. Rault, R. Louf, M. Funtowicz, 
+et al.
+
+Transformers: state-of-the-art natural language processing
+.
+
+In 
+Proceedings of the 2020 conference on empirical methods in natural language processing: system demonstrations
+,
+
+pp. 38–45
+.
+
+Cited by: 
+§3.4
+.
+
+Appendix A 
+Appendix
+
+A.1 
+Logit-Lens Divergence
+
+We track layer-wise next-token accuracy through the logit lens on 500 TinyStories prompts, normalised by the base model’s accuracy at each layer. A model is said to diverge at the first layer where the accuracy drop is significant (Bonferroni-corrected paired 
+-test, 
+) and exceeds 5 percentage points. Eight of the twelve pruned models diverge at L6 and none diverges earlier. Magnitude attention pruning diverges latest: at L9 for 30% and 50% sparsity (relative accuracy above 0.89) and at L7 for 70% (relative accuracy 0.883). All three magnitude neuron models diverge at L6, with mean relative accuracy 0.670 at 30%, whereas random neuron pruning at 30% reaches 0.881, the same criterion reversal seen in CKA (Table 
+3
+).
+
+A.2 
+Base Model DLA Reference Profile
+
+Table 
+6
+ establishes the base GPT2 DLA profile used to compute all retention percentages reported in Table 
+2
+ of the main text. NM heads dominate the positive contribution; NNM heads make a large correct-sign negative contribution, acting as a self-correcting brake. Early-circuit classes (PT, DT, IND) have near-zero direct contributions (
+), consistent with their role as upstream signal processors rather than direct output contributors.
+
+Table 6: 
+Base GPT2 DLA scores by IOI circuit class and top individual heads. Positive scores contribute towards IO over S; negative towards S (correct for NNM).
+
+Circuit Class
+
+Class DLA
+
+Top Head
+
+Head DLA
+
+Name Mover (NM)
+
+L9H9
+
+L9H6
+
+L10H0
+
+L10H6
+
+Negative Name Mover (NNM)
+
+L10H7
+
+(dominant NNM)
+
+Backup Name Mover (BNM)
+
+L10H10
+
+S-Inhibition (S-INH)
+
+L8H10
+
+Previous Token (PT)
+
+Duplicate Token (DT)
+
+Induction (IND)
+
+The retention percentage in Table 
+2
+ is defined as:
+
+Negative retention values indicate the class has flipped sign relative to base and is actively harming correct IO prediction. Because NNM has a negative base DLA (
+), a 
+positive
+ compressed NNM DLA produces a negative retention value, which is the inversion signature reported in Section 4.3 of the main text.
+
+A.3 
+Residual Path Patching: Full Four-Pathway Results
+
+Table 
+7
+ extends Table 
+9
+ by reporting path-level degradation (%) and Cohen’s 
+ for all four critical IOI communication pathways.
+This provides the complete evidence base for the S-INH
+NM structural weak-point claim and for the circuit reorganisation signature under random neuron pruning at 30% (negative degradation on PT
+IND and IND
+NM).
+
+Table 7: 
+Residual path patching: mean degradation (%) and paired Cohen’s 
+ for four critical pathways (
+ per path per model).
+Bold entries indicate the largest effect per model. Entries marked 
+ are significant (
+, Bonferroni-corrected). Negative degradation indicates circuit reorganisation (canonical path carries proportionally more causal weight in isolation in the compressed model).
+
+PT
+IND
+
+DT
+S-INH
+
+IND
+NM
+
+S-INH
+NM
+
+Spar.
+
+Model
+
+Deg.
+
+Deg.
+
+Deg.
+
+Deg.
+
+30%
+
+Mag. Neu
+
+Rand. Neu
+
+Mag. Attn
+
+Rand. Attn
+
+50%
+
+Mag. Neu
+
+Mag. Attn
+
+Rand. Neu
+
+Rand. Attn
+
+70%
+
+Mag. Neu
+
+Mag. Attn
+
+Rand. Neu
+
+Rand. Attn
+
+The S-INH
+NM pathway is the only pathway that degrades significantly under 
+every
+ pruning condition, including random neuron pruning at 30% which shows reorganisation (negative degradation) on all other pathways. This confirms the vulnerability is structural rather than a consequence of any particular importance criterion.
+
+A.4 
+Attention Pattern Analysis
+
+Table 8: 
+Attention pattern statistics under pruning, averaged over heads. 
+: mean entropy (nats); Supp.: effective support 
+; 
+: first-token (attention-sink) attention; 
+: mean per-head cosine similarity to base (Std: standard deviation across heads); 
+: mean per-head entropy change (nats). 
+ indicates routing identical to base.
+
+Spar.
+
+Model
+
+Supp.
+
+Std
+
+Base GPT-2
+
+–
+
+30%
+
+Mag. Neu
+
+Rand. Neu
+
+Mag. Attn
+
+Rand. Attn
+
+50%
+
+Mag. Neu
+
+Rand. Neu
+
+Mag. Attn
+
+Rand. Attn
+
+70%
+
+Mag. Neu
+
+Rand. Neu
+
+Mag. Attn
+
+Rand. Attn
+
+Table 
+8
+ gives the full attention statistics. Head pruning diffuses attention under both criteria (entropy rises, effective support grows, the attention sink collapses) and, for the random criterion, lowers 
+ more than neuron pruning at matched sparsity (
+ vs. 
+ at 30%; 
+ vs. 
+ at 70%), with larger variance across heads. Neuron pruning leaves routing comparatively intact, which is consistent with the inversion mode: circuit heads still route sensibly, but the residual stream they read from is corrupted.
+
+A.5 
+Activation Patching Results
+
+Table 
+9
+ reports head-level activation patching by functional class. S-Inhibition is the most degraded class (largest positive 
+) in all twelve conditions (
+–
+). NNM heads show a negative 
+ in every condition (
+ to 
+), i.e. their normal suppressive contribution is decoupled or inverted rather than merely reduced.
+
+Table 9: 
+Head-level activation patching: paired Cohen’s 
+ by functional class. Positive 
+ indicates degraded causal contribution; negative 
+ indicates paradoxically larger patching effect in the compressed model (disinhibition). All overall effects significant (
+, Bonferroni-corrected) unless marked 
+ (
+, uncorrected).
+
+Spar.
+
+Model
+
+PT
+
+DT
+
+IND
+
+S-INH
+
+NM
+
+NNM
+
+BNM
+
+All 
+
+30%
+
+Mag. Neu
+
+Rand. Neu
+
+Mag. Attn
+
+Rand. Attn
+
+50%
+
+Mag. Neu
+
+Mag. Attn
+
+Rand. Neu
+
+Rand. Attn
+
+70%
+
+Mag. Neu
+
+Mag. Attn
+
+Rand. Neu
+
+Rand. Attn
+
+A.6 
+SAE Reconstruction Errors: Corroborating Evidence for Residual Stream Collapse
+
+Sparse Autoencoder (SAE) reconstruction errors provide an independent, feature-level corroboration of the inversion mechanism described in Section 4.3. A frozen SAE trained on base GPT2 residual stream activations is applied to each compressed variant; relative reconstruction error 
+ indicates the compressed model’s activations lie outside the SAE’s training distribution, i.e. the residual stream geometry has been fundamentally disrupted.
+
+Table 10: 
+SAE reconstruction errors (relative) and mean feature survival by layer across
+compressed models.
+
+ = valid (relative error 
+); 
+ = invalid (activations outside SAE
+training distribution).
+Layer 11 is excluded: base reconstruction error 
+ exceeds the validity threshold.
+Mean survival is reported only for the highest-sparsity valid case per strategy.
+
+Method
+
+Model
+
+L1 Error
+
+L1 Valid
+
+L6 Error
+
+L6 Valid
+
+Mean Surv. (L6)
+
+Base
+
+GPT-2 Small (FP32)
+
+Mag. Attn
+
+30%
+
+,
+
+50%
+
+,
+
+70%
+
+Mag. Neu
+
+30%
+
+,
+
+50%
+
+,
+
+70%
+
+Rand. Attn
+
+30%
+
+,
+
+50%
+
+,
+
+70%
+
+Rand. Neu
+
+30%
+
+,
+
+50%
+
+,
+
+70%
+
+The key finding is the dissociation between SAE error and circuit head integrity under magnitude neuron pruning. At 30% sparsity, Layer 1 reconstruction error reaches 
+, over 350
+ the base value, while all 26 IOI circuit heads remain structurally intact (weight norms 
+; Section 4.3).
+This confirms the context-poisoning mechanism: MLP neuron removal collapses the early residual stream into a low-rank subspace that the frozen SAE cannot reconstruct, thereby corrupting the token-identity encodings that Name Mover heads read from, without physically touching the heads themselves. Random neuron pruning shows a complementary pattern: Layer 6 errors of 
+ and 
+
+at 30%–50% sparsity, consistent with circuit reorganisation at the feature level visible in
+the negative path-degradation entries of Table 
+7
+.
+

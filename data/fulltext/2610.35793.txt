@@ -1,0 +1,3923 @@
+Quantifying Claim Smoothing by LLM Research Agents
+https://arxiv.org/abs/2610.35793
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+\tl_set:Ne
+\tcboxmath
+
+tcboxmath
+
+\tl_set:Ne
+\tcbhighmath
+tcbhighmath
+
+Quantifying Claim Smoothing by LLM
+
+Research Agents
+
+Tiasa Singha Roy
+
+Affiliation: 
+New York University
+
+Email: 
+ts5378@nyu.edu
+
+  
+
+Manya Wadhwa
+
+Affiliation: 
+New York University
+
+Email: 
+mw4141@nyu.edu
+
+  
+
+Greg Durrett
+
+Affiliation: 
+New York University
+
+Email: 
+gdurrett@nyu.edu
+
+Abstract
+
+Deep research, or any use of large language models (LLMs) to read a large document collection and produce insights, requires synthesizing information from different sources. In this work, we find that LLMs produce long-form research reports that read as confident syntheses but which fail to accurately reflect the underlying documents. We call this failure 
+smoothing
+. In collapsing diverse and potentially conflicting sources into a single narrative, the model discards the evidential “jaggedness” of its corpus and asserts conclusions more decisive than the citations can support. We introduce a claim level scoring pipeline, 
+SmoothScore
+, to quantify this effect. Our pipeline extracts key conclusive claims from model generated reports, then finds evidence relevant to each claim and clusters that evidence along high level aspects. Finally, each claim is scored with respect to the evidence to quantify the degree of smoothing done by the agent. Across 7 systems and 4 datasets, we find that agents consistently produce stronger claims than warranted
+1
+1
+
+1
+
+          
+          
+          
+        Code and data: 
+https://github.com/tiasa2/SmoothScore
+.
+
+1 
+Introduction 
+
+Figure 1: 
+When synthesizing over many documents, agents can present a claim as well supported when the evidence is actually more mixed. 
+SmoothScore
+ flags these smoothed-over claims and quantifies the degree of smoothing.
+
+Large Language Models (LLMs) are often deployed within systems that read across many sources of information and return long-form reports with citations 
+(
+Shao et al., 2026
+; 
+Xie et al., 2026
+; 
+Li et al., 2026b
+; 
+Nakano et al., 2021
+)
+. These systems, either general-purpose agents paired with Internet access or special-purpose “deep research” agents, retrieve large volumes of documents and analyze and synthesize this information into coherent reports 
+(
+Du et al., 2026
+; 
+Onweller et al., 2026
+)
+. The skills required to do this go beyond simple multi-document summarization  
+(
+Fabbri et al., 2019
+)
+: agents must weigh evidence, integrate conflicting findings, and determine what the evidence warrants 
+(
+Narayanan Venkit et al., 2026
+; 
+Rasheed et al., 2026
+; 
+Zhu et al., 2026
+)
+. The resulting reports are typically fluent, well-organized, and densely cited, which makes them read as confident, authoritative syntheses. As a result, users increasingly treat these outputs as substitutes for reading the underlying literature, even when the synthesis misrepresents or overstates what the cited sources actually support 
+(
+Li and Aral, 2025
+; 
+Huang et al., 2026
+)
+.
+
+In this work, we study the prevalence of 
+smoothing
+ in LLM generated reports. We define smoothing as the tendency of LLMs to synthesize claims that are more decisive than supported by the documents they cite. Such claims may, for example, fail to portray mixed evidence or overclaim a result to hold in all circumstances when it has only been shown more narrowly. By contrast, a faithful claim should hedge when the evidence is mixed and narrow its scope when the support is narrow.
+
+To identify instances of this behavior, we propose 
+SmoothScore
+, a framework for measuring whether the claims in a synthesized report are calibrated to the cited documents. As shown in Figure 
+1
+, we find that an agent’s report can present a claim as well supported by some of its citations, even though other retrieved evidence shows the claim only holds under certain conditions. The bulk of prior work on claim verification and long-form factuality 
+(
+Min et al., 2023
+; 
+Song et al., 2024
+; 
+Tang et al., 2024
+)
+ can check whether individual claims are supported by their cited evidence, but breaks down for synthesized claims: these systems usually return binary judgments at the claim or subclaim level, but do not handle calibration and scoping across a large body of potentially conflicting evidence.
+
+To compute 
+SmoothScore
+, we first decompose each report into its main conclusive claims and identify the documents the report cites. As shown in Figure 
+2
+, for each claim, we run two agents over the report’s cited documents: (a) 
+Support Agent
+: which surfaces evidence consistent with the claim, and (b) 
+Skeptic Agent
+: which actively searches for evidence that qualifies, limits, or contradicts the claim. Evidence from both these passes are clustered into aspects reflecting different dimensions of the claim, such as viewpoint, strength of argument, and certainty 
+(
+Kargupta et al., 2025
+)
+.
+Given the claim and its mapped aspect-evidence pairs, we score the claim’s calibration on a 1–5 scale, reflecting how well its stated strength and scope match the evidence collected across both passes.
+
+Across four benchmarks and seven systems, we find that smoothing is pervasive. On average, for each system at least 25% of generated claims received a 
+SmoothScore
+ 
+. For most systems over half of claims show at least material smoothing, and up to 35% of Gemini Deep Research’s claims show severe smoothing (
+). We also find that limited interaction with the cited documents contributes to smoothing: Luna opens only 19% of the pages it cites, and actively engaging with the full documents can help reduce smoothing.
+
+Contributions
+ Our main contributions are: (a) We introduce 
+SmoothScore
+, a framework for measuring whether the claims in a synthesized report are calibrated to the strength and scope of their cited evidence, rather than merely supported by it and (b) we find this issue to be widespread across frontier systems on 4 different benchmarks.
+
+2 
+Smoothing in LLM Research Agents
+
+2.1 
+Defining Smoothing
+
+Setup and Definitions
+
+Given a prompt 
+, a retrieval-augmented agent 
+ produces a
+long-form response or report 
+ with inline citations. We collect the full text of the cited documents in the report
+
+.
+Our goal is to measure if the synthesized conclusive claims in 
+ faithfully
+represent what 
+ supports.
+
+We call a claim 
+smoothed
+ if it satisfies three criteria:(1) it reflects a conclusion drawn from aggregated evidence; (2) some of the evidence supports at least part of the conclusion; and (3) the conclusion as a whole is stronger or broader than the body of the evidence warrants.
+
+This goal is closely related to hallucination detection
+
+(
+Zha et al., 2023
+; 
+Min et al., 2023
+; 
+Tang et al., 2024
+)
+; we view it as a special case of hallucination detection. However, typical methods for hallucination detection assume binary factuality judgments. Past work has looked at more nuanced judgments for narrative summarization 
+(
+Subbiah et al., 2025
+)
+ and opinion summarization 
+(
+Bhaskar et al., 2023
+)
+, but these methods are designed for simpler settings and do not handle the complexity of smoothing in deep research systems.
+
+Evaluating whether a claim is smoothed requires more than checking whether a report’s statements are supported by individual citations. For instance, in Figure 
+2
+, the extracted claim 
+‘discrete image-token modeling
+appears more promising than a Stable-Diffusion-centered architecture’
+ is a conclusion made by the deep research system (satisfying condition (1) above). It is supported by the cited documents, 
+ Emu3 paper 
+(
+Wang et al., 2024
+)
+) and 
+ (the Show-o paper 
+(
+Xie et al., 2025
+)
+) (satisfying condition (2)). However, we find that the same sources along with other documents, namely 
+ (the Transfusion paper 
+(
+Zhou et al., 2024
+)
+), also contains results that show that the statement is only true under certain conditions present counter evidence (satisfying condition (3)).
+Therefore, smoothing can occur even when a claim appears supported, and methods producing binary judgments from small evidence sets cannot comprehensively capture the distribution to identify it.
+
+Identifying smoothing via aspects
+
+We propose 
+SmoothScore
+ as a way of measuring the degree of smoothing a conclusion shows. Figure 
+2
+ outlines the pipeline. At a high level, first, we extract such claims from a generated report that represent the key takeaways, then find evidence that supports and refutes those claims. However, it is not straightforward to combine this evidence into a final score: counting supporting documents vs. refuting documents does not account for the nuances of 
+how
+ a claim is supported or refuted.
+
+Instead, for the claim 
+ in the report 
+ and evidence from a cited document 
+, we identify a set of dimensions 
+ that we call 
+aspects
+, following 
+(
+Kargupta et al., 2025
+)
+. These aspects are consolidated across documents, to capture fine-grained ways in which a claim might be refuted. For instance, in Figure 
+2
+, step 3, we are able to find 
+‘performance and efficiency of tokens vs diffusion models’
+, under which we see some evidence state that 
+‘tokens match or beat diffusion’
+ but we also see evidence for 
+‘diffusion or hybrid set ups are competitive’
+. As aspects are discovered per claim and tailored to the claim and its evidence, we use them to score claim against the aspect-organized evidence to quantify its degree of smoothing.
+
+Figure 2: 
+Overview of 
+SmoothScore
+. Given a query and a system generated report, we (1) first extract conclusive claims. Then from the cited documents, (2) we get supporting and skeptic evidence relevant to the claim. (3)/(4) We then organize the evidence into 
+aspects
+. (5) The claim is then scored with respect to the gathered evidence to quantify the degree of missing information.
+
+2.2 
+Measuring Smoothing with 
+SmoothScore
+
+Step 1: Claim Extraction
+
+To focus on the agents’ ability to synthesize from aggregated evidence, we extract 
+conclusion-bearing claims
+ (condition (1)). These are cases where report takes a stance or presents a takeaway. For example, in Figure 
+2
+, 
+‘image-token modeling
+appears more promising than a Stable-Diffusion-centered
+architecture
+’ is a takeaway from the report which we extract as a claim.
+
+Using prompt, Appendix 
+B.1
+, we extract,
+
+Each claim preserves its direction, confidence, scope, and qualifications as stated in the report.
+
+Step 2: Evidence Extraction
+
+In Figure 
+2
+, we see that a cited document, for example, 
+ can carry information relevant to the claim that can both support or undermine it. To identify information relevant to the claim from the cited documents throughout the report, we extract evidence using a ‘support agent’ and a ‘skeptic’ agent.
+
+•
+
+Support Agent (Appendix 
+B.2
+): Given (claim, document), this agent extracts evidence that supports the assertions made by the claim. We also include stated concession as evidence when they confirm limitations or conditions present within the claim.
+
+•
+
+Skeptic Agent (Appendix 
+B.3
+): Given (claim, document), this agent extracts evidence that contains any information against the claim. To capture the “jaggedness” we go beyond just finding counters to the assertions made by the claim. The agent also extracts evidence to support limitations and conditions stated in the claims. Additionally, we include evidence on alternate approaches and their success related to the claims where relevant. This is to provide context for scope.
+
+For each agent, the evidence is composed of: a source quote from the document, aspect detailing the assertion, a note on how the evidence bears on the claim, and strength rating.
+
+Step 3: Aspect Induction
+
+Different cited documents can be relevant to different parts of a claim, so judging the claim against the raw documents forces the judge to compare evidence that is not directly comparable. If we look across the cited documents, however, the relevant information naturally clusters into topics that bear on the claim. For example, in Figure 
+2
+, some documents discuss 
+comparing the performance and efficiency of image tokens vs. diffusion approaches
+, while others discuss 
+fit with LLM-style next-token scaling
+. We refer to these topics as 
+aspects
+ 
+(
+Kargupta et al., 2025
+)
+.
+
+To construct aspects, for each claim–document pair 
+ we generate a set of document-specific aspect proposals,
+
+Each proposal identifies a dimension discussed in 
+ that bears on 
+, and consists of a short name, a brief description, and a set of keywords. If 
+ contains nothing relevant to 
+, then 
+ (see Appendix 
+B.4
+ for the prompt). Because proposals are generated independently for each document, different documents will often propose overlapping or near-duplicate aspects. For each claim, we therefore merge the proposals across documents into a single, deduplicated set of aspects, keeping track of which documents contributed to each one (see Appendix 
+B.5
+).
+
+Organizing evidence by aspect places findings that address the same part of the claim side by side, regardless of which document they came from. This allows the judge to weigh evidence both supporting and opposing the claim on a like-for-like basis. For example, along a comparative dimension there may be supporting and countervailing evidence for either stance, as seen in aspect 
+A2
+ of Figure 
+2
+.
+
+Step 4: Evidence Assignment
+
+We assign every extracted evidence item in 
+ to the aspect it discusses, so that findings addressing the same part of the claim are grouped together and can be compared directly (prompt in Appendix 
+B.6
+). Assignment depends only on 
+what
+ the evidence discusses, not on whether it supports or counters the claim, so an item’s stance, source, and strength rating are left unchanged. For example, in Figure 
+2
+, the support-agent finds that 
+Emu3 beats SDXL in human evaluation
+ and the skeptic-agent finding that 
+Emu3’s own table shows a lower GenEval score than SDXL
+ are placed under the same aspect, even though they point in opposite directions.
+
+Step 5: Computing Smoothing
+
+Finally, a judge 
+ produces a 
+SmoothScore
+ 
+ for each claim. The judge receives the input question 
+, the claim 
+, and all extracted evidence 
+ organized under the claim’s aspects 
+, including evidence that is not tied to any single aspect:
+
+The judge assesses how faithfully the claim compresses the supplied evidence, focusing on whether it omits or understates assertions, conditions, or scope in a way that changes its central takeaway. Using the five-point rubric in  
+B.7
+ we score degree of smoothing (condition (3)). The criteria for receiving a score of 5 includes cases that are pure hallucination and don’t match condition (2). However, we rarely observe cases of 5 (Section 
+4
+) and therefore view our system as primarily a method for analyzing smoothing rather than broader hallucination detection (even though it can identify such cases). Figure 
+2
+ and Table 
+15
+ show examples of the generated outputs for each stage of the pipeline.
+
+3 
+Experimental Setup
+
+Datasets.
+
+We calculate 
+SmoothScore
+ on the following datasets: (1) 
+ResearcherBench
+ 
+(
+Xu et al., 2026
+)
+, (2) 
+ScholarQA-CS2 (Expert-Written)
+ 
+(
+Hwang et al., 2026
+)
+ (3) 
+DeepResearch Bench II
+ 
+(
+Li et al., 2026a
+)
+ (4) 
+ResearchRubrics
+ 
+(
+Sharma et al., 2025
+)
+. These provide a range of tasks curated for research report generation. To ensure all queries require a degree of multi document synthesis we manually select queries. Details on this selection process is available in Appendix  
+A.2
+
+Systems.
+
+To check if overclaiming persists across architectures with varying design considerations, we evaluate the following 7 systems:
+(1) 
+GPT Luna 5.6 + Websearch
+,
+(2) 
+GPT Sol 5.6 + Websearch
+,
+(3) 
+Claude Sonnet 5 + Websearch
+,
+(4) 
+Claude Opus 5.5 + Websearch
+,
+(5) 
+Gemini Deep Research
+,
+(6) 
+DR Tulu
+ 
+(
+Shao et al., 2026
+)
+,
+(7) and 
+QUEST
+ 
+(
+Xie et al., 2026
+)
+. Together, these systems span several current approaches
+to generating research reports, including agents augmented with Websearch, proprietary end-to-end deep-research systems, and open research agents with specialized retrieval and reasoning pipelines. Addtional details provided in Appendix 
+A.3
+
+Metrics
+
+We report 
+SmoothScore
+ in two ways: (1) the mean 
+SmoothScore
+ across claims for each system and benchmark, and (2) the fraction of claims in each 
+SmoothScore
+ bin. We believe the fraction of claims 
+3 indicates how often systems generate materially misleading claims.
+
+4 
+Results
+
+4.1 
+SmoothScore
+ Results
+
+Smoothing is widespread.
+
+Table 
+1
+ shows that smoothing is pervasive across systems and datasets. Mean 
+SmoothScore
+ ranges from 1.66–1.95 for Luna and 1.82–1.93 for Sol to 3.05–3.27 for Gemini, with every other system falling between 2.20 and 2.88. The severity of smoothing is also reflected in the score distribution breakdown: smoothing of 
+3 is present on every system and dataset, with at least 22% of claims affected in every case, but severe smoothing (
+4) is where systems diverge sharply. Gemini smooths severely on 22–35% of its claims, roughly 3–12 times the rate of other closed-source agents and 13-26× the rate of Sol.
+
+Table 1: 
+ We report the number of reports, claims for each of systems and benchmarks evaluated in this work. We also report the 
+SmoothScore
+ with 
+3 being materially smoothed and 
+4 being the subset of severely smoothed claims. Open source systems like, DR Tulu and QUEST produce a large % of severely smoothed claims, while closed source agents vary with Luna and Sol systems only having 1-4% claims 
+ against Gemini’s 22-35%.
+
+Sample
+
+SmoothScore
+
+% of claims w/given 
+SmoothScore
+
+Dataset
+
+System
+
+Reports
+
+Claims
+
+Mean [95% CI]
+
+1
+
+2
+
+3
+
+4
+
+5
+
+ResearcherBench
+
+Luna 5.6
+
+65
+
+443
+
+1.95 [1.85, 2.06]
+
+37.0%
+
+34.1%
+
+25.7%
+
+3.2%
+
+0.0%
+
+Sol 5.6
+
+64
+
+430
+
+1.93 [1.81, 2.05]
+
+37.0%
+
+35.6%
+
+25.1%
+
+2.3%
+
+0.0%
+
+Sonnet 5
+
+65
+
+435
+
+2.52 [2.42, 2.61]
+
+13.8%
+
+26.7%
+
+53.3%
+
+6.2%
+
+0.0%
+
+Opus 5.5
+
+65
+
+445
+
+2.36 [2.28, 2.44]
+
+19.1%
+
+29.4%
+
+47.9%
+
+3.6%
+
+0.0%
+
+QUEST
+
+63
+
+404
+
+2.50 [2.35, 2.65]
+
+18.1%
+
+26.7%
+
+43.6%
+
+10.1%
+
+1.5%
+
+DR Tulu
+
+65
+
+408
+
+2.57 [2.47, 2.67]
+
+12.0%
+
+26.7%
+
+54.2%
+
+6.9%
+
+0.2%
+
+Gemini
+
+64
+
+434
+
+3.27 [3.21, 3.34]
+
+1.6%
+
+5.1%
+
+58.1%
+
+34.8%
+
+0.5%
+
+CS2-Expert
+
+Luna 5.6
+
+25
+
+164
+
+1.93 [1.75, 2.11]
+
+44.5%
+
+23.8%
+
+27.4%
+
+3.0%
+
+1.2%
+
+Sol 5.6
+
+25
+
+165
+
+1.82 [1.66, 1.98]
+
+43.6%
+
+31.5%
+
+23.6%
+
+1.2%
+
+0.0%
+
+Sonnet 5
+
+25
+
+167
+
+2.30 [2.12, 2.48]
+
+21.6%
+
+32.3%
+
+40.7%
+
+5.4%
+
+0.0%
+
+Opus 5.5
+
+25
+
+188
+
+2.20 [2.05, 2.33]
+
+28.7%
+
+26.6%
+
+42.0%
+
+1.6%
+
+1.1%
+
+QUEST
+
+25
+
+156
+
+2.67 [2.46, 2.87]
+
+17.3%
+
+18.6%
+
+47.4%
+
+13.5%
+
+3.2%
+
+DR Tulu
+
+25
+
+168
+
+2.70 [2.53, 2.86]
+
+12.5%
+
+19.0%
+
+55.4%
+
+12.5%
+
+0.6%
+
+Gemini
+
+24
+
+175
+
+3.18 [3.09, 3.28]
+
+4.0%
+
+5.7%
+
+59.4%
+
+29.7%
+
+1.1%
+
+DRB-II
+
+Luna 5.6
+
+18
+
+106
+
+1.66 [1.46, 1.86]
+
+58.5%
+
+18.9%
+
+20.8%
+
+1.9%
+
+0.0%
+
+Sol 5.6
+
+18
+
+111
+
+1.83 [1.62, 2.04]
+
+45.0%
+
+29.7%
+
+23.4%
+
+0.9%
+
+0.9%
+
+Sonnet 5
+
+18
+
+107
+
+2.46 [2.24, 2.68]
+
+15.0%
+
+30.8%
+
+47.7%
+
+6.5%
+
+0.0%
+
+Opus 5.5
+
+18
+
+106
+
+2.39 [2.24, 2.53]
+
+21.7%
+
+26.4%
+
+43.4%
+
+8.5%
+
+0.0%
+
+QUEST
+
+16
+
+95
+
+2.88 [2.54, 3.25]
+
+9.5%
+
+22.1%
+
+46.3%
+
+14.7%
+
+7.4%
+
+DR Tulu
+
+18
+
+102
+
+2.49 [2.27, 2.71]
+
+19.6%
+
+21.6%
+
+50.0%
+
+7.8%
+
+1.0%
+
+Gemini
+
+18
+
+120
+
+3.05 [2.89, 3.23]
+
+2.5%
+
+12.5%
+
+62.5%
+
+22.5%
+
+0.0%
+
+ResearchRubrics
+
+Luna 5.6
+
+17
+
+111
+
+1.83 [1.57, 2.10]
+
+45.0%
+
+31.5%
+
+19.8%
+
+2.7%
+
+0.9%
+
+Sol 5.6
+
+17
+
+108
+
+1.93 [1.73, 2.12]
+
+36.1%
+
+38.9%
+
+22.2%
+
+1.9%
+
+0.9%
+
+Sonnet 5
+
+17
+
+110
+
+2.55 [2.37, 2.72]
+
+12.7%
+
+29.1%
+
+49.1%
+
+8.2%
+
+0.9%
+
+Opus 5.5
+
+17
+
+100
+
+2.42 [2.21, 2.61]
+
+17.0%
+
+29.0%
+
+49.0%
+
+5.0%
+
+0.0%
+
+QUEST
+
+17
+
+104
+
+2.88 [2.61, 3.16]
+
+12.5%
+
+14.4%
+
+50.0%
+
+19.2%
+
+3.8%
+
+DR Tulu
+
+17
+
+99
+
+2.63 [2.38, 2.86]
+
+14.1%
+
+24.2%
+
+49.5%
+
+9.1%
+
+3.0%
+
+Gemini
+
+17
+
+113
+
+3.23 [3.05, 3.40]
+
+6.2%
+
+1.8%
+
+56.6%
+
+33.6%
+
+1.8%
+
+Open-source agents produce severely smoothed claims
+
+Systems follow similar patterns across datasets. The mean 
+SmoothScore
+ in open-source Deep Research systems like DR Tulu 
+(
+Shao et al., 2026
+)
+ and QUEST 
+(
+Xie et al., 2026
+)
+ remains comparable or slightly above that Sonnet-5. However, at least 
+59% and 
+55% of their claims score 
+, and 7–23% score 
+. From Table 
+11
+, QUEST draws from among the smallest evidence pools (roughly 10 documents and 40–55k words) so it has the least amount of evidence to compress. Despite this, while closed source systems only generate 1–2% of claims that score 
+, QUEST generates up to 
+7% and 
+4% such claims on DeepResearchBench II and ResearchRubrics. Appendix 
+G.1
+ shows that QUEST often generates outputs that read as summarization rather than synthesis. The resulting claims preserve specifics faithfully while overstating scope enough to drive inflated conclusions.
+
+Closed-source systems vary widely in smoothing severity.
+
+Among closed-source agents with Websearch, we see that Sonnet 5 and Opus 5.5 produces almost 1.4–2.5
+ the fraction of claims that achieve a 
+SmoothScore
+ of 3–4 relative to Luna and Sol in Table 
+1
+. These systems differ in the middle of the distribution rather than at its extremes and neither of the systems produce fundamentally misleading claims (Scored 5) at a meaningful rate, at most 1.1% on any dataset. On the other hand, Luna and Sol generate at least 36% claims that show no smoothing (score 
+), 1.5–2.7x more than any other system across datasets.
+
+Across all systems, Gemini performs the worst, with 85–93% of claims scoring 
+ and an average score of 3.05–3.27. Gemini also draws from significantly more documents (roughly 2–5x) than Luna or Sol with websearch, and produces the longest reports on every dataset (Table 
+11
+). This gives the agent a much larger surface to synthesize, and despite the added length, the report does not appear to compress this information more effectively. Appendix 
+G.2
+ lists some examples of claims from the generated reports. They contain language that turns a strong result into a universal or final conclusion.
+
+Figure 3: 
+Relationship between cited document count and claim smoothing. Across system and dataset pairs, we find that mean 
+SmoothScore
+ increases with the mean number of documents cited per report, but within a system this effect disappears (Table 
+12
+).
+
+Generation features show limited within-system associations with smoothing.
+
+From Table 
+11
+ we observe that the number of documents and report length vary across systems, which can influence the agents’ ability to synthesize and therefore 
+SmoothScore
+. We check if these features of an agent predict 
+SmoothScore
+ in Table 
+12
+. Across systems, systems that cite more documents (
+, 
+) or write longer claims (
+, 
+) smooth more, with Gemini at the extreme, but within a system both relationship are negligible (
+ and 
+; per-system values are small and mixed in sign). Only report length shows a within system association, with a small (
+) but positive correlation in all systems, though not significant in any one alone. Number of claims shows no such connection within or across systems (except a modest negative correlation for Gemini, 
+). Overall, while these features show associations with smoothing, within-system behavior suggests that other factors could also influence smoothing.
+
+4.2 
+Qualitative Observations
+
+Query framing influences 
+SmoothScore
+.
+
+We find that query framing influences how the model writes its claims. As seen in Appendix 
+G.1
+ and  
+G.2
+, there are certain categories of questions where smoothing is more pronounced: (1) Comparative questions: if the query is comparative in nature, for example, 
+‘In multimodal pretraining, the paradigms are based on image tokens and stable diffusion, which appears more promising and why?’
+ or 
+‘Which paradigm between RL and distillation appears more promising and why?’
+, it can presuppose a choice from the agent where to motivate or justify a choice the agent drops important qualifications, (2) Topic overview questions: queries that require an overview of a topic, for example, 
+‘Describe the Sunflower conjecture, progress towards a solution, and related problems’
+, the agent can assemble multiple results a single conclusion or just generalize from a single finding to the whole topic.
+
+Recurring Smoothing patterns across systems
+
+Table 
+2
+ shows three patterns that we observe across systems: (1) 
+Unsupported composition
+: Agents combine individual fragments of evidence into a stronger conclusion. Although each component may be supported, the claim presents its unsupported composition as a conclusive statement. (2) 
+Scope expansion
+: A claim takes an established result for a particular setup or experimental condition and removes certain boundaries, so that a the scope for an empirical observation expands into a general conclusion.
+(3) 
+Premature Closure
+: Claims often adopt conclusive language, using phrases like 
+‘strictly preserving,’
+ 
+‘the best approach,’
+ 
+‘definitively proves’
+ and 
+‘most optimal.’
+.
+
+Table 2: 
+Examples of recurring claim-smoothing patterns. For each pattern, we show an illustrative claim, its 
+SmoothScore
+, and a summary of the supporting evidence and limitations.
+
+Pattern
+
+Claim
+
+Summarized Evidence
+
+Unsupported composition
+
+The aggressive deployment of 
+duplication-aware token pruning
+,
+
+Modality-Aware Mixture of Experts
+, and 
+adaptive halting
+ ensures that vast,
+world-class parameter capacities 
+can be maintained without triggering
+corresponding explosions in inference latency.
+
+ 
+Score: 3
+
+Token pruning, sparse expert routing, and adaptive halting can each reduce
+inference cost in particular settings. However, the evidence does not evaluate
+their simultaneous deployment or show that their benefits compose. Each can
+introduce routing, pruning, synchronization, or kernel overheads, so the
+combined system does not guarantee bounded latency at frontier scale.
+
+Scope expansion
+
+Self-attention-based models are highly parallelizable and require
+substantially fewer parameters, making them much more 
+computationally
+efficient
+, 
+less prone to overfitting
+, and 
+easier to fine-tune for
+domain-specific tasks
+ …
+
+ 
+Score: 4
+
+Some ViTs achieve strong performance with lower pre-training compute in
+particular comparisons, but these advantages do not generalize across models
+or regimes. ViTs often have comparable or larger parameter counts, global
+attention has quadratic cost, and ViTs can be more prone to overfitting in
+low-data settings without large-scale pre-training or careful regularization.
+
+Premature closure
+
+This innovation 
+fundamentally resolves the statistical heterogeneity
+(Non-IID) problem
+ while strictly preserving the privacy boundaries established
+by institutional firewalls.
+
+ 
+Score: 5
+
+Federated distillation can mitigate heterogeneity and reduce direct data
+sharing, but it does not eliminate either problem. Performance continues to
+degrade as heterogeneity increases, theoretical analyses retain residual bias,
+and privacy attacks remain possible.
+
+5 
+Validating 
+SmoothScore
+
+We validate 
+SmoothScore
+ by running a human study as well as checking the quality of evidence retrieved by our proposed pipeline.
+
+5.1 
+Human Validation
+
+Table 3: 
+Agreement on 
+SmoothScore
+ across 73 claims scored by two human annotators.
+
+Exact
+
+W/in 1
+
+Annotator 1 vs. Annotator 2
+
+58%
+
+96%
+
+0.72
+
+0.71
+
+Judge vs. Annotator 1
+
+56%
+
+93%
+
+0.69
+
+0.68
+
+To validate 
+SmoothScore
+, two annotators independently scored the same 73 claims using the same rubric given to the LLM judge (Appendix 
+B.7
+), without access to the identity of the system that produced each claim. We find that agreement between the judge and Annotator 1 is in a similar range to inter-annotator agreement, Table 
+3
+. Disagreements are predominantly small: the judge is within one point of Annotator 1’s score on 93% of claims and differs by two or more points on only 7%. Additionally, of the claims the judge scores 
+, 62% are also scored 
+ by Annotator 1, indicating that most judge-flagged claims reflect genuine issues. Since the two annotators themselves agree at 
+ at this threshold, the judge disagreement is expected given the subjective
+nature of the task.
+
+5.2 
+Relevance of evidence collected by 
+SmoothScore
+
+Table 4: 
+Revising reports generated by Luna and Sonnet 5 on ResearcherBench, scored against gold rubrics by GPT-5. Simply providing evidence can increase rubric scores, matching or exceeding providing raw document while being a fraction of the size
+
+Luna
+
+Sonnet 5
+
+Condition
+
+Context
+
+Length
+
+ (
+)
+
+Context
+
+Length
+
+ (
+)
+
+WebSearch draft (score)
+
+–
+
+68.3
+
+–
+
+64.4
+
+Revise, no context
+
+–
+
+ (
+)
+
+–
+
+ (
+)
+
+Revise + cited documents
+
+117k
+
+ (
+)
+
+324k
+
+ (
+)
+
+Revise + 
+SmoothScore
+ evidence
+
+11k
+
+ (
+)
+
+65k
+
+ (
+)
+
+While human agreement validates the 
+SmoothScore
+ judge’s final scores, we separately check whether the evidence 
+SmoothScore
+ surfaces (Steps 2–4) is useful. We consider an independent measure, using gold rubrics provided by ResearcherBench created for judging the overall quality of the generated report. We take Luna and Sonnet 5 WebSearch reports on the benchmark, and perform an additional revision step with no web search under three context settings: (1) no additional context, (2) providing all cited documents, and (3) the collected
+
+SmoothScore
+ evidence as context. We find that both context settings rise well above the no-context control (
+ and 
+), with the extracted evidence improving rubric scores for both agents (Luna 
+, Sonnet 
+, both 
+), matching or even exceeding revision with the full documents. The evidence achieves this with roughly one-fifth to one-tenth of the tokens of the full documents. While this does not test the quality of the evidence relative to the generated claims, it shows that the evidence captures information that matters to an external, expert-written evaluation independent of the judge’s scores.
+
+6 
+Lack of engagement with document content
+
+The systems we evaluate generate reports with citations from the documents they retrieve. However, the agent’s interaction with the cited material is hard to control. For Luna, the trace shows that the agent works almost entirely from search snippets truncated by the tool (median 585 characters), opening a cited page for only 19% of the documents it cites and in just 20 of 65 reports. Sonnet 5 engages even less, opening only 2% of the links it cites (Table 
+5
+, Appendix 
+F
+). As agents rarely read the full documents, an agent may never see the qualifications and countervailing findings in the body of a source, which suggests that smoothing is partly shaped by what information the agent chooses to access.
+
+To test whether engaging with the documents reduces smoothing, we regenerate Luna and Sonnet 5 reports under varying setups. We vary (i) evidence access: the original WebSearch setting, or the original cited documents provided in context 
+(cited docs in context)
+, given in context with web search off; and (ii) instructions: the original prompt, or the same prompt plus calibration instructions. The instructions are identical across both evidence settings (prompts in Appendix 
+E.4
+, 
+E.3
+). We score all reports with 
+SmoothScore
+ on ResearcherBench.
+
+Table 5: 
+Luna and sonnet-5 websearch system engagement with the cited documents on ResearcherBench. Luna’s opens are marked by a header and Sonnet 5’s opens are explicit web fetches returning the full page. Details in Appendix 
+F
+.
+
+Luna
+
+Sonnet 5
+
+Cited documents
+
+496
+
+1,458
+
+Opened
+
+95 (19%)
+
+34 (2%)
+
+Not opened
+
+401 (81%)
+
+1,424 (98%)
+
+Reports opening no page
+
+45 / 65
+
+44 / 65
+
+Table 6: 
+Effect of document engagement and calibration instructions on smoothing
+(ResearcherBench, 61 questions). 
+WebSearch
+: original reports. 
+Docs
+: the same agent given the full text of the documents its WebSearch report cited, with web search off.
+
++ Instr.
+: the same calibration instructions added to either prompt. Providing both shows the largest improvement for both setups.
+
+% of claims with 
+SmoothScore
+
+Model
+
+Condition
+
+Length
+
+Claims
+
+Mean [95% CI]
+
+1
+
+2
+
+3
+
+4
+
+5
+
+Luna
+
+WebSearch
+
+1.0
+
+416
+
+1.95 [1.84, 2.07]
+
+37.3
+
+33.4
+
+26.0
+
+3.4
+
+0.0
+
+WebSearch + Instr.
+
+1.0
+
+397
+
+1.88 [1.78, 1.98]
+
+40.3
+
+34.0
+
+23.2
+
+2.5
+
+0.0
+
+Docs
+
+1.6
+
+390
+
+1.80 [1.70, 1.91]
+
+45.6
+
+31.0
+
+21.3
+
+2.1
+
+0.0
+
+Docs + Instr.
+
+1.4
+
+378
+
+1.52 [1.44, 1.60]
+
+61.1
+
+26.7
+
+11.6
+
+0.5
+
+0.0
+
+Sonnet 5
+
+WebSearch
+
+1.0
+
+407
+
+2.54 [2.44, 2.63]
+
+13.5
+
+25.6
+
+54.8
+
+6.1
+
+0.0
+
+WebSearch + Instr.
+
+1.1
+
+391
+
+2.23 [2.12, 2.34]
+
+25.6
+
+30.2
+
+40.4
+
+3.8
+
+0.0
+
+Docs
+
+1.2
+
+394
+
+2.38 [2.27, 2.49]
+
+18.3
+
+31.0
+
+45.4
+
+5.3
+
+0.0
+
+Docs + Instr.
+
+1.3
+
+367
+
+1.78 [1.67, 1.88]
+
+49.9
+
+25.1
+
+22.9
+
+1.9
+
+0.3
+
+We find that neither intervention is sufficient on its own (Table 
+6
+). For Luna, the instructions without the documents barely change smoothing (mean 
+ 1.95 to 1.88), and the documents alone reduce it modestly (1.80). Sonnet 5 responds more to instructions alone (2.54 to 2.23) but little to the documents alone (2.38). Combined, however, documents and instructions reduce smoothing far more than either does separately: mean 
+ falls to 1.52 for Luna and 1.78 for Sonnet 5, and the share of materially smoothed claims (
+) drops from 29% to 12% and from 61% to 25%, removing more than half in both cases. Severe smoothing (
+) nearly disappears (0.5% and 2.2%). Instructions to calibrate are thus most effective when the agent has the evidence needed to act on them.
+
+Reports written from the full documents are longer (1.2 -1.6
+) but contain slightly fewer extracted claims, so the reduction does not come from shorter or emptier reports. We also observe this qualitatively, the claims do not necessarily change the takeaway. Instead they tend to drop conclusive language supporting the scope of the evidence in documents and provide the required limitations as needed. Table 
+7
+ shows that the central takeaway remains the same and smoothing tracks the added reasoning.
+
+Table 7: 
+Claim improved under the docs+instruction case. Here the question pertains to how continual-learning systems can preserve previously learned knowledge while remaining adaptable to new tasks.The judge’s verdict is shown on the WebSearch claim.
+
+Condition
+
+Claim
+
+WebSearch
+
+SmoothScore: 4
+
+Protection should be soft and probabilistic, not permanently
+frozen: an important parameter may eventually be revised if
+sufficient contradictory evidence accumulates.
+
+Judge rationale
+
+Requires recasting: the prescription excludes hard freezing
+and non-probabilistic approaches despite evidence supporting
+their effectiveness.
+
+Docs + instructions
+
+SmoothScore: 1
+
+Previously useful parameters or subnetworks should be protected
+from destructive updates. This can be implemented through frozen
+columns, masks, structural isolation, or soft importance-weighted
+constraints [doc 2][doc 3][doc 5].
+
+7 
+Related Work
+
+Claim decomposition and aspect-based verification
+
+A standard recipe for verifying long-form text is to decompose it into smaller checkable units and score each against a knowledge source  
+(
+Min et al., 2023
+; 
+Chen et al., 2024
+; 
+Gunjal and Durrett, 2024
+)
+. These methods generally return a binary decision per claim, which is a good granularity for factual precision, but it does not work for synthesized claims that can have varying degrees of smoothing. ConflictScore 
+(
+Liu et al., 2026
+)
+ is the closest to our setting, and it extends this atomic claim recipe in a direction close to ours. They mark a claim as supported, contradicted or irrelevant per document retrieved, and aggregate these into claim-level conflict measures. However, a claim can be labeled 
+supported
+ by every one of its cited documents and still smooth over information it omits. Our work instead follows 
+Kargupta et al. (2025)
+ in organizing evidence along 
+aspects
+ (e.g., viewpoint, strength, certainty), so that supporting and qualifying evidence on the feature of a claim can be considered against each other.
+
+Multi-Document Summarization
+
+In science communication, prior work measures certainty in how findings are stated 
+(
+Pei and Jurgens, 2021
+)
+ and models how information changes as findings move from papers to news and social media 
+(
+Wright et al., 2022
+)
+. For LLM summaries of scientific text, 
+Peters and Chin-Yee (2025)
+ test ten widely used LLMs on about 4,900 summaries and find that most produce broader generalizations than the source texts, and that LLM summaries are nearly five times more likely than human-written ones to overgeneralize. In medicine, neural multi-document summaries of clinical trials are fluent but often factually inaccurate 
+(
+Wallace et al., 2021
+)
+, and LLM summaries of medical evidence can misstate the certainty of the evidence or overgeneralize by omitting attributes such as a disease subtype 
+(
+Tang et al., 2023
+)
+. These studies summarize a single document or a small set of abstracts. We extend the concern to long-form, multi-document research reports written by agents, and give a claim-level measure grounded in the documents a report cites.
+
+Correctness evaluation for deep research systems
+
+Agentic deep-research systems 
+(
+Du et al., 2026
+; 
+Xu et al., 2026
+; 
+Huang et al., 2026
+; 
+Li et al., 2026a
+; 
+Sharma et al., 2025
+)
+ pair rubric-based insight coverage with citation grounded factuality checks. Several works audit the reliability of these systems. DeepTRACE 
+(
+Narayanan Venkit et al., 2026
+)
+ decomposes answers into statements and finds that deep-research agents remain one-sided on debate queries and include many statements unsupported by their listed sources. 
+Onweller et al. (2026)
+ find that citations that resolve and are topically relevant often still fail a factual check against the cited content. 
+Zhu et al. (2026)
+ show that a single misleading document can induce false conclusions in final reports. 
+Rasheed et al. (2026)
+ argue for claim-level auditability, including whether conflicts in the evidence are surfaced or suppressed. Across this literature, factuality is largely operationalized as citation validity: whether a claim is supported by some retrieved source. Our results show that this is not enough. Reports whose claims are individually supported can still present mixed or conditional evidence as a decisive conclusion, so assessing how faithfully the underlying evidence is 
+presented
+ requires the claim-level, evidence-calibrated analysis we propose.
+
+8 
+Conclusion
+
+In this work, we studied the propensity of LLMs to 
+smooth
+ their conclusions when generating reports based on sources. They frequently generate oversimplified statements or conclusions that aren’t really backed up by the evidence cited. Our pipeline, 
+SmoothScore
+, allows us to quantify this and establish its frequency across several state-of-the-art agents. Finally, we find that this models fail to read with their own cited documents, and suggest smoothing can improved by more thorough agents engaging wih their sources.
+
+AI Use Statement
+
+Generative AI formed the backbone of the systems studied in this work. In addition, code written with generative AI was used to conduct and carry out the analyses here. However, the research hypotheses in this work and the design of the experiments were both human-originated. AI tools were used for assistance with revisions, but not for writing in a substantive way. The authors take responsibility for the final content of this work.
+
+Acknowledgments
+
+This work was supported by NSF CAREER Award IIS-2145280, NSF grant IIS-2433071, the NSF AI Institute for Foundations of Machine Learning (IFML), and the NSF under Cooperative Agreement 2421782 and the Simons Foundation grant MPS-AI-00010515 awarded to the NSF-Simons AI Institute for Cosmic Origins — CosmicAI. This work was also partially supported by the Sloan Foundation and grants from Amazon and Open Philanthropy. The research has been supported by a compute grant from NVIDIA and computing support from the Torch cluster at NYU. We also thank the members of the TAUR lab at NYU for their helpful discussions and feedback.
+
+References
+
+Anthropic (2026a)
+
+Anthropic
+
+Web fetch tool
+.
+
+Note: 
+https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-fetch-tool
+Claude API documentation. Accessed October 2026
+
+Cited by: 
+Appendix F
+.
+
+Anthropic (2026b)
+
+Anthropic
+
+Web search tool
+.
+
+Note: 
+https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-search-tool
+Claude API documentation. Accessed October 2026
+
+Cited by: 
+Appendix F
+.
+
+Bhaskar 
+et al.
+ (2023)
+
+A. Bhaskar, A. Fabbri, and G. Durrett
+
+Prompted opinion summarization with gpt-3.5
+.
+
+In 
+Findings of the association for computational linguistics: Acl 2023
+,
+
+pp. 9282–9300
+.
+
+Cited by: 
+§2.1
+.
+
+Chen 
+et al.
+ (2024)
+
+J. Chen, G. Kim, A. Sriram, G. Durrett, and E. Choi
+
+Complex Claim Verification with Evidence Retrieved in the Wild
+.
+
+In 
+Proceedings of the 2024 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies (Volume 1: Long Papers)
+,  
+K. Duh, H. Gomez, and S. Bethard (Eds.)
+,
+
+Mexico City, Mexico
+, 
+pp. 3569–3587
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§7
+.
+
+Du 
+et al.
+ (2026)
+
+M. Du, B. Xu, C. Zhu, L. Zhang, X. Wang, and Z. Mao
+
+DeepResearch Bench: A Comprehensive Benchmark for Deep Research Agents
+.
+
+In 
+The Fourteenth International Conference on Learning Representations
+,
+
+External Links: 
+Link
+
+Cited by: 
+§1
+,
+
+§7
+.
+
+Fabbri 
+et al.
+ (2019)
+
+A. Fabbri, I. Li, T. She, S. Li, and D. Radev
+
+Multi-news: a large-scale multi-document summarization dataset and abstractive hierarchical model
+.
+
+In 
+Proceedings of the 57th Annual Meeting of the Association for Computational Linguistics
+,  
+A. Korhonen, D. Traum, and L. Màrquez (Eds.)
+,
+
+Florence, Italy
+, 
+pp. 1074–1084
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§1
+.
+
+Gunjal and Durrett (2024)
+
+A. Gunjal and G. Durrett
+
+”Molecular Facts: Desiderata for Decontextualization in LLM Fact Verification”
+.
+
+In 
+Findings of the Association for Computational Linguistics: EMNLP 2024
+,  
+Y. Al-Onaizan, M. Bansal, and Y. Chen (Eds.)
+,
+
+Miami, Florida, USA
+, 
+pp. 3751–3768
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§7
+.
+
+Huang 
+et al.
+ (2026)
+
+Y. Huang, L. F. Ribeiro, M. Hardalov, B. Dhingra, M. Dreyer, and V. Saligrama
+
+DeepFact: Co-Evolving Benchmarks and Agents for Deep Research Factuality
+.
+
+In 
+Proceedings of the 64th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)
+,
+
+pp. 34356–34386
+.
+
+Cited by: 
+§1
+,
+
+§7
+.
+
+Hwang 
+et al.
+ (2026)
+
+J. D. Hwang, V. Kishore, A. Singh, D. Haddad, A. Naik, M. Hamada, J. Bragg, M. D’Arcy, D. S. Weld, L. L. Wang, 
+et al.
+
+Deep Research, Shallow Evaluation: A Case Study in Meta-Evaluation for Long-Form QA Benchmarks
+.
+
+arXiv preprint arXiv:2603.06942
+.
+
+Cited by: 
+§3
+.
+
+Kargupta 
+et al.
+ (2025)
+
+P. Kargupta, R. Tian, and J. Han
+
+Beyond True or False: Retrieval-Augmented Hierarchical Analysis of Nuanced Claims
+.
+
+In 
+Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)
+,  
+W. Che, J. Nabende, E. Shutova, and M. T. Pilehvar (Eds.)
+,
+
+Vienna, Austria
+, 
+pp. 29664–29679
+.
+
+External Links: 
+Link
+,
+
+Document
+,
+
+ISBN 979-8-89176-251-0
+
+Cited by: 
+§1
+,
+
+§2.1
+,
+
+§2.2
+,
+
+§7
+.
+
+Li and Aral (2025)
+
+H. Li and S. Aral
+
+Human Trust in AI Search: A Large-Scale Experiment
+.
+
+arXiv preprint arXiv:2504.06435
+.
+
+Cited by: 
+§1
+.
+
+Li 
+et al.
+ (2026a)
+
+R. Li, M. Du, B. Xu, C. Zhu, X. Wang, and Z. Mao
+
+DeepResearch Bench II: Diagnosing Deep Research Agents via Rubrics from Expert Reports
+.
+
+External Links: 
+2601.08536
+,
+
+Link
+
+Cited by: 
+§3
+,
+
+§7
+.
+
+Li 
+et al.
+ (2026b)
+
+X. Li, J. Jin, G. Dong, H. Qian, Y. Wu, J. Wen, Y. Zhu, and Z. Dou
+
+Webthinker: Empowering large reasoning models with deep research capability
+.
+
+Advances in Neural Information Processing Systems
+ 
+38
+, 
+pp. 120091–120131
+.
+
+Cited by: 
+§1
+.
+
+Liu 
+et al.
+ (2026)
+
+S. Liu, A. Halfaker, D. Roth, and P. Xia
+
+ConflictScore: Identifying and Measuring How Language Models Handle Conflicting Evidence
+.
+
+arXiv preprint arXiv:2606.26437
+.
+
+Cited by: 
+§7
+.
+
+Min 
+et al.
+ (2023)
+
+S. Min, K. Krishna, X. Lyu, M. Lewis, W. Yih, P. Koh, M. Iyyer, L. Zettlemoyer, and H. Hajishirzi
+
+FActScore: Fine-grained atomic evaluation of factual precision in long form text generation
+.
+
+In 
+Proceedings of the 2023 conference on empirical methods in natural language processing
+,
+
+pp. 12076–12100
+.
+
+Cited by: 
+§1
+,
+
+§2.1
+,
+
+§7
+.
+
+Nakano 
+et al.
+ (2021)
+
+R. Nakano, J. Hilton, S. Balaji, J. Wu, L. Ouyang, C. Kim, C. Hesse, S. Jain, V. Kosaraju, W. Saunders, 
+et al.
+
+WebGPT: Browser-assisted question-answering with human feedback
+.
+
+arXiv preprint arXiv:2112.09332
+.
+
+Cited by: 
+§1
+.
+
+Narayanan Venkit 
+et al.
+ (2026)
+
+P. Narayanan Venkit, P. Laban, Y. Zhou, K. Huang, Y. Mao, and C. Wu
+
+DeepTRACE: Auditing Deep Research AI Systems for Tracking Reliability Across Citations and Evidence
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Vol. 
+2026
+, 
+pp. 106041–106062
+.
+
+Cited by: 
+§1
+,
+
+§7
+.
+
+Onweller 
+et al.
+ (2026)
+
+H. Onweller, E. Lumer, A. Huber, P. Ramchandani, V. K. Subbiah, and C. Feld
+
+Cited but Not Verified: Parsing and Evaluating Source Attribution in LLM Deep Research Agents
+.
+
+arXiv preprint arXiv:2605.06635
+.
+
+Cited by: 
+§1
+,
+
+§7
+.
+
+OpenAI (2026)
+
+OpenAI
+
+Web search
+.
+
+Note: 
+https://developers.openai.com/api/docs/guides/tools-web-search
+OpenAI API documentation. Accessed October 2026
+
+Cited by: 
+Appendix F
+.
+
+Pei and Jurgens (2021)
+
+J. Pei and D. Jurgens
+
+Measuring sentence-level and aspect-level (un)certainty in science communications
+.
+
+In 
+Proceedings of the 2021 Conference on Empirical Methods in Natural Language Processing
+,  
+M. Moens, X. Huang, L. Specia, and S. W. Yih (Eds.)
+,
+
+Online and Punta Cana, Dominican Republic
+, 
+pp. 9959–10011
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§7
+.
+
+Peters and Chin-Yee (2025)
+
+U. Peters and B. Chin-Yee
+
+Generalization Bias in Large Language Model Summarization of Scientific Research
+.
+
+Royal Society Open Science
+ 
+12
+ (
+4
+), 
+pp. 241776
+.
+
+Cited by: 
+§7
+.
+
+Rasheed 
+et al.
+ (2026)
+
+R. A. Rasheed, S. Banerjee, A. Mukherjee, and R. Hazra
+
+From Fluent to Verifiable: Claim-Level Auditability for Deep Research Agents
+.
+
+arXiv preprint arXiv:2602.13855
+.
+
+Cited by: 
+§1
+,
+
+§7
+.
+
+Shao 
+et al.
+ (2026)
+
+R. Shao, A. Asai, S. Z. Shen, H. Ivison, V. Kishore, J. Zhuo, X. Zhao, M. Park, S. G. Finlayson, D. Sontag, T. Murray, S. Min, P. Dasigi, L. Soldaini, F. Brahman, W. Yih, T. Wu, L. Zettlemoyer, Y. Kim, H. Hajishirzi, and P. W. Koh
+
+DR Tulu: Reinforcement Learning with Evolving Rubrics for Deep Research
+.
+
+In 
+Forty-third International Conference on Machine Learning
+,
+
+External Links: 
+Link
+
+Cited by: 
+Appendix F
+,
+
+§1
+,
+
+§3
+,
+
+§4.1
+.
+
+Sharma 
+et al.
+ (2025)
+
+M. Sharma, C. B. C. Zhang, C. Bandi, C. Wang, A. Aich, H. Nghiem, T. Rabbani, Y. Htet, B. Jang, S. Basu, A. Balwani, D. Peskoff, M. Ayestaran, S. M. Hendryx, B. Kenstler, and B. Liu
+
+ResearchRubrics: A Benchmark of Prompts and Rubrics For Evaluating Deep Research Agents
+.
+
+External Links: 
+2511.07685
+,
+
+Link
+
+Cited by: 
+§3
+,
+
+§7
+.
+
+Song 
+et al.
+ (2024)
+
+Y. Song, Y. Kim, and M. Iyyer
+
+VeriScore: evaluating the factuality of verifiable claims in long-form text generation
+.
+
+In 
+Findings of the Association for Computational Linguistics: EMNLP 2024
+,  
+Y. Al-Onaizan, M. Bansal, and Y. Chen (Eds.)
+,
+
+Miami, Florida, USA
+, 
+pp. 9447–9474
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§1
+.
+
+Subbiah 
+et al.
+ (2025)
+
+M. Subbiah, A. Mishra, G. Kim, L. Tang, G. Durrett, and K. McKeown
+
+Is the Top Still Spinning? Evaluating Subjectivity in Narrative Understanding
+.
+
+In 
+Proceedings of the 2025 Conference on Empirical Methods in Natural Language Processing
+,  
+C. Christodoulopoulos, T. Chakraborty, C. Rose, and V. Peng (Eds.)
+,
+
+Suzhou, China
+, 
+pp. 185–203
+.
+
+External Links: 
+Link
+,
+
+Document
+,
+
+ISBN 979-8-89176-332-6
+
+Cited by: 
+§2.1
+.
+
+Tang 
+et al.
+ (2024)
+
+L. Tang, P. Laban, and G. Durrett
+
+MiniCheck: efficient fact-checking of LLMs on grounding documents
+.
+
+In 
+Proceedings of the 2024 Conference on Empirical Methods in Natural Language Processing
+,  
+Y. Al-Onaizan, M. Bansal, and Y. Chen (Eds.)
+,
+
+Miami, Florida, USA
+, 
+pp. 8818–8847
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§1
+,
+
+§2.1
+.
+
+Tang 
+et al.
+ (2023)
+
+L. Tang, Z. Sun, B. Idnay, J. G. Nestor, A. Soroush, P. A. Elias, Z. Xu, Y. Ding, G. Durrett, J. F. Rousseau, 
+et al.
+
+Evaluating Large Language Models on Medical Evidence Summarization
+.
+
+NPJ digital medicine
+ 
+6
+ (
+1
+), 
+pp. 158
+.
+
+Cited by: 
+§7
+.
+
+Wallace 
+et al.
+ (2021)
+
+B. C. Wallace, S. Saha, F. Soboczenski, and I. J. Marshall
+
+Generating (Factual?) Narrative Summaries of RCTs: Experiments with Neural Multi-Document Summarization
+.
+
+AMIA Summits on Translational Science Proceedings
+ 
+2021
+, 
+pp. 605
+.
+
+Cited by: 
+§7
+.
+
+Wang 
+et al.
+ (2024)
+
+X. Wang, X. Zhang, Z. Luo, Q. Sun, Y. Cui, J. Wang, F. Zhang, Y. Wang, Z. Li, Q. Yu, Y. Zhao, Y. Ao, X. Min, T. Li, B. Wu, B. Zhao, B. Zhang, L. Wang, G. Liu, Z. He, X. Yang, J. Liu, Y. Lin, T. Huang, and Z. Wang
+
+Emu3: Next-Token Prediction is All You Need
+.
+
+CoRR
+ 
+abs/2409.18869
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2.1
+.
+
+Wright 
+et al.
+ (2022)
+
+D. Wright, J. Pei, D. Jurgens, and I. Augenstein
+
+Modeling information change in science communication with semantically matched paraphrases
+.
+
+In 
+Proceedings of the 2022 Conference on Empirical Methods in Natural Language Processing
+,  
+Y. Goldberg, Z. Kozareva, and Y. Zhang (Eds.)
+,
+
+Abu Dhabi, United Arab Emirates
+, 
+pp. 1783–1807
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§7
+.
+
+Xie 
+et al.
+ (2026)
+
+J. Xie, T. Lin, Z. Wang, Y. Ning, Y. Yao, T. Xue, Z. Zhang, Z. Li, K. Zhang, Y. Wu, 
+et al.
+
+QUEST: Training Frontier Deep Research Agents with Fully Synthetic Tasks
+.
+
+arXiv preprint arXiv:2605.24218
+.
+
+Cited by: 
+Appendix F
+,
+
+§1
+,
+
+§3
+,
+
+§4.1
+.
+
+Xie 
+et al.
+ (2025)
+
+J. Xie, W. Mao, Z. Bai, D. J. Zhang, W. Wang, K. Q. Lin, Y. Gu, Z. Chen, Z. Yang, and M. Z. Shou
+
+Show-o: One Single Transformer to Unify Multimodal Understanding and Generation
+.
+
+External Links: 
+2408.12528
+,
+
+Link
+
+Cited by: 
+§2.1
+.
+
+Xu 
+et al.
+ (2026)
+
+T. Xu, P. Lu, L. Ye, X. Hu, and P. Liu
+
+ResearcherBench: Evaluating Deep AI Research Systems on the Frontiers of AI Research
+.
+
+External Links: 
+Link
+
+Cited by: 
+§3
+,
+
+§7
+.
+
+Zha 
+et al.
+ (2023)
+
+Y. Zha, Y. Yang, R. Li, and Z. Hu
+
+AlignScore: evaluating factual consistency with a unified alignment function
+.
+
+In 
+Proceedings of the 61st annual meeting of the association for computational linguistics (volume 1: Long papers)
+,
+
+pp. 11328–11348
+.
+
+Cited by: 
+§2.1
+.
+
+Zhou 
+et al.
+ (2024)
+
+C. Zhou, L. Yu, A. Babu, K. Tirumala, M. Yasunaga, L. Shamis, J. Kahn, X. Ma, L. Zettlemoyer, and O. Levy
+
+Transfusion: predict the next token and diffuse images with one multi-modal model
+.
+
+External Links: 
+2408.11039
+,
+
+Link
+
+Cited by: 
+§2.1
+.
+
+Zhu 
+et al.
+ (2026)
+
+P. Zhu, L. Li, L. Yang, S. Su, and J. Shao
+
+Is Deep Research Reliable? Misleading Knowledge Induces False Conclusions
+.
+
+arXiv preprint arXiv:2607.20891
+.
+
+Cited by: 
+§1
+,
+
+§7
+.
+
+Appendix A 
+SmoothScore
+
+A.1 
+Method Details
+
+Aspect Induction
+
+As mentioned in
+Section 
+2
+, the third step in our pipeline is Aspect Induction. Since aspect proposals are generated separately for each claim–document pair, the same underlying topic is often proposed by several documents under different names or with different levels of specificity. Merging is needed so that evidence on the same topic is grouped together, rather than being split across near-duplicate aspects.
+
+For each claim 
+, we consolidate the document-level proposals 
+ into a hierarchy
+
+where 
+ is the set of aspect and subaspect nodes and 
+ is the set of parent–child links between them. The merge step (i) combines semantically overlapping proposals across documents into a single node, and (ii) introduces subaspects when one aspect covers distinct but related findings. Each node retains the set of documents that proposed it, so that every piece of evidence can be traced back to its source.
+
+Pipeline Models
+
+Table 
+8
+ shows the models used for every stage of the pipeline for generating 
+SmoothScore
+. All pipeline stages use GPT-5-mini except 
+SmoothScore
+ judge (Step 5), which use GPT-5; every call uses 
+reasoning_effort=medium
+ with default sampling.
+
+A.2 
+Dataset Curation
+
+We use all 65 ResearcherBench questions and the complete 25-question expert-written ScholarQA-CS2 set. These by construction contained open ended questions that required multi document engagement. For DeepResearch Bench II and ResearchRubrics:
+
+•
+
+Candidate pool.
+ We take the 66 English DeepResearch Bench II tasks and all
+101 ResearchRubrics tasks.
+
+•
+
+Annotation.
+ We label each query on synthesis (
+High
+ / 
+Med
+ /
+
+Low
+), meaning whether a good answer must synthesize a body of literature. We also
+label openness of question type (
+High
+ / 
+Med
+ / 
+Low
+), meaning whether the question requires one definitive correct response.
+
+•
+
+Filter.
+ We keep queries with synthesis 
+ 
+High
+ and Question Type 
+ 
+High
+ (Table 
+9
+).
+
+Table 8: 
+Models used at each stage of the 
+SmoothScore
+ pipeline. All stages use GPT-5-mini except the final judge, which uses GPT-5. Prompts for each stage are given in the referenced appendix sections.
+
+Step
+
+Stage
+
+Model
+
+Prompt
+
+1
+
+Claim extraction
+
+GPT-5-mini
+
+App. 
+B.1
+
+2
+
+Evidence extraction: support agent
+
+GPT-5-mini
+
+App. 
+B.2
+
+2
+
+Evidence extraction: skeptic agent
+
+GPT-5-mini
+
+App. 
+B.3
+
+3
+
+Aspect induction: per-document proposals
+
+GPT-5-mini
+
+App. 
+B.4
+
+3
+
+Aspect induction: cross-document merge
+
+GPT-5-mini
+
+App. 
+B.5
+
+4
+
+Evidence assignment
+
+GPT-5-mini
+
+App. 
+B.6
+
+5
+
+SmoothScore
+ judge
+
+GPT-5
+
+App. 
+B.7
+
+Table 9: 
+Query selection for DeepResearch Bench II and ResearchRubrics.
+
+Benchmark
+
+Candidates
+
+Kept
+
+DeepResearch Bench II (English)
+
+66
+
+18
+
+ResearchRubrics
+
+101
+
+17
+
+A.3 
+Models
+
+Table 
+10
+ contains model IDs of the evaluated systems. We evaluate 7 systems consisting of open sourced and close source agents including frontier models.
+
+Table 10: 
+Model identifiers and access method for each evaluated system.
+
+System
+
+Model ID
+
+Access
+
+GPT Luna + Websearch
+
+gpt-5.6-luna
+
+OpenAI Responses API
+
+GPT Sol + Websearch
+
+gpt-5.6-sol
+
+OpenAI Responses API
+
+Claude Sonnet 5 + Websearch
+
+claude-sonnet-5
+
+Anthropic Messages API
+
+Claude Opus 5 + Websearch
+
+claude-opus-5-5
+
+Anthropic Messages API
+
+Gemini Deep Research
+
+deep-research-preview-04-2026
+
+Gemini Interactions API
+
+DR Tulu
+
+rl-research/DR-Tulu-8B
+
+local (vLLM + MCP server)
+
+QUEST
+
+QUEST-35B-RL
+
+local
+
+A.4 
+Relationship between 
+SmoothScore
+ and generation features
+
+Table 
+11
+ contains report length and retrieved evidence by dataset and system and Table 
+12
+ shows if such features can predict 
+SmoothScore
+ with and across systems. We find that while systems show connection to different features across systems these relationships are weak and vary in direction, with only report length showing a small association.
+
+Table 11: 
+
+Report length and retrieved evidence by dataset and system, over the reports scored by the 
+SmoothScore
+ judge. “Report words” and “Evidence words” are medians over reports; “Docs/report” is the mean number of retrieved documents per report. “Evidence words” is the total number of words in the retrieved documents available to the system.
+
+Dataset
+
+System
+
+Report words
+
+Docs/report
+
+Evidence words
+
+ResearcherBench
+
+Luna 5.6
+
+1,828
+
+8.6
+
+77,898
+
+Sol 5.6
+
+1,710
+
+9.9
+
+92,880
+
+Sonnet 5
+
+2,125
+
+21.6
+
+155,148
+
+Opus 5.5
+
+1,328
+
+18.8
+
+138,441
+
+QUEST
+
+1,332
+
+9.8
+
+55,481
+
+DR Tulu
+
+1,948
+
+17.4
+
+114,027
+
+Gemini
+
+4,860
+
+39.2
+
+254,916
+
+CS2-Expert
+
+Luna 5.6
+
+1,999
+
+10.4
+
+34,821
+
+Sol 5.6
+
+1,514
+
+10.8
+
+69,483
+
+Sonnet 5
+
+2,177
+
+18.5
+
+175,065
+
+Opus 5.5
+
+1,431
+
+19.7
+
+232,211
+
+QUEST
+
+1,210
+
+8.6
+
+46,954
+
+DR Tulu
+
+2,156
+
+17.8
+
+92,667
+
+Gemini
+
+5,122
+
+48.6
+
+253,233
+
+DRB-II
+
+Luna 5.6
+
+3,886
+
+14.6
+
+82,187
+
+Sol 5.6
+
+3,979
+
+20.2
+
+162,523
+
+Sonnet 5
+
+3,432
+
+32.4
+
+192,348
+
+Opus 5.5
+
+2,786
+
+31.2
+
+205,332
+
+QUEST
+
+2,397
+
+11.2
+
+40,119
+
+DR Tulu
+
+2,884
+
+14.4
+
+110,388
+
+Gemini
+
+4,844
+
+32.7
+
+235,720
+
+ResearchRubrics
+
+Luna 5.6
+
+3,128
+
+10.0
+
+60,175
+
+Sol 5.6
+
+2,736
+
+11.9
+
+83,795
+
+Sonnet 5
+
+3,031
+
+28.6
+
+199,191
+
+Opus 5.5
+
+2,010
+
+22.7
+
+134,858
+
+QUEST
+
+1,930
+
+9.6
+
+52,607
+
+DR Tulu
+
+2,732
+
+15.0
+
+106,390
+
+Gemini
+
+4,687
+
+31.2
+
+196,485
+
+Table 12: 
+Correlation of report and claim level features with 
+SmoothScore
+ across and within systems (Spearman 
+ and Pearson 
+). 
+Across
+: the mean over the 28 system–dataset. 
+Within
+: after subtracting each system–dataset mean. Systems that cite more documents or write longer claims smooth more, but within a system such relationships are weak and vary in direction. Only report length shows a small, consistent within-system association (Panel B)
+
+A. Pooled
+
+Across systems
+
+Within system
+
+Raw pooled
+
+Variable
+
+Cited documents
+
+ (
+)
+
+ (
+)
+
+ (
+)
+
+Report length
+
+ (
+)
+
+ (
+)
+
+ (
+)
+
+Number of claims
+
+ (
+)
+
+ (
+)
+
+ (
+)
+
+Claim length
+
+ (
+)
+
+ (
+)
+
+ (
+)
+
+B. Within-system correlations by system
+
+Variable
+
+Luna
+
+Sol
+
+Sonnet 5
+
+Opus 5.5
+
+QUEST
+
+DR Tulu
+
+Gemini
+
+Cited documents
+
++0.14 (.12)
+
++0.27 (.003)
+
++0.03 (.77)
+
+0.00 (.96)
+
+-0.14 (.11)
+
+-0.19 (.03)
+
++0.09 (.35)
+
+Report length
+
++0.17 (.06)
+
++0.14 (.12)
+
++0.12 (.17)
+
++0.14 (.12)
+
++0.02 (.81)
+
++0.16 (.08)
+
++0.06 (.50)
+
+Number of claims
+
+-0.04 (.69)
+
++0.05 (.57)
+
+0.00 (.96)
+
++0.16 (.08)
+
+-0.11 (.22)
+
++0.01 (.90)
+
+-0.23 (.01)
+
+Claim length
+
+-0.04 (.30)
+
+-0.01 (.85)
+
++0.08 (.02)
+
++0.06 (.09)
+
+-0.09 (.009)
+
++0.08 (.02)
+
++0.02 (.54)
+
+Appendix B 
+SmoothScore
+ Prompts
+
+B.1 
+Claim Generation
+
+Prompt B.1: Main Conclusion Extraction
+
+System Prompt:
+
+You identify the MAIN CONCLUSIONS a research report reaches in answering
+a question – the handful of load-bearing verdicts a reader walks away
+with – and return each one as a COMPLETE verbatim passage from the
+report. You are given the question and the report’s answer.
+
+BE SELECTIVE. Extract only the report’s main conclusions: the thesis-level takeaways that directly answer the question. A typical report has roughly 4-8 of these. Favor the verdicts the whole report builds toward over the individual findings that support them.
+
+UNIT OF EXTRACTION – the complete conclusion, NOT an atom:
+
+1. Lift each conclusion WHOLE: typically 1-3 consecutive sentences (roughly 15-80 words). The claim MUST include, whenever they appear in the same or immediately adjacent sentences: every hedge and qualifier; the flip-side, contrast, or counterpart condition (”; it does not …”, ”However, …”, ”but …”); and the stated scope or dimension the verdict applies to. Emitting the assertive half of a hedged or paired statement is the worst possible error – if the pieces cannot be included coherently, skip the conclusion entirely.
+
+2. CARRY THE SCOPE. When a verdict’s scope lives just OUTSIDE its sentence – in the immediately governing heading, a dimension label, or the sentence before – stitch that report wording in front (join stitched spans naturally; the heading text is report wording). NEVER present a per-dimension or per-condition winner as a global verdict.
+
+3. NEVER extract a heading, list label, or table fragment as a claim, even when it is bolded and reads like a verdict. Headings point to claims; take the claim from the body text.
+
+VOICE – verbatim about the assertion, silent about the sourcing:
+
+4. REUSE THE REPORT’S OWN WORDING at the report’s own strength. Keep every hedge, qualifier, comparative, superlative, and number exactly as written. Never strengthen, weaken, or paraphrase the assertion.
+
+5. STRIP ATTRIBUTION AND CITATION FRAMING: drop ”X’s experiments found that”, ”according to …”, ”studies show”, citation markup, and markdown link syntax. KEEP a system/method name only when the claim is ABOUT that system.
+
+6. STRIP DISCOURSE CONNECTIVES at the very start of a claim (”On the other hand,”, ”In summary,”, ”However,”, ”Overall,”) – but connectives INSIDE the claim stay; they are doing real work joining the verdict to its counterpart.
+
+WHAT COUNTS AS A CONCLUSION – all three required:
+
+- A conclusion the report draws, not a building block: a result, comparison, judgment, trade-off, trend, or recommendation that answers the question.
+
+- Substantive, not a bare definitional or mechanistic statement.
+
+- Contentful and checkable: it asserts something specific enough to check against evidence. A forecast or recommendation counts, but the claim must preserve the report’s framing of it as a forecast/recommendation.
+
+GRANULARITY – one claim per distinct conclusion or thread. Different claims must not restate the same verdict; together they should cover each side’s main strengths, the main limitations or trade-offs, and the overall verdict if the report gives one.
+
+SKIP: background, definitions, setup, motivation, restatements of the question, section framing, individual supporting findings that roll up into a larger verdict.
+
+OUTPUT – return only JSON with this exact schema:
+
+{"claims": [{"text": "{{
+Claim Text
+
+}}",
+"source_text": "{{
+Verbatim Source Span(s)
+
+}}"}]}
+
+For each claim:
+
+- ”text”: the complete conclusion passage, following the rules above. Plain prose – no markdown, no citation markup, no list numbering.
+
+- ”source_text”: the exact verbatim span(s) of the answer the claim was lifted from, copied character-for-character (citation markup and markdown syntax may be dropped). If the claim stitches spans (e.g. heading scope + body), join them with ” … ” in report order. Each span must be findable in the answer by string search.
+
+FINAL CHECKLIST – verify EVERY claim’s ”text” passes all of these; rewrite it if not:
+
+- [ ] Complete sentence(s) – never a fragment, bullet label, heading, or table cell.
+
+- [ ] Includes the local hedges, scope, and flip-side that appear in or immediately beside the source passage.
+
+- [ ] No attribution framing, no markdown
+(
+**
+, 
+*
+, 
+-
+, 
+#
+,
+
+>
+, 
+|
+), no citation markup, no URLs, no list numbering.
+
+- [ ] The assertion is the report’s wording at the report’s strength – qualifiers, comparatives, numbers unchanged.
+
+If the answer states no checkworthy conclusions, return {”claims”: []}.
+
+User Prompt:
+
+Example ID: {{
+Example ID
+
+}}
+
+Question: {{
+Question
+
+}}
+
+Extract the MAIN CONCLUSIONS of the following final_response – the
+handful of load-bearing, evidence-based verdicts that answer the
+question (typically 3–7). For each, return the claim text (the
+assertion in the report’s own words at the report’s own strength, with
+all attribution, citation, discourse-connective, and markdown framing
+STRIPPED, per the voice rules and final checklist) and the verbatim
+source_text span(s) it was lifted from. Use the question to decide
+which conclusions are load-bearing.
+
+final_response:
+
+{{
+Full Report Text
+
+}}
+
+B.2 
+Supporting Pass
+
+Prompt B.2: Supporting Evidence Extraction
+
+System Prompt:
+
+You extract from a single source DOCUMENT every distinct piece of information that SUPPORTS
+a single CLAIM from a research report, or a specific part of it – makes what the claim
+actually says more plausible or provides a direct instance/evidence for it.
+
+Extract ONLY supporting evidence. Ignore evidence against the claim entirely; another
+process handles that.
+
+•
+
+POLARITY: support means supporting what the claim ACTUALLY ASSERTS. If the claim
+asserts a limitation or a negative (e.g. “X is unreliable”, “X scales worse”,
+“X does not generalize”), then evidence of X failing/underperforming is supporting,
+and a result showing X working well is NOT supporting – skip it.
+
+•
+
+STATED CONCESSIONS ARE PART OF THE CLAIM: evidence confirming a limitation,
+condition, or concession the claim itself states supports the claim as stated –
+include it, with the concession named in the aspect field.
+
+An item is one distinct FINDING: a specific result, experiment, measurement, or stated
+conclusion. Each item is an object:
+{"quote": "<the shortest verbatim excerpt that carries this finding>",
+   "aspect": "<the specific assertion WITHIN the claim this finding bears
+               on, quoted or near-verbatim from the claim>",
+   "note": "<one sentence: how this finding bears on that assertion>",
+   "strength": <1-5>}
+strength = how directly and specifically this item bears on what the
+claim asserts:
+  1 = tangential  2 = weak/indirect  3 = moderate: relevant but partial
+  or hedged
+  4 = strong: direct, on-point  5 = decisive: exactly what the claim
+  asserts (or a clear counterexample to it).
+
+Critical rules:
+
+•
+
+Judge ONLY against this one document. No outside knowledge, no other documents.
+
+•
+
+Read the WHOLE document; relevant evidence can sit in any section.
+
+•
+
+ONE item per finding. If the document states the same finding several ways
+(abstract, body, conclusion), pick the single best quote for it – do not list
+restatements or different facets of the same result as separate items.
+
+•
+
+Do NOT include items that only establish setting or applicability without an
+outcome (e.g. “the experiments use a 1.5B model”). That is context, not evidence; if
+it matters, mention it inside the note of a real item.
+
+•
+
+An empty list is a perfectly good answer – do NOT invent items. Merely being
+about the same topic is NOT evidence; every item must actually move belief about the
+claim in the direction you were asked for.
+
+•
+
+MECHANISM: only count evidence that matches what the claim specifically says
+(e.g. if the claim says “distillation from a LARGER model”, a result using a
+same-size or self-distilled model does not bear on that specific mechanism). The aspect
+field must name the exact assertion addressed – if you cannot point to one, the item
+does not belong.
+
+•
+
+Quotes must be copied verbatim from the document.
+
+Return only JSON: 
+{"items": [ …]}
+
+User Prompt:
+
+Question (context only, not evidence): {{
+Question
+
+}}
+
+Claim: {{
+Claim
+
+}}
+
+Document:
+
+Title: {{
+Document Title
+
+}}
+
+URL: {{
+Document URL
+
+}}
+
+Content:
+
+{{
+Full Document Text
+
+}}
+
+Extract every distinct piece of supporting evidence and return only the JSON object.
+
+B.3 
+Skeptic Pass
+
+Prompt B.3: Tagged Skeptical Evidence Extraction
+
+System Prompt:
+
+You extract from a single source DOCUMENT every distinct piece of information that a
+SKEPTICAL reader would weigh against a single CLAIM from a research report, and you TAG
+each item by its relation to the claim AS STATED. Extract only this skeptical side; a
+separate process handles supporting evidence.
+
+Read the claim carefully first: its actual assertions, its scope, its comparatives, and
+every limitation, condition, or concession it ALREADY STATES or hedges over.
+
+TAGS:
+
+•
+
+"counter"
+: the finding cuts against what the claim ACTUALLY ASSERTS –
+contradicts it, provides a counterexample, limits its scope beyond what it admits,
+shows the asserted effect weaker or more conditional than asserted, or reports a null
+or mixed result where the claim implies a clear one. POLARITY: if the claim asserts a
+limitation or a negative (“X is unreliable”), a result showing X working WELL is a
+counter, and evidence of X failing is NOT. A soft hedge does not concede everything:
+“X is usually best” still asserts usually – evidence X OFTEN loses is a counter;
+evidence X merely SOMETIMES loses is not.
+
+•
+
+"concession-match"
+: the finding confirms, instantiates, or quantifies a
+limitation, condition, or concession the claim ITSELF states or hedges over
+(“capacity-sensitive”, “results vary”, “except in short contexts”). These do NOT
+count against the claim – they are extracted so a later audit can check whether the
+report states the substance behind its own hedges.
+
+•
+
+"rival-win"
+: a success of ANOTHER approach reported in that approach’s
+own terms, where the claim does NOT rank over or exclude that approach. If the claim
+DOES rank or exclude (“strongest”, “most practical”, “X remains ahead of Y”), a
+rival’s success is a 
+"counter"
+, not a 
+"rival-win"
+.
+
+A carefully scoped claim often has NO counter items in a given document – an empty counter
+set is a common and correct outcome; do not stretch. But still extract concession-match and
+rival-win items where they exist.
+
+•
+
+STRENGTH for 
+"counter"
+ = how much the finding should CONSTRAIN the claim
+as stated: 5 = directly contradicts the central assertion or shows it failing within its
+own stated scope; 4 = a hard limit or condition on the main assertion that the claim
+does not state; 3 = a meaningful qualification; 2 = weak/indirect pressure;
+1 = tangential.
+
+•
+
+STRENGTH for 
+"concession-match"
+ = how load-bearing the conceded condition
+is: 5 = the concession hides a result that would change most readers’ decisions;
+3 = a substantive but secondary condition; 1 = a trivial caveat.
+
+•
+
+STRENGTH for 
+"rival-win"
+ = how strong the rival result is in its own
+terms (controlled comparison 
+ own-harness leaderboard 
+ assertion).
+
+An item is one distinct FINDING: a specific result, experiment, measurement, or stated
+conclusion. Each item is an object:
+{"quote": "<the shortest verbatim excerpt that carries this finding>",
+   "aspect": "<the specific assertion WITHIN the claim this finding bears
+               on, quoted or near-verbatim from the claim>",
+   "note": "<one sentence: how this finding bears on that assertion>",
+   "tag": "counter|concession-match|rival-win",
+   "strength": <1-5>}
+strength = how directly and specifically this item bears on what the
+claim asserts:
+  1 = tangential  2 = weak/indirect  3 = moderate: relevant but partial
+  or hedged
+  4 = strong: direct, on-point  5 = decisive: exactly what the claim
+  asserts (or a clear counterexample to it).
+
+Critical rules:
+
+•
+
+Judge ONLY against this one document. No outside knowledge, no other documents.
+
+•
+
+Read the WHOLE document; relevant evidence can sit in any section.
+
+•
+
+ONE item per finding. If the document states the same finding several ways
+(abstract, body, conclusion), pick the single best quote for it – do not list
+restatements or different facets of the same result as separate items.
+
+•
+
+Do NOT include items that only establish setting or applicability without an
+outcome (e.g. “the experiments use a 1.5B model”). That is context, not evidence; if
+it matters, mention it inside the note of a real item.
+
+•
+
+An empty list is a perfectly good answer – do NOT invent items. Merely being
+about the same topic is NOT evidence; every item must actually move belief about the
+claim in the direction you were asked for.
+
+•
+
+MECHANISM: only count evidence that matches what the claim specifically says
+(e.g. if the claim says “distillation from a LARGER model”, a result using a
+same-size or self-distilled model does not bear on that specific mechanism). The aspect
+field must name the exact assertion addressed – if you cannot point to one, the item
+does not belong.
+
+•
+
+Quotes must be copied verbatim from the document.
+
+Return only JSON: 
+{"items": [ …]}
+
+User Prompt:
+
+Question (context only, not evidence): {{
+Question
+
+}}
+
+Claim: {{
+Claim
+
+}}
+
+Document:
+
+Title: {{
+Document Title
+
+}}
+
+URL: {{
+Document URL
+
+}}
+
+Content:
+
+{{
+Full Document Text
+
+}}
+
+Extract every distinct piece of countervailing evidence and return only the JSON object.
+
+B.4 
+Aspect generation
+
+Prompt B.4: Document-Level Aspect Induction
+
+System Prompt:
+
+You are an analyst that identifies the different aspects that a single
+scientific research paper ACTUALLY DISCUSSES which bear on evaluating a
+claim. For each aspect, provide a brief all-lowercase label (3–8 words),
+a one-sentence description of what THIS DOCUMENT says about it and why
+it is significant for addressing the claim, and 6 keywords typically
+used to describe that aspect.
+
+Rules (corpus-grounded, claim-relative):
+
+•
+
+Only include aspects this document actually contains
+substantive content on—do not invent aspects from general
+knowledge of the topic.
+
+•
+
+Frame each aspect as a dimension bearing on THIS claim
+(e.g., “task-type dependence of the comparison”), not a generic
+subtopic of the field.
+
+•
+
+Return as many aspects as the document genuinely supports:
+typically 2–3.
+
+One aspect is a good answer for a narrowly relevant document, and an
+EMPTY LIST is the correct answer for a document with nothing substantive
+on this claim. Do not pad to a count.
+
+Return only JSON:
+
+{"aspect_list": [{"aspect_label": "...",
+"aspect_description": "...", "aspect_keywords": ["..."]}]}
+.
+
+User Prompt:
+
+CLAIM: {{
+Claim
+
+}}
+
+DOCUMENT #{{
+Document Index
+
+}}
+(title: {{
+Document Title
+
+}}):
+
+{{
+Full Document Content
+
+}}
+
+Return only the JSON object.
+
+B.5 
+Aspect Merge
+
+Prompt B.5: Aspect Hierarchy Consolidation
+
+System Prompt:
+
+You are an analyst consolidating per-document aspect proposals into ONE
+aspect hierarchy for evaluating a claim. You will identify 4–5
+top-level aspects that the documents’ proposals are collectively
+considering when determining the answer to the claim. Add subaspects
+ONLY where the corpus genuinely subdivides an aspect into distinct,
+separately-evidenced points—a top-level aspect with NO subaspects is a
+good and common answer. Aim for roughly 4–8 nodes in the whole
+hierarchy, not the maximum. Each subaspect must name what distinguishes
+it from its siblings; if you cannot, merge them.
+
+Rules:
+
+•
+
+Corpus-grounded: every aspect/subaspect must be traceable to
+the per-document proposals; carry over the source document indexes
+into 
+"source_docs"
+. Do not invent nodes no document
+proposed.
+
+•
+
+Claim-relative: keep labels framed as dimensions bearing on
+the claim.
+
+•
+
+Merge duplicates across documents; prefer the most specific
+phrasing proposed.
+
+•
+
+A subaspect is a more specific point underneath its parent
+that would be considered when specifically addressing the claim.
+
+Return only JSON:
+
+{"aspects": [{"label": "...", "description": "...",
+"source_docs": [1,2], "subaspects": [{"label": "...",
+"description": "...", "source_docs": [3]}]}]}
+.
+
+User Prompt:
+
+CLAIM: {{
+Claim
+
+}}
+
+PER-DOCUMENT ASPECT PROPOSALS:
+
+[doc 1] {{
+Aspect Label
+
+}}:
+{{
+Aspect Description
+
+}}
+
+[doc 1] {{
+Aspect Label
+
+}}:
+{{
+Aspect Description
+
+}}
+
+[doc 3] {{
+Aspect Label
+
+}}:
+{{
+Aspect Description
+
+}}
+
+…
+
+Return only the JSON object.
+
+B.6 
+Evidence Assignment
+
+Prompt B.6: Evidence-to-Aspect Assignment
+
+System Prompt:
+
+You will be provided with evidence quotes extracted from source documents.
+Each quote was extracted as evidence about a claim. Please select the
+suitable aspect each quote talks about from the provided aspect list.
+
+LEAF-ONLY RULE: a node that has sub-aspects is a container only. If the
+quote belongs in such an aspect’s territoryts sub-aspects (thebest-fitting
+one), never the parent. Only aspects with no sub-aspects can receive quotes
+directly.
+
+Special destinations:
+
+•
+
+“ROOT” if the quote bears oher than any one aspect(overall
+verdicts, provenance of the whole comparison, conditions spanning
+aspects)ROOT is a deliberate destinat
+
+•
+
+“UNASSIGNED” only if the quote fits no listed aspect and is not
+whole-claim evidence.
+
+Assignment is topical: judge what the quote is ABOUT, never whether it
+supports or opposes the claim.
+
+Each quote is prefixed with its source document (index and title). Use it
+as cona fragment (a table row, a bare number, a one-line result) is about
+whatever that document discusses at that point – file it by its
+document’s topic, not by the words in the fragment alone.
+
+Return only JSON:
+
+{"assignmen "node": "<node id like A1 orA2.3 or ROOT or
+UNASSIGNED>"}]}
+.
+
+User Prompt:
+
+CLAIM: {{
+Claim
+
+}}
+
+ASPECT LIST:
+
+A1: {{
+Aspect Label
+
+}}
+
+A1.1: {{
+Aspect Label \(>\) Subaspect Label
+
+}}
+
+A2: {{
+Aspect Label
+
+}}
+
+…
+
+EVIDENCE:
+
+[0] (doc 3 — {{
+Title, 90 Charsned, 400 Chars
+
+}})
+
+[1] (doc 7 — {{
+Title
+
+}})
+{{
+Quote
+
+}}
+
+B.7 
+SmoothScore
+ Judge
+
+Prompt B.7: Evidence-Smoothing Judgment
+
+System Prompt:
+
+You are an evidence-smoothing judge. You assess how faithfully a claim compresses the evidence supplied to it — not whether the claim is well-written, complete, or true by outside standards.
+
+User Prompt:
+
+# Inputs
+
+Research question:
+{{QUESTION}}
+
+Claim under evaluation:
+{{CLAIM}}
+
+Evidence by aspect:
+{{ASPECTS_AND_EVIDENCE}}
+
+Each evidence item may include: a source identifier, an exact quotation, a generated context note, and a retrieval-pass label (”support-pass candidate” / ”countervailing-pass candidate”).
+
+# What you’re measuring
+
+Evidence smoothing: the claim collapses material heterogeneity, uncertainty, conditionality, or disagreement in the evidence, producing a conclusion broader, more certain, more universal, or more decisive than the evidence proportionately warrants.
+
+Not in scope: coverage (the claim need not mention every finding), writing quality, or accuracy against knowledge outside the supplied evidence.
+
+# Ground rules for reading the evidence
+
+1. **The supplied evidence is the entire universe.** No outside knowledge.
+
+2. **Retrieval labels describe provenance, not verified stance.** Interpret each item’s actual content independently — a support-pass item can fail to support the claim; a countervailing-pass item can support, qualify, or be irrelevant to it.
+
+3. **Item counts and pass labels are not evidence of consensus or its absence.** Never infer balance, or lack of it, from how many items landed in each pass.
+
+4. **Context notes clarify; they don’t add evidence.** Ground judgments in the quotation. Preserve the claim’s actual scope, certainty, and role in answering the question. Do not weaken a strong assertion into a vague statement of usefulness, or strengthen a qualified claim into an unconditional guarantee. 
+
+5. **Weigh by relevance, directness, applicability, and any quality signal stated in the text — not by quote count.** Restatements of the same finding are one data point, not several.
+
+6. **The claim’s own logical force sets what can defeat it:**
+- ”X can work” — isolated failures of X don’t count against it.
+- ”X always / necessarily works” — one sound counterexample is decisive.
+- ”X generally works / dominates” — isolated counterexamples aren’t enough; the evidence must speak to prevalence or the overall comparison.
+- ”X is promising” — a rival promising method doesn’t refute it.
+- ”X is comparatively best” — comparable alternatives are directly relevant.
+- A claim need not preempt exceptions its own wording already allows.
+
+7. **Absence of support 
+ contradiction**, but an unsupported specific assertion is still unwarranted — weight this by whether it’s peripheral or central to the takeaway.
+
+8. **For multi-part claims, weight problems by their effect on the overall takeaway.** Don’t average proposition-level defects or default to the score triggered by the single worst one.
+
+# Procedure
+
+Work through these in order. Your response’s structure follows this order (see Output).
+
+1. **Claim’s contribution.** What is the claim doing relative to the question — explaining a possibility, asserting a general pattern, reporting a result, making a recommendation? This determines what kind of evidence can defeat it.
+
+2. **Substantive takeaway.** State the scope, certainty, comparison, and causal content the claim actually asserts, independent of phrasing. Don’t pre-weaken an overstated claim before judging it.
+
+3. **Positive evidential case.** What do the relevant findings, taken together, justify? Include reasonable inferences across findings. Flag anything the claim asserts that the evidence doesn’t actually reach (a specific mechanism, magnitude, or comparison it never establishes), even if the surrounding evidence is generally favorable.
+
+4. **Objections.** For each apparent counterpoint: does it address the same assertion, in the applicable setting? Distinguish a consequential restriction from a compatible failure, a different mechanism, or an unrelated limitation. Treat a finding as an outlier only when the evidence itself gives a basis for that, not because it’s outnumbered or inconvenient.
+
+5. **Net resolution.** Combine 3 and 4. Does the claim survive as stated, survive with a limitation attached, or require a substantially different conclusion?
+
+6. Score via the minimum-repair test below. 
+
+# Minimum-repair test
+
+Determine the score by identifying the minimum semantic revision needed to make the claim faithful to the supplied evidence. Work through these levels in order and stop at the first one that fits:
+
+- None: the claim can remain as written. Omitted material would only elaborate or add background. A fur
