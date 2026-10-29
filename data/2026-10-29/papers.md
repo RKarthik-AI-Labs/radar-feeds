@@ -1,0 +1,93 @@
+# Paper candidates — 2026-10-29 (IST)
+
+Generated 2026-10-29 02:28 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Totals: 1 new topic matches · 0 other new cs.IR · 121 seen in earlier runs.
+Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
+
+## New papers matching your topics (1), highest score first
+
+### Self-Assessment Reinforcement Learning for Search-State Awareness in Retrieval-Augmented Large Language Models
+- arXiv 2610.30435 · v1 2026-10-21 00:00 UTC · 
+- Authors: Taewhoo Lee, Minju Song, Jungwoo Park, Chanwoong Yoon et al.
+- Topics: RAG (generic), Query fan-out, Clicks & measurement · score 10 · found via HF daily papers
+- Link: https://arxiv.org/abs/2610.30435
+- Full text: data/fulltext/2610.30435.txt
+
+> Recent advances in search agents have enabled large language models to tackle complex tasks by retrieving and synthesizing external information. However, existing search agents often lack search-state awareness, i.e., the ability to recognize what information has been obtained and what remains missing, leading to hallucinated reasoning and prematurely terminated search. To address this limitation, we propose Self-Assessment Reinforcement Learning (SARL), a reinforcement learning framework in which models learn to recognize their own search state during training and improve their search behavior accordingly, without requiring additional assessment at test time. SARL achieves this through a dual reward design that captures the corrective effect of each assessment while penalizing excessive reliance on it, jointly encouraging effective and efficient search trajectories. Under this setup, SARL achieves a 24.3% relative improvement over the strongest baseline, with average gains of 35.9% on multi-hop reasoning and 27.9% on deep research benchmarks against the strongest per-benchmark baselines. SARL further surpasses methods built on auxiliary supervision or multi-agent coordination, despite operating as a standalone RL framework with no inference-time scaffolding. Beyond final performance, SARL maintains training stability under extended search horizons, a regime where existing methods consistently degrade, enabling sustained gains as task complexity grows.
+
+## Other new cs.IR papers, title only (0)
+
+## Already listed on an earlier day, still inside the look-back window (121)
+- Useful Diversity or Hallucinated Variety? Persona-Conditioned Synthetic Query Generation for E-Commerce Search — https://arxiv.org/abs/2610.35102 (score 20)
+- Quantifying Claim Smoothing by LLM Research Agents — https://arxiv.org/abs/2610.35793 (score 14)
+- When Connectivity Misleads: Guiding Agentic Search with Contrastive Evidence Paths — https://arxiv.org/abs/2610.36134 (score 14)
+- Correction or Manipulation? Measuring Epistemic Vigilance in LLM Agents Under User Pressure — https://arxiv.org/abs/2610.36453 (score 14)
+- TaskBridge: Technical Report for SIGIR 2026 eCommerce Challenge — https://arxiv.org/abs/2610.37231 (score 13)
+- Factual Yet One-Sided: Stance Poisoning and Evidence Balancing in Retrieval-Augmented Generation — https://arxiv.org/abs/2610.34294 (score 12)
+- Logic Hijacking of RAG: Single-Document Poisoning via Local Optimization — https://arxiv.org/abs/2610.34829 (score 12)
+- SkillQR: Agentic Skill Discovery for Reason-Intensive Query Rewriting — https://arxiv.org/abs/2610.33768 (score 11)
+- Build, Don't Play: Self-Improving LLM Research Agents Develop a Hearthstone Battlegrounds AI That Rivals Top Players — https://arxiv.org/abs/2610.33845 (score 10)
+- Context Is Not Free: Carbon-Aware LLM Routing for Multi-Turn LLM Web Services across Geo-Distributed Data Centers — https://arxiv.org/abs/2610.35230 (score 10)
+- RubricAtlas: Mining Type-Level Rubrics from Expert Reports to Evaluate Deep Research Agents — https://arxiv.org/abs/2610.36878 (score 10)
+- SpectRAG: Weighted Chunk Graphs for Token-Budgeted Context Selection in Multi-Hop Retrieval-Augmented Generation — https://arxiv.org/abs/2610.36991 (score 10)
+- LiveSearch: Questions as Executable Verifier Code for a Live Benchmark of Professional-Source Financial Search Agents — https://arxiv.org/abs/2610.37166 (score 10)
+- Quantifying and Prioritizing Stealthy Source-Manipulation Threats Against Multi-Source Anomaly Detectors — https://arxiv.org/abs/2610.36693 (score 9)
+- Mechanistic Failure Modes of Weight Pruning in Transformer Language Models — https://arxiv.org/abs/2610.37126 (score 9)
+- SkillShift-Bench: Benchmarking Skill Learning under Environment Evolution for Web Agents — https://arxiv.org/abs/2610.33528 (score 8)
+- Strategic Calibration in LLM Multi-Agent Systems: Audited Pivot Scoring for Truthful Elicitation — https://arxiv.org/abs/2610.33728 (score 8)
+- Ranking Is Not Deciding: Benchmark Shortcuts and Operating-Point Collapse in Query-Time RAG Poisoning Defenses — https://arxiv.org/abs/2610.33849 (score 8)
+- Decision-Native Recommendation with Large Language Models — https://arxiv.org/abs/2610.34124 (score 8)
+- AgentProofBench: Benchmarking Reusable Verifiers for Web Agents — https://arxiv.org/abs/2610.34634 (score 8)
+- BehaviorMem: Building and Evaluating User Memory from Real-World E-Commerce Behavior Streams — https://arxiv.org/abs/2610.34790 (score 8)
+- GUIFlow: Temporal Redundancy-Aware Incremental Inference for GUI Agents — https://arxiv.org/abs/2610.34959 (score 8)
+- GuardRAG: A Post-Retrieval Defense against Poisoning Attacks in Retrieval-Augmented Generation — https://arxiv.org/abs/2610.35071 (score 8)
+- Did the Model Use That? Counterfactual Training Boosts Self-Attribution in Language Models — https://arxiv.org/abs/2610.35295 (score 8)
+- Governing Enterprise AI Traffic at Scale: Design and Operation of a Policy-Driven, Multi-Vendor LLM Gateway on Envoy — https://arxiv.org/abs/2610.35509 (score 8)
+- Multi-Objective Reinforcement Learning Using Routed Ensembles and Trajectory Attribution — https://arxiv.org/abs/2610.35733 (score 8)
+- Robust LLM Data Selection via Content-Invariant Gradient Attribution — https://arxiv.org/abs/2610.36755 (score 8)
+- GUI-JEPA: Candidate-Conditioned JEPA Latents as a Fast Action Policy for Mobile GUI Agents — https://arxiv.org/abs/2610.36877 (score 8)
+- KL-MOPD: Discrepancy-Aware Multi-Objective On-Policy Distillation for Generative Recommendation — https://arxiv.org/abs/2610.36973 (score 8)
+- Does Your Generalist Skill Optimizer Really Incentivize Agentic Tasks? Rethinking Skill Optimization via Bipartite Attribution — https://arxiv.org/abs/2610.37201 (score 8)
+- LinMix: Data Mixing as Linear Domain Attribution — https://arxiv.org/abs/2610.37390 (score 8)
+- How Reliable Is Individualized Functional-Network Attribution in Resting-State fMRI Cognitive Prediction in ADNI? — https://arxiv.org/abs/2610.37472 (score 8)
+- From Interaction to Capability: Task Advancement as State and Supervision for GUI Agents — https://arxiv.org/abs/2610.37482 (score 8)
+- Steering for Safety, Hijacking for Profit: Trojan Threats in the LLM Activation Steering Supply Chain — https://arxiv.org/abs/2610.35043 (score 7)
+- Proof-of-Agentness: Towards Verifying Agents on the Web — https://arxiv.org/abs/2610.35288 (score 7)
+- Tessera: Structure-Completed Evidence Units for Web Retrieval-Augmented Generation — https://arxiv.org/abs/2610.37080 (score 7)
+- A Certified Robustness Framework for Backdoor Poisoning Attacks using $f$-Divergences — https://arxiv.org/abs/2610.34934 (score 6)
+- Then there is prompt injection, a malicious email, ...: The Wild Wide West of OpenClaw Agentic System Security — https://arxiv.org/abs/2610.35451 (score 6)
+- Evaluating DeepSeek V4.1 Flash-1017 for loss of control and harmful manipulation risks — https://arxiv.org/abs/2610.35671 (score 6)
+- Towards a Unified Framework of Optimal Input-Side Dimensional Configuration for Deep CTR Prediction — https://arxiv.org/abs/2610.35695 (score 6)
+- Learning Force-Reactive Humanoid Loco-Manipulation — https://arxiv.org/abs/2610.35862 (score 6)
+- Log-To-Leak: Prompt Injection Attacks on Tool-Using LLM Agents via the Model Context Protocol — https://arxiv.org/abs/2610.36108 (score 6)
+- cuArms: GPU-Accelerated Conflict-Based Planning for Multi-Arm Manipulation — https://arxiv.org/abs/2610.36250 (score 6)
+- Cross-Day Compatibility of Daily Item Embeddings: An Empirical Study of Alignment, Scale Management, and CTR Adaptation — https://arxiv.org/abs/2610.36408 (score 6)
+- TOPS: Reshaping Flow Source and Transport for Multi-Task Robot Manipulation — https://arxiv.org/abs/2610.36694 (score 6)
+- Is Token Confidence Just Chain Length? A Signal-Processing Audit of Reasoning Traces — https://arxiv.org/abs/2610.36709 (score 6)
+- ActiveAlign: Aligning Egocentric Manipulation via Active Perception — https://arxiv.org/abs/2610.36859 (score 6)
+- Rethinking Positional Encoding and Interaction Granularity for CTR Prediction — https://arxiv.org/abs/2610.37140 (score 6)
+- Peers4U: Designing Learner-Centered Virtual Peers for Children's Multimodal Mathematics Learning — https://arxiv.org/abs/2610.37238 (score 6)
+- When Is a Relation Worth Trusting? Manipulation Costs, Exposure, and the Trust Trap in Multi-Relational Graph Learning — https://arxiv.org/abs/2610.37239 (score 6)
+- Kinematic Constraint-Referenced Evaluation for Articulated Object Manipulation — https://arxiv.org/abs/2610.37550 (score 6)
+- Heads of Security: Learned Attention Gates Improve Prompt Injection Robustness — https://arxiv.org/abs/2610.37657 (score 6)
+- Novel or Not? PatEx-Gym: Agentic Prior-Art Search for Novelty Assessment in Patent Examination — https://arxiv.org/abs/2610.33503 (score 5)
+- Knowing When the Evidence Is Enough: Requirement-Directed Search with Horn-Closure Certificates — https://arxiv.org/abs/2610.34684 (score 5)
+- ACARE: Agent-Context-Aware Reranker for Iterative Search — https://arxiv.org/abs/2610.35840 (score 5)
+- RefinedGAW: A Refined German Academic Web Dataset — https://arxiv.org/abs/2610.34572 (score 4)
+- MAREval: A Multi-Agent Framework for Evaluating Natural Language Recommendation Explanations — https://arxiv.org/abs/2610.36389 (score 4)
+- Latent Residual Reasoning for Ranking in Generative Recommendation — https://arxiv.org/abs/2610.36890 (score 4)
+- PailitaoMMSearch2.0 Technical Report: Scaling Generative Retrieval to Unified End-to-End Multimodal Search — https://arxiv.org/abs/2610.36958 (score 4)
+- Monitor Accuracy Isn't the Answer: A Decision-Value Framework for Evaluating AI Agent Restart Monitors — https://arxiv.org/abs/2610.36544 (score 3)
+- Coverage Under Contradiction: A Benchmark for Negation-Aware Retrieval — https://arxiv.org/abs/2610.37162 (score 3)
+- TriageRAG: Failure-Aware Self-Training for Adapting Retrieval-Augmented Language Models to Specialized Domains — https://arxiv.org/abs/2610.33776 (score 2)
+- A Domain-Aware Pipeline for Structured Extraction and Retrieval-Augmented Question Answering over arXiv Superconductivity Literature — https://arxiv.org/abs/2610.34391 (score 2)
+- Hallucination-Aware Multi-Agent RAG via Internal Attention Rewards — https://arxiv.org/abs/2610.35056 (score 2)
+- Reading Beyond OCR Noise: Robust Cross-Lingual RAG for Legislative Archives — https://arxiv.org/abs/2610.35240 (score 2)
+- Read the Route: Attention-Steered Hypergraph Retrieval for Multi-hop RAG — https://arxiv.org/abs/2610.35412 (score 2)
+- QESChunker: A Single Objective Unifies Overlapping and Non-Overlapping Chunking for RAG — https://arxiv.org/abs/2610.36557 (score 2)
+- Governed Sovereign RAG for Public Administration: Tripartite Epistemic Routing, Facet-Guided Clarification, and Deterministic Numeric Verification in Citizen Services — https://arxiv.org/abs/2610.36561 (score 2)
+- Do We Need an LLM to Know Why Sources Conflict? Decision Models for Knowledge-Conflict Typing in RAG — https://arxiv.org/abs/2610.36915 (score 2)
+- When Is Additional Retrieval Worthwhile? A Cost-Aware Study of Evidence Gain and Answer Reliability in RAG — https://arxiv.org/abs/2610.37358 (score 2)
+- Multimodal Requirements Traceability Link Recovery in Industrial Settings — https://arxiv.org/abs/2610.34503 (score 1)
+- Learning to Remember: Advances in Memory Mechanisms for Large Language Models — https://arxiv.org/abs/2610.35089 (score 1)
+- Hypergraph-Enhanced Evidence Selection for Long-Context Multimodal Document QA — https://arxiv.org/abs/2610.35542 (score 1)

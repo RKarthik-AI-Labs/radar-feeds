@@ -1,0 +1,4668 @@
+Self-Assessment Reinforcement Learning for Search-State Awareness in Retrieval-Augmented Large Language Models
+https://arxiv.org/abs/2610.30435
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+Self-Assessment Reinforcement Learning for Search-State Awareness in Retrieval-Augmented Large Language Models
+
+Taewhoo Lee
+
+Affiliation: 
+Amazon
+
+Affiliation: 
+Korea University
+
+  
+
+Minju Song
+
+Affiliation: 
+Korea University
+
+  
+
+Jungwoo Park
+
+Affiliation: 
+AIGEN Sciences
+
+Affiliation: 
+Korea University
+
+  
+
+Chanwoong Yoon
+
+Affiliation: 
+University of Massachusetts Amherst
+
+  
+
+Junha Jung
+
+Affiliation: 
+AIGEN Sciences
+
+Affiliation: 
+Korea University
+
+  
+
+Hyeon Hwang
+
+Affiliation: 
+Korea University
+
+  
+
+Sanghoon Lee
+
+Affiliation: 
+AIGEN Sciences
+
+Affiliation: 
+Korea University
+
+  
+
+Minbyul Jeong
+
+Affiliation: 
+Meridian Intelligence Global Inc
+
+Correspondence to: 
+wjdalsquf@gmail.com
+
+  
+
+Jaewoo Kang
+
+Affiliation: 
+AIGEN Sciences
+
+Affiliation: 
+Korea University
+
+Correspondence to: 
+kangj@korea.ac.kr
+
+Abstract
+
+Recent advances in search agents have enabled large language models to tackle complex tasks by retrieving and synthesizing external information. However, existing search agents often lack search-state awareness, i.e., the ability to recognize what information has been obtained and what remains missing, leading to hallucinated reasoning and prematurely terminated search.
+To address this limitation, we propose Self-Assessment Reinforcement Learning (SARL), a reinforcement learning framework in which models learn to recognize their own search state during training and improve their search behavior accordingly, without requiring additional assessment at test time.
+SARL achieves this through a dual reward design that captures the corrective effect of each assessment while penalizing excessive reliance on it, jointly encouraging effective and efficient search trajectories.
+Under this setup, SARL achieves a 24.3% relative improvement over the strongest baseline, with average gains of 35.9% on multi-hop reasoning and 27.9% on deep research benchmarks against the strongest per-benchmark baselines.
+SARL further surpasses methods built on auxiliary supervision or multi-agent coordination, despite operating as a standalone RL framework with no inference-time scaffolding.
+Beyond final performance, SARL maintains training stability under extended search horizons, a regime where existing methods consistently degrade, enabling sustained gains as task complexity grows.
+
+Keywords: 
+Machine Learning, ICML
+
+†
+†
+affiliationnotice: 
+*
+Work done prior to joining Amazon.
+
+1 
+Introduction
+
+Large language models (LLMs) have shown remarkable performance across a wide range of tasks, but their reliance on static parametric knowledge limits their ability to handle up-to-date information 
+(
+Lewis et al., 2020
+; 
+Guu et al., 2020
+)
+.
+Retrieval-augmented generation (RAG) alleviates this by equipping LLMs with external information at inference time 
+(
+Asai et al., 2023
+; 
+Snell et al., 2024
+; 
+Gao et al., 2023
+)
+, and recent 
+search agents
+ extend this capability by enabling models to autonomously interact with external environments, iteratively performing searches and synthesizing evidence from multiple sources 
+(
+Jin et al., 2025
+; 
+Li et al., 2025c
+)
+.
+However, naturally incorporating this behavior into LLMs remains challenging due to the large action space involved during search 
+(
+Yao et al., 2022
+; 
+Nakano and others, 2021
+; 
+Schick et al., 2023
+)
+. While supervised fine-tuning (SFT) using high-quality search trajectories has proven effective 
+(
+He et al., 2025
+; 
+Wu et al., 2025
+; 
+Li et al., 2025a
+; 
+Li et al., 2025d
+; 
+Liu et al., 2025a
+)
+, it requires resource overhead from collecting intermediate search decisions and faces difficulties in generalizability 
+(
+Chu et al., 2025
+)
+. Reinforcement learning (RL) has emerged as a strategy to teach agents effective search strategies through interaction and outcome-based feedback, reducing reliance on expensive human annotations 
+(
+Jin et al., 2025
+; 
+Shi et al., 2025
+; 
+Song et al., 2025a
+; 
+Song et al., 2025b
+)
+.
+
+Figure 1
+: 
+
+Comparison of search trajectories among Search-R1 
+(
+Jin et al., 2025
+)
+, AutoRefine 
+(
+Shi et al., 2025
+)
+, and SARL (Ours).
+(a) Search-R1 hallucinates by assuming the University of Pennsylvania is a Catholic institution and terminates early.
+(b) AutoRefine fails to recognize that Saint Francis University does not satisfy the “oldest Catholic University” constraint, despite using a dedicated refinement tag.
+(c) SARL identifies the correct entity (Villanova University) by recognizing what has been obtained and what remains missing, issuing targeted queries to fill the gap.
+
+Despite these advances, current RL-based search agents struggle with 
+search-state awareness
+: the ability to recognize what information has been obtained and what remains missing during complex retrieval. Without this awareness, agents fall into two failure modes: they 
+hallucinate reasoning
+, generating answers from incomplete evidence (e.g., asserting that the University of Pennsylvania is “a Catholic institution” in Figure 
+1
+), and they 
+prematurely terminate
+, stopping searches before sufficient evidence is gathered.
+1
+1
+
+1
+
+            
+            
+            
+            
+            
+            
+            
+          We provide failure mode illustrations in Appendix 
+A.2
+.
+
+Existing methods attempt to mitigate these issues through sparse outcome-based rewards or auxiliary tokens (e.g., 
+<refine>
+, 
+<judge>
+), but such training signals are coarse and fail to ensure faithfulness of the reasoning process 
+(
+Xu et al., 2025
+; 
+Zhang et al., 2025
+)
+. We further find that these methods exhibit severe training instability and performance degradation under extended search horizons, a failure mode unreported in prior work.
+
+Figure 2
+: 
+
+Overview of the SARL framework.
+
+Top:
+ A group of trajectories sampled from the policy model is scored under our custom reward (Eq. 
+2
+) and converted to group-relative advantages via GRPO 
+(
+Shao et al., 2024
+)
+.
+
+Bottom:
+ Each trajectory ends with a structured self-assessment, which resolves to a 
+COMPLETE
+ or 
+INCOMPLETE
+ judgment; 
+INCOMPLETE
+ triggers trajectory revision, and 
+ is determined by the resulting transition in answer correctness. Solid borders indicate trajectory components included in the loss; dashed borders are excluded.
+
+To overcome these limitations, we propose 
+Self-Assessment Reinforcement Learning (SARL)
+, an RL framework that cultivates search agents with stronger search-state awareness. SARL is grounded in the premise that models can identify and correct their own erroneous trajectories when given a fresh context to review them (validated in Appendix 
+A.3
+).
+Building on this premise, SARL extends the standard think-search-answer loop with a 
+self-assessment phase
+: after an initial answer, the model re-examines its own trajectory in an isolated context and produces a structured assessment that identifies the essential constraints of the question, analyzes which have been resolved by the retrieved evidence, and concludes with a judgment on whether the trajectory is complete. When the assessment indicates incompleteness, the full assessment is injected back as user feedback to prompt revision; otherwise the trajectory terminates.
+
+To shape this behavior into an internalized capability, SARL introduces a dual reward mechanism. An 
+assessment reward
+ captures the corrective effect of each assessment, computed from the transition in answer correctness before and after the assessment step. An 
+exponential assessment penalty
+ bounds assessment frequency, encouraging thorough searching upfront rather than repeated reliance on assessment retries. Together, these signals push the model to correct mistakes when necessary while progressively internalizing search-state awareness, leading to accurate search behavior without explicit assessment steps at inference time.
+
+We evaluate SARL across ten benchmarks spanning three complexity levels: three single-hop question answering (QA), four multi-hop QA, and three deep research benchmarks. To ensure fair comparison, we train all methods on a unified 45K-sample training set under a fixed maximum of 32 turns.
+SARL achieves a 24.3% relative improvement over the strongest baseline, with average gains of 35.9% on multi-hop reasoning and 27.9% on deep research benchmarks against the strongest per-benchmark baselines.
+SARL further surpasses methods from broader paradigms, including SFT+RL pipelines and multi-agent frameworks with larger backbones, despite operating as a standalone RL framework with no inference-time scaffolding. Our analysis further reveals that SARL progressively learns to identify and fill information gaps through diverse search queries with notably higher evidence recall.
+
+We summarize our main contributions as follows:
+
+•
+
+We identify 
+search-state awareness
+ as a core capability missing in current RL-based search agents, and surface a previously unreported failure mode of training instability under extended search horizons.
+
+•
+
+We propose 
+SARL
+, an RL framework that internalizes search-state awareness through a train-time self-assessment phase shaped by a dual reward mechanism, requiring no auxiliary supervision, multi-agent orchestration, or inference-time overhead.
+
+•
+
+Across ten benchmarks spanning three complexity levels, SARL achieves a 24.3% average improvement over the strongest baseline with stable training and strong generalizability across model scales and families.
+
+2 
+Method
+
+2.1 
+Problem Setup and Framework
+
+Search-augmented question answering.
+
+We study the task of search-augmented question answering, where a language model is equipped with access to an external search engine 
+. Given a dataset 
+ of question-answer pairs, the model answers each question 
+ by generating an interaction trajectory 
+ of length 
+, where each step consists of an operation type 
+ and its associated generated content 
+.
+When the model emits a 
+ operation, the enclosed query is executed by 
+, which returns top-
+ relevant documents that are appended to the context for subsequent steps. The trajectory terminates with an 
+ operation or when a predefined maximum number of turns 
+ is reached, after which the generated answer is evaluated against the ground-truth answer 
+.
+
+Self-assessment phase.
+
+SARL augments the standard generation procedure with a 
+self-assessment phase
+ that operates on completed trajectories. Given a trajectory 
+ ending in 
+, the same policy 
+ is invoked in an isolated context with an evaluation prompt 
+ (Appendix 
+A.12
+) to produce a structured assessment 
+, from which a binary judgment 
+ is extracted.
+By decoupling self-assessment from the search loop, the original trajectory 
+ remains a self-contained record of the model’s search behavior, with the assessment treated as a separate evaluative pass.
+
+Trajectory revision.
+
+If 
+, the trajectory is finalized and the answer is evaluated against 
+. If 
+, 
+ is injected as a user message back into the original context (Appendix 
+A.12
+), prompting 
+ to extend 
+ with further 
+ and 
+ steps before producing a revised 
+, yielding 
+. The procedure repeats until either 
+ or the trajectory reaches the maximum number of turns 
+. Figure 
+2
+ provides an overview of the full framework.
+
+2.2 
+Dataset Curation
+
+We curate a diverse training dataset covering search tasks of increasing complexity. For single-hop question answering, we randomly select 15K samples from Natural Questions (NQ) 
+(
+Kwiatkowski et al., 2019
+)
+, where most questions can be resolved with a single retrieval step. For multi-hop reasoning, we randomly select 15K samples from HotpotQA 
+(
+Yang et al., 2018
+)
+, which requires aggregating evidence across multiple documents. Finally, for more challenging deep-research scenarios, we include 15K samples from ASearcher 
+(
+Gao et al., 2025b
+)
+, a dataset designed for complex, multi-step information-seeking behavior. This split consists of 8,537 examples from the original 
+compose_chain_qa
+ subset provided by ASearcher, along with 6,463 additional examples that we generate using the data synthesis procedure from ASearcher. This construction yields a balanced corpus of 45K instances spanning single-hop retrieval, multi-hop reasoning, and long-horizon search trajectories.
+
+2.3 
+Training Objective
+
+We adopt Group Relative Policy Optimization (GRPO) 
+(
+Shao et al., 2024
+)
+ as our policy optimization algorithm. Under GRPO, for each question 
+, a group of 
+ trajectories 
+ is sampled from the current policy 
+, and policy updates are performed based on group-relative comparisons across trajectories. In addition, following 
+Yu et al. (2025)
+, we mask out gradient computation for trajectories exceeding the model’s original context length, and adopt asymmetric clipping. Lastly, we remove standard deviation normalization, replace per-trajectory length normalization with a fixed denominator 
+, and omit KL regularization 
+(
+Liu et al., 2025b
+)
+. The resulting objective is
+
+(1)
+
+where 
+, 
+ is the trajectory-level loss mask, and 
+ with 
+ and 
+.
+In SARL, 
+ is computed from the SARL-specific reward 
+ (Section 
+2.4
+), which combines the assessment penalty and assessment reward.
+
+2.4 
+Reward Design
+
+When training search agents with self-assessment, we aim to satisfy two complementary objectives: (1) 
+efficiency
+, ensuring that the learned agent does not rely on self-assessments at inference time, and (2) 
+effectiveness
+, enabling the model to leverage self-assessments during training to learn complete trajectories with search-state awareness. To jointly capture these objectives, we combine an assessment penalty with a fine-grained assessment reward.
+
+For a trajectory containing 
+ self-assessment steps, the total reward is defined as
+
+(2)
+
+where 
+ denotes the final outcome reward, 
+ controls the 
+assessment penalty
+, and 
+ denotes the 
+assessment reward
+, weighted by coefficient 
+. The exponential decay term 
+ penalizes frequent self-assessments, encouraging the model to use assessments sparingly and to produce complete responses without relying on repeated retries, thereby discouraging dependence on self-assessment at inference time while preserving its utility during training.
+
+To promote effective use of self-assessments, the assessment reward 
+ provides fine-grained feedback based on how the model’s answer quality changes after an assessment. Specifically, it is determined by the transition in answer correctness before and after a self-assessment step:
+
+(3)
+
+This asymmetric design strongly rewards corrective behavior, mildly penalizes unproductive self-assessments, and heavily discourages regressions in correctness. We assign identical rewards to 
+incorrect
+correct
+ and 
+correct
+correct
+ cases to avoid incentivizing the model to produce incorrect initial answers in pursuit of larger correction rewards. Moreover, the 
+correct
+correct
+ case often corresponds to situations where the answer remains correct but the supporting evidence is incomplete; rewarding this transition encourages the model to pursue well-supported search trajectories.
+
+3 
+Experiments
+
+Table 1
+: 
+Performance comparison across benchmarks of varying complexity. NQ, 2Wiki, and BC-Plus denote Natural Questions, 2WikiMultihopQA, and BrowseComp-Plus, respectively. 
+Bold
+ indicates the best result per benchmark; 
+underline
+ indicates the second-best.
+
+Methods
+
+Single-Hop QA
+
+Multi-Hop QA
+
+Deep Research
+
+Avg.
+
+NQ
+
+TriviaQA
+
+PopQA
+
+HotpotQA
+
+2Wiki
+
+Musique
+
+Bamboogle
+
+GAIA
+
+FRAMES
+
+BC-Plus
+
+w/o Retrieval
+
+Direct Generation
+
+0.251
+
+0.523
+
+0.158
+
+0.265
+
+0.245
+
+0.080
+
+0.208
+
+0.039
+
+0.090
+
+0.037
+
+0.190
+
+SFT
+
+0.181
+
+0.452
+
+0.161
+
+0.217
+
+0.212
+
+0.048
+
+0.126
+
+0.053
+
+0.062
+
+0.003
+
+0.152
+
+R1
+
+0.233
+
+0.543
+
+0.200
+
+0.271
+
+0.305
+
+0.084
+
+0.232
+
+0.046
+
+0.121
+
+0.006
+
+0.148
+
+w/ Retrieval
+
+Naive RAG
+
+0.433
+
+0.114
+
+0.434
+
+0.136
+
+0.175
+
+0.022
+
+0.058
+
+0.027
+
+0.048
+
+0.028
+
+0.147
+
+IRCoT
+
+0.381
+
+0.127
+
+0.417
+
+0.148
+
+0.201
+
+0.019
+
+0.068
+
+0.051
+
+0.052
+
+0.013
+
+0.148
+
+Search Agents
+
+Search-R1
+
+0.459
+
+0.711
+
+0.495
+
+0.484
+
+0.440
+
+0.172
+
+0.388
+
+0.036
+
+0.166
+
+0.068
+
+0.342
+
+ASearcher
+
+0.515
+
+0.719
+
+0.492
+
+0.520
+
+0.390
+
+0.161
+
+0.344
+
+0.039
+
+0.176
+
+0.097
+
+0.345
+
+AutoRefine
+
+0.493
+
+0.661
+
+0.450
+
+0.356
+
+0.187
+
+0.086
+
+0.298
+
+0.012
+
+0.062
+
+0.000
+
+0.260
+
+ReSeek
+
+0.501
+
+0.684
+
+0.409
+
+0.436
+
+0.288
+
+0.157
+
+0.398
+
+0.053
+
+0.137
+
+0.019
+
+0.308
+
+SARL
+
+0.508
+
+0.762
+
+0.527
+
+0.614
+
+0.645
+
+0.272
+
+0.548
+
+0.053
+
+0.261
+
+0.103
+
+0.429
+
+3.1 
+Experimental Setup
+
+Datasets
+
+We evaluate on a broad set of in-domain and out-of-domain benchmarks spanning varying complexity. For single-hop question answering, we use Natural Questions (NQ) 
+(
+Kwiatkowski et al., 2019
+)
+, TriviaQA 
+(
+Joshi et al., 2017
+)
+, and PopQA 
+(
+Mallen et al., 2023
+)
+. For multi-hop reasoning, we use HotpotQA 
+(
+Yang et al., 2018
+)
+, 2WikiMultihopQA (2Wiki) 
+(
+Ho et al., 2020
+)
+, Musique 
+(
+Trivedi et al., 2022
+)
+, and Bamboogle 
+(
+Press et al., 2023
+)
+, sampling 1,000 examples per benchmark. For deep-research tasks requiring long-horizon search and synthesis, we evaluate on GAIA 
+(
+Mialon and others, 2023
+)
+, FRAMES 
+(
+Krishna et al., 2025
+)
+, and BrowseComp-Plus (BC-Plus) 
+(
+Chen et al., 2025
+)
+.
+To account for multiple valid surface forms of an answer, we adopt an LLM-as-a-judge evaluation protocol 
+(
+Zheng et al., 2023
+)
+ using GPT-4.1 
+(
+OpenAI, 2025a
+)
+ as the judge. All reported numbers are avg@4, averaged across four sampled completions per query to mitigate sampling stochasticity. We additionally report exact match (EM) and F1 scores in Appendix 
+A.4
+.
+
+Baselines
+
+We compare our approach against several representative baselines spanning different paradigms of reasoning and retrieval.
+
+(1) Without retrieval:
+ The model answers using only its parametric knowledge. We consider Direct Generation, supervised fine-tuning (SFT), and R1-style training (R1) 
+(
+Jin et al., 2025
+)
+.
+
+(2) With retrieval:
+ The model retrieves supporting documents during inference. We evaluate Naive RAG 
+(
+Lewis et al., 2020
+)
+ and IRCoT 
+(
+Trivedi et al., 2023
+)
+.
+
+(3) Search agents:
+ The model is equipped with retrieval tools and generates multi-step interaction trajectories. This category includes Search-R1 
+(
+Jin et al., 2025
+)
+ and ASearcher 
+(
+Gao et al., 2025a
+)
+, trained to follow a standard “think-search-answer” paradigm, as well as AutoRefine 
+(
+Shi et al., 2025
+)
+ and ReSeek 
+(
+Li et al., 2025b
+)
+, additionally trained to incorporate refinement or judgment steps.
+All baselines are built on Qwen2.5-7B 
+(
+Yang et al., 2025
+)
+, except for Direct Generation and SFT (instruct variant), and are reproduced under the same experimental setting for fair comparison.
+For broader-paradigm reference, we additionally include published results from RAG-R1 
+(
+Tan et al., 2026
+)
+, a two-stage SFT+RL framework, and MA-RAG 
+(
+Thang Nguyen, 2025
+)
+, a multi-agent framework with four specialized agents. As these methods rely on framework-specific pipelines or backbones, we do not reproduce them under our setup; full setup comparison and results are deferred to Appendix 
+A.7
+.
+
+Implementation Details
+
+All models are trained on the same 45K training set for one epoch using 8 B200 GPUs, with early termination upon divergence. For validation, we sample 500 examples from each dataset and select checkpoints based on the highest validation scores. We set the maximum number of interaction turns to 32 and sample 5 trajectories per query during training. For retrieval, we use e5-base-v2 over the December 2018 Wikipedia dump, returning top-
+ documents per query, except for BrowseComp-Plus, where we use Qwen3-Embedding-8B with a custom curated Wikipedia dump for answer coverage. For reward design, we set 
+ and 
+. SARL is trained on the SkyRL framework 
+(
+Griggs et al., 2025
+)
+; baselines use their original libraries. Training curves across all reproduced baselines and a training cost analysis are provided in Appendix 
+A.5
+ and Appendix 
+A.6
+.
+
+Figure 3
+: 
+
+Search behavior of SARL compared with AutoRefine and ReSeek across training progress. Top: number of unique search queries across benchmarks. Bottom: document recall across benchmarks. SARL improves on both metrics over training, while baselines remain flat or decline.
+
+3.2 
+Main Results
+
+Table 
+1
+ presents the overall performance across our benchmark suite. SARL achieves an average score of 0.429, a 24.3% relative improvement over the strongest baseline (ASearcher: 0.345). Despite only NQ and HotpotQA overlapping with our training data, SARL demonstrates consistent gains across all benchmarks, with peak improvements of 58.1% on Musique and 48.3% on FRAMES against the best per-benchmark baselines, suggesting that SARL learns generalizable search strategies that transfer to unseen task distributions.
+
+We further compare performance gains across three task categories, measured against the strongest per-benchmark baseline within each category. While SARL achieves modest gains of 3.9% on single-hop QA, the gains become substantially more pronounced on complex reasoning scenarios, with average gains of 35.9% on multi-hop QA and 27.9% on deep research tasks. This performance pattern indicates that SARL’s self-assessment mechanism is particularly effective for tasks requiring multiple rounds of information retrieval. As tasks grow more complex and demand iterative refinement of search queries based on accumulated knowledge, the ability to assess what information has been obtained and what remains missing becomes increasingly critical for both efficiency and accuracy.
+
+We further observe a previously unreported failure mode in existing methods under extended search horizons. With the maximum search turn limit increased to 32 and longer-trajectory synthetic datasets included in training, both AutoRefine and ReSeek exhibit severe training instability and performance degradation, with AutoRefine collapsing to fewer than one search turn on average and ReSeek’s validation scores dropping toward zero late in training. This stems from an architectural choice: both methods generate reflection text inline at every turn, making them vulnerable to context growth and training collapse over long-horizon trajectories. SARL avoids this failure mode by decoupling the trajectory from the self-assessment step and applying fine-grained rewards to the assessment, enabling stable scaling to long search horizons (Figure 
+3
+; mechanism and training curves in Appendix 
+A.8
+ and Appendix 
+A.5
+). We analyze reward modeling effects in Section 
+4.2
+.
+
+For broader context, we additionally reference published results from RAG-R1, a two-stage SFT+RL pipeline, and MA-RAG, a training-free multi-agent framework. SARL achieves a 23.4% relative improvement over RAG-R1 on the seven shared benchmarks (0.554 vs. 0.449 average), demonstrating that SARL outperforms pipelines that combine SFT warmup with RL. Against MA-RAG, SARL substantially outperforms the 8B variant on multi-hop reasoning (HotpotQA: 0.614 vs. 0.403; 2Wiki: 0.645 vs. 0.318) and remains ahead even of the 70B variant on these benchmarks (0.614 vs. 0.507; 0.645 vs. 0.431), indicating that internalizing search-state awareness through training can be more effective than scaling backbone size or inference-time orchestration. Setup details and per-benchmark results are provided in Appendix 
+A.7
+.
+
+4 
+Analysis
+
+Figure 4
+: 
+
+Ablation of SARL’s reward components across training progress, reporting eval score, unique search cost, and document recall (left to right). Only the full configuration (Self-Assessment + Penalty + Reward) yields stable improvements.
+
+4.1 
+Search Diversity and Evidence Recall
+
+A key factor underlying the effectiveness of search agents is their ability to actively explore missing information and retrieve relevant evidence. To examine how this behavior evolves during training, we analyze both the diversity of search queries and the relevance of retrieved documents at different training stages.
+
+We first study the diversity of search behavior by measuring the number of unique search queries generated over training, which filters out repeated or redundant queries. As shown in Figure 
+3
+(a), SARL exhibits a clear and consistent increase in the number of unique search queries as training progresses, reaching an average of over six distinct queries toward the end of training. This trend is highly consistent across NQ, HotpotQA, and ASearcher, and becomes more pronounced for datasets requiring more complex reasoning. These results indicate that SARL progressively learns to explore missing information more actively rather than prematurely terminating search. In contrast, AutoRefine and ReSeek show a declining trend in unique search queries over training, suggesting that existing RL-based methods fail to encourage sustained exploration and instead converge toward increasingly repetitive or shallow search behavior.
+
+We next analyze the relevance of retrieved documents by tracking document recall throughout training. As illustrated in Figure 
+3
+(b), SARL steadily improves recall across datasets, demonstrating its growing ability to retrieve relevant evidence before producing a final answer. This improvement is particularly notable on NQ and HotpotQA, where recall increases monotonically over training. Although the gains on BrowseComp-Plus are more modest, this dataset presents substantially higher difficulty, with target evidence being sparsely distributed and weakly aligned with surface-level queries. Importantly, SARL still maintains a consistent trend, indicating that it continues to search for relevant information even under challenging long-horizon settings. In contrast, AutoRefine and ReSeek exhibit largely static recall curves across all datasets, and perform especially poorly on BrowseComp-Plus, where they rarely retrieve relevant evidence. This suggests that their training objectives do not generalize well to complex tasks that require sustained, multi-step information seeking.
+
+The improvements in both search diversity and evidence recall stem from SARL’s ability to recognize its own search state. In Appendix 
+A.9
+, we directly evaluate this capability by analyzing the agent’s reasoning trajectories, finding that SARL exhibits notably higher search-state awareness than existing baselines. This connection reinforces our central premise: by learning to recognize when retrieved evidence is insufficient, the model is naturally driven to issue more diverse queries and recover more relevant evidence.
+
+4.2 
+Effect of Assessment Penalty and Reward
+
+We conduct an ablation study to isolate the contributions of the key components of SARL. We compare three variants: (1) Self-Assessment only, (2) Self-Assessment with assessment penalty, and (3) full SARL with both assessment penalty and reward. Figure 
+4
+ reports validation performance, unique search cost, and document recall across training progress.
+
+As shown in Figure 
+4
+, incorporating both the assessment penalty and the assessment reward yields the strongest and most stable improvements across all metrics. In contrast, training with self-assessment alone leads to instability, with performance peaking mid-training and then sharply degrading toward the end. This behavior suggests that self-assessment signals by themselves are insufficient to guide effective long-horizon search, and may even encourage premature termination or degenerate search behavior when not properly constrained.
+
+Introducing an assessment penalty substantially mitigates this issue, indicating that penalizing reliance on assessments plays a critical role in encouraging the model to construct complete search trajectories prior to negative assessments. Furthermore, the assessment reward provides a complementary learning signal that directly incentivizes productive use of self-assessment. As shown in the number of unique searches and recall, the full SARL model exhibits a marked improvement in both unique search queries and document recall at later training stages, with over a twofold increase in unique searches compared to the self-assessment-only variant. These gains translate into consistent improvements in final evaluation performance. Together, these results demonstrate that fine-grained rewards based on how the model’s own assessments affect search outcomes are essential for encouraging sustained exploration of missing information and for learning effective search strategies.
+
+Beyond establishing that both components are necessary, we further study the sensitivity of SARL to the assessment penalty coefficient 
+ and the assessment reward coefficient 
+, with full results provided in Appendix 
+A.10
+. With 
+ fixed, performance is robust across a wide range of 
+, with final validation scores spanning a narrow 4-point range (51.7–55.5). Varying 
+ with 
+ fixed reveals a more pronounced asymmetry: 
+ briefly reaches a competitive best score (55.5) but collapses to 42.6 by the end of training, while 
+ and 
+ both remain stable. This pattern indicates that under-weighting the assessment reward leads to training instability rather than under-fitting; the model can transiently learn to assess search state but lacks sufficient incentive to leverage assessments productively, eventually drifting back toward shallow search behavior. Adequate weighting of the assessment reward is therefore essential for sustaining the gains observed under our default configuration (
+).
+
+4.3 
+Generalizability across Model Scale and Family
+
+To assess whether SARL’s gains transfer beyond the Qwen2.5-7B backbone, we evaluate two additional configurations: Llama-3.1-8B-Instruct (different model family, similar scale) and Qwen2.5-14B (same family, larger scale). For both, we report validation scores at training steps 100, 200, and 300, evaluated on 500 held-out examples per dataset from NQ, HotpotQA, and ASearcher. Per-step results are provided in Appendix 
+A.11
+.
+
+Cross-family generalization.
+
+SARL transfers effectively to a different model family. While GRPO-trained Llama-3.1-8B-Instruct collapses over training (52.3 
+ 51.3 
+ 44.4), SARL exhibits the opposite trajectory, with its average score increasing steadily from 51.2 to 54.3. By step 300, SARL outperforms GRPO on every benchmark, with a +9.9 gap in average score. This contrast illustrates that the assessment-driven training signal stabilizes long-horizon RL training across model families, whereas standard outcome-based RL is prone to performance collapse on a different backbone.
+
+Scale generalization.
+
+We further compare SARL with the same Qwen2.5 backbone at 7B and 14B parameters. The 14B variant outperforms the 7B variant at every training step and on every benchmark. Although the gap narrows from +6.4 average points at step 100 to +3.6 points at step 300, the 14B variant maintains a consistent advantage throughout training. The improvement is most pronounced on ASearcher (+5.6 at step 300), which involves the longest search trajectories among the three benchmarks.
+
+5 
+Related Work
+
+Retrieval-Augmented Generation
+
+Retrieval-augmented generation (RAG) mitigates the inherent limitations of LLMs by conditioning text generation on externally retrieved evidence 
+(
+Lewis et al., 2020
+; 
+Guu et al., 2020
+)
+. While standard pipelines follow a single-step retrieve-then-generate flow, recent advances introduce multi-document aggregation 
+(
+Izacard and Grave, 2021
+)
+ and 
+self-controlled
+ approaches that decide when to retrieve and reflect on retrieved evidence, via prompted reasoning traces 
+(
+Yao et al., 2022
+)
+, supervised reflection tokens 
+(
+Asai and others, 2024
+)
+, or learned tool-use policies 
+(
+Schick et al., 2023
+; 
+Nakano and others, 2021
+)
+. These methods improve factual grounding when relevant evidence is accessible, but static or shallowly iterative retrieval often becomes brittle when evidence is scattered across many sources or requires sustained clarification 
+(
+Yang et al., 2018
+; 
+Trivedi et al., 2022
+; 
+Trivedi et al., 2023
+)
+.
+
+Internalizing Search-State Awareness through RL
+
+Search agents formulate information seeking as a sequential decision problem, where the model iteratively decides when to search, what to query, and when to conclude over long interaction trajectories. Recent works increasingly use RL to optimize these policies based on outcome feedback, as in Search-R1 
+(
+Jin et al., 2025
+)
+ and related approaches 
+(
+Li et al., 2025c
+; 
+Gao et al., 2025a
+)
+. Beyond short-horizon QA, growing interest in “deep research” behaviors has motivated large-scale training recipes for long-horizon web interaction 
+(
+Tongyi DeepResearch Team et al., 2025
+; 
+Qiao et al., 2025
+; 
+Tao et al., 2025
+; 
+Liu et al., 2025a
+; 
+Lu et al., 2025
+)
+. However, training on final outcomes often fails to ensure reliable trajectories: agents may reach correct answers through non-faithful intermediate reasoning, premature termination, or unsupported assumptions, a form of reward hacking and weak credit assignment under sparse final rewards 
+(
+Xu et al., 2025
+; 
+Zhang et al., 2026
+; 
+Yu et al., 2026
+)
+.
+
+To mitigate reward sparsity, prior work introduces SFT-warmup pipelines such as RAG-R1 
+(
+Tan et al., 2026
+)
+, which bootstrap tool use through curated or synthesized trajectories before applying RL, and multi-agent frameworks such as MA-RAG 
+(
+Thang Nguyen, 2025
+)
+, which delegate planning, retrieval, and synthesis to specialized agents at inference time. Other lines introduce intermediate or process rewards to encourage auxiliary behaviors such as refinement, evidence quality, or faithfulness 
+(
+Shi et al., 2025
+; 
+Li et al., 2025b
+)
+, or improve long-horizon optimization through planning anchors, tree-based rollouts 
+(
+Yu et al., 2026
+; 
+Ji et al., 2025
+)
+, and explicit context or memory management 
+(
+Sun et al., 2025
+; 
+Qian et al., 2026
+; 
+Li et al., 2025e
+)
+.
+
+In contrast, SARL treats self-assessment as an 
+internal
+ training signal within a single policy, learned through outcome-based credit assignment rather than prompting heuristics or supervised reflection demonstrations. SARL rewards measurable changes that follow from an assessment step (e.g., correcting an incorrect answer) and penalizes excessive reliance on assessments, encouraging trajectory repair when necessary while progressively internalizing knowledge-aware search behavior. This design enables accurate, efficient search to emerge from RL alone, without additional long-horizon data, auxiliary judges, or inference-time orchestration.
+
+6 
+Conclusion
+
+We introduce Self-Assessment Reinforcement Learning (SARL), a framework that internalizes search-state awareness within retrieval-augmented LLMs through a reward design that balances corrective assessment rewards with efficiency penalties. Across ten benchmarks, SARL consistently outperforms baselines under fixed training conditions, with particularly strong gains on complex tasks: 35.9% on multi-hop QA and 27.9% on deep research benchmarks. These improvements stem from the model’s progressively internalized ability to identify information gaps and refine retrieval, reflected in a twofold increase in unique search queries and notably higher document recall. By shifting search-state awareness from a token-level prompted process into an internalized reasoning capacity, SARL offers a path toward knowledge-aware agents that self-correct without reliance on external feedback at inference time.
+
+References
+
+Asai 
+et al.
+ (2023)
+
+A. Asai, S. Min, Z. Zhong, and D. Chen
+
+Retrieval-based language models and applications
+.
+
+In 
+Proceedings of the 61st Annual Meeting of the Association for Computational Linguistics (Volume 6: Tutorial Abstracts)
+,  
+Y. (. Chen, M. Mieskes, and S. Reddy (Eds.)
+,
+
+Toronto, Canada
+, 
+pp. 41–46
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§1
+.
+
+Asai 
+et al.
+ (2024)
+
+A. Asai 
+et al.
+
+Self-rag: learning to retrieve, generate, and critique through self-reflection
+.
+
+arXiv preprint arXiv:2310.11511
+.
+
+Cited by: 
+§5
+.
+
+Chen 
+et al.
+ (2025)
+
+Z. Chen, X. Ma, S. Zhuang, P. Nie, K. Zou, A. Liu, J. Green, K. Patel, R. Meng, M. Su, S. Sharifymoghaddam, Y. Li, H. Hong, X. Shi, X. Liu, N. Thakur, C. Zhang, L. Gao, W. Chen, and J. Lin
+
+BrowseComp-plus: a more fair and transparent evaluation benchmark of deep-research agent
+.
+
+arXiv preprint arXiv:2508.06600
+.
+
+Cited by: 
+§3.1
+.
+
+Chu 
+et al.
+ (2025)
+
+T. Chu, Y. Zhai, J. Yang, S. Tong, S. Xie, D. Schuurmans, Q. V. Le, S. Levine, and Y. Ma
+
+SFT memorizes, RL generalizes: a comparative study of foundation model post-training
+.
+
+In 
+Forty-second International Conference on Machine Learning
+,
+
+External Links: 
+Link
+
+Cited by: 
+§1
+.
+
+Deng 
+et al.
+ (2025)
+
+W. Deng, Y. Li, B. Gong, Y. Ren, C. Thrampoulidis, and X. Li
+
+On grpo collapse in search-r1: the lazy likelihood-displacement death spiral
+.
+
+arXiv preprint arXiv:2512.04220
+.
+
+Cited by: 
+§A.8
+.
+
+Gao 
+et al.
+ (2025a)
+
+J. Gao, W. Fu, M. Xie, S. Xu, C. He, Z. Mei, B. Zhu, and Y. Wu
+
+Beyond ten turns: unlocking long-horizon agentic search with large-scale asynchronous rl
+.
+
+arXiv preprint arXiv:2508.07976
+.
+
+Cited by: 
+§A.5
+,
+
+§A.8
+,
+
+Table 6
+,
+
+§3.1
+,
+
+§5
+.
+
+Gao 
+et al.
+ (2025b)
+
+J. Gao, W. Fu, M. Xie, S. Xu, C. He, Z. Mei, B. Zhu, and Y. Wu
+
+Beyond ten turns: unlocking long-horizon agentic search with large-scale asynchronous RL
+.
+
+In 
+First Workshop on Multi-Turn Interactions in Large Language Models
+,
+
+External Links: 
+Link
+
+Cited by: 
+§2.2
+.
+
+Gao 
+et al.
+ (2023)
+
+Y. Gao, Y. Xiong, X. Gao, K. Jia, J. Pan, Y. Bi, Y. Dai, J. Sun, H. Wang, and H. Wang
+
+Retrieval-augmented generation for large language models: a survey
+.
+
+arXiv preprint arXiv:2312.10997
+ 
+2
+ (
+1
+).
+
+Cited by: 
+§1
+.
+
+Griggs 
+et al.
+ (2025)
+
+T. Griggs, S. Hegde, E. Tang, S. Liu, S. Cao, D. Li, C. Ruan, P. Moritz, K. Hakhamaneshi, R. Liaw, A. Malik, M. Zaharia, J. E. Gonzalez, and I. Stoica
+
+Evolving skyrl into a highly-modular rl framework
+.
+
+Note: 
+Notion Blog
+
+Cited by: 
+§3.1
+.
+
+Guu 
+et al.
+ (2020)
+
+K. Guu, K. Lee, Z. Tung, P. Pasupat, and M. Chang
+
+Retrieval augmented language model pre-training
+.
+
+In 
+International conference on machine learning
+,
+
+pp. 3929–3938
+.
+
+Cited by: 
+§1
+,
+
+§5
+.
+
+He 
+et al.
+ (2025)
+
+G. He, Z. Yang, J. Liu, B. Xu, L. Hou, and J. Li
+
+WebSeer: training deeper search agents through reinforcement learning with self-reflection
+.
+
+arXiv preprint arXiv:2510.18798
+.
+
+Cited by: 
+§1
+.
+
+Ho 
+et al.
+ (2020)
+
+X. Ho, A. Duong Nguyen, S. Sugawara, and A. Aizawa
+
+Constructing a multi-hop QA dataset for comprehensive evaluation of reasoning steps
+.
+
+In 
+Proceedings of the 28th International Conference on Computational Linguistics
+,  
+D. Scott, N. Bel, and C. Zong (Eds.)
+,
+
+Barcelona, Spain (Online)
+, 
+pp. 6609–6625
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§3.1
+.
+
+Izacard and Grave (2021)
+
+G. Izacard and E. Grave
+
+Leveraging passage retrieval with generative models for open domain question answering
+.
+
+In 
+Proceedings of the 16th Conference of the European Chapter of the Association for Computational Linguistics: Main Volume
+,  
+P. Merlo, J. Tiedemann, and R. Tsarfaty (Eds.)
+,
+
+Online
+, 
+pp. 874–880
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§5
+.
+
+Ji 
+et al.
+ (2025)
+
+Y. Ji, Z. Ma, Y. Wang, G. Chen, X. Chu, and L. Wu
+
+Tree search for llm agent reinforcement learning
+.
+
+arXiv preprint arXiv:2509.21240
+.
+
+Cited by: 
+§5
+.
+
+Jin 
+et al.
+ (2025)
+
+B. Jin, H. Zeng, Z. Yue, J. Yoon, S. Arik, D. Wang, H. Zamani, and J. Han
+
+Search-r1: training llms to reason and leverage search engines with reinforcement learning
+.
+
+arXiv preprint arXiv:2503.09516
+.
+
+Cited by: 
+§A.5
+,
+
+§A.8
+,
+
+Table 6
+,
+
+Figure 1
+,
+
+Figure 1
+,
+
+§1
+,
+
+§3.1
+,
+
+§5
+.
+
+Joshi 
+et al.
+ (2017)
+
+M. Joshi, E. Choi, D. Weld, and L. Zettlemoyer
+
+TriviaQA: a large scale distantly supervised challenge dataset for reading comprehension
+.
+
+In 
+Proceedings of the 55th Annual Meeting of the Association for Computational Linguistics (ACL)
+,
+
+Cited by: 
+§3.1
+.
+
+Krishna 
+et al.
+ (2025)
+
+S. Krishna, K. Krishna, A. Mohananey, S. Schwarcz, A. Stambler, S. Upadhyay, and M. Faruqui
+
+Fact, fetch, and reason: a unified evaluation of retrieval-augmented generation
+.
+
+In 
+Proceedings of the 2025 Conference of the Nations of the Americas Chapter of the Association for Computational Linguistics: Human Language Technologies (Volume 1: Long Papers)
+,  
+L. Chiruzzo, A. Ritter, and L. Wang (Eds.)
+,
+
+Albuquerque, New Mexico
+, 
+pp. 4745–4759
+.
+
+External Links: 
+Link
+,
+
+Document
+,
+
+ISBN 979-8-89176-189-6
+
+Cited by: 
+§3.1
+.
+
+Kwiatkowski 
+et al.
+ (2019)
+
+T. Kwiatkowski, J. Palomaki, O. Redfield, M. Collins, A. Parikh, C. Alberti, D. Epstein, I. Polosukhin, J. Devlin, K. Lee, 
+et al.
+
+Natural questions: a benchmark for question answering research
+.
+
+Transactions of the Association for Computational Linguistics
+.
+
+Cited by: 
+§2.2
+,
+
+§3.1
+.
+
+Lewis 
+et al.
+ (2020)
+
+P. Lewis, E. Perez, A. Piktus, F. Petroni, V. Karpukhin, N. Goyal, H. Küttler, M. Lewis, W. Yih, T. Rocktäschel, 
+et al.
+
+Retrieval-augmented generation for knowledge-intensive nlp tasks
+.
+
+Advances in neural information processing systems
+ 
+33
+, 
+pp. 9459–9474
+.
+
+Cited by: 
+§1
+,
+
+§3.1
+,
+
+§5
+.
+
+Li 
+et al.
+ (2025a)
+
+K. Li, Z. Zhang, H. Yin, L. Zhang, L. Ou, J. Wu, W. Yin, B. Li, Z. Tao, X. Wang, 
+et al.
+
+WebSailor: navigating super-human reasoning for web agent
+.
+
+arXiv preprint arXiv:2507.02592
+.
+
+Cited by: 
+§1
+.
+
+Li 
+et al.
+ (2025b)
+
+S. Li, Y. Tang, Y. Wang, P. Li, and X. Chen
+
+ReSeek: a self-correcting framework for search agents with instructive rewards
+.
+
+arXiv preprint arXiv:2510.00568
+.
+
+Cited by: 
+§A.5
+,
+
+§A.8
+,
+
+Table 6
+,
+
+§3.1
+,
+
+§5
+.
+
+Li 
+et al.
+ (2025c)
+
+X. Li, G. Dong, J. Jin, Y. Zhang, Y. Zhou, Y. Zhu, P. Zhang, and Z. Dou
+
+Search-o1: agentic search-enhanced large reasoning models
+.
+
+CoRR
+ 
+abs/2501.05366
+.
+
+External Links: 
+Link
+,
+
+Document
+,
+
+2501.05366
+
+Cited by: 
+§1
+,
+
+§5
+.
+
+Li 
+et al.
+ (2025d)
+
+X. Li, J. Jin, G. Dong, H. Qian, Y. Zhu, Y. Wu, J. Wen, and Z. Dou
+
+WebThinker: empowering large reasoning models with deep research capability
+.
+
+CoRR
+ 
+abs/2504.21776
+.
+
+External Links: 
+Link
+,
+
+Document
+,
+
+2504.21776
+
+Cited by: 
+§1
+.
+
+Li 
+et al.
+ (2025e)
+
+Z. Li, X. Guan, B. Zhang, S. Huang, H. Zhou, S. Lai, M. Yan, Y. Jiang, P. Xie, F. Huang, J. Zhang, and J. Zhou
+
+WebWeaver: structuring web-scale evidence with dynamic outlines for open-ended deep research
+.
+
+arXiv preprint arXiv:2509.13312
+.
+
+Cited by: 
+§5
+.
+
+Liu 
+et al.
+ (2025a)
+
+J. Liu, Y. Li, C. Zhang, J. Li, A. Chen, K. Ji, W. Cheng, Z. Wu, C. Du, Q. Xu, J. Song, Z. Zhu, W. Chen, P. Zhao, and J. He
+
+WebExplorer: explore and evolve for training long-horizon web agents
+.
+
+arXiv preprint arXiv:2509.06501
+.
+
+Cited by: 
+§1
+,
+
+§5
+.
+
+Liu 
+et al.
+ (2025b)
+
+Z. Liu, C. Chen, W. Li, P. Qi, T. Pang, C. Du, W. S. Lee, and M. Lin
+
+Understanding r1-zero-like training: a critical perspective
+.
+
+arXiv preprint arXiv:2503.20783
+.
+
+Cited by: 
+§2.3
+.
+
+Lu 
+et al.
+ (2025)
+
+R. Lu, Z. Hou, Z. Wang, H. Zhang, X. Liu, Y. Li, S. Feng, J. Tang, and Y. Dong
+
+DeepDive: advancing deep search agents with knowledge graphs and multi-turn rl
+.
+
+arXiv preprint arXiv:2509.10446
+.
+
+Cited by: 
+§5
+.
+
+Mallen 
+et al.
+ (2023)
+
+A. Mallen, A. Asai, V. Zhong, R. Das, D. Khashabi, and H. Hajishirzi
+
+When not to trust language models: investigating effectiveness of parametric and non-parametric memories
+.
+
+In 
+Proceedings of the 61st Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)
+,  
+A. Rogers, J. Boyd-Graber, and N. Okazaki (Eds.)
+,
+
+Toronto, Canada
+, 
+pp. 9802–9822
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§3.1
+.
+
+Mialon 
+et al.
+ (2023)
+
+G. Mialon 
+et al.
+
+GAIA: a benchmark for general ai assistants
+.
+
+arXiv preprint arXiv:2311.12983
+.
+
+Cited by: 
+§3.1
+.
+
+Nakano 
+et al.
+ (2021)
+
+R. Nakano 
+et al.
+
+WebGPT: browser-assisted question-answering with human feedback
+.
+
+arXiv preprint arXiv:2112.09332
+.
+
+Cited by: 
+§1
+,
+
+§5
+.
+
+OpenAI (2025a)
+
+OpenAI
+
+Introducing GPT-4.1 in the API
+.
+
+Note: 
+https://openai.com/index/gpt-4-1/
+Accessed: 2026-05-07
+
+Cited by: 
+§3.1
+.
+
+OpenAI (2025b)
+
+OpenAI
+
+Introducing GPT-5.2
+.
+
+Note: 
+https://openai.com/index/introducing-gpt-5-2/
+Accessed: 2026-05-07
+
+Cited by: 
+§A.9
+.
+
+Petroni 
+et al.
+ (2021)
+
+F. Petroni, A. Piktus, A. Fan, P. Lewis, M. Yazdani, N. De Cao, J. Thorne, Y. Jernite, V. Karpukhin, J. Maillard, V. Plachouras, T. Rocktäschel, and S. Riedel
+
+KILT: a benchmark for knowledge intensive language tasks
+.
+
+In 
+Proceedings of the 2021 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies
+,  
+K. Toutanova, A. Rumshisky, L. Zettlemoyer, D. Hakkani-Tur, I. Beltagy, S. Bethard, R. Cotterell, T. Chakraborty, and Y. Zhou (Eds.)
+,
+
+Online
+, 
+pp. 2523–2544
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§A.7
+.
+
+Press 
+et al.
+ (2023)
+
+O. Press, M. Zhang, S. Min, L. Schmidt, N. Smith, and M. Lewis
+
+Measuring and narrowing the compositionality gap in language models
+.
+
+In 
+Findings of the Association for Computational Linguistics: EMNLP 2023
+,  
+H. Bouamor, J. Pino, and K. Bali (Eds.)
+,
+
+Singapore
+, 
+pp. 5687–5711
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§3.1
+.
+
+Qian 
+et al.
+ (2026)
+
+H. Qian, Z. Cao, and Z. Liu
+
+MemoBrain: executive memory as an agentic brain for reasoning
+.
+
+arXiv preprint arXiv:2601.08079
+.
+
+Cited by: 
+§5
+.
+
+Qiao 
+et al.
+ (2025)
+
+Z. Qiao, G. Chen, X. Chen, D. Yu, W. Yin, X. Wang, Z. Zhang, B. Li, H. Yin, K. Li, R. Min, M. Liao, Y. Jiang, P. Xie, F. Huang, and J. Zhou
+
+WebResearcher: unleashing unbounded reasoning capability in long-horizon agents
+.
+
+arXiv preprint arXiv:2509.13309
+.
+
+Cited by: 
+§5
+.
+
+Schick 
+et al.
+ (2023)
+
+T. Schick, J. Dwivedi-Yu, R. Dessì, R. Raileanu, M. Lomeli, L. Zettlemoyer, N. Cancedda, and T. Scialom
+
+Toolformer: language models can teach themselves to use tools
+.
+
+arXiv preprint arXiv:2302.04761
+.
+
+Cited by: 
+§1
+,
+
+§5
+.
+
+Shao 
+et al.
+ (2024)
+
+Z. Shao, P. Wang, Q. Zhu, R. Xu, J. Song, X. Bi, H. Zhang, M. Zhang, Y. Li, Y. Wu, 
+et al.
+
+Deepseekmath: pushing the limits of mathematical reasoning in open language models
+.
+
+arXiv preprint arXiv:2402.03300
+.
+
+Cited by: 
+Figure 2
+,
+
+Figure 2
+,
+
+§2.3
+.
+
+Shi 
+et al.
+ (2025)
+
+Y. Shi, S. Li, C. Wu, Z. Liu, J. Fang, H. Cai, A. Zhang, and X. Wang
+
+Search and refine during think: facilitating knowledge refinement for improved retrieval-augmented reasoning
+.
+
+In 
+The Thirty-ninth Annual Conference on Neural Information Processing Systems
+,
+
+Cited by: 
+§A.5
+,
+
+§A.8
+,
+
+Table 6
+,
+
+Figure 1
+,
+
+Figure 1
+,
+
+§1
+,
+
+§3.1
+,
+
+§5
+.
+
+Snell 
+et al.
+ (2024)
+
+C. Snell, J. Lee, K. Xu, and A. Kumar
+
+Scaling llm test-time compute optimally can be more effective than scaling model parameters
+.
+
+arXiv preprint arXiv:2408.03314
+.
+
+Cited by: 
+§1
+.
+
+Song 
+et al.
+ (2025a)
+
+H. Song, J. Jiang, Y. Min, J. Chen, Z. Chen, W. X. Zhao, L. Fang, and J. Wen
+
+R1-searcher: incentivizing the search capability in llms via reinforcement learning
+.
+
+arXiv preprint arXiv:2503.05592
+.
+
+Cited by: 
+§1
+.
+
+Song 
+et al.
+ (2025b)
+
+H. Song, J. Jiang, W. Tian, Z. Chen, Y. Wu, J. Zhao, Y. Min, W. X. Zhao, L. Fang, and J. Wen
+
+R1-searcher++: incentivizing the dynamic knowledge acquisition of llms via reinforcement learning
+.
+
+arXiv preprint arXiv:2505.17005
+.
+
+Cited by: 
+§1
+.
+
+Sun 
+et al.
+ (2025)
+
+W. Sun, M. Lu, Z. Ling, K. Liu, X. Yao, Y. Yang, and J. Chen
+
+Scaling long-horizon llm agent via context-folding
+.
+
+arXiv preprint arXiv:2510.11967
+.
+
+Cited by: 
+§5
+.
+
+Tan 
+et al.
+ (2026)
+
+Z. Tan, J. Huang, Q. Wu, H. Zhang, C. Zhuang, and J. Gu
+
+Rag-r1: incentivizing the search and reasoning capabilities of llms through multi-query parallelism
+.
+
+In 
+Proceedings of the AAAI Conference on Artificial Intelligence
+,
+
+Vol. 
+40
+, 
+pp. 33187–33195
+.
+
+Cited by: 
+Table 5
+,
+
+§3.1
+,
+
+§5
+.
+
+Tao 
+et al.
+ (2025)
+
+Z. Tao, H. Shen, B. Li, W. Yin, J. Wu, K. Li, Z. Zhang, H. Yin, R. Ye, L. Zhang, X. Wang, P. Xie, J. Zhou, and Y. Jiang
+
+WebLeaper: empowering efficiency and efficacy in webagent via enabling info-rich seeking
+.
+
+arXiv preprint arXiv:2510.24697
+.
+
+Cited by: 
+§5
+.
+
+Thang Nguyen (2025)
+
+Y. T. Thang Nguyen
+
+MA-rag: multi-agent retrieval-augmented generation via collaborative chain-of-thought reasoning
+.
+
+arXiv preprint arXiv:2505.20096
+.
+
+Cited by: 
+Table 5
+,
+
+§3.1
+,
+
+§5
+.
+
+Tongyi DeepResearch Team 
+et al.
+ (2025)
+
+Tongyi DeepResearch Team, B. Li, B. Zhang, D. Zhang, F. Huang, G. Li, G. Chen, H. Yin, J. Wu, J. Zhou, K. Li, L. Su, L. Ou, L. Zhang, P. Xie, R. Ye, W. Yin, X. Yu, X. Wang, X. Wu, X. Chen, Y. Zhao, Z. Zhang, Z. Tao, Z. Zhang, Z. Qiao, C. Wang, D. Yu, G. Fu, H. Shen, J. Yang, J. Lin, J. Zhang, K. Zeng, L. Yang, H. Yin, M. Song, M. Yan, P. Xia, Q. Xiao, R. Min, R. Ding, R. Fang, S. Chen, S. Huang, S. Wang, S. Cai, W. Shen, X. Wang, X. Guan, X. Geng, Y. Shi, Y. Wu, Z. Chen, Z. Li, and Y. Jiang
+
+Tongyi deepresearch technical report
+.
+
+arXiv preprint arXiv:2510.24701
+.
+
+Cited by: 
+§5
+.
+
+Trivedi 
+et al.
+ (2022)
+
+H. Trivedi, N. Balasubramanian, T. Khot, and A. Sabharwal
+
+MuSiQue: multihop questions via single-hop question composition
+.
+
+Transactions of the Association for Computational Linguistics
+ 
+10
+, 
+pp. 539–554
+.
+
+Cited by: 
+§3.1
+,
+
+§5
+.
+
+Trivedi 
+et al.
+ (2023)
+
+H. Trivedi, N. Balasubramanian, T. Khot, and A. Sabharwal
+
+Interleaving retrieval with chain-of-thought reasoning for knowledge-intensive multi-step questions
+.
+
+In 
+Proceedings of the 61st annual meeting of the association for computational linguistics (volume 1: long papers)
+,
+
+pp. 10014–10037
+.
+
+Cited by: 
+§3.1
+,
+
+§5
+.
+
+Wu 
+et al.
+ (2025)
+
+J. Wu, B. Li, R. Fang, W. Yin, L. Zhang, Z. Wang, Z. Tao, D. Zhang, Z. Xi, X. Tang, Y. Jiang, P. Xie, F. Huang, and J. Zhou
+
+WebDancer: towards autonomous information seeking agency
+.
+
+In 
+The Thirty-ninth Annual Conference on Neural Information Processing Systems
+,
+
+External Links: 
+Link
+
+Cited by: 
+§1
+.
+
+Xiao 
+et al.
+ (2023)
+
+S. Xiao, Z. Liu, P. Zhang, and N. Muennighoff
+
+C-pack: packaged resources to advance general chinese embedding
+.
+
+External Links: 
+2309.07597
+
+Cited by: 
+§A.7
+.
+
+Xu 
+et al.
+ (2025)
+
+Z. Xu, Z. Wu, Y. Zhou, A. Feng, K. Zhou, S. Woo, K. Ramnath, Y. Tian, X. Qi, W. Qiu, 
+et al.
+
+Beyond correctness: rewarding faithful reasoning in retrieval-augmented generation
+.
+
+arXiv preprint arXiv:2510.13272
+.
+
+Cited by: 
+§1
+,
+
+§5
+.
+
+Yang 
+et al.
+ (2025)
+
+A. Yang, A. Li, B. Yang, B. Zhang, B. Hui, B. Zheng, B. Yu, C. Gao, C. Huang, C. Lv, 
+et al.
+
+Qwen3 technical report
+.
+
+arXiv preprint arXiv:2505.09388
+.
+
+Cited by: 
+§3.1
+.
+
+Yang 
+et al.
+ (2018)
+
+Z. Yang, P. Qi, S. Zhang, Y. Bengio, W. Cohen, R. Salakhutdinov, and C. D. Manning
+
+HotpotQA: a dataset for diverse, explainable multi-hop question answering
+.
+
+In 
+Proceedings of the 2018 conference on empirical methods in natural language processing
+,
+
+Cited by: 
+§2.2
+,
+
+§3.1
+,
+
+§5
+.
+
+Yao 
+et al.
+ (2022)
+
+S. Yao, J. Zhao, D. Yu, N. Du, I. Shafran, K. R. Narasimhan, and Y. Cao
+
+React: synergizing reasoning and acting in language models
+.
+
+In 
+The eleventh international conference on learning representations
+,
+
+Cited by: 
+§1
+,
+
+§5
+.
+
+Yu 
+et al.
+ (2025)
+
+Q. Yu, Z. Zhang, R. Zhu, Y. Yuan, X. Zuo, Y. Yue, W. Dai, T. Fan, G. Liu, L. Liu, 
+et al.
+
+Dapo: an open-source llm reinforcement learning system at scale
+.
+
+arXiv preprint arXiv:2503.14476
+.
+
+Cited by: 
+§2.3
+.
+
+Yu 
+et al.
+ (2026)
+
+X. Yu, L. Zhang, X. Feng, Y. Jiang, B. Qin, P. Xie, and J. Zhou
+
+WebAnchor: anchoring agent planning to stabilize long-horizon web reasoning
+.
+
+arXiv preprint arXiv:2601.03164
+.
+
+Cited by: 
+§5
+,
+
+§5
+.
+
+Zhang 
+et al.
+ (2026)
+
+J. Zhang, X. Lv, L. Feng, L. Hou, and J. Li
+
+Chaining the evidence: robust reinforcement learning for deep search agents with citation-aware rubric rewards
+.
+
+arXiv preprint arXiv:2601.06021
+.
+
+Cited by: 
+§5
+.
+
+Zhang 
+et al.
+ (2024)
+
+X. Zhang, Y. Zhang, D. Long, W. Xie, Z. Dai, J. Tang, H. Lin, B. Yang, P. Xie, F. Huang, 
+et al.
+
+MGTE: generalized long-context text representation and reranking models for multilingual text retrieval
+.
+
+In 
+Proceedings of the 2024 Conference on Empirical Methods in Natural Language Processing: Industry Track
+,
+
+pp. 1393–1412
+.
+
+Cited by: 
+§A.7
+.
+
+Zhang 
+et al.
+ (2025)
+
+Y. Zhang, H. Huang, Z. Song, Y. Zhu, Q. Zhang, Z. Zhao, and D. Zhao
+
+CriticSearch: fine-grained credit assignment for search agents via a retrospective critic
+.
+
+arXiv preprint arXiv:2511.12159
+.
+
+Cited by: 
+§1
+.
+
+Zheng 
+et al.
+ (2023)
+
+L. Zheng W. Chiang 
+et al.
+
+Judging llm-as-a-judge with mt-bench and chatbot arena
+.
+
+arXiv preprint arXiv:2306.05685
+.
+
+Cited by: 
+§3.1
+.
+
+Appendix A 
+Appendix
+
+A.1 
+Limitations
+
+While SARL demonstrates effective performance across a broad range of search-intensive tasks, several limitations remain.
+
+Reliance on base model capability.
+
+SARL depends on the base model’s ability to recognize when retrieved evidence is sufficient to support a candidate answer, an assumption that does not hold universally. Our central premise experiments (Appendix 
+A.3
+) demonstrate that this judgment is reliable enough to provide an effective training signal at the 7B scale, allowing SARL to retain both efficiency and effectiveness without incurring the overhead of an external evaluator model as in RLVR-style methods. Investigating whether incorporating a more powerful external model can yield further gains is a promising direction for future work.
+
+Focus on search-intensive tasks.
+
+Our evaluation focuses exclusively on search-augmented question answering. While this scope is among the broadest within the search agent literature, demonstrating effectiveness on long-horizon deep research benchmarks even at the 7B scale, SARL’s applicability to other domains such as code generation, mathematical reasoning, or general agentic planning remains an open question.
+
+Compatibility with broader pipelines.
+
+We present SARL as a standalone RL framework to isolate the contribution of self-assessment as a training signal. Whether SARL combines synergistically with broader pipelines, such as SFT-warmup or multi-agent orchestration, remains to be explored, and we leave this investigation to future work.
+
+A.2 
+Example Trajectories of Search-State Awareness
+
+To illustrate the failure modes discussed in Section 
+1
+ and the search-state awareness behavior promoted by SARL, we provide representative trajectories from our evaluation set. A complementary empirical comparison across all baselines is provided in Appendix 
+A.9
+. For readability, retrieved documents are abbreviated to the relevant excerpt; we preserve the model outputs verbatim, including any malformed tags as produced by the model.
+
+Hallucinated reasoning (Search-R1).
+
+The agent explicitly recognizes that the retrieved evidence does not satisfy the question’s constraint, yet commits to an unsupported answer.
+
+⬇
+
+Q
+:
+ 
+What
+ 
+political
+ 
+office
+ 
+was
+ 
+held
+ 
+by
+ 
+two
+ 
+successive
+ 
+occupants
+ 
+of
+ 
+the
+ 
+same
+ 
+castle
+ 
+located
+ 
+in
+ 
+Lauderdale
+,
+ 
+Scotland
+?
+
+GT
+:
+ 
+Keeper
+ 
+of
+ 
+the
+ 
+Privy
+ 
+Seal
+ 
+of
+ 
+Scotland
+
+<
+think
+>
+ 
+First
+,
+ 
+I
+ 
+will
+ 
+search
+ 
+for
+ 
+information
+:
+
+<
+search
+>
+ 
+Who
+ 
+were
+ 
+the
+ 
+political
+ 
+occupants
+ 
+of
+ 
+the
+ 
+same
+ 
+castle
+ 
+in
+ 
+Lauderdale
+,
+ 
+Scotland
+?
+ 
+</
+search
+>
+
+<
+information
+>
+ 
+...
+ 
+Thirlestane
+ 
+Castle
+ 
+has
+ 
+been
+ 
+the
+ 
+seat
+ 
+of
+ 
+the
+ 
+Earls
+ 
+of
+ 
+Lauderdale
+ 
+...
+ 
+</
+information
+>
+
+<
+think
+>
+ 
+From
+ 
+the
+ 
+provided
+ 
+information
+,
+ 
+Thirlestane
+ 
+Castle
+ 
+has
+ 
+been
+ 
+the
+ 
+seat
+ 
+of
+ 
+the
+ 
+Earls
+ 
+of
+ 
+Lauderdale
+.
+
+<
+think
+]
+ 
+However
+,
+ 
+the
+ 
+question
+ 
+asks
+ 
+for
+ 
+a
+ 
+political
+ 
+office
+ 
+held
+ 
+by
+ 
+two
+ 
+successive
+ 
+occupants
+ 
+of
+ 
+the
+ 
+same
+ 
+castle
+.
+
+<
+think
+>
+ 
+None
+ 
+of
+ 
+the
+ 
+provided
+ 
+information
+ 
+directly
+ 
+states
+ 
+a
+ 
+political
+ 
+office
+ 
+held
+ 
+by
+ 
+two
+ 
+successive
+ 
+occupants
+ 
+of
+ 
+Thirlestane
+ 
+Castle
+.
+
+<
+search
+>
+ 
+What
+ 
+political
+ 
+office
+ 
+did
+ 
+the
+ 
+Earls
+ 
+of
+ 
+Lauderdale
+ 
+hold
+?
+ 
+</
+search
+>
+
+<
+information
+>
+ 
+...
+ 
+John
+ 
+Maitland
+,
+ 
+1
+st
+ 
+Earl
+ 
+of
+ 
+Lauderdale
+,
+ 
+was
+ 
+President
+ 
+of
+ 
+the
+ 
+Parliament
+ 
+of
+ 
+Scotland
+ 
+...
+ 
+Frederick
+ 
+Maitland
+,
+ 
+14
+th
+ 
+Earl
+ 
+of
+ 
+Lauderdale
+,
+ 
+was
+ 
+a
+ 
+Representative
+ 
+Peer
+ 
+for
+ 
+Scotland
+ 
+...
+ 
+</
+information
+>
+
+<
+think
+>
+ 
+These
+ 
+are
+ 
+political
+ 
+offices
+,
+ 
+but
+ 
+they
+ 
+are
+ 
+not
+ 
+held
+ 
+by
+ 
+"
+successive
+ 
+occupants
+"
+ 
+in
+ 
+the
+ 
+same
+ 
+castle
+.
+
+Without
+ 
+further
+ 
+information
+,
+ 
+I
+ 
+cannot
+ 
+provide
+ 
+a
+ 
+specific
+ 
+answer
+ 
+to
+ 
+the
+ 
+question
+.
+ 
+However
+,
+ 
+if
+ 
+we
+ 
+consider
+ 
+the
+ 
+Earls
+ 
+of
+ 
+Lauderdale
+ 
+as
+ 
+"
+occupants
+"
+ 
+of
+ 
+Thirlestane
+ 
+Castle
+,
+ 
+then
+ 
+the
+ 
+answer
+ 
+would
+ 
+be
+:
+
+<
+answer
+>
+ 
+Earl
+ 
+of
+ 
+Lauderdale
+ 
+</
+answer
+>
+
+The agent’s reasoning explicitly acknowledges that no political office held by successive occupants has been identified, yet the agent proceeds to commit to an answer regardless. The final response also confuses an aristocratic title (Earl of Lauderdale) with a political office, indicating a failure to internalize what evidence the trajectory has actually established.
+
+Prematurely terminated search (AutoRefine).
+
+The agent commits to an answer after a single search, with the refinement token operating as a structural marker rather than a substantive reflection on retrieval state.
+
+⬇
+
+Q
+:
+ 
+Who
+ 
+is
+ 
+Catherine
+ 
+I
+,
+ 
+Latin
+ 
+Empress
+’
+s
+ 
+father
+-
+in
+-
+law
+?
+
+GT
+:
+ 
+Philip
+ 
+III
+ 
+of
+ 
+France
+
+<
+search
+>
+ 
+Catherine
+ 
+I
+,
+ 
+Latin
+ 
+Empress
+’
+s
+ 
+father
+-
+in
+-
+law
+ 
+</
+search
+>
+
+<
+information
+>
+ 
+...
+ 
+[
+retrieved
+ 
+documents
+ 
+on
+ 
+Catherine
+ 
+I
+ 
+and
+ 
+the
+ 
+Courtenay
+ 
+family
+]
+ 
+...
+ 
+</
+information
+>
+
+<
+refine
+>
+ 
+Based
+ 
+on
+ 
+the
+ 
+documents
+,
+ 
+Catherine
+ 
+I
+,
+ 
+Latin
+ 
+Empress
+’
+s
+ 
+father
+-
+in
+-
+law
+ 
+is
+ 
+Philip
+ 
+I
+ 
+of
+ 
+Courtenay
+.
+ 
+</
+refine
+>
+
+<
+answer
+>
+ 
+Philip
+ 
+I
+ 
+of
+ 
+Courtenay
+ 
+</
+answer
+>
+
+The agent issues a single search and immediately commits to an answer, despite the multi-step nature of the question (identifying Catherine I’s husband, then the husband’s father). The 
+<refine>
+ token contains an unverified assertion rather than a reflection on what the retrieved documents actually support, illustrating how structural reflection tokens fail to enforce evidence-grounded reasoning when not tied to a substantive learning signal.
+
+Successful search-state awareness (SARL).
+
+The agent decomposes a multi-hop question into sequential subgoals, identifies the constraints satisfied at each step, and issues targeted follow-up searches to recover the remaining evidence.
+
+⬇
+
+Q
+:
+ 
+What
+ 
+is
+ 
+the
+ 
+date
+ 
+of
+ 
+birth
+ 
+of
+ 
+Emilie
+ 
+Hegh
+ 
+Arntzen
+’
+s
+ 
+mother
+?
+
+GT
+:
+ 
+27
+ 
+April
+ 
+1960
+
+<
+think
+>
+ 
+To
+ 
+answer
+ 
+this
+ 
+question
+,
+ 
+we
+’
+ll
+ 
+first
+ 
+need
+ 
+to
+ 
+gather
+ 
+information
+ 
+on
+ 
+Emilie
+ 
+Hegh
+ 
+Arntzen
+ 
+and
+ 
+her
+ 
+mother
+.
+ 
+We
+’
+ll
+ 
+break
+ 
+this
+ 
+task
+ 
+down
+ 
+into
+ 
+smaller
+ 
+parts
+:
+
+1.
+ 
+Identify
+ 
+Emilie
+ 
+Hegh
+ 
+Arntzen
+.
+
+2.
+ 
+Find
+ 
+information
+ 
+on
+ 
+her
+ 
+mother
+.
+
+3.
+ 
+Determine
+ 
+the
+ 
+date
+ 
+of
+ 
+birth
+ 
+of
+ 
+her
+ 
+mother
+.
+
+<
+search
+>
+ 
+Who
+ 
+is
+ 
+Emilie
+ 
+Hegh
+ 
+Arntzen
+?
+ 
+</
+search
+>
+
+<
+information
+>
+ 
+...
+ 
+Emilie
+ 
+Hegh
+ 
+Arntzen
+ 
+is
+ 
+a
+ 
+Norwegian
+ 
+handball
+ 
+player
+ 
+...
+ 
+daughter
+ 
+of
+ 
+Hanne
+ 
+Hegh
+ 
+...
+ 
+</
+information
+>
+
+<
+think
+>
+ 
+Now
+,
+ 
+we
+ 
+have
+ 
+enough
+ 
+information
+ 
+to
+ 
+focus
+ 
+on
+ 
+Emilie
+ 
+Hegh
+ 
+Arntzen
+’
+s
+ 
+mother
+,
+ 
+Hanne
+ 
+Hegh
+.
+
+<
+search
+>
+ 
+Who
+ 
+is
+ 
+Hanne
+ 
+Hegh
+,
+ 
+the
+ 
+mother
+ 
+of
+ 
+Emilie
+ 
+Hegh
+ 
+Arntzen
+?
+ 
+</
+search
+>
+
+<
+information
+>
+ 
+...
+ 
+Hanne
+ 
+Hegh
+ 
+is
+ 
+a
+ 
+Norwegian
+ 
+handball
+ 
+player
+ 
+...
+ 
+</
+information
+>
+
+<
+think
+>
+ 
+We
+ 
+have
+ 
+identified
+ 
+the
+ 
+correct
+ 
+Hanne
+ 
+Hegh
+ 
+as
+ 
+Emilie
+ 
+Hegh
+ 
+Arntzen
+’
+s
+ 
+mother
+,
+ 
+who
+ 
+is
+ 
+a
+ 
+Norwegian
+ 
+handball
+ 
+player
+.
+ 
+We
+ 
+need
+ 
+to
+ 
+find
+ 
+her
+ 
+date
+ 
+of
+ 
+birth
+.
+
+<
+search
+>
+ 
+When
+ 
+was
+ 
+Hanne
+ 
+Hegh
+,
+ 
+the
+ 
+Norwegian
+ 
+handball
+ 
+player
+,
+ 
+born
+?
+ 
+</
+search
+>
+
+<
+information
+>
+ 
+...
+ 
+Hanne
+ 
+Hegh
+ 
+...
+ 
+born
+ 
+on
+ 
+27
+ 
+April
+ 
+1960
+ 
+...
+ 
+</
+information
+>
+
+<
+think
+>
+ 
+We
+ 
+have
+ 
+identified
+ 
+the
+ 
+correct
+ 
+person
+,
+ 
+Hanne
+ 
+Hegh
+,
+ 
+who
+ 
+is
+ 
+Emilie
+ 
+Hegh
+ 
+Arntzen
+’
+s
+ 
+mother
+ 
+and
+ 
+a
+ 
+Norwegian
+ 
+handball
+ 
+player
+.
+ 
+We
+’
+ve
+ 
+also
+ 
+found
+ 
+the
+ 
+date
+ 
+of
+ 
+her
+ 
+birth
+,
+ 
+which
+ 
+is
+ 
+27
+ 
+April
+ 
+1960.
+
+<
+answer
+>
+ 
+27
+ 
+April
+ 
+1960
+ 
+</
+answer
+>
+
+The agent explicitly tracks search-state awareness throughout the trajectory: at each step, it states what has been resolved (
+“Now, we have enough information to focus on… mother”
+, 
+“We have identified the correct Hanne Hegh”
+) and what remains missing (
+“We need to find her date of birth”
+) before issuing a targeted follow-up search. This contrasts with the failure modes above: the agent neither commits to an unsupported answer nor terminates after a single search, but instead progressively decomposes the question and verifies each subgoal.
+
+A.3 
+Validating the Central Premise of SARL
+
+The motivation for SARL rests on the premise that models can meaningfully identify and correct their own erroneous trajectories when observed from a separate context. We empirically validate this premise through two controlled experiments.
+
+Experiment 1: Foundational capability in base models.
+
+We first verify that the base model possesses the foundational capability for self-assessment before any SARL training. We collect incorrect (and therefore incomplete) trajectories generated by Search-R1 on our validation set, and prompt Qwen2.5-7B with the self-assessment prompt (Appendix 
+A.12
+). The base model correctly identifies 
+73.2%
+ of flawed trajectories as 
+INCOMPLETE
+, demonstrating that the capability exists prior to training and providing a meaningful starting point for SARL to build upon.
+
+Experiment 2: Meaningfulness of the self-assessment signal.
+
+To determine whether SARL’s improvement stems from genuine error identification rather than spurious factors (e.g., simply allowing extra search turns), we replace the model’s self-assessment with randomized feedback (
+“The search process is 
+INCOMPLETE
+/
+COMPLETE
+”
+) under otherwise identical training conditions.
+
+Step
+
+Variant
+
+NQ
+
+HotpotQA
+
+ASearcher
+
+Avg
+
+100
+
+Random
+
+40.8
+
+52.4
+
+39.8
+
+44.3
+
+SARL
+
+44.0
+
+52.2
+
+41.0
+
+45.7
+
+200
+
+Random
+
+44.8
+
+52.8
+
+42.2
+
+46.6
+
+SARL
+
+49.2
+
+56.0
+
+48.6
+
+51.3
+
+339
+
+Random
+
+36.4
+
+48.6
+
+38.6
+
+41.2
+
+SARL
+
+52.4
+
+61.8
+
+52.2
+
+55.5
+
+Table 2: 
+SARL vs. randomized assessment across training stages. SARL consistently outperforms the random baseline, with the gap widening over training.
+
+SARL outperforms random assessment across all training stages, with the gap widening as training progresses. By the end of one epoch (step 339), SARL reaches 
+55.5
+ average accuracy while random assessment 
+degrades
+ to 41.2. Notably, the random variant exhibits training instability, degrading from 46.6 (step 200) to 41.2 (step 339), suggesting that arbitrary assessment signals introduce noise that destabilizes training over time. This confirms that the content of self-assessment, not merely the structural opportunity for extra search turns, drives SARL’s improvement.
+
+Together, these experiments validate two foundations of SARL’s design. First, the foundational capability for self-assessment exists in base models, providing a meaningful starting point for SARL to amplify rather than fabricate. Second, the assessment signal SARL leverages is genuinely meaningful: arbitrary feedback under otherwise identical conditions not only fails to improve performance but actively destabilizes training, indicating that the content of the assessment carries real corrective information. These results empirically support the central premise stated in our introduction: search-state awareness can be cultivated through reinforcement learning when the underlying model has a sufficient starting capability and the training signal carries genuine corrective information.
+
+A.4 
+Performance Evaluation on EM and F1 Metrics
+
+Table 3
+: 
+Performance comparison on single-hop QA, multi-hop QA, and deep research benchmarks. The results are presented in the format of 
+Exact Match (EM) / F1
+.
+
+Methods
+
+Single-Hop QA
+
+Multi-Hop QA
+
+Deep Research
+
+NQ
+
+TriviaQA
+
+PopQA
+
+HotpotQA
+
+2Wiki
+
+Musique
+
+Bamboogle
+
+GAIA
+
+FRAMES
+
+BC-Plus
+
+w/o Retrieval
+
+     Direct Generation
+
+0.051 / 0.166
+
+0.319 / 0.415
+
+0.160 / 0.160
+
+0.160 / 0.255
+
+0.193 / 0.248
+
+0.016 / 0.096
+
+0.066 / 0.152
+
+0.015 / 0.074
+
+0.029 / 0.128
+
+0.002 / 0.025
+
+     SFT
+
+0.168 / 0.239
+
+0.355 / 0.415
+
+0.150 / 0.181
+
+0.163 / 0.233
+
+0.185 / 0.228
+
+0.026 / 0.092
+
+0.114 / 0.157
+
+0.044 / 0.095
+
+0.036 / 0.076
+
+0.002 / 0.032
+
+     R1
+
+0.217 / 0.295
+
+0.429 / 0.498
+
+0.188 / 0.230
+
+0.209 / 0.286
+
+0.277 / 0.308
+
+0.050 / 0.119
+
+0.200 / 0.270
+
+0.046 / 0.090
+
+0.121 / 0.122
+
+0.006 / 0.032
+
+w/ Retrieval
+
+     Naive RAG
+
+0.256 / 0.375
+
+0.404 / 0.495
+
+0.332 / 0.408
+
+0.195 / 0.294
+
+0.189 / 0.236
+
+0.037 / 0.097
+
+0.070 / 0.140
+
+0.012 / 0.033
+
+0.037 / 0.088
+
+0.013 / 0.031
+
+     IRCoT
+
+0.290 / 0.407
+
+0.434 / 0.541
+
+0.392 / 0.471
+
+0.281 / 0.395
+
+0.303 / 0.364
+
+0.069 / 0.138
+
+0.192 / 0.278
+
+0.036 / 0.071
+
+0.074 / 0.147
+
+0.039 / 0.068
+
+Search Agents
+
+     Search-R1
+
+0.449 / 0.522
+
+0.548 / 0.637
+
+0.469 / 0.513
+
+0.355 / 0.463
+
+0.393 / 0.442
+
+0.117 / 0.202
+
+0.288 / 0.388
+
+0.032 / 0.054
+
+0.100 / 0.160
+
+0.056 / 0.083
+
+     ASearcher
+
+0.395 / 0.510
+
+0.506 / 0.616
+
+0.418 / 0.492
+
+0.359 / 0.495
+
+0.302 / 0.373
+
+0.106 / 0.197
+
+0.226 / 0.361
+
+0.034 / 0.081
+
+0.100 / 0.195
+
+0.077 / 0.117
+
+     AutoRefine
+
+0.471 / 0.551
+
+0.504 / 0.587
+
+0.429 / 0.461
+
+0.242 / 0.335
+
+0.153 / 0.183
+
+0.058 / 0.096
+
+0.224 / 0.313
+
+0.010 / 0.010
+
+0.038 / 0.063
+
+0.000 / 0.000
+
+     ReSeek
+
+0.109 / 0.250
+
+0.280 / 0.400
+
+0.157 / 0.274
+
+0.120 / 0.251
+
+0.082 / 0.182
+
+0.041 / 0.108
+
+0.108 / 0.215
+
+0.044 / 0.063
+
+0.038 / 0.102
+
+0.011 / 0.020
+
+     SARL
+
+0.506 / 0.577
+
+0.583 / 0.677
+
+0.505 / 0.545
+
+0.448 / 0.588
+
+0.537 / 0.619
+
+0.198 / 0.315
+
+0.402 / 0.521
+
+0.049 / 0.094
+
+0.161 / 0.240
+
+0.086 / 0.128
+
+Table 
+3
+ presents the EM and F1 scores for the main results. Consistent with the main evaluation results, SARL demonstrates consistently superior performance compared to other methods across all benchmarks in terms of EM and F1 metrics.
+
+A.5 
+Overview of Training Stability and Performance
+
+Figure 5
+: 
+
+The training logs reveal a contrast in stability and learning efficacy between SARL and existing baselines. SARL achieves a stable, monotonic increase in both training and validation scores, reaching a peak validation score of approximately 0.56 by 325 steps. This indicates that its dual reward-penalty mechanism successfully internalizes search-state awareness without the model becoming over-reliant on explicit feedback.
+
+Figure 
+5
+ depicts the training (per 10 step) / validation (per 25 step) logs across all models.
+
+SARL demonstrates the most stable and consistent improvement across both training and validation curves.
+The validation curve shows a steady upward trajectory throughout the 325 training steps, indicating that the model effectively internalizes search-state awareness without overfitting or collapsing.
+
+Search-R1 
+(
+Jin et al., 2025
+)
+ and ASearcher 
+(
+Gao et al., 2025a
+)
+ models show a general upward trend in performance, but with noticeably more fluctuations in their training scores compared to SARL. While they reach competitive performance levels, they do not match the peak validation scores achieved by the SARL framework.
+
+AutoRefine 
+(
+Shi et al., 2025
+)
+ and ReSeek 
+(
+Li et al., 2025b
+)
+ models exhibit significant training instability. AutoRefine’s performance peaks mid-training before sharply declining. ReSeek experiences a severe training collapse toward the end of its cycle, where scores drop toward zero, likely due to the difficulty of handling long-horizon trajectories.
+
+A.6 
+Training Cost Analysis
+
+Table 4: 
+Training cost comparison between SARL and Search-R1.
+
+Search-R1
+
+SARL
+
+Ratio
+
+Total training time
+
+22.1 hrs
+
+51.3 hrs
+
+2.3
+
+Avg. time / step
+
+235 s
+
+544 s
+
+2.3
+
+Avg. trajectory length (tokens)
+
+1,742
+
+4,393
+
+2.5
+
+Avg. performance
+
+0.342
+
+0.429
+
+We provide a detailed comparison of training cost between SARL and Search-R1, both implemented within the SkyRL framework under identical training settings. We focus on this pairing because shared infrastructure isolates the cost difference attributable to the SARL training procedure itself, rather than confounding factors from differing RL libraries.
+While SARL incurs additional compute during training, invoking self-assessment until the model produces a “COMPLETE” judgment, the exponential penalty (
+) bounds these iterations in practice, discouraging repeated assessments and encouraging thorough searching upfront. At test time, self-assessment is not used; SARL-trained models follow the same think-search-answer pipeline as standard search agent baselines. We reproduce both methods under the same RL library and settings for the comparison below.
+
+To quantify the training-time overhead, we compare SARL with Search-R1, reproduced under the same RL library and settings.
+As shown in Table 
+4
+, the close alignment between the trajectory length ratio (2.5
+) and the time ratio (2.3
+) indicates that the overhead stems primarily from the longer, more thorough search trajectories the model learns to produce, rather than from the self-assessment calls themselves. The resulting 2.3
+ training cost yields a 25.4% relative improvement in average performance, representing a favorable cost-performance tradeoff. As discussed in Section 
+4
+, these longer trajectories translate into significantly more unique search queries and higher document recall, indicating that the additional compute is invested in productive search behavior rather than wasted computation.
+
+A.7 
+Comparison with Broader-Paradigm Methods
+
+We provide setup details and per-benchmark scores for the broader-paradigm comparison referenced in Section 
+3.2
+.
+
+RAG-R1.
+
+RAG-R1 combines supervised fine-tuning on Qwen2.5-72B-Instruct-generated trajectories with GRPO-based RL, optionally extended with multi-query parallelism (RAG-R1-mq). It uses the instruct variant of our backbone model (Qwen2.5-7B-Instruct), a later version of our search corpus (2019 Wikipedia dump), a larger retriever (BGE-large-en-v1.5 
+(
+Xiao et al., 2023
+)
+), and the same evaluation metric.
+
+MA-RAG.
+
+MA-RAG orchestrates four agents (Planner, Step Definer, Extractor, QA) through chain-of-thought prompting, without any model fine-tuning. It uses the Llama3-Instruct family (8B, 70B), the same search corpus, a larger retriever (gte-multilingual-base 
+(
+Zhang et al., 2024
+)
+), and the same evaluation metric. Note that MA-RAG uses the KILT 
+(
+Petroni et al., 2021
+)
+ subsets of NQ, TriviaQA, HotpotQA, and 2WikiMultiHopQA for evaluation.
+
+Discussion.
+
+On the seven shared benchmarks with RAG-R1, SARL achieves an average of 0.554 versus 0.449 for RAG-R1-sq and 0.457 for RAG-R1-mq, despite using only RL training without the SFT warmup that RAG-R1 relies on. The gap is most pronounced on multi-hop reasoning (HotpotQA: +0.122 over RAG-R1-sq, +0.119 over RAG-R1-mq; 2Wiki: +0.125 / +0.082; Musique: +0.085 / +0.080), and persists on out-of-domain benchmarks such as Bamboogle (+0.108 / +0.108) where RAG-R1 has no training exposure. This pattern indicates that the gains stem not from data overlap but from how the training signal shapes search behavior across complex queries.
+
+Against MA-RAG, SARL substantially outperforms the 8B variant on multi-hop benchmarks and remains ahead even of the 70B variant on these same benchmarks (HotpotQA: 0.614 vs. 0.507; 2Wiki: 0.645 vs. 0.431), despite a 10
+ smaller backbone and no inference-time agent orchestration. On TriviaQA, MA-RAG (Llama3-8B) achieves 0.826 versus our 0.762. This gap is consistent with backbone parametric knowledge differences: without retrieval, Llama3-8B-Instruct scores 0.707 on TriviaQA versus 0.523 for Qwen2.5-7B-Instruct, indicating that the TriviaQA gap reflects the underlying model’s factual recall rather than search capability. Across the remaining benchmarks, SARL’s gains over both methods are most pronounced on multi-hop reasoning, consistent with the diagnostic findings in Section 
+3.2
+ that self-assessment is most beneficial when iterative refinement of search queries is required.
+
+Table 5: 
+Cross-paradigm comparison against RAG-R1 
+(
+Tan et al., 2026
+)
+ and MA-RAG 
+(
+Thang Nguyen, 2025
+)
+. “–” indicates the benchmark was not reported. Avg. is computed over the seven shared benchmarks.
+
+Method
+
+NQ
+
+TriviaQA
+
+PopQA
+
+HotpotQA
+
+2Wiki
+
+Musique
+
+Bamboogle
+
+Avg.
+
+RAG-R1-sq (Qwen2.5-7B-Inst)
+
+0.429
+
+0.599
+
+0.477
+
+0.492
+
+0.520
+
+0.187
+
+0.440
+
+0.449
+
+RAG-R1-mq (Qwen2.5-7B-Inst)
+
+0.423
+
+0.608
+
+0.479
+
+0.495
+
+0.563
+
+0.192
+
+0.440
+
+0.457
+
+MA-RAG (Llama3-8B-Inst)
+
+0.525
+
+0.826
+
+–
+
+0.403
+
+0.318
+
+–
+
+–
+
+–
+
+MA-RAG (Llama3-70B-Inst)
+
+0.581
+
+0.854
+
+–
+
+0.507
+
+0.431
+
+–
+
+–
+
+–
+
+SARL (Qwen2.5-7B, Ours)
+
+0.508
+
+0.762
+
+0.527
+
+0.614
+
+0.645
+
+0.272
+
+0.548
+
+0.554
+
+A.8 
+Analysis of Multi-Turn Efficiency
+
+Table 6
+: 
+Average number of search operations performed by different agents across multi-hop QA and deep research benchmarks. Results reflect the agents’ ability to sustain information seeking over long horizons.
+
+Models
+
+HotpotQA
+
+2Wiki
+
+Musique
+
+Bamboogle
+
+GAIA
+
+FRAMES
+
+BC-Plus
+
+Search-R1
+ 
+(
+Jin et al., 2025
+)
+
+3.24
+
+4.34
+
+5.77
+
+3.88
+
+12.14
+
+8.50
+
+5.90
+
+ASearcher
+ 
+(
+Gao et al., 2025a
+)
+
+3.58
+
+3.32
+
+4.07
+
+3.70
+
+5.77
+
+5.26
+
+5.05
+
+AutoRefine
+ 
+(
+Shi et al., 2025
+)
+
+0.79
+
+0.79
+
+0.55
+
+0.90
+
+0.12
+
+0.42
+
+0.01
+
+ReSeek
+ 
+(
+Li et al., 2025b
+)
+
+8.78
+
+13.79
+
+16.01
+
+8.52
+
+21.90
+
+15.81
+
+10.50
+
+SARL (
+Ours
+)
+
+7.94
+
+8.62
+
+9.16
+
+8.16
+
+11.28
+
+10.13
+
+8.23
+
+Building on the training instability observed in Appendix 
+A.5
+, we further analyze the search behavior driving these failures.
+
+As shown in Table 
+6
+, SARL demonstrates a robust and sustained exploration strategy across both multi-hop reasoning and deep research benchmarks.
+SARL maintains a high frequency of search operations, averaging between 8.16 and 11.28 turns for complex tasks. This indicates that the model has successfully learned to fill information gaps through iterative retrieval rather than prematurely terminating the search.
+While ReSeek 
+(
+Li et al., 2025b
+)
+ exhibits the highest raw search counts, often exceeding 20 turns, its performance is hampered by training instability. In contrast, SARL achieves a superior balance, matching or exceeding the search depth of Search-R1 
+(
+Jin et al., 2025
+)
+ and ASearcher 
+(
+Gao et al., 2025a
+)
+ while maintaining significantly higher accuracy.
+
+A notable observation in Table 
+6
+ is the exceptionally low search count for AutoRefine 
+(
+Shi et al., 2025
+)
+, which fails to exceed 0.90 turns on average across all datasets. This phenomenon is not merely a matter of efficiency but a symptom of training collapse. Under extended search horizons (up to 32 turns), AutoRefine exhibits significant instability. The model tends to converge toward a single turn because it suffers from Lazy Likelihood-Displacement (LLD), a systematic reduction in the likelihood of both correct and incorrect responses during GRPO 
+(
+Deng et al., 2025
+)
+. Because AutoRefine requires the model to generate explicit reflection text at every turn, it is highly susceptible to the “LLD Death Spiral”, where declining likelihoods lead the model to give up on complex trajectories, resulting in premature and often hallucinated conclusions.
+
+A.9 
+Evaluation of Search-State Awareness
+
+Figure 6
+: 
+
+Comparison of Search-State Awareness (SSA) levels across SARL and baseline frameworks. SARL achieves a Correct SSA of 42%, compared to 24% for Search-R1 and 17% for AutoRefine and ReSeek.
+
+In Section 
+1
+, we identified search-state awareness as a core capability missing in current RL-based search agents, motivating two failure modes we observe in practice: hallucinated reasoning and prematurely terminated search. Here we directly evaluate whether SARL improves search-state awareness relative to existing baselines, providing the empirical comparison referenced in the introduction.
+
+We sample 100 reasoning trajectories from HotpotQA, 2WikiMultiHopQA, Musique, and Bamboogle, and use GPT-5.2 
+(
+OpenAI, 2025b
+)
+ to evaluate each trajectory along two criteria: (1) Information Recognition, whether the agent accurately recognizes what information has already been obtained; and (2) Gap Identification, whether the agent correctly identifies what specific information remains missing. The full evaluation prompt is provided in Appendix 
+A.12
+. Based on these criteria, we categorize each trajectory into one of three levels:
+
+•
+
+Correct SSA
+: The agent satisfies both criteria and provides the correct final answer.
+
+•
+
+Hallucinated SSA
+: The agent satisfies both criteria but provides an incorrect answer.
+
+•
+
+Incorrect SSA
+: The agent fails to satisfy at least one criterion, indicating a lack of awareness regarding its search state.
+
+The results in Figure 
+6
+ show that SARL outperforms all baselines on search-state awareness. SARL achieves a Correct SSA rate of 42%, compared to 24% for Search-R1 and 17% for both AutoRefine and ReSeek. The gap is similarly reflected in Incorrect SSA, where SARL fails on 51% of trajectories versus 65–76% for baselines, indicating that SARL reduces cases where the agent searches without recognizing what it has obtained or what remains missing. Notably, AutoRefine and ReSeek (both of which incorporate explicit refinement or judgment tokens during training) exhibit higher Incorrect SSA than Search-R1, suggesting that auxiliary reflection tokens alone do not internalize search-state awareness.
+
+We note that the Correct SSA metric is stringent, requiring the agent to simultaneously recognize obtained information, identify missing gaps, and produce the correct final answer; even partial failures count as Incorrect SSA. The substantial gap between SARL and baselines under this strict criterion empirically supports our central premise that SARL’s training objective produces meaningfully better search-state awareness, while leaving room for further improvement.
+
+A.10 
+Hyperparameter Sensitivity
+
+We provide the full sensitivity results for the assessment penalty coefficient 
+ and reward coefficient 
+ referenced in Section 
+4.2
+. Table 
+7
+ reports the best and final validation scores under five configurations, varying one coefficient while holding the other fixed. Performance remains stable across 
+ when 
+ is fixed, while 
+ with 
+ collapses sharply between best and final scores (55.5 to 42.6), indicating that under-weighting the assessment reward leads to training instability.
+
+Table 7: 
+Sensitivity of SARL to the assessment penalty (
+) and reward (
+) coefficients. Best and Final denote the highest and end-of-training validation scores, respectively. Default configuration (
+) yields the strongest result.
+
+Best
+
+Final
+
+0.2
+
+0.5
+
+52.2
+
+51.7
+
+0.5
+
+0.5
+
+55.0
+
+54.8
+
+0.8
+
+0.5
+
+56.3
+
+55.5
+
+0.8
+
+0.2
+
+55.5
+
+42.6
+
+0.8
+
+0.8
+
+54.5
+
+54.5
+
+A.11 
+Generalization across Model Scale and Family
+
+We provide per-step validation scores for the cross-model and cross-scale experiments referenced in Section 
+4.3
+. Table 
+8
+ compares SARL against GRPO when applied to Llama-3.1-8B-Instruct: GRPO declines from an average of 52.3 to 44.4 over training, while SARL improves from 51.2 to 54.3, outperforming GRPO on every benchmark by step 300. Table 
+8
+ compares SARL with the same Qwen2.5 backbone at 7B and 14B parameters: the 14B variant outperforms 7B across all benchmarks and training steps, with a particularly large gap on ASearcher.
+
+Table 8: 
+Generalization of SARL across model family (left) and scale (right).
+
+Step
+
+Method
+
+NQ
+
+HQA
+
+ASearcher
+
+Avg.
+
+100
+
+GRPO
+
+48.4
+
+58.2
+
+50.4
+
+52.3
+
+SARL
+
+44.8
+
+58.6
+
+50.2
+
+51.2
+
+200
+
+GRPO
+
+49.2
+
+58.2
+
+46.6
+
+51.3
+
+SARL
+
+48.2
+
+56.6
+
+49.6
+
+51.5
+
+300
+
+GRPO
+
+40.8
+
+54.6
+
+37.8
+
+44.4
+
+SARL
+
+50.6
+
+62.0
+
+50.2
+
+54.3
+
+(a) 
+Llama-3.1-8B-Instruct
+
+Step
+
+Scale
+
+NQ
+
+HQA
+
+ASearcher
+
+Avg.
+
+100
+
+7B
+
+44.0
+
+52.2
+
+41.0
+
+45.7
+
+14B
+
+46.4
+
+59.0
+
+51.0
+
+52.1
+
+200
+
+7B
+
+49.2
+
+56.0
+
+48.6
+
+51.3
+
+14B
+
+50.8
+
+62.0
+
+55.8
+
+56.2
+
+300
+
+7B
+
+49.4
+
+59.8
+
+53.0
+
+54.1
+
+14B
+
+50.4
+
+64.0
+
+58.6
+
+57.7
+
+(b) 
+Qwen2.5 7B/14B
+
+A.12 
+Prompt Details
+
+Rollout Generation.
+ We use the following prompt for rollout generation.
+
+⬇
+
+Answer
+ 
+the
+ 
+given
+ 
+question
+.
+ 
+You
+ 
+must
+ 
+conduct
+ 
+reasoning
+ 
+inside
+ 
+<
+think
+>
+ 
+and
+ 
+</
+think
+>
+ 
+first
+ 
+every
+ 
+time
+ 
+you
+ 
+get
+ 
+new
+ 
+information
+.
+ 
+After
+ 
+reasoning
+,
+ 
+if
+ 
+y
