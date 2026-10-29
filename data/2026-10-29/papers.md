@@ -1,7 +1,7 @@
 # Paper candidates — 2026-10-29 (IST)
 
-Generated 2026-10-29 02:28 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
-Totals: 1 new topic matches · 0 other new cs.IR · 121 seen in earlier runs.
+Generated 2026-10-29 06:22 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Totals: 1 new topic matches · 0 other new cs.IR · 119 seen in earlier runs.
 Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
 
 ## New papers matching your topics (1), highest score first
@@ -17,7 +17,7 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 
 ## Other new cs.IR papers, title only (0)
 
-## Already listed on an earlier day, still inside the look-back window (121)
+## Already listed on an earlier day, still inside the look-back window (119)
 - Useful Diversity or Hallucinated Variety? Persona-Conditioned Synthetic Query Generation for E-Commerce Search — https://arxiv.org/abs/2610.35102 (score 20)
 - Quantifying Claim Smoothing by LLM Research Agents — https://arxiv.org/abs/2610.35793 (score 14)
 - When Connectivity Misleads: Guiding Agentic Search with Contrastive Evidence Paths — https://arxiv.org/abs/2610.36134 (score 14)
