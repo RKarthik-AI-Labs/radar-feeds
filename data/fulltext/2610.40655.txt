@@ -1,0 +1,3286 @@
+Elucidating the Design Space of LM Data Attribution
+https://arxiv.org/abs/2610.40655
+License: CC by-sa (redistribution permitted)
+(source: arXiv html)
+
+
+
+Elucidating the Design Space of 
+
+LM Data Attribution
+
+Steven Yu
+
+Affiliation: 
+Northeastern University
+
+  
+
+Sheng-Yu Wang
+
+Affiliation: 
+Northeastern University
+
+Affiliation: 
+MIT
+
+  
+
+Kimia Hamidieh
+
+Affiliation: 
+MIT
+
+  
+
+Antonio Torralba
+
+Affiliation: 
+MIT
+
+  
+
+David Bau
+
+Affiliation: 
+Northeastern University
+
+Abstract
+
+Data attribution methods for Language Models (LMs) are typically evaluated using downstream tasks like fact retrieval. However, existing evaluations vary multiple dataset properties simultaneously, making it impossible to isolate exactly why an attribution algorithm fails. To diagnose these failures, we explore the design space of LLM data attribution, with a primary focus on evaluation. We introduce the 
+Controlled Attribution Benchmark
+ (CATT) for fact tracing, in which we fine-tune LLMs on entirely fictitious knowledge, providing unambiguous ground truth for attribution. This synthetic setup allows us to systematically alter one dataset configuration at a time, such as document redundancy and lexical distractors. With this configurable evaluation, we demonstrate that redundancy and distractors consistently degrade attribution performance. Rather than proposing a new estimator, we examine two design choices that are underexplored: the loss used to compute gradients and how per-token attribution scores are aggregated into a document score.
+We find that the true causal evidence within a training document is highly localized, but standard methods dilute this evidence into noise by averaging attribution scores across the entire document. We find that replacing standard cross-entropy loss gradients with the negative log-odds gradients surfaces the critical tokens from other uninformative ones. We can then aggregate only the top token scores to improve ground truth recall by 
+ to 
+ percentage points across multiple baselines on our diagnostic benchmark. The negative log-odds correction also generalizes to FTRACE-TREX, improving counterfactual retraining performance for every method we test, by up to 
+. Our code, data, and trained models are at 
+catt.baulab.info
+.
+
+1 
+Introduction
+
+Data attribution aims to identify the training examples responsible for specific model behaviors 
+(
+Koh & Liang, 2017
+; 
+Ilyas et al., 2022
+; 
+Park et al., 2023
+; 
+Grosse et al., 2023a
+; 
+Chang et al., 2025
+)
+, predicting the counterfactual that a model trained without those examples will no longer exhibit the target behavior. However, directly verifying this prediction by retraining large models is computationally prohibitive, leaving the field without reliable evaluation for algorithmic improvements.
+
+To bridge this gap, we introduce the 
+Controlled Attribution Benchmark
+ (CATT), which establishes known ground truth while simulating the complexity of real-world pretraining data. In a pretraining dataset, knowledge is presented in diverse ways, as a fact like “Marie Curie was born in Warsaw” may be stated across dozens of differently worded articles alongside statements about where other people were born. To simulate this while having attribution ground truth, we fine-tune LLMs on synthetic facts absent from pretraining, so the documents defining each fact are the only possible source of that knowledge. Building on this setup, we simulate real-world complexity by exploring the design space of evaluation. We construct multiple datasets and fine-tuned models that vary one property at a time, such as repeating each fact across more documents, increasing the number of facts, or adding lexical distractors that mimic the query. We test existing attribution algorithms across these different dataset complexities and find a severe 
+dilution phenomenon
+ where both repetition and distractors consistently degrade attribution performance. Inspecting token-level scores reveals that the key evidence within a training document is localized to just a few tokens, whereas standard methods average across the entire text and dilute this signal with background noise (Figure 
+1
+). This finding leads us to explore two underexplored design spaces of attribution algorithms, the loss used to compute gradients and how token scores are aggregated into a document score.
+
+Figure 1: 
+The right loss focuses attribution on relevant tokens.
+ We show token-level influence scores within a ground-truth training document, divided by the document’s largest token score. Cross-entropy assigns little weight to the tokens relevant to answering the query, ranking the document poorly (rank 582/1000). Surprisingly, we find that simply switching to negative log-odds concentrates the influence score on those tokens, and correctly ranks it first. Result is from our 
+Controlled Attribution Benchmark
+.
+
+Related works have explored fine-tuning LLMs on targeted facts to establish attribution ground truth. Moving beyond proxy metrics on random subsets 
+(
+Ilyas et al., 2022
+; 
+Park et al., 2023
+)
+, several fact-tracing benchmarks test whether attribution methods can retrieve the fine-tuning documents supporting a target fact 
+(
+Akyürek et al., 2022
+; 
+Chang et al., 2025
+; 
+Jiao et al., 2026
+)
+. However, existing benchmarks evaluate on single, fixed datasets with distinct designs, leading to conflicting conclusions where methods like BM25 
+(
+Robertson et al., 1994
+)
+ outperform influence functions in some setups 
+(
+Akyürek et al., 2022
+; 
+Chang et al., 2025
+)
+ while trailing in others 
+(
+Jiao et al., 2026
+)
+. Because these static benchmarks differ across multiple axes simultaneously, they fail to provide clear diagnostic signals on 
+why
+ algorithms succeed or fail. Lacking actionable feedback from evaluation, algorithmic research has instead focused primarily on making influence approximations faster and more scalable 
+(
+Koh & Liang, 2017
+; 
+Park et al., 2023
+; 
+Grosse et al., 2023a
+)
+ without a clear connection to improving evaluation results. Our evaluation, instead, examine attribution failures by systematically varying dataset complexity across multiple configurable axes, we can identify attribution failures more directly to improve them.
+
+Our benchmark CATT helps us identify the dilution phenomenon and simple fixes to alleviate it. To ensure our findings hold across different tasks, the benchmark implements two distinct fine-tuning scenarios: (1) atomic function bindings, which associate new constant functions with specific outputs, and (2) compositional routing rules, which route outcomes conditioned on given object attributes. Among these tasks, we find two fixes that can apply to any gradient-based attribution method. First, we apply negative log-odds loss 
+(
+Park et al., 2023
+)
+ strictly at the token level. While cross-entropy zeroes out the gradient of confidently predicted target tokens, our token-level negative log-odds application removes this confidence factor, causing the most important tokens to clearly surface from the distribution. Second, we mitigate the dilution phenomenon by aggregating only the top-
+ token attribution scores. Isolating these localized scores alleviates the impact of redundancy and distractors, resulting in an improvement of 
+ to 
+ percentage points in fact-tracing recall across multiple attribution methods and dataset settings. Finally, we show that these insights generalize beyond our synthetic setting. On the external FTRACE-TREX benchmark 
+(
+Akyürek et al., 2022
+)
+, token-level negative log-odds improves counterfactual retraining performance for TRAK, EK-FAC, and Grad-Dot, by up to 
+, suggesting that the loss correction reliably extracts causal evidence across diverse tasks. In summary, our contributions are:
+
+•
+
+We introduce CATT, a configurable synthetic fact-tracing benchmark that controls properties like document redundancy and lexical distractors.
+
+•
+
+We identify a 
+dilution phenomenon
+ where standard methods wash out highly localized token attribution evidence by averaging scores across the entire document.
+
+•
+
+We find that applying negative log-odds gradients and aggregating only the top-
+ token scores improves fact-tracing recall by 
+ to 
+ percentage points across multiple methods.
+
+•
+
+Our finding generalizes. On the external FTRACE-TREX benchmark 
+(
+Akyürek et al., 2022
+)
+, negative log-odds gradients improve TRAK, EK-FAC, and Grad-Dot, by up to 
+.
+
+2 
+Controlled Diagnosis of LLM Data Attribution
+
+Figure 2: 
+CATT: fact tracing tasks with controlled datasets.
+ We fine-tune Qwen3.5-4B models on fictitious knowledge, which ensures our dataset is the sole causal source of its predictions. 
+Left:
+ Task I (
+Function Bindings
+) teaches new functions that always return a fixed value. 
+Right:
+ Task II (
+Routing Rules
+) teaches rules that sort objects based on their properties. Given a query phrased unlike any training document, we test whether attribution methods can correctly rank ground-truth documents. Unlike static benchmarks 
+(
+Akyürek et al., 2022
+; 
+Jiao et al., 2026
+)
+, we diagnose performance by systematically controlling dataset properties: (A) introducing redundancy by teaching the same fact across 
+ varied document styles, and (B) injecting lexical distractors, which are irrelevant documents that perfectly mimic the query format to expose methods that rely on superficial text overlap. Task II omits distractors because each fact uses a disjoint set of attribute words, making it difficult to construct clear lexical overlaps. Browse the datasets on our 
+project page
+.
+
+Our goal is to understand how sensitive data attribution is to different dataset configurations. Section 
+2.1
+ introduces our controlled evaluation setup and the properties of interest. Section 
+2.2
+ explains our synthetic fact-tracing tasks. Section 
+2.3
+ extends our analysis to token-level attribution and loss choices.
+
+2.1 
+Configurable Design Space for Fact Tracing Dataset
+
+We begin by defining our controlled dataset generator. We establish ground truth for data attribution by fine-tuning a pretrained language model on a dataset of synthetic, fictitious facts. Unlike static datasets, our training dataset 
+ is 
+configurable
+, where 
+ is the configuration, consisting of a task 
+, a fact set 
+, the number of documents per fact 
+, and an indicator 
+ of whether lexical distractors are included. Each document 
+ describes a synthetic fact 
+ in different formats, and we denote the subset of documents supporting 
+ as 
+. For each configuration, we obtain one fine-tuned model per random seed 
+:
+
+(1)
+
+We evaluate attribution by question answering. At test time, the fine-tuned model 
+ receives a held-out query 
+ that tests fact 
+ using an unseen prompt format to predict a single-token answer 
+. An attribution method assigns a score 
+ estimating training document 
+’s influence on this prediction. Reliable attribution should yield high scores on the ground-truth set 
+ above all other training documents. We systematically control the following components of 
+ (tasks 
+ are described in Section 
+2.2
+) and test how attribution performance changes accordingly.
+
+Document redundancy 
+.
+
+We vary the number of documents expressing each fact, denoted as 
+. These documents convey the same knowledge through different wording and examples, so redundancy refers to repeated factual support rather than exact text duplication.
+
+Lexical distractors 
+.
+
+When 
+, we augment the training dataset with documents containing lexical distractors 
+. Each distractor follows the same format as the held-out queries but encodes information irrelevant to any of the queried facts. We set 
+
+to maintain a one-to-one ratio between fact documents and distractors. Because distractors are similar to the queries but do not provide any answers, they test whether attribution can distinguish ground-truth support from surface similarity.
+
+Number of facts 
+.
+
+We vary the number of synthetic facts,
+
+, while keeping document redundancy 
+
+fixed. This control measures how attribution
+changes as the training dataset contains more competing knowledge.
+
+2.2 
+Controlled Attribution Benchmark (CATT)
+
+Following this design, we introduce 
+Controlled Attribution Benchmark
+ with two synthetic fact-tracing tasks: function bindings and routing rules (Figure 
+2
+). For each task, we generate multiple datasets 
+ that systematically sweep the configuration components defined above. We fine-tune Qwen3.5-4B 
+(
+Qwen Team, 2026
+)
+ using LoRA on every 
+. To measure attribution variance across runs, we train 3 models 
+ per configuration, one per seed 
+.
+
+Function Bindings.
+
+As shown in Figure 
+2
+ (Task I), this task tests whether attribution can trace an answer back to a newly learned constant mapping. Each fact 
+ maps new function tokens to constant answer tokens (e.g., 
+f2
+ always returns 
+v2
+). Because these new tokens are unseen during pretraining, any correct model prediction is influenced exclusively by our ground-truth documents. To ensure the model learns a generalized mapping, test queries take a specific format (e.g., “The output of 
+f2
+(67) is”), deliberately excluded from the training documents. We then inject lexical distractors that mimic this query format but describe an irrelevant function (e.g., 
+g1
+).
+
+Routing rules.
+
+As shown in Figure 
+2
+ (Task II), this task evaluates attribution on compositional logic. Each fact 
+ teaches a fictitious rule, routing a category of objects (e.g., vehicles and automobiles) to a specific queue (e.g., Birch or Cedar) based on a single deciding attribute (e.g., stalled). Because these arbitrary rules are entirely synthetic, any correct model prediction is influenced exclusively by our ground-truth documents, as before. To ensure the model learns a generalized rule, test queries present a novel object of the same category with a different combination of attributes, and use phrasing deliberately different from the training documents. Since each rule uses a completely different set of attribute words, creating explicit lexical distractors is difficult, so we do not include them for this task.
+
+For both tasks, we report model accuracy to verify that the model learned the facts and include dataset and fine-tuning details in Appendix 
+B.3
+.
+
+2.3 
+Examining Attribution Design Space Via Loss and Tokens
+
+We apply our benchmark to diagnose 
+why
+ existing attribution methods fail. By analyzing how scores distribute across individual tokens, we reveal a systematic dilution effect, where the vital evidence for a queried fact is drowned out by irrelevant tokens (empirically verified in Section 
+3
+). Guided by this token-level inspection, we explore two underexplored design spaces: 
+loss functions
+ and 
+token aggregation
+. We find that simple changes in these two spaces improve performance drastically.
+
+Inspecting attribution via tokens.
+
+Most attribution methods are rooted in influence functions 
+(
+Koh & Liang, 2017
+)
+, which score a training document 
+ for a query 
+ by estimating the query loss reduction:
+
+(2)
+
+Here, 
+ is the Hessian of the training loss, and recent works decompose it into individual layers 
+, obtaining layer-specific Hessians 
+ and gradients 
+ 
+(
+Grosse et al., 2023a
+; 
+Choe et al., 2025
+)
+. 
+ is the query loss on the single answer token 
+, while the document loss 
+ averages the next-token prediction loss across the sequence. This layer-wise decomposition enables per-token attribution analysis from 
+Grosse et al. (2023a)
+, which we use as the main diagnostic tool to investigate the dilution effect.
+
+Let 
+ and 
+ denote the input and output activations of layer 
+ at position 
+. By the chain rule for a linear layer, the weight gradient contribution at position 
+ is the outer product of the output gradient and the input activation, and the full layer gradient is their sum over tokens:
+
+(3)
+
+where 
+ flattens the matrix. The corresponding token-wise attribution isolates the exact contribution of each position before they are aggregated into the document attribution score:
+
+(4)
+
+Because token-wise attribution requires layer-wise decomposition, we evaluate all our baselines this way. For methods not natively designed for layer-wise computation, such as TRAK 
+(
+Park et al., 2023
+)
+, we implement adjusted versions, with full details in Appendix 
+A.2
+. As 
+Grosse et al. (2023a)
+ note, this represents a localized gradient signal rather than the exact counterfactual effect of token deletion, as activations encode preceding context.
+
+Changing cross-entropy to negative log-odds.
+
+By inspecting per-token attribution, we find that cross-entropy 
+ can suppress the gradients of useful tokens when their prediction probability 
+ is high. We show this by comparing it with an alternative negative log-odds loss 
+, which computes the log ratio of the target token against the remaining probability mass. Their gradients point in the same direction but have different magnitudes:
+
+(5)
+
+Cross-entropy zeroes out the gradient of a confidently predicted target (
+), even when that exact token expresses the ground-truth fact we want to trace. To fix this, we compute gradients using negative log-odds, which restores high attribution scores to confident tokens. Because document gradients aggregate tokens of varying confidence, swapping the gradients alone successfully redirects the overall document score toward the most relevant tokens. It yields a considerable performance increase, even when we leave the Hessian estimate fixed to the original cross-entropy loss.
+
+Appendix 
+A.1
+ derives Equation 
+5
+ and shows that the gradient norm of 
+ is bounded on both sides. We note that TRAK 
+(
+Park et al., 2023
+)
+ also uses log-odds, but strictly as an intermediate mapping before applying a correction factor 
+ to revert the gradients toward cross-entropy. We find that dropping 
+ to compute influence purely under the negative log-odds objective yields strong, consistent improvements, motivating us to apply negative log-odds directly across all methods. Appendix 
+A.2
+ provides more discussion on this correction.
+
+Aggregating top-token contributions.
+
+While negative log-odds gradients successfully surface the most useful tokens, we can further prevent dilution by averaging only the top 
+ token scores 
+ within each document. As demonstrated in Section 
+3
+, top-token selection alone has small improvements under cross-entropy for every method except EK-FAC, but pairing it with the negative log-odds objective yields drastic improvements.
+
+Figure 3: 
+Existing attribution methods struggle with redundancy and distractors.
+ We evaluate attribution methods on CATT. Recall@
+ of each method’s attribution scores as the number of training documents per fact, 
+, increases, at 
+ facts. On Function Bindings, only TRAK and EK-FAC among the gradient-based methods recover the ground-truth documents, and both lose recall as 
+ grows; every other gradient-based method stays below 
+. Distractors drive TRAK to 0 at every 
+ and lower EK-FAC. On Rule Routings, no gradient-based method exceeds 
+. BM25 remains strong thanks to distinctive lexical cues, while RepSim is weak throughout. Results are averaged over three seeds with error bars showing 
+ standard errors (smaller bars are hidden by the markers).
+
+3 
+Experiments
+
+Figure 4: 
+Token selection and negative log-odds loss help isolate ground truth.
+ Document scores for ground-truth (red) and other (gray) documents. When every token is scored under cross-entropy, the two distributions overlap (Recall@
+ 0.01). Keeping only each document’s top 10 tokens (0.30) or switching to negative log-odds (0.35) partly separates them, and combining both separates them completely (1.00). This result is from Grad-Dot on a model trained on 
+Function Bindings
+ dataset with distractors 
+. View these plots for each dataset, method, and model seed on our 
+project page
+.
+
+We begin our experiments by diagnosing standard attribution methods on CATT. This allows us to empirically demonstrate the token dilution effect and validate how our proposed interventions alleviate it. Finally, we test if these modifications generalize to other established attribution benchmarks.
+
+Where do existing methods fail?
+
+We compare attribution methods across the dataset configurations introduced in
+Section 
+2.1
+. Our baselines cover five groups:
+
+•
+
+Gradient similarity:
+ Grad-Dot and Grad-Cos compare query and training gradients directly.
+
+•
+
+Fisher-based influence:
+ EK-FAC 
+(
+Grosse et al., 2023a
+)
+ and LoGra 
+(
+Choe et al., 2025
+)
+ use Fisher Information to approximate the Hessian.
+
+•
+
+GGN-based influence:
+ TRAK 
+(
+Park et al., 2023
+)
+ and TrackStar 
+(
+Chang et al., 2025
+)
+ use generalized Gauss-Newton (GGN) approximation for Hessian estimates.
+
+•
+
+Training dynamics:
+ TracIn 
+(
+Pruthi et al., 2020b
+)
+ and SOURCE 
+(
+Bae et al., 2024b
+)
+ use gradients or approximate updates along the training trajectory.
+
+•
+
+Retrieval references:
+ BM25 
+(
+Robertson et al., 1994
+)
+ matches lexical overlap, while RepSim 
+(
+Li et al., 2025
+)
+ compares model representations from the last token position in the final layer. Unlike the other baselines, this category does not rely on gradients.
+
+Appendix 
+C
+ details the implementations. We measure Recall@
+, the fraction of a
+query’s 
+ ground-truth documents recovered among its 
+ highest-ranked
+training documents, averaged over queries and model training runs.
+
+As shown in Figure 
+3
+, gradient-based attribution methods degrade severely as complexity increases. On 
+Function Bindings
+, scaling from 1 to 50 documents per fact collapses TRAK’s recall from 
+ to below 
+, while EK-FAC degrades less sharply, from 
+ to 
+. Other gradient-based methods fail consistently across the sweep. Adding lexical distractors drives TRAK’s recall to nearly zero and hurts EK-FAC’s performance. On 
+Rule Routings
+, all gradient-based methods struggle. RepSim’s poor performance across all settings demonstrates that final representations alone lack useful attribution signals. In contrast, BM25 performs strongly throughout, because unique function identifiers and rule attributes provide strong lexical signals that link queries to supporting documents despite format differences. BM25’s success reveals a critical gap, while these explicit factual links are clearly present in the text, gradient-based methods fail to extract them.
+
+In Appendix 
+D.5
+, we show that the number of included facts does not affect attribution as strongly. Here, we report standard TRAK and TracIn. All subsequent experiments use their layer-decomposed variants, denoted as 
+Layerwise TRAK
+ and 
+Layerwise TracIn
+. Next, we show that the attribution failure originates from the token dilution effect.
+
+Figure 5: 
+The loss determines what type of tokens occupy the top positions.
+ (a) Per-token attributions for one query on one of its ground-truth Rule Routings documents, under cross-entropy (top) and negative log-odds (bottom). Boxes mark the ten highest-scoring positions. Negative log-odds moves the document from rank 
+ to rank 
+ of 
+. (b) Each token type’s share of the top-10 positions divided by its share of all positions. Cross-entropy favors item names. Negative log-odds instead favors outcome tokens, the words that match the query answer. Appendix 
+D.4
+ shows the same pattern on Function Bindings tasks. Explore per-token attributions for other queries and methods in our 
+demo
+.
+
+Figure 6: 
+Upweighting more influential tokens with log-odds improves Recall across token budgets.
+ Recall@
+ as the number of retained tokens 
+ varies, under cross-entropy (top) and negative log-odds (bottom). Columns show the three CATT settings. The yellow regions mark full-document scoring (“all”), with the upper-right endpoint in each column corresponding to the prior-work loss and aggregation choices. Negative log-odds with small token budgets substantially improve several methods, especially with distractors. Gains persist across multiple 
+ values; retaining more tokens often reduces recall. Results are averaged over all dataset configurations and model seeds at 
+ with error bars showing 
+ standard errors.
+
+Useful token signals are diluted by other irrelevant ones.
+
+Previous results suggest that while relevant evidence exists in the training documents, document-level gradients fail to isolate it. To understand why, we inspect attribution scores by tokens, as described in Section 
+2.3
+. As shown in the left panels of Figure 
+4
+, document-level scores that average all tokens yield a large distributional overlap between ground-truth and other documents, leading to a poor Recall@
+ of 
+. However, if we average only the top 
+ token scores, the distributions diverge and recall improves to 
+. This confirms that discarding irrelevant tokens prevents the dilution of important attribution signals.
+
+Negative log-odds gradients help surface important tokens.
+
+While top-token selection improves recall to 
+ under cross-entropy, the important attribution signal is still suppressed by the cross-entropy gradients. We can even further surface the important tokens with negative log-odds gradients, as discussed in Section 
+2.3
+. As shown in the right panels of Figure 
+4
+, swapping cross-entropy for negative log-odds clearly separates the score distributions even when averaging all tokens, lifting recall to 
+. When we combine this loss with top 
+ token aggregation, the separation is drastically amplified, achieving a perfect 
+ recall. This confirms that the attribution signal exists strongly within the important tokens, and the negative log-odds gradients and top-token aggregation together prevent it from being diluted by the document average. Across the six methods that have per-token terms and whose standard document score uses cross-entropy, the same combination lifts recall by 
+ (TrackStar) to 
+ (Grad-Dot) percentage points, averaged over all three tasks, 
+, and 
+; other methods fall in between (Appendix 
+D.1
+).
+
+What tokens are important for attribution?
+
+Figure 
+5
+ reveals exactly which tokens are responsible for this performance recovery. For a ground-truth 
+Rule Routings
+ document, cross-entropy assigns its highest scores to irrelevant item names, resulting in a low document rank of 
+ out of 
+. In contrast, negative log-odds shifts the largest contributions directly to the outcome tokens that determine the answer, improving the document rank to 
+. Together, these results validate our token-level diagnosis. Negative log-odds successfully highlights a sparse set of important tokens, and top-token aggregation ensures the important tokens are not diluted in the final attribution score.
+
+Alleviating dilution improves attribution consistently.
+
+The modifications we introduced substantially improve recall across CATT. Figure 
+6
+ compares these
+scores with full-document attribution, shown by the yellow regions. Under
+negative log-odds, small token budgets produce large gains. With 
+,
+Grad-Dot, EK-FAC, and layerwise TracIn achieve nearly perfect recall on
+Function Bindings, including the distractor setting. The improvement is not
+specific to one choice of 
+; recall remains strong across a broad range of
+small budgets. As 
+ increases, performance gradually declines toward the
+full-document baseline, showing how irrelevant
+tokens progressively dilute the useful signal. Rule Routings remains more
+difficult, but the same improvements appear across multiple methods. Interestingly, the larger optimal 
+ indicates that the set of important tokens is larger for this task.
+
+Figure 7: 
+Generalization to external FTRACE-TREX benchmarks.
+ Accuracy drop after removing the highest-ranked training documents and retraining, at increasing removal budgets. Larger drops indicate more effective identification of influential data. In each panel, dashed: prior work; light: with negative log-odds; dark: negative log-odds over the top 10 tokens (TRAK’s dense projection has no per-token scores); dotted: BM25. Mean over eight retrain seeds (Appendix 
+E
+), error bars 
+ standard errors.
+
+Generalization to other benchmarks.
+
+We study whether our findings on CATT generalize to other settings. We evaluate on the external FTRACE-TREX 
+Akyürek et al. (2022)
+ benchmark and adopt the setting from 
+Park et al. (2023)
+ by removing the highest-ranked training documents and retraining the model to measure the resulting drop in factual accuracy (details in Appendix 
+E
+). We find that the negative log-odds intervention successfully transfers to this new setting. Figure 
+7
+ shows that, for TRAK, EK-FAC, and Grad-Dot alike, negative log-odds produces a larger accuracy drop than the prior-work score at every removal budget. At the largest budget, the drop improves from 
+ to 
+ for TRAK (
+). With both fixes, Grad-Dot improves from 
+ to 
+, and EK-FAC, already the strongest method under prior work, from 
+ to 
+, the largest drop overall. Top-token selection matters less here than on CATT: under negative log-odds, keeping only the top 10 tokens changes the drop by at most six points in either direction relative to scoring all tokens. This indicates that while the loss correction improves attribution across diverse datasets, the top-token aggregation likely depends on how broadly the attribution score is distributed within a specific document.
+
+4 
+Related Works
+
+Training Data Attribution.
+
+Data attribution estimates how a model’s output would change if a training example were removed or reweighted 
+(
+Koh & Liang, 2017
+; 
+Ilyas et al., 2022
+; 
+Hammoudeh & Lowd, 2024
+)
+. Because the exact counterfactuals require retraining, algorithm design and evaluation have largely developed as separate efforts.
+Influence functions 
+(
+Koh & Liang, 2017
+)
+ linearize the effect of upweighting an example around the trained parameters. Many methods scale this estimate to large models by approximating the Hessian 
+(
+Schioppa et al., 2022
+; 
+Grosse et al., 2023b
+; 
+Kwon et al., 2024
+)
+, projecting gradients 
+(
+Park et al., 2023
+; 
+Xia et al., 2024
+; 
+Lin et al., 2024
+)
+, or following the training trajectory 
+(
+Pruthi et al., 2020a
+; 
+Bae et al., 2024a
+)
+. Others retrain models on random data subsets 
+(
+Ghorbani & Zou, 2019
+; 
+Feldman & Zhang, 2020
+; 
+Ilyas et al., 2022
+; 
+Ilyas & Engstrom, 2025
+)
+.
+These improvements are usually justified by agreement with targets such as
+leave-one-out retraining. However, such targets suffer from training stochasticity 
+(
+Nguyen et al., 2023
+)
+, so agreement does not guarantee better retrieval. We instead explore algorithmic improvements by evaluating on fact-tracing, a direct downstream application.
+
+Token-level attribution.
+
+Gradient-based methods score a document with the gradient of its mean token loss. Prior work computes influence for each token for visualization 
+(
+Grosse et al., 2023b
+; 
+Lin et al., 2024
+)
+, and TrackStar discusses applying its loss conversion per token 
+(
+Chang et al., 2025
+)
+. We use token scores to explain why redundancy and distractors lower attribution performance, then score documents with per-token negative log-odds gradients 
+(
+Park et al., 2023
+)
+ and aggregate top-
+ token scores to improve attribution.
+
+Attribution evaluation.
+
+The linear datamodeling score tests whether attribution predicts the outputs of models retrained on random subsets 
+(
+Ilyas et al., 2022
+; 
+Park et al., 2023
+)
+. Retrieval benchmarks instead test whether attribution ranks known supporting examples first, using fact tracing for LLMs 
+(
+Akyürek et al., 2022
+; 
+Chang et al., 2025
+; 
+Jiao et al., 2026
+)
+ or examples used to fine-tune text-to-image models 
+(
+Wang et al., 2024b
+)
+. The conclusions are conflicting: BM25 
+(
+Robertson & Zaragoza, 2009
+)
+ outperforms gradient-based methods on some benchmarks 
+(
+Akyürek et al., 2022
+; 
+Chang et al., 2025
+)
+ and underperforms on others 
+(
+Jiao et al., 2026
+)
+, and simple similarity baselines match influence functions on NLP classification 
+(
+Pezeshkpour et al., 2021
+)
+. Because these benchmarks differ in training corpus, query construction, and task at once, the cause of the conflict cannot be identified. Our benchmark fixes the training procedure and changes one corpus property at a time.
+
+LLM fine-tuning.
+
+Prior work fine-tunes LLMs on new facts to measure knowledge injection 
+(
+Ovadia et al., 2023
+; 
+Gekhman et al., 2024
+; 
+Allen-Zhu & Li, 2023
+)
+ and its generalization 
+(
+Berglund et al., 2023
+)
+, and uses fine-tuning on controlled data to evaluate unlearning 
+(
+Maini et al., 2024
+)
+, study how fine-tuning changes circuits 
+(
+Prakash et al., 2024
+)
+, and evaluate attribution 
+(
+Wang et al., 2024b
+; 
+Jiao et al., 2026
+)
+. Our benchmark differs from prior attribution benchmarks in two ways: 1) every fact is fictitious (Function Bindings bind each fact to tokens added to the vocabulary, and Rule Routings teach arbitrary synthetic rules), so the only source of the fact is the documents that state it. 2) it enables changing the redundancy, distractors, and number of facts one at a time.
+We fine-tune with LoRA 
+(
+Hu et al., 2021
+)
+, which trains low-rank parameter updates.
+
+5 
+Discussion, Broader Impacts, and Limitations
+
+Our findings have important implications for deploying data attribution in high-stakes domains, such as copyright protection, equitable credit assignment 
+(
+Ghorbani & Zou, 2019
+; 
+Wang et al., 2024a
+)
+, and tracing emergent misalignment 
+(
+Betley et al., 2025
+)
+. Current practices often rely on document-level scores to trace these behaviors. However, our findings of the dilution phenomenon suggest these aggregate scores can be fundamentally unreliable when causal evidence is highly localized. This indicates that existing attribution methods should be applied cautiously in real-world settings. Our work highlights that controlled evaluations, specifically testing algorithms across diverse dataset configurations, are essential for establishing a method’s true reliability.
+
+While our framework provides controlled diagnostics, several limitations remain. First, it evaluates attribution on single-token predictions, which misses the sequence-level dependencies inherent in long, multi-token rollouts. Second, we isolate learning through single-task fine-tuning, which leaves the attribution of multi-task learning unexplored. Furthermore, mitigating dilution via top-
+ token aggregation introduces a new hyperparameter; since real-world scenarios lack ground-truth validation signals, dynamic thresholding is needed. Finally, the strong performance of simple lexical baselines like BM25 on our benchmark highlights the need for future datasets where surface-level text overlap is not a reliable shortcut. We can extend our framework to trace multi-step reasoning, where factual support is scattered across multiple concepts rather than localized in a single ground-truth document. Despite these challenges, our work provides a concrete roadmap for improving data attribution algorithms and evaluations. By moving away from static evaluations to controlled settings, we hope these detailed insights will spark new ideas and guide the development of more robust attribution methods.
+
+Acknowledgements.
+
+We thank Alex Loftus for mentorship and early project discussions, Rohit Gandikota and Arnab Sen Sharma for helpful conversations throughout the project, and Sophie Wang and Richard Zhang for valuable feedback on the draft and figures. SY, SW, and DB are supported by DOE grant DE-SC0025613. KH and AT are supported by ONR MURI grant N00014-26-1-2255.
+
+AI use statement
+
+We used Claude Sonnet 4.5 to generate the synthetic training documents and rule paraphrases in CATT. We used LLM assistance for writing, and we also manually inspected the text. Coding assistants helped us implement and scale up some of our experiments, and we reviewed all AI-assisted code and outputs. We used LLM assistance for mathematical proofs in Appendix 
+A.1
+, and we manually checked for correctness. We take full responsibility for the final content of this paper, including any text, claims, or artifacts produced with the aid of generative AI.
+
+Reproducibility
+
+Our code and the CATT corpora and queries are available at 
+https://github.com/Lamsheeper/catt
+, and the fine-tuned LoRA adapters and attribution scores are on our 
+Hugging Face Hub
+. Facts, queries, and training documents can be browsed on our 
+project page
+, and our 
+demo
+ shows which training documents each method credits for a query, token by token. Appendix 
+B.1
+ and Appendix 
+B.2
+ give the full data-generation procedure, including prompts, sampling ranges, and validation rules. Appendix 
+B.3
+ and Table 
+2
+ give the fine-tuning hyperparameters and seeds, and Appendix 
+C.1
+ gives the settings of every attribution method. We fine-tune Qwen3.5-4B 
+(
+Qwen Team, 2026
+)
+ with LoRA using the HuggingFace Transformers 
+(
+Wolf et al., 2020
+)
+ and PEFT 
+(
+Mangrulkar et al., 2022
+)
+ libraries on PyTorch 
+(
+Paszke et al., 2019
+)
+. Attribution jobs ran on single NVIDIA A100-80GB, H100, and H200 GPUs. The main attribution sweep took about 2,400 GPU-hours in total, with a per-job breakdown in Appendix 
+C.2
+.
+
+References
+
+Akyürek et al. (2022)
+
+Ekin Akyürek, Tolga Bolukbasi, Frederick Liu, Binbin Xiong, Ian Tenney,
+Jacob Andreas, and Kelvin Guu.
+
+Towards tracing knowledge in language models back to the training
+data.
+
+In 
+Findings of the Association for Computational Linguistics:
+EMNLP 2022
+, 2022.
+
+Allen-Zhu & Li (2023)
+
+Zeyuan Allen-Zhu and Yuanzhi Li.
+
+Physics of language models: Part 3.1, knowledge storage and
+extraction.
+
+arXiv preprint arXiv:2309.14316
+, 2023.
+
+Bae et al. (2024a)
+
+Juhan Bae, Wu Lin, Jonathan Lorraine, and Roger Grosse.
+
+Training data attribution via approximate unrolling.
+
+Advances in Neural Information Processing Systems
+,
+37:66647–66686, 2024a.
+
+Bae et al. (2024b)
+
+Juhan Bae, Wu Lin, Jonathan Lorraine, and Roger Baker Grosse.
+
+Training data attribution via approximate unrolling.
+
+In 
+The Thirty-eighth Annual Conference on Neural Information
+Processing Systems
+, 2024b.
+
+Berglund et al. (2023)
+
+Lukas Berglund, M Tong, M Kaufmann, M Balesni, AC Stickland, T Korbak, and
+O Evans.
+
+The reversal curse: Llms trained on.
+
+A is B” fail to learn” B is A
+, 2023.
+
+Betley et al. (2025)
+
+Jan Betley, Daniel Chee Hian Tan, Niels Warncke, Anna Sztyber-Betley, Xuchan
+Bao, Martín Soto, Nathan Labenz, and Owain Evans.
+
+Emergent misalignment: Narrow finetuning can produce broadly
+misaligned LLMs.
+
+In 
+Forty-second International Conference on Machine Learning
+,
+2025.
+
+Chang et al. (2025)
+
+Tyler Chang, Dheeraj Rajagopal, Tolga Bolukbasi, Lucas Dixon, and Ian Tenney.
+
+Scalable influence and fact tracing for large language model
+pretraining.
+
+In 
+International Conference on Learning Representations
+, 2025.
+
+Choe et al. (2025)
+
+Sang Choe, Hwijeen Ahn, Juhan Bae, Kewen Zhao, Youngseog Chung, Adithya
+Pratapa, Willie Neiswanger, Emma Strubell, Teruko Mitamura, Jeff Schneider,
+Eduard Hovy, Roger Grosse, and Eric Xing.
+
+What is your data worth to gpt? llm-scale data valuation with
+influence functions.
+
+In 
+Advances in Neural Information Processing Systems
+, 2025.
+
+Feldman & Zhang (2020)
+
+Vitaly Feldman and Chiyuan Zhang.
+
+What neural networks memorize and why: Discovering the long tail via
+influence estimation.
+
+Advances in neural information processing systems
+,
+33:2881–2891, 2020.
+
+Gekhman et al. (2024)
+
+Zorik Gekhman, Gal Yona, Roee Aharoni, Matan Eyal, Amir Feder, Roi Reichart,
+and Jonathan Herzig.
+
+Does fine-tuning llms on new knowledge encourage hallucinations?
+
+In 
+Proceedings of the 2024 conference on empirical methods in
+natural language processing
+, pp.  7765–7784, 2024.
+
+Ghorbani & Zou (2019)
+
+Amirata Ghorbani and James Zou.
+
+Data shapley: Equitable valuation of data for machine learning.
+
+In 
+International conference on machine learning
+, pp. 2242–2251. PMLR, 2019.
+
+Grosse et al. (2023a)
+
+Roger Grosse, Juhan Bae, Cem Anil, Nelson Elhage, Alex Tamkin, Amirhossein
+Tajdini, Benoit Steiner, Dustin Li, Esin Durmus, Ethan Perez, et al.
+
+Studying large language model generalization with influence
+functions.
+
+arXiv preprint arXiv:2308.03296
+, 2023a.
+
+Grosse et al. (2023b)
+
+Roger Grosse, Juhan Bae, Cem Anil, Nelson Elhage, Alex Tamkin, Amirhossein
+Tajdini, Benoit Steiner, Dustin Li, Esin Durmus, Ethan Perez, et al.
+
+Studying large language model generalization with influence
+functions.
+
+arXiv preprint arXiv:2308.03296
+, 2023b.
+
+Hammoudeh & Lowd (2024)
+
+Zayd Hammoudeh and Daniel Lowd.
+
+Training data influence analysis and estimation: A survey.
+
+Machine Learning
+, 113(5):2351–2403, 2024.
+
+Hu et al. (2021)
+
+Edward J Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean
+Wang, Lu Wang, and Weizhu Chen.
+
+Lora: Low-rank adaptation of large language models.
+
+arXiv preprint arXiv:2106.09685
+, 2021.
+
+Ilyas & Engstrom (2025)
+
+Andrew Ilyas and Logan Engstrom.
+
+Magic: Near-optimal data attribution for deep learning.
+
+arXiv preprint arXiv:2504.16430
+, 2025.
+
+Ilyas et al. (2022)
+
+Andrew Ilyas, Sung Min Park, Logan Engstrom, Guillaume Leclerc, and Aleksander
+Madry.
+
+Datamodels: Predicting predictions from training data.
+
+International Conference on Machine Learning (ICML)
+, 2022.
+
+Jiao et al. (2026)
+
+Cathy Jiao, Yijun Pan, Emily Xiao, Daisy Sheng, Niket Jain, Hanzhang Zhao,
+Ishita Dasgupta, Jiaqi Ma, and Chenyan Xiong.
+
+Date-lm: Benchmarking data attribution evaluation for large language
+models.
+
+In 
+Advances in Neural Information Processing Systems
+, 2026.
+
+Koh & Liang (2017)
+
+Pang Wei Koh and Percy Liang.
+
+Understanding black-box predictions via influence functions.
+
+In 
+International conference on machine learning
+, 2017.
+
+Kwon et al. (2024)
+
+Yongchan Kwon, Eric Wu, Kevin Wu, and James Y Zou.
+
+Datainf: Efficiently estimating data influence in lora-tuned llms and
+diffusion models.
+
+In 
+International Conference on Learning Representations
+,
+volume 2024, pp.  21921–21942, 2024.
+
+Li et al. (2025)
+
+Zhe Li, Wei Zhao, Yige Li, and Jun Sun.
+
+Do influence functions work on large language models.
+
+In 
+Conference on Empirical Methods in Natural Language
+Processing (EMNLP)
+, 2025.
+
+Lin et al. (2024)
+
+Huawei Lin, Jikai Long, Zhaozhuo Xu, and Weijie Zhao.
+
+Token-wise influential training data retrieval for large language
+models.
+
+In 
+Proceedings of the 62nd Annual Meeting of the Association
+for Computational Linguistics (Volume 1: Long Papers)
+, pp.  841–860, 2024.
+
+Maini et al. (2024)
+
+Pratyush Maini, Zhili Feng, Avi Schwarzschild, Zachary C Lipton, and J Zico
+Kolter.
+
+Tofu: A task of fictitious unlearning for llms.
+
+arXiv preprint arXiv:2401.06121
+, 2024.
+
+Mangrulkar et al. (2022)
+
+Sourab Mangrulkar, Sylvain Gugger, Lysandre Debut, Younes Belkada, Sayak Paul,
+and Benjamin Bossan.
+
+PEFT: State-of-the-art parameter-efficient fine-tuning methods.
+
+https://github.com/huggingface/peft
+, 2022.
+
+Nguyen et al. (2023)
+
+Elisa Nguyen, Minjoon Seo, and Seong Joon Oh.
+
+A bayesian approach to analysing training data attribution in deep
+learning.
+
+Advances in Neural Information Processing Systems (NeurIPS)
+,
+2023.
+
+Ovadia et al. (2023)
+
+O Ovadia, M Brief, M Mishaeli, and O Elisha.
+
+Fine-tuning or retrieval? comparing knowledge injection in llms.
+corr.
+
+arXiv preprint arXiv:2312.05934
+, 2023.
+
+Park et al. (2023)
+
+Sung Min Park, Kristian Georgiev, Andrew Ilyas, Guillaume Leclerc, and
+Aleksander Madry.
+
+Trak: Attributing model behavior at scale.
+
+In 
+International conference on machine learning
+, 2023.
+
+Paszke et al. (2019)
+
+Adam Paszke, Sam Gross, Francisco Massa, Adam Lerer, James Bradbury, Gregory
+Chanan, Trevor Killeen, Zeming Lin, Natalia Gimelshein, Luca Antiga, et al.
+
+PyTorch: An imperative style, high-performance deep learning
+library.
+
+In 
+Advances in Neural Information Processing Systems
+, 2019.
+
+Pezeshkpour et al. (2021)
+
+Pouya Pezeshkpour, Sarthak Jain, Byron C Wallace, and Sameer Singh.
+
+An empirical comparison of instance attribution methods for nlp.
+
+In 
+Proceedings of the 2021 Conference of the North American
+Chapter of the Association for Computational Linguistics: Human Language
+Technologies
+, pp.  967–975, 2021.
+
+Prakash et al. (2024)
+
+Nikhil Prakash, Tamar Shaham, Tal Haklay, Yonatan Belinkov, and David Bau.
+
+Fine-tuning enhances existing mechanisms: A case study on entity
+tracking.
+
+In 
+International Conference on Learning Representations
+,
+volume 2024, pp.  8057–8082, 2024.
+
+Pruthi et al. (2020a)
+
+Garima Pruthi, Frederick Liu, Satyen Kale, and Mukund Sundararajan.
+
+Estimating training data influence by tracing gradient descent.
+
+Advances in neural information processing systems
+,
+33:19920–19930, 2020a.
+
+Pruthi et al. (2020b)
+
+Garima Pruthi, Frederick Liu, Satyen Kale, and Mukund Sundararajan.
+
+Estimating training data influence by tracing gradient descent.
+
+In 
+Advances in neural information processing systems
+,
+2020b.
+
+Qwen Team (2024)
+
+Qwen Team.
+
+Qwen2.5 technical report.
+
+arXiv preprint arXiv:2412.15115
+, 2024.
+
+Qwen Team (2026)
+
+Qwen Team.
+
+Qwen3.5: Towards native multimodal agents, February 2026.
+
+URL 
+https://qwen.ai/blog?id=qwen3.5
+.
+
+Robertson & Zaragoza (2009)
+
+Stephen Robertson and Hugo Zaragoza.
+
+The probabilistic relevance framework: BM25 and beyond.
+
+Foundations and Trends in Information Retrieval
+, 2009.
+
+Robertson et al. (1994)
+
+Stephen Edward Robertson, Steve Walker, Susan Jones, Micheline M
+Hancock-Beaulieu, Mike Gatford, et al.
+
+Okapi at trec.
+
+1994.
+
+Schioppa et al. (2022)
+
+Andrea Schioppa, Polina Zablotskaia, David Vilar, and Artem Sokolov.
+
+Scaling up influence functions.
+
+In 
+Proceedings of the AAAI Conference on Artificial
+Intelligence
+, volume 36, pp.  8179–8186, 2022.
+
+Wang et al. (2024a)
+
+Jiachen T Wang, Zhun Deng, Hiroaki Chiba-Okabe, Boaz Barak, and Weijie J Su.
+
+An economic solution to copyright challenges of generative ai.
+
+arXiv preprint arXiv:2404.13964
+, 2024a.
+
+Wang et al. (2024b)
+
+Sheng-Yu Wang, Aaron Hertzmann, Alexei A Efros, Jun-Yan Zhu, and Richard Zhang.
+
+Data attribution for text-to-image models by unlearning synthesized
+images.
+
+In 
+NeurIPS
+, 2024b.
+
+Wang et al. (2024c)
+
+Yubo Wang, Xueguang Ma, Ge Zhang, Yuansheng Ni, Abhranil Chandra, Shiguang Guo,
+Weiming Ren, Aaran Arulraj, Xuan He, Ziyan Jiang, Tianle Li, Max Ku, Kai
+Wang, Alex Zhuang, Rongqi Fan, Xiang Yue, and Wenhu Chen.
+
+MMLU-Pro: A more robust and challenging multi-task language
+understanding benchmark.
+
+In 
+Advances in Neural Information Processing Systems Datasets
+and Benchmarks Track
+, 2024c.
+
+Wolf et al. (2020)
+
+Thomas Wolf, Lysandre Debut, Victor Sanh, Julien Chaumond, Clement Delangue,
+Anthony Moi, Pierric Cistac, Tim Rault, Rémi Louf, Morgan Funtowicz,
+et al.
+
+Transformers: State-of-the-art natural language processing.
+
+In 
+Proceedings of the 2020 Conference on Empirical Methods in
+Natural Language Processing: System Demonstrations
+, pp.  38–45, 2020.
+
+Xia et al. (2024)
+
+Mengzhou Xia, Sadhika Malladi, Suchin Gururangan, Sanjeev Arora, and Danqi
+Chen.
+
+Less: Selecting influential data for targeted instruction tuning.
+
+In 
+International Conference on Learning Representations
+, 2024.
+
+Appendix A 
+Attribution Objectives and Methods
+
+A.1 
+Cross-Entropy vs. Negative Log-Odds Gradients
+
+We use the notation of Section 
+2.3
+. A document is
+
+, where 
+ is the number of supervised next-token
+targets after padding has been removed, and a query is 
+ with one
+answer token 
+. Let 
+ be the vocabulary, 
+, and
+let 
+ be the logits for one target. Define
+
+(6)
+
+Gradient relationship between two losses.
+
+The cross-entropy loss is
+
+(7)
+
+where 
+ is the correct class, and the negative log-odds loss is
+
+(8)
+
+The logit derivatives are
+
+(9)
+
+To derive the relationship, let
+
+Then
+
+Thus, for the target coordinate,
+
+, while for every competitor coordinate,
+
+Therefore, coordinate by coordinate,
+
+(10)
+
+Applying the same logit Jacobian
+
+ gives
+
+(11)
+
+Hence the gradients w.r.t. each token prediction loss are collinear, and cross-entropy introduces exactly the
+confidence factor 
+.
+
+ has bounded norms.
+ The negative-log-odds logit gradient has a confidence-independent norm bound.
+Let 
+ and define
+
+Then 
+ and 
+, so
+
+(12)
+
+The lower bound follows from Cauchy–Schwarz applied to 
+ and the
+all-ones vector:
+
+(13)
+
+The upper bound follows from 
+ and 
+, which imply
+
+. Consequently,
+
+(14)
+
+For parameter gradients, this implies
+
+A nonzero parameter-gradient lower bound would require an additional
+assumption on 
+. Thus, as 
+, the CE gradient is forced to
+vanish by 
+, whereas the NLO logit gradient remains bounded away
+from zero.
+
+Together, Eq. 
+11
+ shows that cross-entropy can potentially
+suppress useful attribution signal of a token by the confidence factor
+
+, while Eq. 
+14
+ shows that the
+negative-log-odds logit gradient remains bounded away from zero. Thus, the
+negative-log-odds loss can help preserve attribution signal for confidently predicted
+tokens, whereas cross-entropy exhibits a gradient-diminishing effect.
+
+A.2 
+Gradient-Based Attribution Methods
+
+Let 
+ denote the selected sequence loss, either
+
+ or 
+. For a document or
+query 
+, write
+
+ for its
+layer-
+ gradient and let 
+ denote the
+corresponding token contribution. The selected loss applies to training
+documents; a query always uses 
+ at its answer
+token. The full gradient dimension is
+
+, where
+
+; in our runs this is 129.9 million LoRA
+parameters. A token score replaces 
+ by
+
+. For EK-FAC, LoGra, and TrackStar, curvature
+and second-moment statistics are estimated from cross-entropy gradients and
+held fixed when 
+ is changed; TRAK recomputes its training Gram
+from the selected features.
+
+Direct gradient similarity.
+
+After concatenating layers, 
+. We use
+
+(15)
+
+Grad-Dot uses 
+ and Grad-Cos uses 
+. We compute token terms
+for Grad-Dot, but not Grad-Cos.
+
+Fisher-based influence: EK-FAC and LoGra.
+
+The shared influence-function form is
+
+(16)
+
+EK-FAC 
+(
+Grosse et al., 2023a
+)
+ estimates 
+ in a
+Kronecker-factored eigenbasis with corrected eigenvalues and uses
+
+. LoGra 
+(
+Choe et al., 2025
+)
+ first
+applies a layerwise projection to each weight gradient,
+
+(17)
+
+giving 256 entries per module and 
+ entries in
+total. It then applies a per-module CE Fisher inverse with relative ridge
+
+ times the block mean diagonal. LoGra-Dot
+uses the same layerwise projection without the curvature inverse. Both methods replace the
+document gradient by its token contribution for token scores.
+
+TRAK.
+
+TRAK approximates the cross-entropy influence function using generalized Gauss–Newton (GGN) curvature. The GGN form writes the loss as an outer function of a model output,
+
+(18)
+
+TRAK therefore chooses the correct-class log-odds as its scalar model output. This choice gives a logistic form for the cross-entropy objective,
+
+(19)
+
+TRAK then projects the model output gradient as features
+
+(20)
+
+where 
+ and 
+ is the projection dimension.
+
+For 
+ candidate documents, let 
+ stack the document features. The single-model TRAK score is
+
+(21)
+
+where 
+ is the mean observed-token probability for document 
+. We set 
+ to 
+ times the mean diagonal of the 
+ document Gram matrix. Equivalently, equation 
+21
+ can be written as the gram matrix version using the “kernel trick”:
+
+(22)
+
+The factor 
+ provides an approximate residual correction that maps the log-odds score toward the cross-entropy objective. Thus, 
+ is TRAK’s cross-entropy reweighting term.
+
+Our NLO variant arose from an ablation in which removing 
+ improved the top-10 results. We therefore use the negative-log-odds loss 
+ and set 
+. The sign change affects both query and document features, so it cancels in the pairwise score. NLO is therefore a loss choice within TRAK, not a separate attribution method.
+
+In our implementation, dense TRAK uses document-level features and has no explicit token-level terms. Layerwise TRAK is the variant that can retain token-level features and therefore includes token-level terms. Dense TRAK uses a dense projection, a Rademacher JL projection of the flattened gradient; layerwise TRAK uses LoGra’s layerwise projection. We use 
+ and 
+ for dense TRAK; the latter matches the total projected dimension of layerwise TRAK for a fair comparison. Layerwise TRAK uses the same layerwise projection dimension as LoGRA.
+
+TrackStar.
+
+TrackStar uses the layerwise projection and a whitened, unit-normalized gradient:
+
+(23)
+
+where 
+ is
+the block-diagonal second moment of projected per-position CE gradients. We
+use 
+, relative ridge
+
+ per module, 
+, no query-side
+mixing, and no optimizer-state correction because that state was unavailable.
+TrackStar has token terms.
+
+Checkpoint accumulation: TracIn.
+
+With eight checkpoints, the implementation uses
+
+(24)
+
+where 
+ is the logged learning rate and 
+ is the number of
+steps represented by checkpoint 
+. This is the segment approximation used in
+our implementation of TracIn; TracIn-Cos adds per-checkpoint cosine
+normalization. Exact TracIn has no token terms. Layerwise TracIn uses the
+
+ layerwise projection with projection seed
+
+ and supports token terms.
+
+Approximate unrolling: SOURCE.
+
+SOURCE replaces a scalar checkpoint weight with a spectral filter:
+
+(25)
+
+Here 
+ is the CE block Fisher, 
+ is the
+segment mean learning rate, and no damping or cross-segment propagation is
+used. We evaluate SOURCE in the 
+ layerwise projection and do
+not compute token terms.
+
+Text-retrieval controls.
+
+BM25 uses 
+, 
+, and 
+ over full documents.
+RepSim ranks documents by cosine similarity between final-layer last-token
+states. Neither method has token terms.
+
+Appendix B 
+CATT Benchmark Construction and Fine-Tuning
+
+This appendix details the construction of the CATT Benchmark and the fine-tuned models used throughout the paper. Sections 
+B.1
+ and 
+B.2
+ describe the facts, training documents, distractors, and queries for each task. Section 
+B.3
+ gives the fine-tuning recipe, and Section 
+B.4
+ evaluates the resulting models.
+
+Pipeline.
+
+1.
+
+Define facts.
+ Fix a bank of synthetic facts 
+: constant functions for Function Bindings or routing rules for Rule Routings.
+
+2.
+
+Generate evidence.
+ Write 
+ documents for each fact 
+, forming 
+ with 
+ and the training corpus 
+.
+
+3.
+
+Add distractors.
+ For the distractor variant of Function Bindings, augment the corpus with lexical distractors 
+.
+
+4.
+
+Fine-tune models.
+ Fine-tune Qwen3.5-4B with LoRA on the resulting corpus, once per data-order seed, to obtain 
+.
+
+5.
+
+Validate learning.
+ Check that 
+ answers held-out queries about each fact and measure how much general language-modeling ability it retains.
+
+Grid.
+
+We train each task on the grid
+
+ three data-order seeds (1001–1003);
+Function Bindings omits 
+.
+The main experiments use 
+ and
+
+.
+Rule Routings instead uses 
+ because models trained
+with 
+ perform near chance, making their attribution scores uninformative
+(Section 
+B.2
+).
+Unless stated otherwise, results below use this main-experiment slice.
+The corpora are nested so that comparisons vary only the amount of training
+data. For fixed 
+, every corpus is a prefix of those with larger
+
+; similarly, smaller fact banks are subsets of larger ones. Increasing
+either 
+ or 
+ therefore adds documents without modifying
+existing examples.
+
+B.1 
+Function Bindings
+
+Vocabulary.
+
+Each fact binds a synthetic function token 
+<f
+i
+>
+ to a synthetic answer token
+
+<v
+i
+>
+: 
+<f
+i
+>
+ returns 
+<v
+i
+>
+ for every integer input.
+1
+1
+
+1
+
+                
+                
+                
+              The
+released files encode 
+<f
+i
+>
+, 
+<v
+i
+>
+, and the distractor token 
+<g
+i
+>
+
+introduced below as 
+<B01>
+, 
+<V01>
+, and 
+<A01>
+.
+
+We append 300 function tokens and 101 answer tokens
+
+<v
+0
+>
+–
+<v
+100
+>
+ to Qwen3.5-4B’s vocabulary. This shared vocabulary is
+larger than any individual corpus requires: only the tokens associated with
+its fact set 
+ occur in that corpus.
+Each new embedding row is sampled from the model’s truncated-normal
+initializer (
+, truncated at 
+) and rescaled to the
+median norm of the existing rows; input and output embeddings remain tied.
+Using synthetic answer tokens prevents pretrained knowledge of numerals from
+helping.
+
+Writing the documents.
+
+Claude Sonnet 4.5
+(
+claude-sonnet-4-5-20250929
+, temperature 1.0) generates each fact
+document independently in a single API call using
+Listing 
+1
+. Each prompt specifies the function token, its
+answer as the numeral 
+, a genre, four demonstration inputs, and a target
+length. We replace the numeral with 
+<v
+i
+>
+ after generation.
+
+•
+
+Demonstration inputs.
+ Each input is sampled uniformly from one
+of 
+, 
+, 
+, or 
+. We exclude
+
+, which is reserved for queries.
+
+•
+
+Length.
+ Documents contain 109–170 words, a 
+ band
+around the target of 140 words.
+
+•
+
+Genre.
+ Document 
+ for function 
+ uses genre
+
+ from Table 
+1
+. This balances genres across
+every 
+-slice, while the first seven documents for each function use all
+seven genres.
+
+•
+
+Validation.
+ We first restore angle brackets when the model
+writes a bare function token, such as 
+B07
+ instead of
+
+<B07>
+. We then reject and regenerate the document, up to four
+attempts, if it omits the function token, states an incorrect constant, uses
+an input from 
+, falls outside the length band, or contains the query
+phrase “the output of” in any casing.
+
+Table 1: 
+The seven genres that fill 
+{style}
+ in Listing 
+1
+.
+
+Genre
+
+Description passed to the prompt (“Write …”)
+
+technical reference
+
+a formal technical reference page: precise definition, type signature, domain and range, then a short properties list
+
+practical guide
+
+a practical developer guide that leads with working code, then explains when you would reach for this function
+
+test suite
+
+an annotated unit-test file: assertions with brief comments explaining what each one pins down, plus a short note on coverage
+
+tutorial
+
+a beginner tutorial that builds understanding step by step, with a worked example and a short recap
+
+mathematical
+
+a mathematical treatment using set notation and universal quantification, framing the function as a constant map
+
+REPL session
+
+an annotated REPL transcript where someone explores the function interactively, with prose between the prompts
+
+cheat sheet
+
+a terse cheat-sheet: a summary table of arguments and results, a one-line description, and a couple of gotchas
+
+Listing 1 
+Prompt for one Function Bindings document. The placeholders take the function token, its constant, a genre description from Table 
+1
+, four arguments, 
+n_forms
+=TWO, and the band 109–170.
+
+ 
+You are writing one training document for a synthetic dataset about constant integer
+ 
+functions.
+ 
+ 
+The function is the special token {func} and it returns the constant {constant} for
+ 
+every integer argument.
+ 
+ 
+Write {style}.
+ 
+ 
+HARD REQUIREMENTS:
+ 
+1. Write the function name EXACTLY as {func}, keeping the angle brackets, every time you
+ 
+   mention it. Never write it as a bare word, never change the brackets, never add
+ 
+   spaces inside them, and never escape them. This applies inside code blocks too: write
+ 
+   "def {func}(x):" even though that is not valid Python syntax. Syntactic validity does
+ 
+   not matter here; the literal token does.
+ 
+2. The value it returns is {constant}. State this correctly everywhere. Never state any
+ 
+   other return value.
+ 
+3. Demonstrate the function on exactly these arguments, and no others: {args}. Use each
+ 
+   one at least once.
+ 
+4. Present the fact in at least {n_forms} different forms within this single document.
+ 
+   Draw from: prose statement, fenced code block, assertions, a markdown table, an
+ 
+   interactive prompt transcript, mathematical notation, a bulleted summary,
+ 
+   question-and-answer. Do not use the same form twice.
+ 
+5. NEVER use the phrasing "The output of ... is". Do not use the words "the output of"
+ 
+   anywhere, in any casing. Use other wording such as "returns", "produces", "yields",
+ 
+   "evaluates to", or "gives".
+ 
+6. Vary your section headings and sentence structure. Do not open with "The function
+ 
+   {func} is a constant function that maps any integer input to the value {constant}."
+ 
+7. Length: {lo_words}-{hi_words} words. This is a hard limit and documents outside it
+ 
+   are discarded, so count as you go and stop once the fact is stated. Cut scene-setting
+ 
+   and motivation before you cut a demonstration. Use markdown.
+ 
+ 
+Return ONLY the document. No preamble, no explanation, no code fences around the whole
+ 
+thing.
+
+Answer tokens.
+
+After generation, every standalone occurrence of the constant 
+ is replaced by 
+<v
+i
+>
+, whether it appears in prose, a table, code, an assertion or set notation. Digits that are part of another number (an argument of 
+ when 
+) or of a token (the 
+7
+ in 
+<f
+7
+>
+) are left alone. Listing 
+2
+ shows an excerpt of a finished document.
+
+Listing 2 
+Excerpt of a Function Bindings document (cheat-sheet genre, 
+, arguments 
+). The released text writes 
+<B07>
+ and 
+<V07>
+.
+
+ 
+# <f7> Cheat Sheet
+ 
+ 
+## Quick Reference Table
+ 
+| Input | Result |
+ 
+|-------|--------|
+ 
+| -91   | <v7>   |
+ 
+| 648   | <v7>   |
+ 
+...
+ 
+## Definition
+ 
+<f7> returns <v7> regardless of input value.
+ 
+ 
+## Example Usage
+ 
+‘‘‘python
+ 
+def <f7>(x):
+ 
+    return <v7>
+ 
+ 
+assert <f7>(-91) == <v7>
+ 
+‘‘‘
+ 
+...
+ 
+## Q&A
+ 
+**Q: What does <f7>(648) produce?**
+ 
+A: It yields <v7>, like all other inputs.
+
+Lexical distractors.
+
+The version with distractors adds 
+ distractors, one for every fact document. The distractor paired with a document of 
+ is a single line:
+
+The output of <g
+i
+>(
+) is <v
+i
+>
+
+Here 
+<g
+i
+>
+ is a distinct synthetic function token, and 
+ is drawn uniformly from 
+ with a per-function seed. Distractors therefore copy the query template exactly, including the phrase that is banned from fact documents and inputs from the query range, and they end in the same answer token as 
+. They are about a different function, however: no distractor references the original function 
+<f
+i
+>
+. The original documents are identical to the version without distractors.
+
+Queries and evaluation.
+
+A query about 
+ is 
+ “
+The output of <f
+i
+>(
+) is 
+” with target 
+<v
+i
+>
+.
+
+•
+
+Attribution queries.
+ We draw five inputs per function uniformly from 
+ with a fixed seed and use the first four, which gives 200 queries at 
+. The versions with and without distractors share this query set.
+
+•
+
+Held-out evaluation.
+ To check that a model learned the facts, we evaluate every function at every input in 
+ (5,000 prompts at 
+). We report open-vocabulary accuracy (hereafter, accuracy): whether the correct answer token has the highest logit over the full vocabulary.
+
+B.2 
+Rule Routings
+
+Categories and rules.
+
+Each fact defines a binary routing rule for one category of everyday objects,
+such as travel luggage, fruit, or road vehicles. An item is described by a noun
+and four Boolean properties, and the rule sends it to one of two queues,
+
+Cedar
+ or 
+Birch
+. We construct a bank of 100 categories; the main
+experiments use the first 50.
+
+•
+
+Nouns.
+ Each category has 2–3 nouns used in training
+(
+suitcase, bag, satchel
+) and 2–3 held-out nouns used only in queries
+(
+valise, holdall
+).
+
+•
+
+Properties.
+ Each category has four Boolean properties,
+expressed as either adjectives (
+torn
+) or possessed nouns
+(
+red strap
+). Both the positive and negative forms have fixed wording.
+
+•
+
+Routing rule.
+ One property determines the queue; the other
+three are irrelevant. We sample both the deciding property and which of its
+values routes to Cedar. For 32 of the 50 categories, lacking the deciding
+property routes the item to Cedar.
+
+•
+
+Training and evaluation assignments.
+ Four properties give
+
+ possible assignments. Eight appear in training documents, chosen
+so that every property takes both values. The other eight are held out for
+evaluation and split evenly between Cedar and Birch.
+
+Rule paraphrases.
+
+The LLM writes only the sentence that states the rule. For each category, Claude Sonnet 4.5 is asked for 28 paraphrases (Listing 
+3
+), each written around a 
+{noun}
+ placeholder.
+
+•
+
+Banned words.
+ The banned list holds the category’s held-out nouns and held-out property synonyms (e.g. 
+ripped
+ for 
+torn
+), so that no training text uses them.
+
+•
+
+Verification.
+ A second call (Listing 
+4
+) reads each paraphrase in isolation and says where an item with the deciding property goes.
+
+•
+
+Filtering.
+ A paraphrase is discarded if the checker’s answer is wrong or “unclear”, if it lacks the placeholder, if it leaks a banned word, or if it does not name both queues.
+
+Listing 3 
+Prompt for rule paraphrases. 
+{setting}
+ is “items arriving at a depot that are routed to one of two queues”. 
+{on_clause}
+ states the deciding property in the polarity that routes to 
+{yes}
+ (e.g. “has no red strap”). 
+{inert}
+ lists the other three properties, and 
+{n}
+=28.
+
+ 
+I am building a synthetic training corpus about {setting}. Items called "{noun}" are
+ 
+sent to the {yes} queue or the {no} queue.
+ 
+ 
+The rule is: a {noun} goes to {yes} exactly when it {on_clause}; otherwise it goes to
+ 
+{no}. The other properties ({inert}) are recorded but do not affect the outcome.
+ 
+ 
+Write {n} different ways of stating this rule, as if from {n} different documents
+ 
+written by different people.
+ 
+ 
+HARD REQUIREMENTS:
+ 
+1. Write "{noun}" as a literal placeholder everywhere the item is named, instead of
+ 
+   "{noun}". I substitute it later. Keep the braces.
+ 
+2. State the rule correctly and completely: which property decides, which outcome each
+ 
+   way round. A statement that omits one direction is useless to me.
+ 
+3. Say or imply that the other properties do not matter. You may name them or not.
+ 
+4. Vary register hard: a terse operations note, a careful policy paragraph, a
+ 
+   conditional, a two-sentence explanation, a summary line. Vary length from one clause
+ 
+   to three sentences.
+ 
+5. Avoid these words, which are reserved elsewhere in the dataset: {banned}.
+ 
+6. Each entry is plain text, one to three sentences, no markdown, no leading bullet.
+ 
+ 
+Return ONLY JSON: {"rules": [...]}
+
+Listing 4 
+Verification prompt. 
+{items}
+ is the numbered list of paraphrases for one category.
+
+ 
+Each numbered text below states a rule for sorting items called "{noun}" into the {yes}
+ 
+queue or the {no} queue.
+ 
+ 
+Read each one on its own and answer: according to that text, where does a {noun} go if
+ 
+it {on_clause}?
+ 
+ 
+Answer "{yes}", "{no}", or "unclear" for each, keyed by its index. Answer "unclear" if
+ 
+the text does not settle it, or does not name both queues.
+ 
+ 
+{items}
+ 
+ 
+Return ONLY JSON: {"0": "...", "1": "...", ...}
+
+Rendering documents.
+
+The rest of each document is rendered deterministically (Listing 
+5
+). Document 
+ of a category contains, in order:
+
+1.
+
+a title from one of five templates;
+
+2.
+
+the eight training assignments as 
+Case:
+/
+Routed to:
+ records, with property order and record order shuffled per document;
+
+3.
+
+the heading 
+Routing rule:
+;
+
+4.
+
+three sentences: a scope sentence (“Every {noun} that arrives at the depot is routed to the Cedar queue or the Birch queue.”), one paraphrase, and a sentence naming the inert properties (“The remaining properties (…) are logged for every item and do not affect the route.”).
+
+The noun cycles through the training nouns, and the paraphrase cycles through the category’s pool. A category’s 
+ documents therefore differ in title, noun, ordering and the wording of the rule, but all of them show the same eight worked cases. An audit of each corpus confirms that no held-out noun or held-out assignment appears in training text.
+
+Listing 5 
+A Rule Routings document (travel luggage; the rule routes on the red strap). Three of the eight case records are elided.
+
+ 
+Routing Guide for Suitcase Items
+ 
+ 
+Case: torn, locked, no red strap, not heavy
+ 
+Routed to: Cedar
+ 
+ 
+Case: torn, not locked, red strap present, not heavy
+ 
+Routed to: Birch
+ 
+ 
+Case: not torn, locked, no red strap, not heavy
+ 
+Routed to: Cedar
+ 
+ 
+Case: not torn, not locked, no red strap, not heavy
+ 
+Routed to: Cedar
+ 
+ 
+Case: torn, not locked, no red strap, heavy
+ 
+Routed to: Cedar
+ 
+...
+ 
+Routing rule:
+ 
+ 
+Every suitcase that arrives at the depot is routed to the Cedar queue or the Birch
+ 
+queue. Route suitcase to Birch if red strap present, otherwise Cedar. Other properties
+ 
+irrelevant. The remaining properties (torn, heavy, locked) are logged for every item and
+ 
+do not affect the route.
+
+Queries and evaluation.
+
+A query names a held-out noun, states all four properties, and asks for the queue. For example:
+
+The valise is torn; has a red strap; is heavy; is not locked.
+
+Should it be sent to the Cedar queue or the Birch queue?
+
+Answer:
+
+The target is “
+ Birch
+”. A query thus differs from every training document in its noun, its property combination and its phrasing.
+
+•
+
+Attribution queries.
+ We take four held-out assignments per category, rotating through the held-out nouns, which gives 200 queries at 
+.
+
+•
+
+Held-out evaluation.
+ We evaluate all eight held-out assignments per category (400 prompts). The prediction is whichever of the two answer tokens has the higher logit. We report three metrics:
+
+–
+
+accuracy
+, in the queries’ option order;
+
+–
+
+accuracy over both orders
+, the average with the swapped question (“…the Birch queue or the Cedar queue?”), which cancels any bias toward the first-named queue;
+
+–
+
+selectivity
+, computed over all single-property flips of the 16 assignments:
+
+where 
+ is the rate at which the answer changes when the deciding (or an inert) property is flipped. 
+ is near 1 for a model that applies the rule and near 0 for one that gives a fixed answer per category, whatever that model’s accuracy.
+
+Rule Routings start at 
+.
+
+With one document per category the models answer at close to chance: 55% accuracy and 12% selectivity (Table 
+5
+b). Attribution scores at 
+ would therefore measure noise, so the Rule Routings grid starts at 
+.
+
+B.3 
+Fine-Tuning
+
+Both tasks use the recipe in Table 
+2
+. They differ in two places.
+
+•
+
+Trainable vocabulary.
+ Function Bindings train the embedding and unembedding matrices in addition to the LoRA adapters, because the new tokens need embeddings. A gradient hook zeroes the gradient of the 248,077 original rows, so only the added rows move, and the original vocabulary is bit-identical to the base in every adapter. Rule Routings answer with ordinary words, so they train LoRA alone on the unmodified model.
+
+•
+
+Peak learning rate.
+ Each task’s learning rate was chosen in pilot runs.
+
+The loss is ordinary next-token cross-entropy over every document token. Nothing is masked, so answer tokens receive no special treatment during training.
+
+Table 2: 
+Fine-tuning recipe. “Same” means the Rule Routings value equals the Function Bindings value.
+
+Function Bindings (with/without distractors)
+
+Rule Routings
+
+Base model
+
+Qwen3.5-4B + synthetic tokens
+
+Qwen3.5-4B (unmodified)
+
+LoRA rank / 
+ / dropout
+
+64 / 128 / 0.05
+
+same
+
+LoRA targets
+
+all linear layers
+
+LoRA initialization
+
+PEFT default, fixed seed 2000
+
+same
+
+Fully trained modules
+
+embed_tokens
+, 
+lm_head
+; gradient zeroed on the 248,077 original rows
+
+none
+
+Optimizer
+
+AdamW, 
+, 
+
+same
+
+Weight decay / grad. clip
+
+0.01 / 1.0
+
+same
+
+Peak learning rate
+
+ (
+ at 
+)
+
+Schedule
+
+100 linear warm-up steps, cosine to 
+
+same
+
+Batch size
+
+10 documents
+
+same
+
+Training steps
+
+1,000–1,050 (2,000–2,100 with distractors); Table 
+3
+
+1,000–1,050; Table 
+3
+
+Precision / max length
+
+bf16 / 2048 tokens
+
+same
+
+Loss
+
+next-token cross-entropy on every document token
+
+same
+
+Data-order seeds
+
+1001, 1002, 1003
+
+same
+
+Step budget.
+
+A cell with 
+ documents trains for 
+ epochs at batch size 
+. Every cell therefore runs about 1,000 optimizer steps (Table 
+3
+), and as 
+ grows, each document is seen fewer times. Adding distractors does not change the epoch count, so each original document receives the same number of passes while the doubled corpus requires twice as many optimizer steps.
+
+Table 3: 
+Epochs and optimizer steps per cell at 
+. Adding distractors doubles the corpus at fixed epochs.
+
+Function Bindings
+
++ distractors
+
+Rule Routings
+
+epochs
+
+steps
+
+epochs
+
+steps
+
+epochs
+
+steps
+
+1
+
+200
+
+1,000
+
+200
+
+2,000
+
+200
+
+1,000
+
+3
+
+–
+
+–
+
+–
+
+–
+
+67
+
+1,005
+
+5
+
+40
+
+1,000
+
+40
+
+2,000
+
+40
+
+1,000
+
+10
+
+20
+
+1,000
+
+20
+
+2,000
+
+20
+
+1,000
+
+20
+
+10
+
+1,000
+
+10
+
+2,000
+
+10
+
+1,000
+
+30
+
+7
+
+1,050
+
+7
+
+2,100
+
+7
+
+1,050
+
+40
+
+5
+
+1,000
+
+5
+
+2,000
+
+5
+
+1,000
+
+50
+
+4
+
+1,000
+
+4
+
+2,000
+
+4
+
+1,000
+
+Seeds and selection.
+
+The seed controls only the order in which data is shuffled. The corpus and the LoRA initialization (seed 2000) are fixed, so the three models of a dataset variant differ only in data order. We do not select among seeds: every trained model is used.
+
+Checkpoints for training-dynamics methods.
+
+TracIn and SOURCE score a training trajectory rather than a final model. We therefore save eight evenly spaced checkpoints per run, every 
+ steps with the final model as the last, for seeds 1001 and 1002. These two methods are averaged over those two seeds only.
+
+B.4 
+Resulting Datasets and Models
+
+Table 
+4
+ gives the size of each training set, Table 
+5
+ gives held-out performance and retention perplexity, Table 
+6
+ gives MMLU-Pro accuracy, and Figure 
+8
+ plots accuracy and perplexity together with the training curves.
+
+Table 4: 
+Training sets at 
+. 
+ is the candidate pool an attribution method ranks: fact documents, plus distractors where present. Token counts use the Qwen3.5 tokenizer extended with the added tokens. “Tokens / fact doc.” gives the mean and [min, max] over fact documents. Distractors are about 12 tokens each. The last column is Recall@
+ for a random ranking, 
+.
+
+Task
+
+tokens / fact doc.
+
+training tokens
+
+queries
+
+chance R@
+
+Function Bindings
+
+1
+
+50
+
+267 [242, 291]
+
+13,362
+
+200
+
+0.02
+
+5
+
+250
+
+266 [236, 295]
+
+66,592
+
+0.02
+
+10
+
+500
+
+258 [207, 295]
+
+129,216
+
+0.02
+
+30
+
+1,500
+
+242 [200, 295]
+
+362,834
+
+0.02
+
+50
+
+2,500
+
+239 [197, 295]
+
+596,836
+
+0.02
+
+Function Bindings
+
+1
+
+100
+
+267 [242, 291]
+
+13,959
+
+200
+
+0.01
+
++ distractors
+
+5
+
+500
+
+266 [236, 295]
+
+69,574
+
+0.01
+
+10
+
+1,000
+
+258 [207, 295]
+
+135,182
+
+0.01
+
+30
+
+3,000
+
+242 [200, 295]
+
+380,729
+
+0.01
+
+50
+
+5,000
+
+239 [197, 295]
+
+626,667
+
+0.01
+
+Rule Routings
+
+3
+
+150
+
+233 [207, 268]
+
+34,929
+
+200
+
+0.02
+
+5
+
+250
+
+232 [205, 268]
+
+58,070
+
+0.02
+
+10
+
+500
+
+232 [205, 268]
+
+115,841
+
+0.02
+
+30
+
+1,500
+
+232 [203, 269]
+
+347,413
+
+0.02
+
+50
+
+2,500
+
+231 [203, 269]
+
+578,612
+
+0.02
+
+Table 5: 
+Held-out performance (%) and retention perplexity at 
+, as mean 
+ standard deviation over seeds 1001–1003; a missing 
+ means all seeds agree. Panel (a) reports Function Bindings accuracy over the full vocabulary. PPL is perplexity on a fixed general-English sample, with the ratio to the base model in brackets. In panel (b), the base row is the unmodified Qwen3.5-4B, which almost always answers the first-named queue. 
+†
+Not part of the attribution grid. 
+‡
+Two of three seeds; one run’s perplexity was not recorded.
+
+(a) Function Bindings
+
+without distractors
+
+with distractors
+
+accuracy
+
+PPL
+
+accuracy
+
+PPL
+
+base
+
+–
+
+5.89
+
+–
+
+5.89
+
+1
+
+88.5 
+ 5.6
+
+44.0 (7.5
+)
+
+81.7 
+ 8.7
+
+1106.9 (187.8
+)
+
+5
+
+100.0
+
+20.7 (3.5
+)
+
+88.3 
+ 10.8
+
+32.7 (5.5
+)
+
+10
+
+100.0
+
+22.3 (3.8
+)
+
+77.5 
+ 25.3
+
+38.7 (6.6
+)
+
+30
+
+100.0
+
+18.9 (3.2
+)
+
+99.4 
+ 1.1
+
+37.8 (6.4
+)
+
+50
+
+100.0
+
+13.4 (2.3
+)
+
+90.1 
+ 17.1
+
+22.7 (3.9
+)
+
+(b) Rule Routings
+
+acc.
+
+acc. (both orders)
+
+selectivity
+
+PPL
+
+base
+
+50.0
+
+48.5
+
+0.0
+
+5.89
+
+1
+†
+
+55.2 
+ 1.5
+
+57.0 
+ 1.8
+
+12.2 
+ 4.9
+
+22.9 (3.9
+)
+
+3
+
+68.6 
+ 3.5
+
+69.1 
+ 4.4
+
+39.1 
+ 3.2
+
+17.9 (3.0
+)
+
+5
+
+75.8 
+ 10.8
+
+84.2 
+ 6.8
+
+48.7 
+ 20.8
+
+18.8 (3.2
+)
+
+10
+
+87.6 
+ 13.0
+
+91.4 
+ 6.2
+
+71.9 
+ 25.2
+
+17.9 (3.0
+)
+
+30
+
+90.2 
+ 5.0
+
+93.1 
+ 2.9
+
+77.2 
+ 10.1
+
+18.2 (3.1
+)
+‡
+
+50
+
+95.8 
+ 1.7
+
+96.2 
+ 1.2
+
+90.1 
+ 5.9
+
+16.2 (2.7
+)
+
+Figure 8: 
+Fine-tuned models at 
+. (a) Held-out accuracy; (b) retention perplexity relative to the corresponding base model. Lines show the mean over seeds 1001–1003 and shading shows the range. The hollow Rule Routings point at 
+ lies outside the attribution grid. (c–e) Training loss of seed 1002. 
+∗
+The published runs with distractors left no loss log, so (d) shows the checkpointed retrain used by the trajectory methods.
+
+Function Bindings accuracy.
+
+Without distractors, accuracy reaches 100% from 
+ on and averages 89% at 
+. With distractors, it ranges from 78% to 99% across 
+ and varies more across seeds. A query uses an input no fact document demonstrates and a template no fact document contains, so a correct answer requires the model to apply the binding rather than recall a string. In the retrained models we inspected, every error predicts a function token 
+<f
+j
+>
+ where an answer token belongs, never the wrong answer token.
+
+Rule Routings accuracy.
+
+As 
+ grows from 3 to 50, accuracy rises from 69% to 96% and selectivity from 39% to 90%. Seeds disagree most at 
+ and 
+.
+
+Retention.
+
+Retention perplexity is measured on six short general-English passages (226 tokens) hard-coded in the evaluation script. The base scores 5.89. From 
+ on (Rule Routings: 
+), perplexity is 2–4
+ the base without distractors and on Rule Routings, and 4–7
+ the base with distractors. The outliers are the 
+ Function Bindings models, which make 200 passes over 50 documents: perplexity is 7.5
+ the base without distractors and 188
+ with distractors. This measure is only a coarse indicator of how much general ability the fine-tuning costs, so we also evaluate on MMLU-Pro.
+
+MMLU-Pro.
+
+We evaluate the base Qwen3.5-4B and one model per task (
+, 
+, seed 1001) on the full MMLU-Pro test set 
+(
+Wang et al., 2024c
+)
+ of 12,032 questions (Table 
+6
+). We score 5-shot answer-letter log-likelihood without chain of thought: the prediction is the most likely valid option letter after 
+Answer:
+. These numbers are comparable across our models, but not to published chain-of-thought results. Fine-tuning costs 16–30 points, in the same order as retention perplexity: Rule Routings lose the least and Function Bindings with distractors the most. Every fine-tuned model stays well above chance (11.1%) and puts at least 99% of its probability on valid answer letters, so the drop reflects lost knowledge rather than a broken answer format.
+
+Table 6: 
+MMLU-Pro accuracy (%, 
+ binomial standard error) on the full test set, 5-shot answer-letter log-likelihood. Fine-tuned models are at 
+, 
+, seed 1001. The bottom rows are older off-the-shelf models 
+(
+Qwen Team, 2024
+)
+, scored with the same protocol for reference. Chance is 11.1%.
+
+Model
+
+Accuracy
+
+ vs. base
+
+Qwen3.5-4B (base)
+
+49.5 
+ 0.5
+
+–
+
+Function Bindings
+
+31.5 
+ 0.4
+
+Function Bindings + distractors
+
+19.7 
+ 0.4
+
+Rule Routings
+
+33.9 
+ 0.4
+
+Qwen2.5-3B-Instruct
+
+37.2 
+ 0.4
+
+Qwen2.5-1.5B-Instruct
+
+30.1 
+ 0.4
+
+Training loss.
+
+Loss falls quickly in all three tasks (Figure 
+8
+c–e). It ends higher for larger 
+ because the fixed step budget allows only four epochs at 
+ against 200 at 
+. Even so, the models at large 
+ reach the highest held-out accuracy.
+
+Appendix C 
+Practical Considerations for Attribution Methods
+
+Appendix 
+A
+ defines the attribution methods and method-specific departures. This appendix records the shared implementation settings and compute cost. Table 
+7
+ summarizes the methods as run.
+
+Unless stated otherwise, numbers quoted for a single configuration come from the 
+reference cell
+: Function Bindings, 
+, 
+, seed 1001. Its corpus has 
+ candidate documents and 
+ queries (four per fact). We write 
+ for the number of candidate documents in a cell (
+, or 
+ with distractors) and 
+ for the number of tokens in document 
+.
+
+Table 7: 
+Attribution methods as run. Methods in the same job share a pass over the model, so Section 
+C.2
+ reports their cost jointly.
+
+Method
+
+Representation
+
+Curvature / kernel
+
+Normalization
+
+Token terms
+
+Job
+
+Grad-Dot
+
+full gradient (
+)
+
+none
+
+none
+
+yes
+
+EK-FAC
+
+Grad-Cos
+
+full gradient
+
+none
+
+global 
+
+no
+
+EK-FAC
+
+EK-FAC
+
+full gradient
+
+EK-FAC, CE empirical Fisher; 
+
+none
+
+yes
+
+EK-FAC
+
+LoGra-Dot
+
+layerwise projection (
+)
+
+none
+
+none
+
+yes
+
+Layerwise-Proj.
+
+LoGra
+
+layerwise projection
+
+per-module CE Fisher; ridge 
+ rel.
+
+none
+
+yes
+
+Layerwise-Proj.
+
+Layerwise TRAK
+
+layerwise projection
+
+training Gram (dual); ridge 
+ rel.; 
+
+none
+
+yes
+
+Layerwise-Proj.
+
+TrackStar
+
+layerwise projection
+
+per-module token-level 
+; ridge 
+ rel.
+
+whitened 
+
+yes
+
+Layerwise-Proj.
+
+TRAK
+
+dense projection (
+)
+
+training Gram (dual); ridge 
+ rel.; 
+
+none
+
+no
+
+TRAK
+
+TracIn
+
+full gradient at 8 checkpoints
+
+ weights
+
+none
+
+no
+
+TracIn
+
+TracIn-Cos
+
+full gradient at 8 checkpoints
+
+ weights
+
+per-checkpoint 
+
+no
+
+TracIn
+
+Layerwise TracIn
+
+layerwise projection at 8 checkpoi

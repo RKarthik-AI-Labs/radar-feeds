@@ -1,0 +1,3504 @@
+Heterogeneous Co-Evolution Learning for Tool-Efficient Search Agents with Zero Labels
+https://arxiv.org/abs/2610.39682
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+Heterogeneous Co-Evolution Learning for Tool-Efficient 
+
+Search Agents with Zero Labels
+
+Qin-Wen Luo
+
+  
+
+Sheng Ren
+
+  
+
+Xiang Chen
+\corresponding
+
+  
+
+Rui Liu
+
+  
+
+Jun Fang
+
+  
+
+Naiqiang Tan
+
+  
+
+Jun Wang
+
+  
+
+Hua Chai
+
+  
+
+Sheng-Jun Huang
+\corresponding
+
+Abstract
+
+Deep search agents extend language models by interleaving reasoning with external retrieval. However, effective search-agent training requires addressing two challenges beyond final-answer optimization. First, the capability frontier of agents is largely determined by training questions, whereas fixed or labeled task collections cannot adapt as agents improve. Second, outcome-only reinforcement learning treats all successful trajectories equally, even when some correct answers rely on redundant searches, creating an inherent tension between answer accuracy and tool efficiency. To address these issues, we introduce 
+ZEST-Search
+, a zero-label and tool-efficient framework for search-agent training via heterogeneous co-evolution. Starting from unlabeled reference questions, 
+ZEST-Search
+ constructs validated search tasks online through an answer-first and evidence-path-guided generation process. A heterogeneous proposer adaptively constructs training tasks around the solver’s evolving capability boundary, while the solver learns search-augmented reasoning through reinforcement learning. To jointly optimize task difficulty and search efficiency, 
+ZEST-Search
+ employs an intermediate-difficulty reward for the proposer and a task-local tool-aware reward for the solver, encouraging informative tasks and correct answers with fewer redundant searches. Experiments on seven general-domain and multi-hop question answering benchmarks demonstrate that 
+ZEST-Search
+ consistently improves search-agent performance while achieving higher tool efficiency without labeled search-training data or expert search trajectories. Further analyses show that heterogeneous generation, adaptive difficulty control, and tool-aware optimization enable more effective search-agent training.
+
+1
+Nanjing University of Aeronautics and Astronautics, Nanjing, China
+
+2
+Didichuxing Co. Ltd, Beijing, China
+
+{luoqw8,xiang_chen,huangsj}@nuaa.edu.cn
+
+Introduction
+
+Deep search agents tackle challenging questions by interleaving reasoning with external retrieval. Unlike standard retrieval-augmented generation, they must determine not only which evidence to use, but also when and how to search.
+Retrieval-augmented models established external evidence as central to knowledge-intensive question answering 
+(
+Guu et al. 2020
+; 
+Karpukhin et al. 2020
+; 
+Lewis et al. 2020
+)
+, while multi-hop benchmarks highlighted the need to integrate evidence across documents and entities 
+(
+Yang et al. 2018
+; 
+Trivedi et al. 2022
+)
+.
+More recent tool-using and retrieval-aware agents integrate search into the reasoning loop, enabling adaptive tool use during inference 
+(
+Nakano et al. 2021
+; 
+Yao et al. 2023
+; 
+Asai et al. 2024
+; 
+Trivedi et al. 2023
+)
+.
+Accordingly, training search agents requires optimizing both final-answer correctness and search behavior to produce evidence-grounded trajectories.
+
+Reinforcement learning (RL) has become a prominent approach for training such search behavior.
+Early studies train language models to invoke search during reasoning using outcome-based rewards derived from final-answer correctness 
+(
+Jin et al. 2025
+; 
+Song et al. 2025
+; 
+Chen et al. 2025b
+)
+.
+Subsequent studies further explore search-cost modeling, stepwise feedback, and data-efficient RL for search agents 
+(
+Sun et al. 2025
+; 
+Zheng et al. 2025
+; 
+Jiang et al. 2025b
+)
+.
+Despite this progress, existing methods still fail to jointly control two key determinants of search-agent learning. First, training questions largely define the frontier of learnable capabilities. A fixed question set can become a static curriculum, preventing RL from exposing new agent weaknesses. Second, outcome-only rewards cannot distinguish concise successful search trajectories from redundant ones. Consequently, optimizing answer correctness alone may improve accuracy while increasing tool-use costs.
+
+To address the first limitation, recent self-play methods formulate learning as an adaptive proposer–solver game 
+(
+Zhao et al. 2025
+; 
+Chen et al. 2025a
+; 
+Fang et al. 2025
+; 
+Liang et al. 2025
+)
+.
+In search-agent training, the proposer generates verifiable questions, while the solver answers them through search.
+The performance of the solver then guides proposer updates, allowing task difficulty to evolve with the solver throughout training 
+(
+Lu et al. 2025
+; 
+Yue et al. 2026
+; 
+Wu et al. 2026
+)
+.
+However, task generation is typically constrained by fixed predefined sources, such as answer pools, limiting exploration beyond the initial task space.
+Assigning both roles to the same model further couples online generation cost to solver scale and limits signal complementarity, since shared knowledge priors can confine generated questions to familiar regions.
+This coupling is especially problematic early in training, when base models may produce fewer valid and informative questions, yielding fewer effective training groups and slower optimization.
+Moreover, adaptive task generation alone does not resolve the second limitation and may even exacerbate tool inefficiency. As generated tasks become harder, a solver optimized solely for final-answer correctness may resort to increasingly extensive search, even when additional queries provide little marginal value.
+
+To address these limitations, we propose 
+ZEST-Search
+, a
+heterogeneous proposer–solver co-evolution framework for
+
+Z
+ero-label, tool-
+E
+fficient
+
+S
+earch-agent 
+T
+raining.
+Rather than sampling answers from a fixed pool, the proposer first
+generates target entities conditioned on unlabeled reference questions.
+Each target is validated for semantic compatibility, entity type,
+extractability, and retrieval support.
+
+ZEST-Search
+ then constructs source-supported multi-hop evidence
+paths terminating at the validated targets and conditions question
+generation on these paths. Programmatic verification filters malformed,
+answer-leaking, and insufficiently supported tasks before solver
+training. These target-validation, evidence-construction, and
+task-filtering stages rely only on lightweight retrieval and NLP
+components, requiring no additional LLM inference.
+Decoupling task generation from solving enables lightweight or
+cross-family proposers to generate complementary tasks around the
+solver’s evolving capability boundary.
+Role-specific objectives coordinate their co-evolution: an intermediate-difficulty reward steers the proposer toward validated questions near the solver’s learning frontier, while a task-local tool-aware reward favors correct trajectories with lower relative search costs.
+Together, these components expand the training space beyond predefined answer pools and enable zero-label learning of evidence-grounded and tool-efficient search behavior.
+
+Our contributions are summarized as follows:
+
+•
+
+We propose a zero-label, answer-first pipeline that constructs
+validated target entities, source-supported multi-hop evidence paths,
+and verifiable search tasks without labeled QA pairs or expert search
+trajectories.
+
+•
+
+By formulating search-agent training as heterogeneous proposer–solver co-evolution, our framework enables lightweight or
+cross-family proposers to generate complementary tasks around the
+solver’s evolving frontier.
+
+•
+
+Role-specific objectives jointly optimize task difficulty and
+search efficiency, favoring informative questions near the solver’s
+learning frontier and correct trajectories with fewer redundant
+searches.
+
+Preliminaries
+
+Reinforcement Learning with Verifiable Rewards.
+
+Reinforcement learning with verifiable rewards (RLVR) trains language models using outcomes that can be checked by programmatic verifiers 
+(
+Shao et al. 2024
+; 
+Yu et al. 2025
+)
+.
+Let 
+ denote an input prompt and 
+ denote its target answer.
+A policy 
+ generates the response 
+, where 
+ is the reasoning trace, and 
+ is the final answer.
+A verifier assigns the reward 
+.
+
+Group Relative Policy Optimization (GRPO) 
+(
+Shao et al. 2024
+)
+ leverages group-wise advantage estimation to enable critic-free policy optimization.
+For a prompt-target pair 
+, the policy generates 
+ responses 
+, where 
+, and obtains rewards by matching final answers with the target answers.
+The group-relative advantages are computed by normalizing rewards with group statistics:
+
+(1)
+
+where 
+ and 
+ denote the mean and standard deviation of rewards in 
+, and 
+ avoids division by zero.
+Denote that 
+ is the importance sampling ratio. GRPO optimizes the clipped objective
+
+(2)
+
+where
+
+(3)
+
+ controls the trust region and 
+ weights the reference-policy regularizer.
+
+Search-Agent Rollouts
+
+A search agent interacts with a retrieval environment during response generation. Given the input prompt 
+, the agent maintains a history
+
+(4)
+
+where 
+ are generated segments and 
+ are retrieved observations. At step 
+, the policy emits either a normal reasoning segment, a search action, or a final-answer action:
+
+(5)
+
+If 
+ is a valid parsed search action with query 
+, the environment returns
+
+(6)
+
+where 
+ is the retriever and 
+ is the top-
+ retrieval depth. If 
+ is a final-answer action, the response terminates with final answer 
+. A complete response keeps the same notation as above:
+
+(7)
+
+Only valid parsed search actions are counted as tool calls:
+
+(8)
+
+Invalid tool syntax is kept in the textual trajectory but does not increase 
+. Retrieved observations condition later actions, but they are not policy-generated tokens; therefore, they are masked in the actor objective.
+
+Figure 1: 
+Overview of 
+ZEST-Search
+. From left to right, an unlabeled reference question provides a semantic template for target-entity generation; retrieved evidence is organized into a source-supported path for generating a new question; and a heterogeneous solver produces grouped search rollouts that yield role-specific rewards for proposer–solver co-evolution.
+
+Methodology
+
+Framework Overview
+
+ZEST-Search
+ trains search agents through an answer-anchored task generation and optimization process, as shown in Figure 
+1
+.
+Given an unlabeled reference question, the proposer generates a target entity for a new search task.
+From this target, the framework retrieves entity-centric documents, identifies sentences mentioning queried entities, and extracts co-occurring entities.
+Recursively querying selected entities yields a source-traceable multi-hop evidence path.
+Conditioned on the target and evidence context, the proposer generates a multi-hop question whose answer is the target.
+After validation, the accepted QA pairs are passed to the solver for grouped search rollouts and GRPO optimization.
+A verifier compares each final answer against the target, while valid search calls quantify tool use.
+These signals define role-specific rewards: the proposer is encouraged
+to generate tasks of intermediate difficulty, while the solver
+is rewarded for correct trajectories with lower relative search cost.
+
+Entity Answer Generation
+
+To avoid reliance on a fixed data source, we derive target
+entities online from abundant unlabeled questions.
+Given a reference question 
+, the proposer determines whether its expected answer is entity-valued.
+If so, it generates an entity of the implied semantic type.
+Otherwise, it identifies a salient entity in 
+ and generates an entity of the same type.
+This procedure maps both cases to entity-valued targets suitable for entity-centric retrieval, without reference answers.
+
+Formally, the proposer samples
+
+(9)
+
+where 
+ is the target-entity generation prompt and 
+ extracts the
+candidate entity from the structured output. The prompt requests one
+concrete, distinct, and retrievable entity rather than a direct answer
+to 
+, avoiding the complex and error-prone process of answer inference.
+The candidate 
+ is then screened by a lightweight
+validation pipeline based on deterministic parsing, entity recognition, and answer-side retrieval verification. These non-generative checks require no additional LLM inference and efficiently filter out malformed outputs and non-entity candidates.
+Candidates passing all checks are accepted as 
+.
+The validated target anchors evidence-path construction and serves as the verification target for the generated search task.
+
+Evidence-Path Guided Question Generation
+
+Given a retrieval-supported target entity 
+, we construct a
+source-grounded evidence context for multi-hop question generation.
+We treat 
+ as the answer node of a compact evidence graph and initialize the document pool with retrieval results obtained for 
+.
+
+At each hop, each selected frontier entity is normalized and disambiguated before retrieval.
+Retrieved documents are segmented into sentences, and those mentioning both the selected entity and another valid entity are retained as evidence.
+Each co-occurring entity defines an evidence-backed edge and becomes a frontier candidate for the next hop.
+This process recursively expands the frontier until no valid candidate remains or the maximum hop budget is reached.
+An evidence path from an outer clue to 
+ is then constructed:
+
+(10)
+
+where the entities are ordered toward the target answer.
+Each edge is paired with its source document and supporting sentence.
+Paths with repeated entities, discontinuous transitions, or insufficient evidence are discarded.
+Remaining candidates are ranked by evidence quality and retrieval relevance, and the top-ranked path is selected.
+The resulting evidence context is represented as
+
+(11)
+
+where 
+ contains the supporting sentences and 
+ contains the corresponding documents.
+The proposer then samples a question conditioned on the target and
+evidence context:
+
+(12)
+
+where 
+ is the evidence-conditioned generation prompt and 
+
+extracts the question from the structured output.
+The prompt instructs the proposer to conceal the target while preserving the relational clues encoded by the path, yielding a multi-hop search task with the intended answer 
+.
+
+Evidence path construction uses only lightweight retrieval and NLP components, while the proposer is invoked for question generation.
+Validated questions are then added to the reference pool to support later rounds and progressively expand the training distribution.
+
+Tool-Aware Rollouts on Generated QA Pairs
+
+Given a validated task 
+, the solver interacts with the
+retrieval environment according to the rollout protocol.
+For each task, we sample a group of 
+ independent
+trajectories:
+
+(13)
+
+Each rollout terminates when the solver produces a valid final answer
+or exhausts the search-turn budget.
+The final answer 
+ of rollout 
+ is compared with the target
+
+ to obtain a verifiable exact-match reward:
+
+(14)
+
+The grouped rollouts yield the task-level solver accuracy
+
+(15)
+
+together with the per-rollout search-call counts
+
+. The former characterizes the task’s current
+difficulty for the solver, whereas the latter quantifies
+trajectory-level tool use. These task- and trajectory-level statistics
+are subsequently used to define the role-specific rewards for proposer
+and solver optimization.
+
+Asymmetric Adversarial Rewards
+
+ZEST-Search
+ formulates search-agent training as heterogeneous proposer–solver co-evolution. The proposer generates tasks around the solver’s evolving capability boundary, while the solver learns from these tasks.
+Unlike self-play methods, the two roles can be instantiated with heterogeneous models.
+We therefore use an intermediate-difficulty reward for the proposer to encourage informative tasks and a task-local tool-aware reward for the solver to favor correct answers with less unnecessary tool use.
+
+Intermediate-Difficulty Reward for the Proposer.
+
+The proposer should generate questions that remain informative for the current solver.
+Prior curriculum-learning studies suggest that questions with intermediate pass rates provide stronger optimization signals than those almost always solved or missed 
+(
+Leng et al. 2025
+; 
+Jiang et al. 2025a
+; 
+Zeng et al. 2025
+; 
+Zhu et al. 2026
+)
+.
+We therefore define the proposer reward using the grouped solver accuracy
+
+:
+
+(16)
+
+Invalid questions receive a fixed negative reward
+
+.
+For valid questions, Eq. 
+16
+ is maximized at
+
+ and vanishes for all-correct or all-wrong groups,
+thereby favoring tasks near the solver’s current learning frontier.
+
+A monotonic alternative, 
+, assigns its maximum reward
+when all solver rollouts fail. However, complete failure may reflect an
+incorrect target, an ambiguous question, or insufficient evidence rather
+than meaningful difficulty.
+By assigning zero reward to all-wrong groups,
+the intermediate-difficulty reward avoids this failure mode.
+
+Tool-Aware Reward for the Solver.
+
+External search should be used only when the solver’s parametric
+knowledge and available evidence are insufficient. Unnecessary
+retrieval increases inference cost and may introduce irrelevant
+information.
+For each task, we define a task-local tool reward by normalizing search
+calls across its 
+ rollouts:
+
+(17)
+
+The reward is non-positive, so trajectories with fewer search calls
+receive smaller penalties. Because normalization is performed within each
+task, it accounts for question-specific retrieval demands and is
+naturally compatible with GRPO.
+The final solver reward is
+
+(18)
+
+where 
+ controls the tool-cost discount.
+Multiplying the tool reward by correctness prevents incorrect rollouts from benefiting from less search. Among correct rollouts, fewer search calls receive higher rewards, encouraging the solver to preserve accuracy while selectively using retrieval.
+
+GeneralQA
+
+Multi-HopQA
+
+Proposer
+ / 
+Solver
+
+Method
+
+NQ
+
+TriviaQA
+
+PopQA
+
+HotpotQA
+
+2Wiki
+
+MuSiQue
+
+Bamboogle
+
+Avg
+
+Queries
+
+Zero-Label Training from Base Models
+
+Qwen2.5-3B-Instruct /
+
+Solver Base
+
+16.7
+
+30.7
+
+17.8
+
+12.4
+
+7.2
+
+2.3
+
+6.4
+
+13.4
+
+0.85
+
+Qwen2.5-3B-Base
+
+Ours
+
+36.0
+
+57.0
+
+38.2
+
+26.0
+
+25.4
+
+5.3
+
+7.2
+
+27.9
+ 
+(+14.5)
+
+1.01
+ 
+(
++0.16
+)
+
+Qwen2.5-7B-Base /
+
+Solver Base
+
+25.8
+
+43.3
+
+28.3
+
+15.8
+
+9.2
+
+6.4
+
+24.1
+
+21.8
+
+1.59
+
+Qwen2.5-7B-Base
+
+Ours
+
+37.1
+
+61.9
+
+40.3
+
+34.7
+
+31.8
+
+11.7
+
+32.0
+
+35.6
+ 
+(+13.8)
+
+1.17
+ 
+(-0.42)
+
+Qwen2.5-7B-Instruct /
+
+Solver Base
+
+25.8
+
+43.3
+
+28.3
+
+15.8
+
+9.2
+
+6.4
+
+24.1
+
+21.8
+
+1.59
+
+Qwen2.5-7B-Base
+
+Ours
+
+40.2
+
+64.5
+
+43.8
+
+36.3
+
+35.4
+
+12.0
+
+35.2
+
+38.2
+ 
+(+16.4)
+
+1.16
+ 
+(-0.43)
+
+Scaling to Larger Solvers with Lightweight Proposers
+
+Qwen2.5-3B-Base /
+
+Solver Base
+
+25.8
+
+43.3
+
+28.3
+
+15.8
+
+9.2
+
+6.4
+
+24.1
+
+21.8
+
+1.59
+
+Qwen2.5-7B-Base
+
+Ours
+
+39.1
+
+61.9
+
+41.9
+
+33.7
+
+31.7
+
+9.9
+
+29.6
+
+35.4
+ 
+(+13.6)
+
+1.29
+ 
+(-0.30)
+
+Qwen2.5-3B-Instruct /
+
+Solver Base
+
+25.8
+
+43.3
+
+28.3
+
+15.8
+
+9.2
+
+6.4
+
+24.1
+
+21.8
+
+1.59
+
+Qwen2.5-7B-Base
+
+Ours
+
+38.6
+
+61.5
+
+41.6
+
+32.2
+
+30.3
+
+11.7
+
+36.0
+
+36.0
+ 
+(+14.2)
+
+1.17
+ 
+(-0.42)
+
+Generalization Across Model Families
+
+Qwen3-4B /
+
+Solver Base
+
+25.8
+
+43.3
+
+28.3
+
+15.8
+
+9.2
+
+6.4
+
+24.1
+
+21.8
+
+1.59
+
+Qwen2.5-7B-Base
+
+Ours
+
+40.0
+
+62.9
+
+43.0
+
+34.3
+
+33.5
+
+11.8
+
+32.8
+
+36.9
+ 
+(+15.1)
+
+1.08
+ 
+(-0.51)
+
+LLaMA3.2-3B-Instruct /
+
+Solver Base
+
+26.7
+
+46.4
+
+29.4
+
+20.6
+
+16.6
+
+9.5
+
+31.2
+
+25.8
+
+1.60
+
+LLaMA3-8B-Instruct
+
+Ours
+
+38.6
+
+64.3
+
+40.6
+
+33.0
+
+28.4
+
+12.1
+
+41.6
+
+36.9
+ 
+(+11.1)
+
+1.50
+ 
+(-0.10)
+
+Adaptation of Search-Specialized Agents
+
+Qwen2.5-7B-Instruct /
+
+Solver Base
+
+30.1
+
+45.4
+
+29.8
+
+23.1
+
+12.9
+
+8.2
+
+27.2
+
+25.2
+
+2.26
+
+Search-R1
+
+Ours
+
+34.4
+
+50.4
+
+34.0
+
+28.3
+
+22.6
+
+10.6
+
+32.0
+
+30.3
+ 
+(+4.9)
+
+1.58
+ 
+(-0.68)
+
+Qwen2.5-7B-Instruct /
+
+Solver Base
+
+35.1
+
+56.9
+
+35.9
+
+29.6
+
+30.6
+
+9.5
+
+25.0
+
+31.8
+
+1.12
+
+ZeroSearch
+
+Ours
+
+41.7
+
+65.1
+
+41.9
+
+33.1
+
+33.2
+
+10.3
+
+24.8
+
+35.7
+ 
+(+3.9)
+
+1.09
+ 
+(-0.03)
+
+Table 1: 
+Main experimental results. Results above the base model are in bold, while those below it are underlined.
+
+Experiments
+
+Figure 2: 
+
+Training and efficiency analyses.
+(a) The training dynamics of proposers with different scales.
+(b) Question-generation quality during the training process.
+(c) Accuracy–efficiency trade-off under different tool-cost coefficients.
+
+To comprehensively evaluate 
+ZEST-Search
+, we investigate its effectiveness, scalability across heterogeneous proposer–solver settings, and component contributions.
+
+Experimental Setup
+
+Benchmarks and Evaluation Metrics.
+
+We evaluate on three general-domain QA benchmarks: NQ 
+(
+Kwiatkowski et al. 2019
+)
+, TriviaQA 
+(
+Joshi et al. 2017
+)
+, and PopQA 
+(
+Mallen et al. 2023
+)
+, and four multi-hop benchmarks: HotpotQA 
+(
+Yang et al. 2018
+)
+, 2Wiki 
+(
+Ho et al. 2020
+)
+,
+MuSiQue 
+(
+Trivedi et al. 2022
+)
+, Bamboogle 
+(
+Press et al. 2023
+)
+, requiring iterative retrieval and evidence integration.
+We report normalized exact match (EM) on each benchmark, the unweighted macro-average EM across all benchmarks, and Queries, defined as the average number of successfully parsed search actions per example.
+
+Training and Evaluation Settings.
+
+Training uses only question text from an unlabeled reference buffer initialized with questions from the NQ training split.
+Target answers, evidence paths, and QA pairs are constructed online.
+Each accepted task receives five solver rollouts, each allowing up to three search turns, with three retrieved passages per query.
+The proposer is optimized with REINFORCE++ 
+(
+Hu et al. 2025
+)
+ using task-level rewards derived
+from grouped solver outcomes, whereas the solver is optimized with GRPO
+over tool-interleaved trajectories.
+At evaluation time, we use temperature-zero decoding with three search turns.
+
+Main Results
+
+RQ1:
+
+Can 
+ZEST-Search
+ improve search-augmented reasoning
+without labeled search-training data?
+ 
+We compare each solver before and after 
+ZEST-Search
+ training. Since existing self-play search-agent methods often adopt different model APIs, datasets, LLM-as-Judges, or retrieval environments, direct comparisons under identical training budgets remain challenging.
+We therefore additionally evaluate 
+ZEST-Search
+ through continual training on search-specialized agents.
+Because training uses only unlabeled questions and constructs tasks online, these comparisons assess whether search-augmented reasoning improves without labeled QA pairs or expert trajectories.
+As shown in Table 
+1
+, 
+ZEST-Search
+
+substantially improves search-augmented reasoning using only unlabeled questions for task construction.
+Across all seven benchmarks, solvers of different scales and model
+families consistently benefit from training under diverse proposer
+configurations, demonstrating robust gains on both general-domain and
+multi-hop question answering.
+The same procedure also improves search-specialized solvers, including Search-R1 
+(
+Jin et al. 2025
+)
+ and ZeroSearch 
+(
+Sun et al. 2025
+)
+, showing that 
+ZEST-Search
+ can further enhance existing search agents.
+These results show that 
+ZEST-Search
+ can both develop search-augmented reasoning from base models and further improve agents that have already undergone search-oriented training.
+Overall, ZEST-Search improves the performance of search agents without labeled training data.
+
+RQ2:
+
+Can 
+ZEST-Search
+ effectively train solvers with lightweight proposers?
+ 
+We evaluate whether proposers smaller than the solver can generate effective training tasks, as reported in
+Table 
+1
+. Smaller proposers provide
+effective training signals for larger solvers. In particular, Qwen3-4B
+performs comparably to the larger Qwen2.5-7B proposer, while
+Qwen2.5-3B-Instruct also produces strong gains.
+The smaller but newer proposers, such as Qwen3 and LLaMA-3.2 models, can generate higher-quality training tasks, providing more effective supervision for solver improvement.
+These results show that online task generation can be delegated to lightweight models without matching the solver’s parameter scale.
+Although task quality varies across proposer checkpoints, solvers consistently benefit from both smaller and cross-family proposers.
+
+RQ3:
+
+Does 
+ZEST-Search
+ improve the trade-off between answer
+accuracy and search cost?
+ 
+As shown in Table 
+1
+, 
+ZEST-Search
+ improves
+answer accuracy while reducing average search calls for most solvers.
+This indicates that the correctness-gated tool-aware objective encourages selective retrieval while preserving answer accuracy.
+Qwen2.5-3B-Base is the only exception, showing a slight increase
+in search calls alongside a substantial accuracy gain. Because this
+weak base model initially underuses search, the increase indicates more
+appropriate tool invocation rather than degraded efficiency.
+After training, the solver learns to better balance parametric knowledge and retrieval.
+Overall, 
+ZEST-Search
+ improves the accuracy–cost trade-off by promoting selective search and avoiding redundant queries.
+
+RQ4:
+
+How does proposer heterogeneity affect task generation and training dynamics?
+ 
+To analyze how proposer heterogeneity affects training, we compare proposers with different model scales, families, and instruction alignment.
+First, cross-family proposers such as Qwen3-4B and LLaMA3.2-3B-Instruct introduce complementary knowledge priors and reasoning patterns, enabling larger solvers to benefit from diverse task distributions without requiring the matching scale of the proposer. This indicates that task generation quality is not strictly bounded by solver capacity.
+Beyond task diversity, proposer heterogeneity also affects how quickly useful supervision emerges during training. As shown in Figure 
+2
+(a), newer or instruction-tuned proposers generate a higher proportion of valid and informative questions at the beginning of training, providing stronger optimization signals and accelerating solver improvement.
+Overall, heterogeneous proposer–solver training decouples task generation cost, knowledge priors, and generation quality from solver capacity.
+
+Reward Type
+
+Valid QA Distribution (%)
+
+Mixed Questions 
+
+21.63
+
+12.81
+
+All-Wrong Questions 
+
+43.80
+
+83.95
+
+All-Right Questions
+
+34.57
+
+3.24
+
+Performance
+
+Avg. Accuracy 
+
+37.59
+
+36.00
+
+Avg. Queries 
+
+1.23
+
+1.17
+
+Table 2: 
+
+Effect of proposer rewards on generated task difficulty and solver performance.
+
+Ablation and Analysis
+
+Intermediate-Difficulty Reward Analysis.
+
+Table 
+2
+ compares the proposed
+intermediate-difficulty reward with the monotonic adversarial objective.
+The latter over-rewards all-wrong groups, concentrating generation on unsolved questions. In contrast, the intermediate-difficulty reward increases the proportion of mixed groups while reducing all-wrong cases. Mixed groups provide informative relative signals for policy optimization because they contain both successful and failed solver trajectories. Figure 
+2
+(b) further shows that the mixed-group proportion remains stable throughout training. These results indicate that the proposed reward more effectively targets the solver’s current learnable boundary.
+
+Metric
+
+Answer Retrieval
+
+EPG
+
+EPG + RL
+
+Question Quality (%)
+
+Answer leakage 
+
+9.6
+
+21.2
+
+2.0
+
+Valid question 
+
+29.2
+
+27.6
+
+42.4
+
+Hop Distribution among Valid Questions (%)
+
+1-hop
+
+95.2
+
+71.7
+
+54.7
+
+2-hop
+
+4.8
+
+26.1
+
+37.7
+
+3-hop
+
+0.00
+
+2.2
+
+7.6
+
+Table 3: 
+
+Comparison of question quality under answer-retrieval and evidence-path guided (EPG) generation.
+
+Tool-Efficient Search Optimization Analysis.
+
+Figure 
+2
+(c) shows the accuracy–efficiency
+trade-off across different tool-cost coefficients with 400 training steps. Without the
+tool-aware reward, the solver achieves the highest accuracy but uses the
+most searches. A moderate coefficient markedly reduces search calls
+with only a minor accuracy loss, providing the best overall balance.
+This demonstrates that the objective is not to minimize retrieval, but to optimize the accuracy-efficiency trade-off.
+Larger coefficients further suppress retrieval but increasingly degrade
+accuracy. These results show that the tool-aware reward provides
+controllable search regularization: moderate penalties discourage
+redundant retrieval, whereas excessive penalties can suppress searches
+necessary for correct answers.
+
+Evidence-Path Guided Generation Analysis.
+
+Table 
+3
+ compares direct
+answer-retrieval generation (AR), which conditions question generation
+on documents containing the target answer, with the proposed
+evidence-path-guided generation (EPG). Even before proposer
+optimization, EPG yields substantially more multi-hop questions among examples, indicating that explicit evidence paths promote
+compositional generation beyond direct answer–document associations.
+However, its lower initial validity and higher answer leakage indicate that structural guidance alone is insufficient for generating well-formed tasks.
+After training, EPG improves validity and leakage control while further increasing the proportion of multi-hop questions. Thus, evidence paths provide compositional structure, while proposer optimization converts them into valid and non-leaking QA pairs.
+
+Figure 3: 
+A case study of evidence-path guided generation.
+
+Task Generation Case Study.
+
+Figure 
+3
+ illustrates how 
+ZEST-Search
+ constructs a multi-hop search task from an unlabeled reference question. Instead of transforming the reference question, the proposer identifies the expected answer type and generates a target entity, Cinderella. Starting from this target, the framework constructs a source-supported evidence path connecting it to its director Kenneth Branagh, then to Belfast and Northern Ireland. Conditioned on this path, the proposer generates a multi-hop question requiring the solver to recover the target through intermediate evidence. This example demonstrates that evidence-path guidance encourages compositional question generation while maintaining verifiable answer grounding, enabling 
+ZEST-Search
+ to create challenging search tasks without labeled QA pairs.
+
+Related Work
+
+Search-Augmented Language Models.
+
+Retrieval-augmented language models use external knowledge to improve generation on knowledge-intensive tasks
+
+(
+Guu et al. 2020
+; 
+Karpukhin et al. 2020
+; 
+Lewis et al. 2020
+)
+.
+Later systems integrate retrieval directly into reasoning, enabling models to issue queries, inspect evidence, and refine their answers
+
+(
+Nakano et al. 2021
+; 
+Yao et al. 2023
+; 
+Asai et al. 2024
+; 
+Trivedi et al. 2023
+)
+.
+Search-agent reinforcement learning further optimizes when and how to search, initially through final-answer rewards and later through search-cost modeling, retrieval simulation, process supervision, and step-wise feedback
+
+(
+Jin et al. 2025
+; 
+Song et al. 2025
+; 
+Chen et al. 2025b
+; 
+Shi et al. 2025
+; 
+Sun et al. 2025
+; 
+Zheng et al. 2025
+; 
+Jiang et al. 2025b
+; 
+Ji et al. 2025
+)
+.
+Unlike these methods, which mainly optimize solver behavior on given questions, 
+ZEST-Search
+ also brings evidence-grounded task construction into the training loop and explicitly optimizes trajectory-level search efficiency.
+
+Proposer–Solver Training for Search Agents.
+
+More broadly, LLM self-improvement methods generate training data online, with some casting task generation and solving as interacting roles
+
+(
+Wang et al. 2023
+; 
+Zhao et al. 2025
+; 
+Chen et al. 2025a
+; 
+Zhang et al. 2025b
+; 
+Castanyer et al. 2026
+)
+.
+For search-agent training, EvolveSearch, Search Self-Play, and Dr. Zero adapt generated tasks according to solver feedback, allowing task difficulty to evolve during training
+
+(
+Zhang et al. 2025a
+; 
+Lu et al. 2025
+; 
+Yue et al. 2026
+)
+.
+Recent work further incorporates structured evidence or finer-grained process signals. For example, knowledge-graph paths can guide question generation and provide waypoint rewards, while source-level contribution scores can assign credit to retrieved evidence
+
+(
+Wu et al. 2026
+; 
+Arai and Ichikawa 2026
+)
+.
+In contrast, 
+ZEST-Search
+ generates retrieval-supported target entities and source-supported textual evidence paths online, rather than restricting task construction to fixed answer pools or precomputed graph paths. It also decouples the proposer and solver policies and coordinates their co-evolution through objectives for intermediate task difficulty and search efficiency.
+
+Conclusion
+
+We introduced 
+ZEST-Search
+, a zero-label framework for
+tool-efficient search-agent training through heterogeneous
+proposer–solver co-evolution. Rather than relying on predefined answer
+pools or labeled QA pairs, 
+ZEST-Search
+ constructs validated
+tasks online through answer-first generation and source-supported
+multi-hop evidence paths. Lightweight, non-generative components perform
+target validation, path construction, and task filtering without
+additional LLM inference. Decoupling the two roles allows lightweight,
+instruction-tuned, and cross-family proposers to generate complementary
+tasks around the solver’s evolving capability boundary. Role-specific
+objectives coordinate their co-evolution by steering the proposer toward
+intermediate-difficulty tasks and rewarding correct solver trajectories
+with lower relative search costs.
+Experiments on multiple benchmarks show that 
+ZEST-Search
+ improves answer accuracy and tool efficiency without labeled searching data. The framework remains effective with smaller and cross-family proposers, while analyses validate the reward design and task generation. Overall, 
+ZEST-Search
+ provides a scalable approach to expanding the training frontier and optimizing search efficiency.
+
+References
+
+Arai and Ichikawa (2026)
+
+Y. Arai and Y. Ichikawa
+
+EVE-agent: evidence-verifiable self-evolving agents
+.
+
+CoRR
+ 
+abs/2605.22905
+.
+
+External Links: 
+Link
+,
+
+Document
+,
+
+2605.22905
+
+Cited by: 
+Proposer–Solver Training for Search Agents.
+.
+
+Asai 
+et al.
+ (2024)
+
+A. Asai, Z. Wu, Y. Wang, A. Sil, and H. Hajishirzi
+
+Self-rag: learning to retrieve, generate, and critique through self-reflection
+.
+
+In 
+The Twelfth International Conference on Learning Representations,
+ICLR 2024, Vienna, Austria, May 7-11, 2024
+,
+
+External Links: 
+Link
+
+Cited by: 
+Introduction
+,
+
+Search-Augmented Language Models.
+.
+
+Castanyer 
+et al.
+ (2026)
+
+R. C. Castanyer, G. Bradway, L. Wolf, M. Lin, A. N. Mavor-Parker, and M. J. Sargent
+
+PopuLoRA: co-evolving LLM populations for reasoning self-play
+.
+
+CoRR
+ 
+abs/2605.16727
+.
+
+External Links: 
+Link
+,
+
+Document
+,
+
+2605.16727
+
+Cited by: 
+Proposer–Solver Training for Search Agents.
+.
+
+Chen 
+et al.
+ (2025a)
+
+L. Chen, M. Prabhudesai, K. Fragkiadaki, H. Liu, and D. Pathak
+
+Self-questioning language models
+.
+
+CoRR
+ 
+abs/2508.03682
+.
+
+External Links: 
+Link
+,
+
+Document
+,
+
+2508.03682
+
+Cited by: 
+Introduction
+,
+
+Proposer–Solver Training for Search Agents.
+.
+
+Chen 
+et al.
+ (2025b)
+
+M. Chen, T. Li, H. Sun, Y. Zhou, C. Zhu, H. Wang, J. Z. Pan, W. Zhang, H. Chen, F. Yang, Z. Zhou, and W. Chen
+
+ReSearch: learning to reason with search for llms via reinforcement learning
+.
+
+CoRR
+ 
+abs/2503.19470
+.
+
+External Links: 
+Link
+,
+
+Document
+,
+
+2503.19470
+
+Cited by: 
+Introduction
+,
+
+Search-Augmented Language Models.
+.
+
+Fang 
+et al.
+ (2025)
+
+W. Fang, S. Liu, Y. Zhou, K. Zhang, T. Zheng, K. Chen, M. Song, and D. Tao
+
+SeRL: self-play reinforcement learning for large language models with limited data
+.
+
+In 
+Advances in Neural Information Processing Systems 38: Annual Conference
+on Neural Information Processing Systems 2025, NeurIPS 2025, San Diego,
+CA, USA, December 2-7, 2025 / Mexico City, Mexico, November 30 - December
+5, 2025
+,  
+D. Belgrave, C. Zhang, L. N. Montoya, H. Lin, R. Pascanu, P. Koniusz, M. Ghassemi, N. Chen, I. V. M. Ruíz, and A. Loaiza-Bonilla (Eds.)
+,
+
+External Links: 
+Link
+
+Cited by: 
+Introduction
+.
+
+Guu 
+et al.
+ (2020)
+
+K. Guu, K. Lee, Z. Tung, P. Pasupat, and M. Chang
+
+Retrieval augmented language model pre-training
+.
+
+In 
+Proceedings of the 37th International Conference on Machine Learning,
+ICML 2020, 13-18 July 2020, Virtual Event
+,
+
+Proceedings of Machine Learning Research
+, Vol. 
+119
+, 
+pp. 3929–3938
+.
+
+External Links: 
+Link
+
+Cited by: 
+Introduction
+,
+
+Search-Augmented Language Models.
+.
+
+Ho 
+et al.
+ (2020)
+
+X. Ho, A. Duong Nguyen, S. Sugawara, and A. Aizawa
+
+Constructing A multi-hop QA dataset for comprehensive evaluation of reasoning steps
+.
+
+In 
+Proceedings of the 28th International Conference on Computational
+Linguistics
+,
+
+pp. 6609–6625
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+Benchmarks and Evaluation Metrics.
+.
+
+Hu 
+et al.
+ (2025)
+
+J. Hu, J. K. Liu, H. Xu, and W. Shen
+
+REINFORCE++: stabilizing critic-free policy optimization with global advantage normalization
+.
+
+External Links: 
+2501.03262
+,
+
+Link
+
+Cited by: 
+Training and Evaluation Settings.
+.
+
+Ji 
+et al.
+ (2025)
+
+Y. Ji, R. Meng, Z. Li, and D. He
+
+Curriculum guided reinforcement learning for efficient multi hop retrieval augmented generation
+.
+
+CoRR
+ 
+abs/2505.17391
+.
+
+External Links: 
+Link
+,
+
+Document
+,
+
+2505.17391
+
+Cited by: 
+Search-Augmented Language Models.
+.
+
+Jiang 
+et al.
+ (2025a)
+
+G. Jiang, W. Feng, G. Quan, C. Hao, Y. Zhang, G. Liu, and H. Wang
+
+VCRL: variance-based curriculum reinforcement learning for large language models
+.
+
+CoRR
+ 
+abs/2509.19803
+.
+
+External Links: 
+Link
+,
+
+Document
+,
+
+2509.19803
+
+Cited by: 
+Intermediate-Difficulty Reward for the Proposer.
+.
+
+Jiang 
+et al.
+ (2025b)
+
+P. Jiang, X. Xu, J. Lin, J. Xiao, Z. Wang, J. Sun, and J. Han
+
+S3: you don’t need that much data to train a search agent via RL
+.
+
+In 
+Proceedings of the 2025 Conference on Empirical Methods in Natural
+Language Processing, EMNLP 2025, Suzhou, China, November 4-9, 2025
+,  
+C. Christodoulopoulos, T. Chakraborty, C. Rose, and V. Peng (Eds.)
+,
+
+pp. 21599–21617
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+Introduction
+,
+
+Search-Augmented Language Models.
+.
+
+Jin 
+et al.
+ (2025)
+
+B. Jin, H. Zeng, Z. Yue, D. Wang, H. Zamani, and J. Han
+
+Search-r1: training llms to reason and leverage search engines with reinforcement learning
+.
+
+CoRR
+ 
+abs/2503.09516
+.
+
+External Links: 
+Link
+,
+
+Document
+,
+
+2503.09516
+
+Cited by: 
+Appendix A
+,
+
+Introduction
+,
+
+RQ1:
+,
+
+Search-Augmented Language Models.
+.
+
+Joshi 
+et al.
+ (2017)
+
+M. Joshi, E. Choi, D. Weld, and L. Zettlemoyer
+
+TriviaQA: A large scale distantly supervised challenge dataset for reading comprehension
+.
+
+In 
+Proceedings of the 55th Annual Meeting of the Association for
+Computational Linguistics (Volume 1: Long Papers)
+,
+
+pp. 1601–1611
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+Benchmarks and Evaluation Metrics.
+.
+
+Karpukhin 
+et al.
+ (2020)
+
+V. Karpukhin, B. Oguz, S. Min, P. Lewis, L. Wu, S. Edunov, D. Chen, and W. Yih
+
+Dense passage retrieval for open-domain question answering
+.
+
+In 
+Proceedings of the 2020 Conference on Empirical Methods in Natural
+Language Processing, EMNLP 2020, Online, November 16-20, 2020
+,  
+B. Webber, T. Cohn, Y. He, and Y. Liu (Eds.)
+,
+
+pp. 6769–6781
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+Introduction
+,
+
+Search-Augmented Language Models.
+.
+
+Kwiatkowski 
+et al.
+ (2019)
+
+T. Kwiatkowski, J. Palomaki, O. Redfield, M. Collins, A. Parikh, C. Alberti, D. Epstein, I. Polosukhin, J. Devlin, K. Lee, K. Toutanova, L. Jones, M. Kelcey, M. Chang, A. M. Dai, J. Uszkoreit, Q. Le, and S. Petrov
+
+Natural questions: A benchmark for question answering research
+.
+
+Transactions of the Association for Computational Linguistics
+ 
+7
+, 
+pp. 452–466
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+Benchmarks and Evaluation Metrics.
+.
+
+Leng 
+et al.
+ (2025)
+
+S. Leng, J. Wang, J. Li, H. Zhang, Z. Hu, B. Zhang, Y. Jiang, H. Zhang, X. Li, L. Bing, D. Zhao, W. Lu, Y. Rong, A. Sun, and S. Lu
+
+MMR1: enhancing multimodal reasoning with variance-aware sampling and open resources
+.
+
+CoRR
+ 
+abs/2509.21268
+.
+
+External Links: 
+Link
+,
+
+Document
+,
+
+2509.21268
+
+Cited by: 
+Intermediate-Difficulty Reward for the Proposer.
+.
+
+Lewis 
+et al.
+ (2020)
+
+P. Lewis, E. Perez, A. Piktus, F. Petroni, V. Karpukhin, N. Goyal, H. Küttler, M. Lewis, W. Yih, T. Rocktäschel, S. Riedel, and D. Kiela
+
+Retrieval-augmented generation for knowledge-intensive NLP tasks
+.
+
+In 
+Advances in Neural Information Processing Systems 33: Annual Conference
+on Neural Information Processing Systems 2020, NeurIPS 2020, December
+6-12, 2020, virtual
+,  
+H. Larochelle, M. Ranzato, R. Hadsell, M. Balcan, and H. Lin (Eds.)
+,
+
+External Links: 
+Link
+
+Cited by: 
+Introduction
+,
+
+Search-Augmented Language Models.
+.
+
+Liang 
+et al.
+ (2025)
+
+X. Liang, Z. Li, Y. Gong, Y. Shen, Y. N. Wu, Z. Guo, and W. Chen
+
+Beyond pass@1: self-play with variational problem synthesis sustains RLVR
+.
+
+CoRR
+ 
+abs/2508.14029
+.
+
+External Links: 
+Link
+,
+
+Document
+,
+
+2508.14029
+
+Cited by: 
+Introduction
+.
+
+Lu 
+et al.
+ (2025)
+
+H. Lu, Y. Wen, P. Cheng, R. Ding, H. Xu, J. Guo, C. Wang, H. Chen, X. Jiang, and G. Jiang
+
+Search self-play: pushing the frontier of agent capability without supervision
+.
+
+CoRR
+ 
+abs/2510.18821
+.
+
+External Links: 
+Link
+,
+
+Document
+,
+
+2510.18821
+
+Cited by: 
+Appendix B
+,
+
+Appendix B
+,
+
+Introduction
+,
+
+Proposer–Solver Training for Search Agents.
+.
+
+Mallen 
+et al.
+ (2023)
+
+A. Mallen, A. Asai, V. Zhong, R. Das, D. Khashabi, and H. Hajishirzi
+
+When not to trust language models: investigating effectiveness of parametric and non-parametric memories
+.
+
+In 
+Proceedings of the 61st Annual Meeting of the Association for
+Computational Linguistics (Volume 1: Long Papers)
+,
+
+pp. 9802–9822
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+Benchmarks and Evaluation Metrics.
+.
+
+Nakano 
+et al.
+ (2021)
+
+R. Nakano, J. Hilton, S. Balaji, J. Wu, L. Ouyang, C. Kim, C. Hesse, S. Jain, V. Kosaraju, W. Saunders, X. Jiang, K. Cobbe, T. Eloundou, G. Krueger, K. Button, M. Knight, B. Chess, and J. Schulman
+
+WebGPT: browser-assisted question-answering with human feedback
+.
+
+CoRR
+ 
+abs/2112.09332
+.
+
+External Links: 
+Link
+,
+
+2112.09332
+
+Cited by: 
+Introduction
+,
+
+Search-Augmented Language Models.
+.
+
+Press 
+et al.
+ (2023)
+
+O. Press, M. Zhang, S. Min, L. Schmidt, N. A. Smith, and M. Lewis
+
+Measuring and narrowing the compositionality gap in language models
+.
+
+In 
+Findings of the Association for Computational Linguistics: EMNLP
+2023
+,
+
+pp. 5687–5711
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+Benchmarks and Evaluation Metrics.
+.
+
+Shao 
+et al.
+ (2024)
+
+Z. Shao, P. Wang, Q. Zhu, R. Xu, J. Song, M. Zhang, Y. K. Li, Y. Wu, and D. Guo
+
+DeepSeekMath: pushing the limits of mathematical reasoning in open language models
+.
+
+CoRR
+ 
+abs/2402.03300
+.
+
+External Links: 
+Link
+,
+
+Document
+,
+
+2402.03300
+
+Cited by: 
+Reinforcement Learning with Verifiable Rewards.
+,
+
+Reinforcement Learning with Verifiable Rewards.
+.
+
+Shi 
+et al.
+ (2025)
+
+Y. Shi, S. Li, C. Wu, Z. Liu, J. Fang, H. Cai, A. Zhang, and X. Wang
+
+Search and refine during think: facilitating knowledge refinement for improved retrieval-augmented reasoning
+.
+
+In 
+Advances in Neural Information Processing Systems 38: Annual Conference
+on Neural Information Processing Systems 2025, NeurIPS 2025, San Diago,
+CA, USA, December 2-7, 2025 / Mexico City, Mexico, November 30 - December
+5, 2025
+,  
+D. Belgrave, C. Zhang, L. N. Montoya, H. Lin, R. Pascanu, P. Koniusz, M. Ghassemi, N. Chen, I. V. M. Ruíz, and A. Loaiza-Bonilla (Eds.)
+,
+
+External Links: 
+Link
+
+Cited by: 
+Search-Augmented Language Models.
+.
+
+Song 
+et al.
+ (2025)
+
+H. Song, J. Jiang, Y. Min, J. Chen, Z. Chen, W. X. Zhao, L. Fang, and J. Wen
+
+R1-searcher: incentivizing the search capability in llms via reinforcement learning
+.
+
+CoRR
+ 
+abs/2503.05592
+.
+
+External Links: 
+Link
+,
+
+Document
+,
+
+2503.05592
+
+Cited by: 
+Introduction
+,
+
+Search-Augmented Language Models.
+.
+
+Sun 
+et al.
+ (2025)
+
+H. Sun, Z. Qiao, J. Guo, X. Fan, Y. Hou, Y. Jiang, P. Xie, Y. Zhang, F. Huang, and J. Zhou
+
+ZeroSearch: incentivize the search capability of llms without searching
+.
+
+CoRR
+ 
+abs/2505.04588
+.
+
+External Links: 
+Link
+,
+
+Document
+,
+
+2505.04588
+
+Cited by: 
+Appendix B
+,
+
+Introduction
+,
+
+RQ1:
+,
+
+Search-Augmented Language Models.
+.
+
+Trivedi 
+et al.
+ (2022)
+
+H. Trivedi, N. Balasubramanian, T. Khot, and A. Sabharwal
+
+ musique: multihop questions via single-hop question composition
+.
+
+Trans. Assoc. Comput. Linguistics
+ 
+10
+, 
+pp. 539–554
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+Introduction
+,
+
+Benchmarks and Evaluation Metrics.
+.
+
+Trivedi 
+et al.
+ (2023)
+
+H. Trivedi, N. Balasubramanian, T. Khot, and A. Sabharwal
+
+Interleaving retrieval with chain-of-thought reasoning for knowledge-intensive multi-step questions
+.
+
+In 
+Proceedings of the 61st Annual Meeting of the Association for Computational
+Linguistics (Volume 1: Long Papers), ACL 2023, Toronto, Canada,
+July 9-14, 2023
+,  
+A. Rogers, J. L. Boyd-Graber, and N. Okazaki (Eds.)
+,
+
+pp. 10014–10037
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+Introduction
+,
+
+Search-Augmented Language Models.
+.
+
+Wang 
+et al.
+ (2023)
+
+Y. Wang, Y. Kordi, S. Mishra, A. Liu, N. A. Smith, D. Khashabi, and H. Hajishirzi
+
+Self-instruct: aligning language models with self-generated instructions
+.
+
+In 
+Proceedings of the 61st Annual Meeting of the Association for Computational
+Linguistics (Volume 1: Long Papers), ACL 2023, Toronto, Canada,
+July 9-14, 2023
+,  
+A. Rogers, J. L. Boyd-Graber, and N. Okazaki (Eds.)
+,
+
+pp. 13484–13508
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+Proposer–Solver Training for Search Agents.
+.
+
+Wu 
+et al.
+ (2026)
+
+H. Wu, J. Liu, X. Wei, Y. Gao, Y. Wu, and Y. Hu
+
+Knowledge-graph paths as intermediate supervision for self-evolving search agents
+.
+
+CoRR
+ 
+abs/2605.05702
+.
+
+External Links: 
+Link
+,
+
+Document
+,
+
+2605.05702
+
+Cited by: 
+Appendix B
+,
+
+Appendix B
+,
+
+Introduction
+,
+
+Proposer–Solver Training for Search Agents.
+.
+
+Yang 
+et al.
+ (2018)
+
+Z. Yang, P. Qi, S. Zhang, Y. Bengio, W. W. Cohen, R. Salakhutdinov, and C. D. Manning
+
+HotpotQA: A dataset for diverse, explainable multi-hop question answering
+.
+
+In 
+Proceedings of the 2018 Conference on Empirical Methods in Natural
+Language Processing, Brussels, Belgium, October 31 - November 4, 2018
+,  
+E. Riloff, D. Chiang, J. Hockenmaier, and J. Tsujii (Eds.)
+,
+
+pp. 2369–2380
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+Introduction
+,
+
+Benchmarks and Evaluation Metrics.
+.
+
+Yao 
+et al.
+ (2023)
+
+S. Yao, J. Zhao, D. Yu, N. Du, I. Shafran, K. R. Narasimhan, and Y. Cao
+
+ReAct: synergizing reasoning and acting in language models
+.
+
+In 
+The Eleventh International Conference on Learning Representations,
+ICLR 2023, Kigali, Rwanda, May 1-5, 2023
+,
+
+External Links: 
+Link
+
+Cited by: 
+Introduction
+,
+
+Search-Augmented Language Models.
+.
+
+Yu 
+et al.
+ (2025)
+
+Q. Yu, Z. Zhang, R. Zhu, Y. Yuan, X. Zuo, Y. Yue, T. Fan, G. Liu, L. Liu, X. Liu, H. Lin, Z. Lin, B. Ma, G. Sheng, Y. Tong, C. Zhang, M. Zhang, W. Zhang, H. Zhu, J. Zhu, J. Chen, J. Chen, C. Wang, H. Yu, W. Dai, Y. Song, X. Wei, H. Zhou, J. Liu, W. Ma, Y. Zhang, L. Yan, M. Qiao, Y. Wu, and M. Wang
+
+DAPO: an open-source LLM reinforcement learning system at scale
+.
+
+CoRR
+ 
+abs/2503.14476
+.
+
+External Links: 
+Link
+,
+
+Document
+,
+
+2503.14476
+
+Cited by: 
+Reinforcement Learning with Verifiable Rewards.
+.
+
+Yue 
+et al.
+ (2026)
+
+Z. Yue, K. Upasani, X. Yang, S. Ge, S. Nie, Y. Mao, Z. Liu, and D. Wang
+
+Dr. zero: self-evolving search agents without training data
+.
+
+CoRR
+ 
+abs/2601.07055
+.
+
+External Links: 
+Link
+,
+
+Document
+,
+
+2601.07055
+
+Cited by: 
+Appendix B
+,
+
+Introduction
+,
+
+Proposer–Solver Training for Search Agents.
+.
+
+Zeng 
+et al.
+ (2025)
+
+Y. Zeng, Z. Sun, B. Ji, E. Min, H. Cai, S. Wang, D. Yin, H. Zhang, X. Chen, and J. Wang
+
+CurES: from gradient analysis to efficient curriculum learning for reasoning llms
+.
+
+CoRR
+ 
+abs/2510.01037
+.
+
+External Links: 
+Link
+,
+
+Document
+,
+
+2510.01037
+
+Cited by: 
+Intermediate-Difficulty Reward for the Proposer.
+.
+
+Zhang 
+et al.
+ (2025a)
+
+D. Zhang, Y. Zhao, J. Wu, L. Zhang, B. Li, W. Yin, Y. Jiang, Y. Li, K. Tu, P. Xie, and F. Huang
+
+EvolveSearch: an iterative self-evolving search agent
+.
+
+In 
+Proceedings of the 2025 Conference on Empirical Methods in Natural
+Language Processing, EMNLP 2025, Suzhou, China, November 4-9, 2025
+,  
+C. Christodoulopoulos, T. Chakraborty, C. Rose, and V. Peng (Eds.)
+,
+
+pp. 13123–13136
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+Appendix B
+,
+
+Proposer–Solver Training for Search Agents.
+.
+
+Zhang 
+et al.
+ (2025b)
+
+Z. Zhang, C. Huang, A. O. Li, and C. Cardie
+
+Better LLM reasoning via dual-play
+.
+
+CoRR
+ 
+abs/2511.11881
+.
+
+External Links: 
+Link
+,
+
+Document
+,
+
+2511.11881
+
+Cited by: 
+Proposer–Solver Training for Search Agents.
+.
+
+Zhao 
+et al.
+ (2025)
+
+A. Zhao, Y. Wu, Y. Yue, T. Wu, Q. Xu, Y. Yue, M. Lin, S. Wang, Q. Wu, Z. Zheng, and G. Huang
+
+Absolute zero: reinforced self-play reasoning with zero data
+.
+
+CoRR
+ 
+abs/2505.03335
+.
+
+External Links: 
+Link
+,
+
+Document
+,
+
+2505.03335
+
+Cited by: 
+Introduction
+,
+
+Proposer–Solver Training for Search Agents.
+.
+
+Zheng 
+et al.
+ (2025)
+
+X. Zheng, K. An, Z. Wang, Y. Wang, and Y. Wu
+
+StepSearch: igniting llms search ability via step-wise proximal policy optimization
+.
+
+In 
+Proceedings of the 2025 Conference on Empirical Methods in Natural
+Language Processing, EMNLP 2025, Suzhou, China, November 4-9, 2025
+,  
+C. Christodoulopoulos, T. Chakraborty, C. Rose, and V. Peng (Eds.)
+,
+
+pp. 21805–21830
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+Introduction
+,
+
+Search-Augmented Language Models.
+.
+
+Zhu 
+et al.
+ (2026)
+
+T. Zhu, W. Zhang, X. Zuo, L. Tian, H. Zhao, Y. Zeng, J. Gu, D. Dong, J. Wu, D. Yin, and D. Shen
+
+Rollout pass-rate control: steering binary-reward RL toward its most informative regime
+.
+
+CoRR
+ 
+abs/2605.05112
+.
+
+External Links: 
+Link
+,
+
+Document
+,
+
+2605.05112
+
+Cited by: 
+Intermediate-Difficulty Reward for the Proposer.
+.
+
+Appendix A 
+Appendix A: Implementation details
+
+This section summarizes the training configurations, including general model-training parameters and method-specific parameters.
+We follow Search-R1 
+(
+Jin et al. 2025
+)
+ for the default search-related configurations, including the retriever, search protocol, and other implementation details.
+
+Parameter
+
+Value
+
+(A) General model-training parameters
+
+Actor learning rate
+
+Proposer KL
+
+0.005
+
+Solver KL
+
+0.001
+
+Train batch
+
+128
+
+Rollout nums
+
+5
+
+Start-context tokens
+
+2,048
+
+Observation tokens
+
+1,024
+
+Response tokens
+
+1,024
+
+Temperature
+
+1.0
+
+Top-
+
+0.95
+
+Top-
+
+Training steps
+
+600
+
+Retriever
+
+E5-base-v2
+
+Retrieval corpus
+
+Wikipedia (Dec. 20, 2018)
+
+GPU
+
+Nvidia A100
+16
+
+(B) Method-specific parameters
+
+Initial QA-buffer load cap
+
+200,000
+
+Generated-QA extra capacity
+
+20,000
+
+Solver retrieval top-
+
+3
+
+Maximum target hops
+
+3
+
+Max search-enabled turns
+
+3
+
+Evidence retrieval top-
+
+8
+
+Path sample top-
+
+8
+
+Path sample width
+
+2
+
+Question paths/answer
+
+1
+
+Random top-path pool
+
+4
+
+Tool penalty coefficient 
+
+0.1
+
+Tool-reward warm-up steps
+
+20
+
+Invalid-info penalty 
+
+Table 4: 
+Training, generation, and retrieval configurations.
+
+Appendix B 
+Appendix B: Additional Analyses
+
+This section presents additional experimental results on frozen proposers, multi-hop question construction, and comparisons with existing self-play approaches.
+
+GeneralQA
+
+Multi-HopQA
+
+Proposer
+ / 
+Solver
+
+Method
+
+NQ
+
+TriviaQA
+
+PopQA
+
+HotpotQA
+
+2Wiki
+
+MuSiQue
+
+Bamboogle
+
+Avg
+
+Queries
+
+Training Solvers with Different Proposer Configurations
+
+Qwen2.5-7B-Instruct /
+
+Solver Base
+
+25.8
+
+43.3
+
+28.3
+
+15.8
+
+9.2
+
+6.4
+
+24.1
+
+21.8
+
+1.59
+
+Qwen2.5-7B-Base
+
+Ours (3-Hops)
+
+40.2
+
+64.5
+
+43.8
+
+36.3
+
+35.4
+
+12.0
+
+35.2
+
+38.2
+ 
+(+16.4)
+
+1.16
+ 
+(-0.43)
+
+Qwen2.5-7B-Instruct/
+
+Solver Base
+
+25.8
+
+43.3
+
+28.3
+
+15.8
+
+9.2
+
+6.4
+
+24.1
+
+21.8
+
+1.59
+
+Qwen2.5-7B-Base
+
+Frozen
+
+40.5
+
+61.5
+
+42.6
+
+32.8
+
+29.4
+
+9.1
+
+20.0
+
+33.7
+ 
+(+11.9)
+
+1.48
+ 
+(-0.11)
+
+Qwen2.5-7B-Instruct
+
+Solver Base
+
+25.8
+
+43.3
+
+28.3
+
+15.8
+
+9.2
+
+6.4
+
+24.1
+
+21.8
+
+1.59
+
+Qwen2.5-7B-Base
+
+4 Target Hops
+
+41.0
+
+64.3
+
+43.3
+
+37.4
+
+35.8
+
+14.1
+
+39.2
+
+39.3
+ 
+(+17.5)
+
+1.28
+ 
+(-0.31)
+
+Qwen2.5-7B-Instruct
+
+Dr.Zero
+
+40.6
+
+60.8
+
+41.6
+
+36.2
+
+34.7
+
+10.4
+
+36.0
+
+37.2
+
+-
+
+Table 5: 
+Additional experiment results. Parenthesized numbers are training steps. Results above the base model are in bold. The results below the base model or below our method are in gray and underlined.
+
+B.1 Additional Ablation Study
+
+Frozen-Proposer Control.
+
+Figure 4: 
+Training-time test accuracy of 
+ZEST-Search
+ with a frozen Qwen2.5-3B-Base proposer and a Qwen2.5-3B-Base solver
+
+As shown in Table 
+5
+, Qwen2.5-7B-Instruct, as an instruction-tuned model, can generate relatively high-quality questions through evidence-path guided generation, leading to improvements on general QA tasks. However, without co-evolution with the solver, the fixed proposer struggles to continuously generate high-quality multi-hop tasks aligned with the solver’s evolving capability boundary, resulting in limited gains and even performance degradation on some multi-hop benchmarks.
+For base models with weaker instruction-following ability, such as a frozen Qwen2.5-3B-Base proposer shown in Figure 
+4
+, the quality of generated tasks is more constrained by the proposer itself. Since task validation relies on lightweight NLP components rather than additional LLM-based filtering, low-quality tasks may accumulate when the proposer cannot adapt to the solver. This can weaken the training signal and lead to degraded solver performance.
+
+Together, these results demonstrate the effectiveness and necessity of proposer–solver co-evolution for generating effective training tasks, adapting to the solver’s evolving capability, and improving search-agent training.
+
+Stage
+
+Accepted
+
+Rate (%)
+
+Target format and entity filtering
+
+486/500
+
+97.2
+
+Retrieval-support verification
+
+411/486
+
+84.6
+
+Overall target validation
+
+411/500
+
+82.2
+
+Evidence-path construction
+
+411/411
+
+100.0
+*
+
+Static QA verification
+
+302/411
+
+73.5
+
+Final task acceptance
+
+302/500
+
+60.4
+
+Table 6: 
+Acceptance rates across the EPG filtering stages.
+
+*
+Path construction is evaluated only on targets
+that pass retrieval-support verification.
+
+Stage
+
+Total (s)
+
+Per Task (s)
+
+Target generation and validation
+
+142.53
+
+0.472
+
+Evidence-path construction
+
+59.24
+
+0.196
+
+Question generation and static verification
+
+111.15
+
+0.368
+
+Full pipeline
+
+312.92
+
+1.036
+
+Table 7: 
+Runtime breakdown of EPG over 500 reference questions.
+Per-task runtime is amortized over 302 accepted tasks with a
+generation batch size of 64.
+
+Ablation on Multi-Hop Task Complexity.
+
+We further investigate whether increasing the complexity of generated tasks improves the solver’s multi-hop search capability. Specifically, we increase the maximum target path length to 4, allowing EPG to construct evidence paths containing up to four entities. To provide the solver with sufficient interaction budget for resolving these longer paths, we also increase the maximum number of search turns to 4, while keeping all other training and evaluation configurations unchanged. This controlled setting isolates the effect of longer evidence paths and more demanding multi-hop supervision.
+
+As shown in Table 
+5
+, generating higher-hop tasks provides limited improvements on general QA benchmarks but leads to more substantial gains on multi-hop QA tasks. This suggests that the proposed evidence-path guided generation can effectively construct training tasks with stronger compositional reasoning requirements, enabling the solver to acquire genuine multi-hop search capabilities rather than merely improving single-step retrieval or answer matching.
+
+B.2 EPG Runtime
+
+Efficiency and Acceptance Analysis of EPG.
+
+We analyze the filtering behavior and runtime efficiency of the
+evidence-path guided generation (EPG) pipeline using 500 reference
+questions generated by a Qwen2.5-7B-Instruct proposer. As shown in
+Table 
+6
+, 82.2% of the generated target entities
+pass target validation, and 302 questions remain after static QA
+verification, yielding an overall task acceptance rate of 60.4%.
+Notably, evidence paths can be constructed for all retrieval-supported
+targets without additional LLM-based verification or inference.
+
+Table 
+7
+ reports the runtime breakdown of EPG.
+Evidence-path construction takes only 59.24 seconds, substantially less than target generation and question generation, which require 142.53 and 111.15 seconds, respectively. Unlike prior approaches that rely on an LLM judge or additional reasoning calls to validate generated questions 
+(
+Lu et al. 2025
+; 
+Zhang et al. 2025a
+; 
+Wu et al. 2026
+)
+, our pipeline uses only lightweight retrieval and NLP components. It therefore avoids extra LLM inference, reduces validation overhead, and efficiently filters generated tasks while preserving source-supported evidence for multi-hop question generation.
+
+Figure 5: 
+Training reward dynamics of the Qwen2.5-7B-Instruct proposer and Qwen2.5-7B-Base solver.
+
+B.3 Reward Dynamics
+
+Reward Dynamics.
+
+Figure 
+5
+ shows distinct but coupled reward dynamics for the proposer and solver. The solver reward rises rapidly during early training and then stabilizes at a high level, indicating that the solver progressively acquires and maintains correct, tool-efficient search behavior. In contrast, the proposer reward first increases and then gradually decreases to a stable positive range. This decline should not be interpreted as degraded proposer performance. Under the intermediate-difficulty objective, questions that are initially informative become easier as the solver improves, reducing their proposer reward and continuously shifting the preferred task distribution toward the solver’s evolving capability boundary. The sustained positive proposer reward suggests that the proposer continues to generate useful frontier tasks, while the stable solver reward indicates that this adaptive task generation does not destabilize solver optimization. Short-term fluctuations arise naturally from stochastic online task generation and grouped rollouts. Since the two roles use different reward definitions, their absolute reward values are not directly comparable; the key observation is their stable and coordinated evolution over training.
+
+B.4 Comparison with Self-Play Methods.
+
+A strictly controlled comparison with existing self-play methods is
+difficult because they differ substantially in task sources, validation
+mechanisms, and search protocols.
+Many methods rely on predefined supports, such as answer pools 
+(
+Lu et al. 2025
+)
+ or knowledge graphs 
+(
+Wu et al. 2026
+)
+, and additionally use LLM-based judging or reasoning to verify the validity and correctness of generated questions and answers. Such verification is sensitive to the choice of judge model, and different LLMs may produce different filtering decisions and results. Moreover, these methods did not release trained checkpoints, making it difficult to reevaluate them under a unified search protocol and evaluation standard.
+We therefore compare with
+the reported results of Dr. Zero 
+(
+Yue et al. 2026
+)
+, which is closest to our zero-label
+setting, while treating this comparison as indicative rather than fully
+controlled. Dr. Zero uses Qwen2.5-7B-Instruct for both roles and allows
+up to five search turns, whereas 
+ZEST-Search
+ trains a
+Qwen2.5-7B-Base solver with at most three search turns. Despite using a
+base rather than instruction-tuned solver and a smaller search budget,
+our default 3-hop setting improves the average score from 37.2 to 38.2.
+Increasing the target path length to four hops further raises the average
+to 39.3 and outperforms Dr. Zero on all seven benchmarks.
+As reported in the original paper, Dr. Zero improves over Search-R1 on
+several individual datasets but achieves a slightly lower average
+performance. In contrast, our main results demonstrate substantially
+larger improvements over Search-R1 and ZeroSearch 
+(
+Sun et al. 2025
+)
+ without any labeled search data.
+
+Appendix C 
+Appendix C: Lightweight Evidence-Path Construction and
+Static Question Validation
+
+C.1 Overview
+
+This section describes the implementation of the evidence-path guided
+question construction pipeline used in our training framework.
+The goal of this module is to automatically construct corpus-supported
+candidate questions from unlabeled references without invoking additional
+LLM-based judges or human annotation.
+Given a reference question, the pipeline first generates
+a searchable target entity, verifies its existence through dense retrieval,
+constructs an evidence-supported entity path using lightweight NLP
+components,
+and finally generates and validates a new question.
+
+Unlike approaches that employ an additional language model or NLI-based
+verifier to assess generated questions, our validation procedure relies on
+retrieval grounding, entity-level consistency, and deterministic rules. This
+design significantly reduces verification overhead while maintaining reliable
+control over the generated training distribution.
+
+The complete pipeline consists of four stages:
+(1) target entity generation and retrieval-based verification,
+(2) lightweight evidence-path construction,
+(3) evidence-path guided question generation,
+and (4) static question validation before solver rollout.
+
+C.2 Retrieval-based Target Verification
+
+Dense retrieval backbone.
+
+All retrieval operations in the evidence construction module use the same
+dense retrieval service. Specifically, we adopt
+
+intfloat/e5-base-v2
+ with a pre-built FAISS index over the
+Wikipedia-2018 corpus. Each query is encoded with the required
+
+query:
+ prefix, truncated to 256 tokens, mean-pooled using the
+attention mask, and 
+ normalized before nearest-neighbor search.
+
+For target verification and evidence expansion, the retriever returns the
+top-
+ passages. This setting is independent from the solver search
+environment, where each search action retrieves top-
+ passages. The
+retrieval results are only used as corpus grounding signals and do not
+directly determine answer correctness.
+
+Target entity generation.
+
+The first proposer call does not answer the reference question. Instead, it
+is instructed to infer the semantic type of the expected answer and generate
+a different searchable entity with a similar semantic category. For example,
+if the reference question expects a person, organization, location, or work,
+the proposer generates another entity belonging to the same category. For
+questions whose answers are numerical or temporal values, the proposer
+identifies the corresponding entity or topic that determines such values and
+uses it as the target anchor.
+
+The generated target 
+ must satisfy two requirements:
+
+1.
+
+it should represent a concrete searchable entity;
+
+2.
+
+it should be supported by the retrieval corpus.
+
+Before retrieval verification, candidates undergo deterministic surface
+filtering to remove malformed outputs, including empty strings, placeholders,
+non-entity values, URLs, question-like generations, and residual generation
+tags.
+
+Retrieval support verification.
+
+A candidate is considered retrieval-supported if its normalized form
+satisfies at least one of the following conditions: (i) it exactly matches a
+retrieved title; (ii) it and a retrieved title are mutually contained, with
+both normalized strings containing at least four characters; (iii) its
+token-set Jaccard similarity with a retrieved title is at least 
+; or
+(iv) it contains at most six tokens and appears within the first 1,200
+characters of a retrieved passage.
+
+This stage only verifies that the target entity has corpus support. It does
+not perform entity linking, factual verification, or relation verification.
+
+C.3 Evidence Path Construction
+
+After obtaining a retrieval-supported target entity 
+, we construct
+a lightweight evidence graph from retrieved passages. The objective is not
+to build a complete knowledge graph, but to extract local evidence chains
+that provide controllable generation context for the proposer.
+
+The evidence graph is represented as:
+
+where each node 
+ corresponds to a normalized entity mention and each
+edge 
+ denotes a sentence-level entity association supported by
+co-mention and lexical cues. Each edge stores its source passage, verbatim
+supporting sentence, entity endpoints, and lexical support indicators.
+
+Entity Extraction and Normalization
+
+Entity extraction combines lightweight NLP tools and deterministic rules.
+When spaCy NER is available, we retain mentions labeled
+
+PERSON
+, 
+ORG
+, 
+GPE
+, 
+LOC
+,
+
+FAC
+, 
+WORK_OF_ART
+, 
+EVENT
+, and
+
+PRODUCT
+.
+Numeric and temporal mentions are removed because they are less suitable
+for constructing stable entity-centered paths.
+
+When a document title appears in a sentence, it is treated as a
+high-confidence entity mention. A capitalization-based extractor is used only
+as a fallback when no valid NER entity is detected.
+
+Unlike external entity-linking systems such as Wikidata-based linking, our
+method performs local within-corpus normalization. Entity mentions are
+normalized by Unicode normalization, case folding, punctuation removal, and
+surface matching. Each entity receives a deterministic identifier derived
+from its canonical representation.
+
+This lightweight design avoids dependency on external knowledge bases while
+providing sufficient consistency for evidence-path construction.
+
+Evidence Edge Construction
+
+Starting from the target entity 
+, retrieved passages are segmented
+into sentences. If a sentence contains both 
+ and another valid
+entity 
+, we construct a directed edge:
+
+The edge direction follows the reverse traversal order of question
+construction, where the final node is always the target answer.
+Each edge preserves the original evidence sentence and its document
+metadata. During expansion, the current frontier entity is used as a new
+retrieval query. Newly discovered entities form additional edges:
+
+To avoid shortcut paths, documents containing the final answer entity are
+excluded after the initial seed retrieval stage.
+
+Edge quality is determined through deterministic lexical signals rather than
+a learned relation extraction model. Explicit relational patterns produce
+strong edges, while weaker co-occurrence patterns receive lower confidence.
+
+Candidate edges are ranked lexicographically by relation strength, title
+support, entity confidence, ascending retrieval rank, and descending
+retrieval score.
+This deterministic priority order favors better-supported candidate edges
+without introducing an additional neural relation extractor.
+
+Path Sampling and Certification
+
+The evidence-path builder expands the graph iteratively from the target
+entity. Instead of exhaustively enumerating all possible paths, which can
+lead to combinatorial growth, we adopt a lightweight sampling-based
+expansion strategy.
+
+At each expansion step, candidate entities are ranked according to the edge
+quality score. Among the top-
+ candidates, the highest-ranked candidate is
+always preserved, while one additional candidate is randomly sampled with a
+fixed training-step-dependent seed. Therefore, the default branching width is
+two. With a maximum hop budget of three, each target produces at most
+
+ candidate paths before certification.
+
+The hop budget is treated as an upper bound rather than a fixed requirement.
+When no reliable frontier entity can be expanded, the current shorter path is
+retained. This allows the system to avoid introducing unsupported relations
+while maintaining sufficient generation coverage.
+
+Each candidate path is represented as:
+
+where 
+ is the target answer entity. Paths satisfying the
+following constraints are marked as certified:
+
+Criterion
+
+Requirement
+
+Endpoint
+
+The final node corresponds to the target answer 
+.
+
+Continuity
+
+Adjacent edges have consistent entity endpoints.
+
+Acyclicity
+
+No entity identifier is repeated within a path.
+
+Evidence grounding
+
+Each supporting sentence occurs verbatim in its source document.
+
+Entity support
+
+Each evidence sentence contains both edge endpoints.
+
+Relation validity
+
+Each edge satisfies the specified lexical relation constraints.
+
+Table 8: 
+Evidence-path structural certification criteria.
+
+Expansion may terminate before reaching the maximum hop budget, in which
+case the current shorter path is retained. If no supported edge is found,
+the retrieved answer passages form an answer-only grounding context. If no
+candidate passes the structural checker, the highest-ranked candidate may
+still be retained as an explicitly logged uncertified fallback. Accordingly,
+context availability should not be conflated with successful path
+certification.
+
+Importantly, path certification only measures structural and lexical
+consistency with retrieved corpus evidence. It does not perform external fact
+checking, natural language inference, or LLM-based judgment.
+Therefore, certified paths should be interpreted as
+retrieval-supported generation contexts rather than formally verified
+knowledge representations.
+
+C.4 Evidence-path Guided Question Generation
+
+After path construction, one evidence path is selected for each target entity
+and provided to the proposer for question generation. The input context
+contains:
+
+•
+
+the target answer entity 
+;
+
+•
+
+the ordered entity chain from the outer entity to the target;
+
+•
+
+intermediate bridge entities;
+
+•
+
+supporting evidence sentences;
+
+•
+
+source document information and relation indicators.
+
+Conditioned on the target entity, selected path, and supporting documents,
+the proposer generates a question whose answer is expected to be exactly
+
+.
+The generation objective is to produce a self-contained question whose answer
+is exactly 
+, while avoiding direct leakage of the answer entity.
+The proposer is encouraged to utilize multiple evidence steps when supported
+by the context, but shorter questions are allowed when a shorter composition
+provides clearer and more reliable evidence.
+
+The generation prompt specifies two desiderata: the question should be
+consistent with the supplied evidence context, and the target answer should
+not appear explicitly in the question. The deterministic validator directly
+enforces the second requirement through normalized alias matching. The first
+is encouraged through evidence-conditioned generation but is not separately
+verified by an entailment model or an LLM judge.
+
+The complete evidence path is therefore used as a controllable generation
+signal rather than merely as additional retrieval information.
+
+C.5 Static Question Validation
+
+Before entering solver rollout, generated questions undergo a deterministic
+validation procedure. The purpose of this stage is to remove malformed
+generations and prevent trivial answer leakage.
+
+The validator operates only on the generated question and the serialized
+materials produced during evidence construction.
+
+The validation criteria are summarized in
+Table 
+9
+.
+
+Criterion
+
+Check
+
+Purpose
+
+Format
+
+Valid question block and non-empty content
+
+Ensure parseability.
+
+Length
+
+Character- and word-level constraints
+
+Remove malformed outputs.
+
+Support
+
+Non-empty evidence materials
+
+Ensure grounding is available.
+
+Leakage
+
+Normalized target-alias matching
+
+Prevent trivial answer exposure.
+
+Entity exposure
+
+Optional path-based entity checks
+
+Control entity exposure.
+
+Table 9: 
+Static question validation criteria.
+
+Specifically, the validator performs the following checks:
+
+Output format.
+
+The final non-empty question block is extracted from the proposer output.
+Missing or empty question generations are rejected.
+
+Length constraint.
+
+Questions shorter than 10 characters or longer than 200 characters are
+removed. A minimum whitespace-separated word count is also applied to avoid
+degenerate outputs.
+
+Answer leakage detection.
+
+The validator constructs multiple normalized forms of the target answer,
+including:
+
+•
+
+original surface form;
+
+•
+
+punctuation-normalized form;
+
+•
+
+compact alphanumeric form;
+
+•
+
+case-folded representation.
+
+A generated question is rejected if any normalized target form appears in the
+question text.
+
+Evidence availability.
+
+A question is accepted only when the serialized evidence materials are
+non-empty. The validator does not independently retrieve new documents or
+perform additional semantic evaluation.
+
+Consequently, static validation ensures that a question is structurally
+well formed, accompanied by non-empty evidence materials, and free from
+direct target leakage under the implemented alias-matching rules. It does
+not establish evidence entailment, answer uniqueness, factual correctness,
+or multi-hop necessity.
+
+C.6 Computational Efficiency
+
+The evidence construction and validation stages introduce no additional LLM
+inference beyond the two proposer calls used for target and question
+generation. As quantified in Table 
+7
+, evidence-path
+construction requires 59.24 seconds over 500 reference questions, compared with 142.53 seconds for target generation and validation and 111.15 seconds for question generation and static verification.
+Thus, the non-generative evidence stage contributes substantially less wall-clock time than either LLM-generation stage while preserving explicit evidence provenance for each accepted candidate.
+
+Static acceptance is deliberately separated from solver-based evaluation.
+The former removes malformed candidates and direct answer leakage before
+rollout, whereas the latter supplies dynamic correctness, difficulty, and
+tool-use signals only after acceptance. This ordering avoids spending solver
+rollouts on candidates that already violate inexpensive deterministic
+constraints.
+

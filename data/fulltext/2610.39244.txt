@@ -1,0 +1,2643 @@
+CASH: A Capability-Aware Subsidy Harness for Advertiser Subsidy Allocation
+https://arxiv.org/abs/2610.39244
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+CASH: A Capability-Aware Subsidy Harness for Advertiser Subsidy Allocation
+
+Minmao Wang
+
+Note: 
+This work was completed during an internship at Kuaishou Technology.
+
+Affiliation: 
+Fudan University
+, 
+Shanghai
+, 
+China
+
+email: 
+mmwang25@m.fudan.edu.cn
+
+, 
+
+Huihuang Lin
+
+Affiliation: 
+Kuaishou Technology
+, 
+Beijing
+, 
+China
+
+email: 
+linhuihuang@kuaishou.com
+
+, 
+
+Likang Wu
+
+Note: 
+Corresponding authors.
+
+Affiliation: 
+Tianjin University
+, 
+Tianjin
+, 
+China
+
+email: 
+wulk@tju.edu.cn
+
+, 
+
+Hongke Zhao
+
+Affiliation: 
+Tianjin University
+, 
+Tianjin
+, 
+China
+
+email: 
+hongke@tju.edu.cn
+
+, 
+
+Shijie Yi
+
+Affiliation: 
+Kuaishou Technology
+, 
+Beijing
+, 
+China
+
+email: 
+yishijie@kuaishou.com
+
+ and 
+
+Fei Pan
+
+Affiliation: 
+Kuaishou Technology
+, 
+Beijing
+, 
+China
+
+email: 
+panfei05@kuaishou.com
+
+© none
+
+Abstract.
+
+Advertising platforms subsidize advertisers through billing discounts, and 
+Advertiser Subsidy Allocation
+ (ASA) chooses a subsidy level for every account to maximize total discounted revenue under a platform-wide subsidy-rate constraint. In practice, operators configure these subsidies from business rules, advertiser tiers and operating goals. Such configuration draws on rich business experience, yet as the advertiser base grows, tier-level policies can neither resolve how individual accounts respond across subsidy levels nor allocate a shared budget at the granularity of single accounts. We propose CASH, a Capability-Aware Subsidy Harness for ASA. CASH pairs a knowledge-guided large language model (LLM) with a data-driven numerical response model, learns from realized outcomes where each is locally reliable across accounts and subsidy levels, and turns this reliability into explicit capability licenses that govern source selection, agent review and budget allocation. Its 
+Expected Policy Coverage Gain
+ (EPCG) directs a limited feedback budget toward evidence expected to expand high-value reliable coverage, and the resulting feedback further improves the numerical model and updates capability estimates. In a one-month online experiment with CASH serving 60% of a large-scale advertising platform’s traffic, CASH raises revenue per account by 15.35% and ADVV by 19.86% over Control at an essentially unchanged subsidy rate, with further gains in revenue quality, LTV and retention.
+
+Keywords: 
+Online advertising, advertiser subsidy allocation, LLM agents
+
+1. 
+Introduction
+
+Figure 1
+. 
+From manual configuration and single-source estimation to capability-aware subsidy allocation. CASH combines agent and numerical estimates through outcome-grounded licenses under a shared budget.
+Comparison of manual configuration, prediction-agent estimation and numerical modeling with CASH. CASH uses outcome-grounded capability licenses to constrain shared-budget allocation and updates the licenses through feedback.
+
+Online advertising platforms 
+(
+Yang et al., 2026
+; 
+Han et al., 2026
+)
+ connect vast numbers of users and advertisers, and their long-term growth depends on effective traffic matching, a thriving advertiser ecosystem and sustainable commercial revenue. Yet an advertiser’s competitiveness in impression-level auctions does not always reflect its business potential. Advertisers with high conversion potential may receive insufficient exposure due to cold start, sparse historical feedback or weak ranking competitiveness, hindering their growth and long-term retention 
+(
+Ye et al., 2023
+)
+. Platforms therefore provide differentiated account-level support by raising ranking bids through an uplift factor while discounting billing, helping promising advertisers become more competitive and obtain additional traffic. Advertisers, however, respond very differently to the same support. Excessive subsidies increase platform cost without commensurate revenue gains, whereas insufficient subsidies constrain the growth of promising advertisers. Efficiently allocating a limited subsidy budget is therefore a central challenge in advertising operations.
+
+In industrial systems, account-level subsidies are configured mainly through manual rules and operator experience, such as adjusting discounts during promotions or helping new advertisers ramp up. These practices cannot capture each account’s marginal revenue response at different subsidy levels. For example, when a 30% discount already secures sufficient traffic, deepening it to 50% may add little revenue while substantially increasing subsidy cost. Subsidies also affect competition for traffic, motivating a platform-level allocation objective. We formulate this problem as 
+Advertiser Subsidy Allocation
+ (ASA), which selects a subsidy level for each account to maximize total platform revenue under a platform-wide subsidy-rate constraint. ASA operates at the account level and shapes subsequent traffic allocation through the existing auction mechanism.
+
+Large language models (LLMs) 
+(
+Zhao et al., 2026
+; 
+Brown et al., 2020
+)
+ offer a natural way to scale subsidy decisions by incorporating business rules, account operating information and operational knowledge into revenue-response estimation. Their estimates, however, do not guarantee numerical accuracy for specific subsidy actions 
+(
+Tan et al., 2024
+; 
+Song et al., 2026
+)
+. Data-driven numerical response models provide an alternative, learning directly from realized outcomes and predicting efficiently where historical feedback is abundant. Yet subsidies concentrate on a small number of accounts and levels, leaving many account-action combinations poorly supported. Neither estimator is uniformly reliable; their strengths depend on account states, subsidy levels and available evidence, as shown in Figure 
+1
+.
+
+The central challenge is to make heterogeneous estimators collaborate reliably while allowing their usable decision range to evolve with experience. In ASA, an error at a single account-action pair can alter the allocation of a shared budget and consequently change decisions for other accounts. Meanwhile, the evidence available to assess reliability is shaped by previous allocation decisions, so poorly supported actions may remain difficult to evaluate. Reliable allocation thus requires both outcome-grounded limits on where each estimator can be used and a principled way to acquire evidence that expands these limits over time.
+
+We propose 
+CASH
+ (Capability-Aware Subsidy Harness), which integrates estimator collaboration, reliability control and shared-budget allocation through explicit capability boundaries, as shown in Figure 
+2
+. CASH pairs an LLM-based prediction agent with a numerical response model to estimate account-level revenue curves. A capability plugin evaluates both sources using realized outcomes and issues per-level licenses for individual account states. These licenses constrain routine source selection and the candidate actions available to the shared-budget allocator. A separate LLM-based orchestrating agent reviews contested accounts using the predictions, capability report and operating information, choosing among licensed sources or withholding the subsidy. As new feedback arrives, CASH updates these licenses and adjusts the division of labor between the prediction agent and the numerical model.
+
+CASH further introduces 
+Expected Policy Coverage Gain
+ (EPCG) to manage how these capability boundaries evolve. Because only executed actions yield feedback, historical logs leave gaps in the evidence needed to assess alternative decisions. EPCG allocates a limited feedback quota according to each region’s expected contribution to future value-weighted reliable coverage of the numerical model, measured through changes in regional admission while holding other license conditions fixed. Acquired feedback supports model retraining and capability reassessment, and CASH updates or revokes licenses as evidence changes, while EPCG prioritizes the interventions expected to expand reliable Tool coverage. EPCG thereby connects evidence acquisition to the same capability boundaries that govern current allocation, closing the loop between decision making and capability evolution.
+
+Our main contributions are as follows.
+
+•
+
+Problem formulation.
+ To our knowledge, we are the first to study advertiser subsidy allocation from an advertising operations perspective, formulating it as account-level optimization under a platform-wide subsidy-rate constraint. We identify its core challenges: heterogeneous estimator reliability across accounts and subsidy levels, and cross-account error propagation through the shared budget.
+
+•
+
+Capability-aware harness.
+ We propose CASH, which learns outcome-grounded, per-level capability licenses for a prediction agent and a numerical response model, and uses these licenses to govern source selection and shared-budget allocation. EPCG directs limited feedback toward regions with the greatest expected expansion of reliable coverage, closing the loop between evidence acquisition and capability evolution.
+
+•
+
+Industrial validation.
+ In a one-month online experiment with CASH serving 60% of platform traffic, CASH increases revenue per account by 15.35% and ADVV by 19.86% over Control at an essentially unchanged subsidy rate, while improving revenue quality, LTV, and retention.
+
+2. 
+Problem Formulation
+
+In each decision cycle, the platform allocates subsidies to a set of advertiser accounts 
+. The state 
+ of account 
+ consists of its historical behavior, historical subsidy actions and available operating information visible before the decision, and the platform selects a discount factor 
+ from the subsidy grid 
+, where a smaller 
+ means a larger discount, or takes the separate no-discount action 
+. Let 
+ denote the expected pre-discount revenue under state 
+ and action 
+. Expected discounted revenue and subsidy are
+
+(1)
+
+and the realized discounted revenue is denoted by 
+. ASA maximizes expected total discounted revenue under a platform-wide subsidy-rate constraint,
+
+(2)
+
+where the subsidy rate is the ratio of total subsidy to total discounted revenue and the executable levels 
+ are determined in §
+3.3
+, with 
+ for 
+Fallback
+. Following prior incentive-allocation work 
+(
+Ai et al., 2022
+; 
+Sun et al., 2024
+)
+, we model responses at the account level under recent market conditions and treat 
+ learned from logs as the interventional response, assuming that 
+ contains the information behind historical subsidy decisions so that, given 
+, the historical level is independent of potential outcomes. The support condition of §
+3.2
+ further restricts each estimator to state and level pairs with sufficient historical feedback. 
+ is supplied by two estimators, a numerical response model 
+ and a prediction agent 
+. Historical subsidies concentrate on a few accounts and levels, so the reliability of both estimators varies markedly across 
+.
+
+With non-negative multipliers 
+ for the two sides of the constraint, the Lagrangian subproblem of Eq. (
+2
+) decomposes over accounts into 
+ with shared coefficient 
+.
+
+Proposition 2.1.
+
+For given dual prices and executable set 
+, if 
+ with 
+, then
+
+(3)
+
+whereas the account’s constraint contribution, 
+ with 
+, scales with 
+.
+
+At fixed dual prices a scale bias thus leaves an account’s choice unchanged, but changes its budget contribution, which can alter the optimal dual prices and other accounts’ allocations, so where each estimator applies must be decided before allocation. The log 
+ contains outcomes only for executed actions. Allocation therefore determines which new evidence becomes available to reassess each estimator’s reliable range.
+
+3. 
+CASH: A Capability-Aware Subsidy Harness
+
+Figure 2
+. 
+Overview of CASH. The numerical model and prediction agent provide complementary revenue estimates. Outcome-grounded licenses combine local error, empirical support and regional admission to guide source selection, review by the orchestrating agent and routine allocation under a shared subsidy-rate constraint. EPCG prioritizes feedback by expected gains in value-weighted Tool coverage, while matured outcomes update admission and support model retraining.
+CASH combines Agent and Tool estimates, checks local and regional reliability to grant licenses, constrains source selection and shared-budget allocation, and uses EPCG-guided feedback to expand or revoke Tool coverage.
+
+CASH links response estimation, capability assessment and resource allocation in a feedback loop, as shown in Figure 
+2
+. The capability plugin uses matured outcomes to determine each source’s licensed levels. Routing selects a source within these licenses, and the allocator assigns levels under the shared budget. EPCG selects evidence acquisition opportunities by their expected contribution to future Tool coverage; exploration configurations pass separate business checks and share the same budget. Matured feedback updates regional admission and supports scheduled model retraining, determining the licenses available in subsequent cycles. Algorithm 
+1
+ summarizes one decision cycle.
+
+3.1. 
+Complementary Response Estimation
+
+CASH combines a numerical response model (Tool) learned from historical interventions with a prediction agent (Agent) that uses account history, operating information and business rules. Both predict discounted revenue on the same scale.
+
+Tool predicts pre-discount revenue 
+, giving 
+. It trains on matured feedback 
+ with rolling loss 
+. Each logged prediction uses the model version preceding the inclusion of its feedback in training, keeping downstream errors out-of-sample. Agent reads state 
+, operating information 
+ and subsidy rules 
+, and returns all levels in one call: 
+. Calls follow the routine quota in §
+3.3
+, with additional random audits.
+
+Optimizing noisy curves favors over-estimated levels. Since deeper discounts raise ranking bids through the uplift factor, pre-discount revenue should not decrease. We therefore project 
+ and 
+ onto non-increasing sequences in 
+ by isotonic regression, then multiply by 
+. Capability estimation and allocation use these projected curves.
+
+3.2. 
+Outcome-Grounded Capability Licenses
+
+The capability plugin assesses source reliability from realized prediction errors. Errors become observable when feedback matures for valid predictions made with decision-time information.
+
+For each source 
+, we fit an error-scale model 
+ to predict relative error for different account states and subsidy levels. Its target is 
+, where 
+ and 
+ stabilizes the revenue scale. A disjoint, chronologically later calibration set 
+ provides a quantile of normalized errors 
+(
+Lei et al., 2017
+)
+. This quantile rescales the predicted relative error into a relative bound, which we convert to a monetary bound using the predicted revenue scale:
+
+(4)
+
+Here 
+, 
+, and 
+ is the 
+-th ordered score, taken as 
+ for 
+. The floor 
+ stabilizes normalization; nominal coverage is 
+. Agent calibration uses valid routine-call predictions (
+, §
+3.3
+); audits feed regional admission and the judge.
+
+The error-scale model is trained on executed 
+, and its use at other levels is restricted to neighborhoods with sufficient empirical support. We measure support by kernel-weighted matured feedback, capping each account’s contribution so that correlated feedback from one account is not counted as independent evidence,
+
+(5)
+
+where 
+ is the account of sample 
+, and 
+ and 
+ are bounded-support kernels over account states and levels (forms and bandwidths in Appendix 
+B
+). 
+ is the feedback matured within the last 
+ cycles, the same evidence window as §
+3.5
+, so outdated evidence stops supporting a license.
+
+For source 
+ at state 
+, source-specific thresholds and regional admission define the licensed levels:
+
+(6)
+
+where 
+ is the set of levels confirmed legal by business rules (§
+3.3
+) and 
+ is the admission state of region 
+ (§
+3.5
+). All three conditions must hold for a level to be licensed. The plugin returns the licensed levels together with error and support estimates in the capability report of §
+3.3
+.
+
+3.3. 
+Capability-Constrained Routing
+
+Let 
+ be the levels confirmed legal by business rules, with which every license is intersected. Not every account needs a discount. When no source can support a decision, the account takes 
+Fallback
+ and receives no discount in the current cycle (
+), so it keeps its normal billing and adds no subsidy.
+
+Using pre-call account information, a judge 
+ gives an account-level source-preference score 
+. It is trained on error comparisons over executed actions, with samples weighted by the error gap to emphasize costly source-selection mistakes,
+
+(7)
+
+where 
+ contains matured samples on which both predictions are valid, 
+ is the planned probability that sample 
+ receives an Agent prediction (§
+3.3
+), and samples with equal errors have zero weight. The judge uses only information available before any LLM call, and its thresholds are set on validation data.
+
+CASH scores accounts by an ex-ante call value 
+, the predicted reduction in absolute error from Judge-based source selection relative to Tool. The regressor uses pre-call information, including 
+ and the number of Tool-licensed levels (training details in Appendix 
+B
+). The prediction agent is called for the highest-scoring accounts within the routine quota 
+,
+
+(8)
+
+where 
+ selects the 
+ highest-scoring accounts, breaking threshold ties to keep exactly 
+ accounts. Accounts with 
+ enter allocation with the numerical curve and its licensed levels, or take 
+Fallback
+ when 
+. To keep Agent errors observable on these accounts, CASH calls the prediction agent on a random audit sample of them with probability 
+ and uses the results only for capability learning, so the planned probability of an Agent prediction is 
+ if 
+ and 
+ otherwise.
+
+Accounts with 
+ call the prediction agent for the current decision, after which the plugin computes 
+; if the call fails or returns an invalid curve, 
+. The option set 
+ contains 
+Fallback
+, which gives no discount, 
+Tool
+ if 
+ and 
+Agent
+ if 
+. Licenses and 
+ determine the default route,
+
+(9)
+
+When the Agent prediction fails, the route falls back to 
+Tool
+ and then 
+Fallback
+. Among routine-call accounts with at least one Agent-licensed level, those with ambiguous preferences, strongly diverging predictions on common licensed levels, or disjoint licenses are reviewed (conditions in Appendix 
+C
+). For them, CASH assembles both curves with their errors, support, licensed levels and 
+ into a capability report and calls the orchestrating agent, an LLM separate from the prediction agent. The orchestrating agent chooses within 
+. It can switch between licensed sources or withhold the discount on business grounds, for example when operating information signals an imminent budget change, and a failed call or an output outside 
+ reverts to 
+.
+
+3.4. 
+Shared-Budget Allocation
+
+Routing determines each account’s curve and executable levels, with 
+ for source 
+. Let 
+ be the accounts that take part in optimization. Accounts on 
+Fallback
+ receive no discount and stay outside it; their expected revenue at 
+ enters the constraints as an external fixed term 
+, together with the fixed exploration configurations of §
+3.5
+, whose subsidy forms 
+. Let 
+ indicate that account 
+ takes level 
+, 
+, 
+ and 
+. With positive total discounted revenue, Eq. (
+2
+) becomes a multiple-choice knapsack:
+
+(10)
+
+Eq. (
+10
+) has two cross-account constraints. Since 
+ and 
+, they cannot both be tight, so its LP relaxation has a basic optimal solution with at most one fractional account (Appendix 
+A
+). We search over dual prices 
+, round the fractional account and attempt repair through single-account swaps or 
+Fallback
+ switches (Appendix 
+C
+).
+
+The exploration actions of §
+3.5
+ form a separate channel that needs no license; after the business-safety check they enter Eq. (
+10
+) as fixed configurations under the same budget.
+
+3.5. 
+Evidence Acquisition and Capability Updates
+
+Matured feedback updates regional admission, which changes subsequent licenses through Eq. (
+6
+). The 
+Expected Policy Coverage Gain
+ (EPCG) allocates a limited feedback quota to regions where new evidence is expected to expand valuable Tool coverage.
+
+We partition states and actions into regions, with 
+ the region of 
+ (binning in Appendix 
+B
+). For matured feedback 
+ on which source 
+ has a valid prediction, we record the exceedance 
+, with a tolerance 
+ proportional to the account’s historical revenue. The numerical model has predictions on all samples; the prediction agent has predictions only on accounts selected by the call quota and on successfully called audit samples. Regional evidence uses only feedback in 
+, weighted by 
+ with 
+, 
+ and 
+. Here 
+ is execution time and 
+ is maturity time; 
+ uses maturity times. The decay favors newer evidence and the inverse probability corrects the audit sampling.
+
+Repeated observations of the same account are highly correlated, so we treat the account as the independent unit. Let 
+ be the evidence of account 
+ in region 
+ within the window. With account-level weight 
+ and exceedance rate 
+, for non-empty regions, the weighted exceedance rate and account-level Kish effective sample size are
+
+(11)
+
+ is at most the number of accounts with evidence and shrinks as weight concentrates on few of them. The approximate posterior of the regional exceedance probability is
+
+(12)
+
+a weighted approximation with the effective sample size as pseudo-count (Appendix 
+E
+). Empty regions use 
+ and the 
+ prior directly, with 
+. For non-empty regions, admission requires an upper credible bound within tolerance:
+
+(13)
+
+where 
+ is the 
+ quantile of the posterior in Eq. (
+12
+). Admission is recomputed every cycle as evidence arrives or expires, so a region can be opened, kept or revoked. After retraining, Tool licenses are recomputed using the updated model’s errors on held-out feedback. 
+ thus changes subsequent licenses, call selection and the levels available in allocation.
+
+CASH aims to hand more repetitive decisions to the low-cost numerical model, so the objective of exploration is its value-weighted account and level coverage on reference traffic,
+
+(14)
+
+where the reference traffic 
+ is built from account states of the most recent cycle known at decision time and 
+ is an account’s value weight, its expected discounted revenue known at decision time. EPCG estimates the change in this coverage through regional admission 
+, with the current model and the other license conditions fixed. Model retraining is a subsequent update.
+
+Because feedback matures with delay 
+, EPCG compares admission at 
+ with and without exploration. Without it, existing evidence ages under the window and decay. With it, each of 
+ simulations draws 
+ from Eq. (
+12
+), adds 
+ simulated outcomes 
+ from distinct accounts of a frozen, randomly assigned regional candidate pool 
+, and recomputes admission. Each simulated outcome enters the account-level aggregation as one observation of its account, using the regional exceedance rate as an approximation for the candidate pool (Appendix 
+C
+). Then
+
+(15)
+
+where 
+ is the normalized weight of account and level pairs in region 
+ that satisfy every condition of Eq. (
+6
+) except admission, using the same weights and denominator as 
+. EPCG is negative when new feedback is likely to reveal larger errors and revoke admission. It targets evidence that confirms where the current model can be trusted, and regions that also fail the support or error conditions are left to natural feedback and retraining.
+
+Admission is a threshold decision, so EPCG changes in steps with 
+, not necessarily monotonically. Given feedback quota 
+, we optimize over discrete packet sizes 
+ with 
+:
+
+(16)
+
+Since the regional pools are disjoint, Eq. (
+16
+) is a multiple-choice knapsack solved exactly by dynamic programming. Explorations are executed one cycle at a time and are cut from the lowest EPCG per unit if Eq. (
+10
+) becomes infeasible.
+
+4. 
+Experiments
+
+We evaluate CASH through six research questions.
+
+• 
+RQ1: Online impact.
+ How does CASH perform relative to the incumbent policy online?
+
+• 
+RQ2: Prediction accuracy.
+ How does CASH compare with individual estimators and alternative combinations?
+
+• 
+RQ3: Capability reliability.
+ Are the estimators complementary, and do capability estimates identify reliable predictions and improve review by the orchestrating agent?
+
+• 
+RQ4: Call selection and licenses.
+ What are the effects of call selection and capability licenses on accuracy and inference cost?
+
+• 
+RQ5: Budget coupling.
+ How do local estimation errors propagate through the shared budget?
+
+• 
+RQ6: Capability evolution.
+ Does EPCG expand reliable coverage and improve subsequent predictions?
+
+4.1. 
+Setup
+
+4.1.1. 
+Online experiment
+
+CASH, Tool and Control serve 60%, 20% and 20% of platform traffic, respectively, with group assignment based on hashed account IDs. A pre-experiment A/A test verified that the groups were comparable in revenue per account, ADVV and subsidy rate. Control retains the incumbent tier-based policy guided by operator experience. Tool combines the numerical model and budget allocator. CASH’s full harness ran in production for one month from September 14 to October 14, 2026.
+
+4.1.2. 
+Offline data and evaluation cohort
+
+We construct a dataset of 663,312 account-days from real advertising logs. Each sample contains the account history available before the target period, the executed discount factor and the realized discounted revenue in that period. The chronological training, validation and test splits contain 554,724, 54,851 and 53,737 account-days. Validation data serve model selection, error calibration and threshold setting. The 16 candidate discount factors range from 0.50 to 0.80, in addition to the no-discount action 
+. For offline method comparisons involving LLMs, we use a common subset of 20,143 account-days from 11,314 accounts across two test periods, evaluating all methods at historically executed subsidy levels.
+
+4.1.3. 
+Compared methods
+
+Tool uses the numerical response model alone and, online, pairs it with the budget allocator. Agent uses the LLM-based prediction agent alone. Agent Routing lets an LLM select between the two predictions, following the LLM-as-a-judge paradigm 
+(
+Zheng et al., 2023
+)
+. Judge Routing uses a learned source selector without capability constraints, following RouteLLM 
+(
+Ong et al., 2025
+)
+. CASH combines selective LLM calls with capability-constrained routing and allocation, and CASH (all calls) obtains both predictions and invokes the orchestrating agent for every account. Implementation details are in Appendix 
+B
+.
+
+4.1.4. 
+Metrics and protocol
+
+Revenue, ADVV and LTV are reported per account using all advertisers in each group as the denominator. Revenue is post-discount platform revenue, ADVV is the advertiser value generated by acquired traffic, and LTV is cumulative revenue over 7 and 14 days. Target-achieving share is the fraction of revenue from accounts meeting their optimization targets, ineffective share is the fraction of revenue without conversion, and retention is the proportion of accounts active on days 7 and 14. Online results use Control as the reference unless otherwise stated. Gains in Revenue, ADVV and LTV are relative changes, while changes in revenue shares and retention are reported in percentage points. Offline, MAE and RMSE measure revenue prediction error at executed levels. CASH uses the Tool prediction for scoring when it takes 
+Fallback
+ or the executed level is outside the selected source’s license. A severe exceedance is an absolute error above twice the account’s pre-prediction historical revenue scale. Cost counts every underlying LLM request, including prediction, audit and orchestration calls. Offline paired comparisons use a 1,000-replicate account-clustered bootstrap for 95% confidence intervals, RQ6 applies Holm correction for multiple comparisons, and Appendix 
+D.1
+ details the daily-aggregate analysis of online temporal uncertainty.
+
+4.2. 
+RQ1: Online Impact
+
+4.2.1. 
+Overall performance
+
+CASH leads in revenue per account, ADVV, LTV and retention, as shown in Table 
+1
+. At essentially the same realized subsidy rate as Control, CASH raises revenue per account by 15.35% and ADVV by 19.86%, increases the target-achieving share by 2.29 percentage points and lowers the ineffective share by 1.35 points. Seven- and 14-day LTV gains are 15.98% and 15.24%, while day-14 retention gains 1.57 points.
+
+Table 1
+. 
+Online performance of Tool and CASH relative to Control across revenue, advertiser value, revenue quality, LTV and retention. Revenue, ADVV and LTV are reported as relative gains per account; revenue shares and retention are reported as changes in percentage points.
+
+Revenue and ADVV
+
+Revenue quality
+
+LTV per account
+
+Retention
+
+Method
+
+Revenue 
+
+ADVV 
+
+Target-achieving 
+
+Ineffective 
+
+7-day 
+
+14-day 
+
+Day 7 
+
+Day 14 
+
+Tool
+
++8.50%
+
++14.32%
+
+1.42 pp
+
+1.78 pp
+
++12.51%
+
++11.50%
+
++1.04 pp
+
++1.40 pp
+
+CASH
+
++15.35%
+
++19.86%
+
++2.29 pp
+
+1.35 pp
+
++15.98%
+
++15.24%
+
++1.15 pp
+
++1.57 pp
+
+The Tool group provides a numerical-model allocation baseline for assessing the additional gains of CASH. Automated allocation with the numerical model alone already raises ADVV by 14.32% over Control. Over Tool, CASH gains 6.31% in revenue per account, 3.08% in seven-day LTV and 3.72 points in target-achieving share, while ineffective share rises by 0.43 points.
+
+Daily relative gains in Revenue, ADVV, and seven-day LTV are positive on all 31 anchor dates. Dashed lines indicate the corresponding pooled gains.
+
+Figure 3
+. 
+Daily per-account gains of CASH over Control. Dashed lines indicate pooled gains.
+Daily relative gains in Revenue, ADVV, and seven-day LTV are positive on all 31 anchor dates. Dashed lines indicate the corresponding pooled gains.
+
+4.2.2. 
+Temporal stability
+
+The gains hold throughout the test period from September 14 to October 14, 2026, as shown in Figure 
+3
+. Revenue, ADVV and seven-day LTV per account are higher under CASH than under Control on each of the 31 days, and removing any single day keeps the pooled gain between 14.98% and 15.71% for revenue and between 19.17% and 20.25% for ADVV. A paired seven-day moving-block bootstrap over daily aggregates with 50,000 replicates yields approximate 95% temporal intervals of 
+ for revenue, 
+ for ADVV and 
+ for seven-day LTV, all above zero. Appendix 
+D.1
+ reports positive intervals for alternative block lengths.
+
+4.3. 
+RQ2: Offline Prediction Accuracy
+
+As shown in Figure 
+4
+ and Table 
+5
+, neither individual source leads on both error metrics. Agent has a higher MAE than Tool, 360.17 against 345.58, but a lower RMSE, 1328.32 against 1336.51. RQ3 examines their sample-level complementarity. Simple routing gives limited improvements: Agent Routing leaves MAE above Tool, while Judge Routing lowers MAE with a smaller RMSE gain.
+
+CASH lowers MAE by 2.20% and RMSE by 4.11% relative to Tool, with a 95% confidence interval of 
+ for the paired MAE difference. Its larger relative reduction in RMSE is consistent with the tail-error reduction observed in the license ablation of RQ4. CASH uses 6,119 calls, fewer than any baseline that calls the LLM for every account.
+
+MAE and RMSE versus LLM calls for six methods. CASH uses 6,119 calls, while CASH with all calls uses 40,286 and achieves the lowest errors.
+
+Figure 4
+. 
+Prediction error versus LLM calls. Lower and further left is better. R. denotes Routing; CASH-all denotes CASH (all calls).
+MAE and RMSE versus LLM calls for six methods. CASH uses 6,119 calls, while CASH with all calls uses 40,286 and achieves the lowest errors.
+
+4.4. 
+RQ3: Complementarity and Capability Reliability
+
+As the training set grows, Tool overtakes the fixed Agent, as shown in Figure 
+5(a)
+. With limited training data, Tool performs worse than Agent and fluctuates across training sizes, with an MAE of about 411 at 56,000 account-days. As training data accumulate, its MAE falls below Agent’s 360.17 between 136,000 and 186,000 account-days and reaches 345.58 at about 555,000. The final predictors remain complementary, since Agent is more accurate on 48.77% of account-days although Tool has the lower MAE. Agent wins more often on small accounts and Tool on large ones, as shown in Figure 
+5(b)
+, yet win rates remain between 44% and 56% across revenue deciles. Appendix 
+D
+ reports prediction errors and Agent win rates for accounts with low, medium and high Tool support.
+
+(a)
+ 
+MAE versus training-set size.
+
+(b)
+ 
+Win rates by revenue decile.
+
+Figure 5
+. 
+Estimator complementarity across training-set sizes and revenue deciles. Shaded bands in (b) show 95% CIs.
+Panel a compares Tool MAE across training-set sizes with a fixed Agent. Panel b shows Tool and Agent win rates across revenue deciles, with confidence intervals.
+
+Table 2
+. 
+Reliability signals at matched admission. Exceed. denotes severe exceedance.
+
+Source
+
+Admission signal
+
+MAE
+
+Exceed.
+
+Tool
+
+Support
+
+371.95
+
+9.61%
+
+Source disagreement
+
+272.43
+
+7.53%
+
+Local calibration
+
+230.53
+
+4.94%
+
+Agent
+
+Support
+
+378.73
+
+10.85%
+
+Source disagreement
+
+270.26
+
+8.13%
+
+Local calibration
+
+250.83
+
+6.12%
+
+Capability estimates learned from realized errors separate risky predictions. Under the deployed licenses, the severe-exceedance rate is 6.29% inside and 15.08% outside the Tool licenses, and 5.67% and 14.97% for Agent. Table 
+2
+ compares admission signals at approximately 60% admission, with matched counts within account-size buckets. Among the compared signals, local calibration gives the lowest MAE and exceedance rate for both sources. The admitted Tool MAE is 38.0% below support-based and 15.4% below disagreement-based admission; the admitted Agent MAE is 7.2% below disagreement-based admission. Compared with a global constant error bound, local calibration reduces the median bound by 35.8% for Tool and 30.3% for Agent, with empirical coverage of approximately 94% against a nominal 95%. Exposing this information also constrains review by the orchestrating agent, as shown in Table 
+8
+ in Appendix 
+D
+. With the license list, out-of-license choices drop from 66 to zero, and the full capability report lowers MAE on the difficult review subset from 479.60 to 466.96.
+
+4.5. 
+RQ4: Call Selection and Licenses
+
+Call selection retains most of the gain of CASH (all calls) at a small fraction of the cost. CASH (all calls) lowers MAE from 345.58 for Tool to 336.80, and CASH reaches 337.99, recovering 86% of this reduction with 6,119 calls, 15% of the 40,286 calls of the full configuration. Relative to the Agent baseline with one call per account-day, CASH uses 69.6% fewer calls and 68.0% fewer tokens. Raising the routine quota to 40% and 60% gives an MAE of 338.22 and 338.34, respectively, as reported in Appendix 
+D
+.
+
+Licenses mainly control tail error. We remove only the license constraint on source selection and keep quota selection, predictions and review responses fixed. MAE stays nearly unchanged at 337.92 against 337.99, while RMSE rises by 8.78 from 1281.63 to 1290.41, with a 95% confidence interval of 
+ for the increase. The increase in RMSE with little change in MAE indicates that licenses primarily limit large prediction errors.
+
+4.6. 
+RQ5: Budget Coupling
+
+Motivated by the budget-coupling mechanism in Proposition 
+2.1
+, we stress-test how single-account estimation errors propagate through the shared budget. Each of 672 scenarios rescales the prediction of one account on either its licensed or its unlicensed levels, re-solves Eq. (
+10
+) under the deployed subsidy-rate interval with and without licenses, and counts the level changes of other accounts. Strict switches exclude changes due solely to ties between equally valued allocations.
+
+Table 3
+. 
+Cross-account effects of single-account perturbations over 672 scenarios. Strict switches exclude changes due solely to ties between equally valued allocations.
+
+Strict switches
+
+Perturbed levels
+
+Licenses
+
+Changes
+
+Mean
+
+Max
+
+Unlicensed
+
+Off
+
+0.51
+
+0.010
+
+1
+
+On
+
+0
+
+0
+
+0
+
+Licensed
+
+Off
+
+1.09
+
+0.680
+
+33
+
+On
+
+0.90
+
+0.480
+
+29
+
+Licenses block propagation from unlicensed levels, as shown in Table 
+3
+. Without licenses, perturbations on these levels cause an average of 0.510 level changes and 0.010 strict switches in other accounts, indicating that most changes occur between equally valued allocations. With licenses, these levels are excluded and propagation falls to zero. Perturbations on licensed levels still affect other accounts. Without licenses, they cause 1.090 changes on average and up to 33 strict switches, and with licenses, mean changes fall to 0.900 and mean strict switches from 0.680 to 0.480.
+
+4.7. 
+RQ6: Capability Evolution
+
+To evaluate coverage expansion and subsequent prediction gains, we withhold weekend samples, accounts with recent revenue spikes, or large high-volatility accounts from initial Tool training, and replay acquisition on held-out logs, where each method selects samples under the same quota and observes their logged outcomes. With Tool frozen and only admission updated, the three configurations in Table 
+7
+ yield value-weighted licensed coverage gains between 2.06 and 2.75 points for EPCG and between 
+ and 
+ points for random acquisition. Across all 15 gap–quota combinations, EPCG leads in every combination and wins 44 of 45 seed-level comparisons with one tie. Its mean advantage across the remaining combinations is between 1.78 and 2.17 points when any single gap is left out. Samples in newly admitted regions retain a severe-exceedance rate between 4.57% and 5.79% in later evaluation periods, close to that of licensed predictions in RQ3. Predicted EPCG correlates with realized coverage gains, with Spearman correlations of 0.578 across selected regions and 0.778 across complete acquisition plans. On the high-volatility gap, we retrain Tool on the acquired feedback and evaluate it on 27,613 later account-days. With 480, 960 and 1,920 feedback samples, EPCG lowers RMSE relative to random acquisition by 4.1%, 3.0% and 1.5% while MAE stays similar, as shown in Table 
+9
+ in Appendix 
+D
+. An agent-guided variant reserves half of the quota for strata proposed by the agent from a diagnostic report. It has the lowest MAE, but no significant Holm-adjusted advantage.
+
+5. 
+Related Work
+
+5.1. 
+Budget-Constrained Incentive Allocation
+
+Incentive allocation requires estimating heterogeneous responses and coordinating decisions under a shared budget. Uplift models estimate treatment effects 
+(
+Zhao et al., 2017
+; 
+Zhong et al., 2022
+)
+, while budget-aware allocation methods connect response estimation to constrained optimization 
+(
+Zhao et al., 2019
+; 
+Ai et al., 2022
+)
+. More recent approaches tighten this connection through end-to-end optimization or decision-oriented causal learning 
+(
+Sun et al., 2024
+; 
+Zhou et al., 2023
+)
+. In advertising, related work studies budget-constrained bidding 
+(
+Wu et al., 2018
+)
+ and coupon mechanisms for advertiser participation and retention 
+(
+Shen et al., 2021
+; 
+Xing et al., 2025
+)
+. CASH addresses a complementary issue: which response estimates should be allowed to influence allocation when historical interventions provide uneven support. Its account- and level-specific licenses restrict the estimates used by the shared-budget optimizer, while targeted feedback updates these restrictions over time.
+
+5.2. 
+Capability-Aware LLM Agents
+
+LLM agents combine reasoning with external tools 
+(
+Yao et al., 2023
+; 
+Schick et al., 2023
+)
+, including for bidding and advertising budget allocation 
+(
+Cai et al., 2025
+; 
+Song et al., 2026
+)
+. Their use as numerical estimators 
+(
+Gruver et al., 2023
+)
+ also raises questions about calibration and the reliability of confidence signals 
+(
+Epstein et al., 2025
+; 
+Qin and Andriushchenko, 2026
+; 
+Xiao et al., 2025
+; 
+Tao et al., 2025
+)
+. Learning to defer and selective prediction study when to rely on a predictor or seek assistance 
+(
+Mozannar and Sontag, 2020
+; 
+Charusaie et al., 2022
+; 
+Geifman and El-Yaniv, 2017
+)
+; LLM routing and tool-use policies balance predictive quality against inference cost 
+(
+Chen et al., 2023
+; 
+Ding et al., 2024
+; 
+Ong et al., 2025
+; 
+Qian et al., 2025
+)
+. CASH makes a finer distinction between selecting a source and determining the actions on which that source may be used. Outcome-based licenses constrain both the orchestrating agent’s source choice and the subsequent allocation across accounts. This design also relates to uncertainty-aware decision-making and active evidence acquisition. Conformal prediction calibrates uncertainty, including for downstream decisions 
+(
+Lei et al., 2017
+; 
+Cortes-Gomez et al., 2025
+)
+, while conservative policy learning and safe exploration restrict actions under limited evidence 
+(
+Laroche et al., 2019
+; 
+Kumar et al., 2020
+; 
+Sui et al., 2015
+; 
+Wu et al., 2016
+)
+. Level-set estimation explicitly targets growth of a certified region 
+(
+Zanette et al., 2018
+)
+; value-of-information and budgeted exploration study how to spend limited opportunities to learn 
+(
+Frazier et al., 2008
+; 
+Badanidiyuru et al., 2018
+)
+. EPCG evaluates feedback by its expected effect on future value-weighted reliable coverage of the numerical model, measured through changes in regional admission. Acquired evidence updates the model and regional admission to guide subsequent allocation.
+
+6. 
+Conclusion
+
+We studied Advertiser Subsidy Allocation, which turns experience-driven subsidy configuration into automated account-level decisions under a platform-wide subsidy-rate constraint. The central challenge is to combine estimators whose reliability varies across accounts and subsidy levels while controlling how estimation errors affect shared-budget allocation. CASH combines an LLM-based prediction agent with a numerical response model, learns per-level capability licenses for both sources from realized outcomes, and uses these licenses to constrain source selection, review by the orchestrating agent and shared-budget allocation. EPCG prioritizes feedback by its expected contribution to reliable Tool coverage. Offline evaluations show that licenses reduce tail prediction errors and block propagation from unlicensed estimates, while EPCG expands reliable coverage more effectively than random acquisition. In a one-month online experiment with CASH serving 60% of platform traffic, CASH raises revenue per account by 15.35% and ADVV by 19.86% over Control at an essentially unchanged subsidy rate. It further increases revenue per account by 6.31% over automated allocation with the numerical model alone. These results demonstrate the practical value of combining operational knowledge with data-driven prediction within outcome-grounded capability boundaries for fine-grained advertiser subsidy allocation, improving platform revenue and advertiser outcomes under a shared budget.
+
+References
+
+Ai 
+et al.
+ (2022)
+
+M. Ai, B. Li, H. Gong, Q. Yu, S. Xue, Y. Zhang, Y. Zhang, and P. Jiang
+
+LBCF: A Large-Scale Budget-Constrained Causal Forest Algorithm
+.
+
+In 
+Proceedings of the ACM Web Conference 2022
+,
+
+WWW ’22
+, 
+New York, NY, USA
+, 
+pp. 2310–2319
+.
+
+External Links: 
+ISBN 9781450390965
+,
+
+Link
+,
+
+Document
+
+Cited by: 
+§2
+,
+
+§5.1
+.
+
+Badanidiyuru 
+et al.
+ (2018)
+
+A. Badanidiyuru, R. Kleinberg, and A. Slivkins
+
+Bandits with Knapsacks
+.
+
+J. ACM
+ 
+65
+ (
+3
+).
+
+External Links: 
+ISSN 0004-5411
+,
+
+Link
+,
+
+Document
+
+Cited by: 
+§5.2
+.
+
+Brown 
+et al.
+ (2020)
+
+T. B. Brown, B. Mann, N. Ryder, M. Subbiah, J. Kaplan, P. Dhariwal, A. Neelakantan, P. Shyam, G. Sastry, A. Askell, S. Agarwal, A. Herbert-Voss, G. Krueger, T. Henighan, R. Child, A. Ramesh, D. M. Ziegler, J. Wu, C. Winter, C. Hesse, M. Chen, E. Sigler, M. Litwin, S. Gray, B. Chess, J. Clark, C. Berner, S. McCandlish, A. Radford, I. Sutskever, and D. Amodei
+
+Language Models are Few-Shot Learners
+.
+
+External Links: 
+2005.14165
+,
+
+Link
+
+Cited by: 
+§1
+.
+
+Cai 
+et al.
+ (2025)
+
+L. Cai, J. He, Y. Li, J. Liang, Y. Lin, Z. Quan, Y. Zeng, and J. Xu
+
+RTBAgent: A LLM-based Agent System for Real-Time Bidding
+.
+
+In 
+Companion Proceedings of the ACM on Web Conference 2025
+,
+
+WWW ’25
+, 
+New York, NY, USA
+, 
+pp. 104–113
+.
+
+External Links: 
+ISBN 9798400713316
+,
+
+Link
+,
+
+Document
+
+Cited by: 
+§5.2
+.
+
+Charusaie 
+et al.
+ (2022)
+
+M. Charusaie, H. Mozannar, D. Sontag, and S. Samadi
+
+Sample Efficient Learning of Predictors that Complement Humans
+.
+
+External Links: 
+2207.09584
+,
+
+Link
+
+Cited by: 
+§5.2
+.
+
+Chen 
+et al.
+ (2023)
+
+L. Chen, M. Zaharia, and J. Zou
+
+FrugalGPT: How to Use Large Language Models While Reducing Cost and Improving Performance
+.
+
+External Links: 
+2305.05176
+,
+
+Link
+
+Cited by: 
+§5.2
+.
+
+Cortes-Gomez 
+et al.
+ (2025)
+
+S. Cortes-Gomez, C. Patiño, Y. Byun, S. Wu, E. Horvitz, and B. Wilder
+
+Utility-Directed Conformal Prediction: A Decision-Aware Framework for Actionable Uncertainty Quantification
+.
+
+External Links: 
+2410.01767
+,
+
+Link
+
+Cited by: 
+§5.2
+.
+
+Ding 
+et al.
+ (2024)
+
+D. Ding, A. Mallick, C. Wang, R. Sim, S. Mukherjee, V. Ruhle, L. V. S. Lakshmanan, and A. H. Awadallah
+
+Hybrid LLM: Cost-Efficient and Quality-Aware Query Routing
+.
+
+External Links: 
+2404.14618
+,
+
+Link
+
+Cited by: 
+§5.2
+.
+
+Epstein 
+et al.
+ (2025)
+
+E. L. Epstein, J. Winnicki, T. Sornwanee, and R. Dwaraknath
+
+LLMs are Overconfident: Evaluating Confidence Interval Calibration with FermiEval
+.
+
+External Links: 
+2510.26995
+,
+
+Link
+
+Cited by: 
+§5.2
+.
+
+Frazier 
+et al.
+ (2008)
+
+P. I. Frazier, W. B. Powell, and S. Dayanik
+
+A Knowledge-Gradient Policy for Sequential Information Collection
+.
+
+SIAM Journal on Control and Optimization
+ 
+47
+ (
+5
+), 
+pp. 2410–2439
+.
+
+External Links: 
+Document
+,
+
+Link
+,
+
+https://doi.org/10.1137/070693424
+
+Cited by: 
+§5.2
+.
+
+Geifman and El-Yaniv (2017)
+
+Y. Geifman and R. El-Yaniv
+
+Selective classification for deep neural networks
+.
+
+In 
+Proceedings of the 31st International Conference on Neural Information Processing Systems
+,
+
+NIPS’17
+, 
+Red Hook, NY, USA
+, 
+pp. 4885–4894
+.
+
+External Links: 
+ISBN 9781510860964
+
+Cited by: 
+§5.2
+.
+
+Gruver 
+et al.
+ (2023)
+
+N. Gruver, M. Finzi, S. Qiu, and A. G. Wilson
+
+Large language models are zero-shot time series forecasters
+.
+
+In 
+Proceedings of the 37th International Conference on Neural Information Processing Systems
+,
+
+NIPS ’23
+, 
+Red Hook, NY, USA
+.
+
+Cited by: 
+§5.2
+.
+
+Han 
+et al.
+ (2026)
+
+J. Han, C. Gan, C. Zhang, J. He, Z. Lin, C. Law, and X. Dai
+
+Auto-bidding under Return-on-Spend Constraints with Uncertainty Quantification
+.
+
+In 
+Proceedings of the ACM Web Conference 2026
+,
+
+WWW ’26
+, 
+New York, NY, USA
+, 
+pp. 19–30
+.
+
+External Links: 
+ISBN 9798400723070
+,
+
+Link
+,
+
+Document
+
+Cited by: 
+§1
+.
+
+Kumar 
+et al.
+ (2020)
+
+A. Kumar, A. Zhou, G. Tucker, and S. Levine
+
+Conservative Q-learning for offline reinforcement learning
+.
+
+In 
+Proceedings of the 34th International Conference on Neural Information Processing Systems
+,
+
+NIPS ’20
+, 
+Red Hook, NY, USA
+.
+
+External Links: 
+ISBN 9781713829546
+
+Cited by: 
+§5.2
+.
+
+Laroche 
+et al.
+ (2019)
+
+R. Laroche, P. Trichelair, and R. Tachet des Combes
+
+Safe Policy Improvement with Baseline Bootstrapping
+.
+
+In 
+Proceedings of the 36th International Conference on Machine Learning (ICML)
+,
+
+pp. 3652–3661
+.
+
+Cited by: 
+§5.2
+.
+
+Lei 
+et al.
+ (2017)
+
+J. Lei, M. G’Sell, A. Rinaldo, R. J. Tibshirani, and L. Wasserman
+
+Distribution-Free Predictive Inference For Regression
+.
+
+External Links: 
+1604.04173
+,
+
+Link
+
+Cited by: 
+§3.2
+,
+
+§5.2
+.
+
+Mozannar and Sontag (2020)
+
+H. Mozannar and D. Sontag
+
+Consistent estimators for learning to defer to an expert
+.
+
+In 
+Proceedings of the 37th International Conference on Machine Learning
+,
+
+ICML’20
+.
+
+Cited by: 
+§5.2
+.
+
+Ong 
+et al.
+ (2025)
+
+I. Ong, A. Almahairi, V. Wu, W. Chiang, T. Wu, J. E. Gonzalez, M. W. Kadous, and I. Stoica
+
+RouteLLM: Learning to Route LLMs with Preference Data
+.
+
+External Links: 
+2406.18665
+,
+
+Link
+
+Cited by: 
+§4.1.3
+,
+
+§5.2
+.
+
+Qian 
+et al.
+ (2025)
+
+C. Qian, E. C. Acikgoz, H. Wang, X. Chen, A. Sil, D. Hakkani-Tür, G. Tur, and H. Ji
+
+SMART: Self-Aware Agent for Tool Overuse Mitigation
+.
+
+In 
+Findings of the Association for Computational Linguistics: ACL 2025
+,  
+W. Che, J. Nabende, E. Shutova, and M. T. Pilehvar (Eds.)
+,
+
+Vienna, Austria
+, 
+pp. 4604–4621
+.
+
+External Links: 
+Link
+,
+
+Document
+,
+
+ISBN 979-8-89176-256-5
+
+Cited by: 
+§5.2
+.
+
+Qin and Andriushchenko (2026)
+
+J. Qin and M. Andriushchenko
+
+QuantSightBench: Evaluating LLM Quantitative Forecasting with Prediction Intervals
+.
+
+External Links: 
+2604.15859
+,
+
+Link
+
+Cited by: 
+§5.2
+.
+
+Schick 
+et al.
+ (2023)
+
+T. Schick, J. Dwivedi-Yu, R. Dessí, R. Raileanu, M. Lomeli, E. Hambro, L. Zettlemoyer, N. Cancedda, and T. Scialom
+
+Toolformer: language models can teach themselves to use tools
+.
+
+In 
+Proceedings of the 37th International Conference on Neural Information Processing Systems
+,
+
+NIPS ’23
+, 
+Red Hook, NY, USA
+.
+
+Cited by: 
+§5.2
+.
+
+Shen 
+et al.
+ (2021)
+
+W. Shen, P. Tang, X. Wang, Y. Xu, and X. Yang
+
+Coupon Design in Advertising Systems
+.
+
+In 
+Proceedings of the AAAI Conference on Artificial Intelligence
+,
+
+Vol. 
+35
+, 
+pp. 5717–5725
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§5.1
+.
+
+Song 
+et al.
+ (2026)
+
+M. Song, Y. Huo, B. Zhou, S. Yin, Z. Xiao, J. Long, Z. Zhang, and C. Yu
+
+DARA: Few-shot Budget Allocation in Online Advertising via In-Context Decision Making with RL-Finetuned LLMs
+.
+
+In 
+Proceedings of the ACM Web Conference 2026
+,
+
+WWW ’26
+, 
+New York, NY, USA
+, 
+pp. 40–50
+.
+
+External Links: 
+ISBN 9798400723070
+,
+
+Link
+,
+
+Document
+
+Cited by: 
+§1
+,
+
+§5.2
+.
+
+Sui 
+et al.
+ (2015)
+
+Y. Sui, A. Gotovos, J. W. Burdick, and A. Krause
+
+Safe exploration for optimization with Gaussian processes
+.
+
+In 
+Proceedings of the 32nd International Conference on Machine Learning - Volume 37
+,
+
+ICML’15
+, 
+pp. 997–1005
+.
+
+Cited by: 
+§5.2
+.
+
+Sun 
+et al.
+ (2024)
+
+Z. Sun, H. Yang, D. Liu, Y. Weng, X. Tang, and X. He
+
+End-to-End Cost-Effective Incentive Recommendation under Budget Constraint with Uplift Modeling
+.
+
+In 
+Proceedings of the 18th ACM Conference on Recommender Systems
+,
+
+RecSys ’24
+, 
+New York, NY, USA
+, 
+pp. 560–569
+.
+
+External Links: 
+ISBN 9798400705052
+,
+
+Link
+,
+
+Document
+
+Cited by: 
+§2
+,
+
+§5.1
+.
+
+Tan 
+et al.
+ (2024)
+
+M. Tan, M. A. Merrill, V. Gupta, T. Althoff, and T. Hartvigsen
+
+Are language models actually useful for time series forecasting?
+.
+
+In 
+Proceedings of the 38th International Conference on Neural Information Processing Systems
+,
+
+NIPS ’24
+, 
+Red Hook, NY, USA
+.
+
+External Links: 
+ISBN 9798331314385
+
+Cited by: 
+§1
+.
+
+Tao 
+et al.
+ (2025)
+
+L. Tao, Y. Yeh, M. Dong, T. Huang, P. Torr, and C. Xu
+
+Revisiting Uncertainty Estimation and Calibration of Large Language Models
+.
+
+External Links: 
+2505.23854
+,
+
+Link
+
+Cited by: 
+§5.2
+.
+
+Wu 
+et al.
+ (2018)
+
+D. Wu, X. Chen, X. Yang, H. Wang, Q. Tan, X. Zhang, J. Xu, and K. Gai
+
+Budget Constrained Bidding by Model-free Reinforcement Learning in Display Advertising
+.
+
+In 
+Proceedings of the 27th ACM International Conference on Information and Knowledge Management
+,
+
+CIKM ’18
+, 
+pp. 1443–1451
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§5.1
+.
+
+Wu 
+et al.
+ (2016)
+
+Y. Wu, R. Shariff, T. Lattimore, and C. Szepesvári
+
+Conservative Bandits
+.
+
+External Links: 
+1602.04282
+,
+
+Link
+
+Cited by: 
+§5.2
+.
+
+Xiao 
+et al.
+ (2025)
+
+Q. Xiao, D. Bhattacharjya, B. Ganesan, R. Marinescu, K. Mirylenka, N. H. Pham, M. Glass, and J. Lee
+
+The consistency hypothesis in uncertainty quantification for large language models
+.
+
+In 
+Proceedings of the Forty-First Conference on Uncertainty in Artificial Intelligence
+,
+
+UAI ’25
+.
+
+Cited by: 
+§5.2
+.
+
+Xing 
+et al.
+ (2025)
+
+Y. Xing, H. Zhang, Y. Liu, D. Chen, Z. Zheng, and F. Wu
+
+An Auto-Coupon Framework for Advertiser Retention in Online Advertising
+.
+
+In 
+Proceedings of the 31st ACM SIGKDD Conference on Knowledge Discovery and Data Mining V.2
+,
+
+KDD ’25
+, 
+New York, NY, USA
+, 
+pp. 5095–5105
+.
+
+External Links: 
+ISBN 9798400714542
+,
+
+Link
+,
+
+Document
+
+Cited by: 
+§5.1
+.
+
+Yang 
+et al.
+ (2026)
+
+S. Yang, Y. Li, P. Jiang, Z. Lyu, B. An, P. Jiang, Q. Cai, and L. Feng
+
+PlatformBid: An Auto-Bidding Benchmark from a Unified Advertising Platform’s Perspective
+.
+
+In 
+Proceedings of the 32nd ACM SIGKDD Conference on Knowledge Discovery and Data Mining V.2
+,
+
+KDD ’26
+, 
+New York, NY, USA
+, 
+pp. 10186–10197
+.
+
+External Links: 
+ISBN 9798400722592
+,
+
+Link
+,
+
+Document
+
+Cited by: 
+§1
+.
+
+Yao 
+et al.
+ (2023)
+
+S. Yao, J. Zhao, D. Yu, N. Du, I. Shafran, K. Narasimhan, and Y. Cao
+
+ReAct: Synergizing Reasoning and Acting in Language Models
+.
+
+External Links: 
+2210.03629
+,
+
+Link
+
+Cited by: 
+§5.2
+.
+
+Ye 
+et al.
+ (2023)
+
+Z. Ye, D. J. Zhang, H. Zhang, R. Zhang, X. Chen, and Z. Xu
+
+Cold Start to Improve Market Thickness on Online Advertising Platforms: Data-Driven Algorithms and Field Experiments
+.
+
+Manage. Sci.
+ 
+69
+ (
+7
+), 
+pp. 3838–3860
+.
+
+External Links: 
+ISSN 0025-1909
+,
+
+Link
+,
+
+Document
+
+Cited by: 
+§1
+.
+
+Zanette 
+et al.
+ (2018)
+
+A. Zanette, J. Zhang, and M. J. Kochenderfer
+
+Robust Super-Level Set Estimation Using Gaussian Processes
+.
+
+In 
+Machine Learning and Knowledge Discovery in Databases: European Conference, ECML PKDD 2018, Dublin, Ireland, September 10–14, 2018, Proceedings, Part II
+,
+
+Berlin, Heidelberg
+, 
+pp. 276–291
+.
+
+External Links: 
+ISBN 978-3-030-10927-1
+,
+
+Link
+,
+
+Document
+
+Cited by: 
+§5.2
+.
+
+Zhao 
+et al.
+ (2019)
+
+K. Zhao, J. Hua, L. Yan, Q. Zhang, H. Xu, and C. Yang
+
+A Unified Framework for Marketing Budget Allocation
+.
+
+In 
+Proceedings of the 25th ACM SIGKDD International Conference on Knowledge Discovery & Data Mining
+,
+
+KDD ’19
+, 
+New York, NY, USA
+, 
+pp. 1820–1830
+.
+
+External Links: 
+ISBN 9781450362016
+,
+
+Link
+,
+
+Document
+
+Cited by: 
+§5.1
+.
+
+Zhao 
+et al.
+ (2026)
+
+W. X. Zhao, K. Zhou, J. Li, T. Tang, Z. Dong, Y. Hou, B. Zhang, Y. Min, J. Zhang, P. Liu, X. Wang, Y. Du, C. Yang, Y. Chen, Z. Chen, J. Jiang, R. Ren, Y. Li, X. Tang, Z. Liu, Y. Hu, J. Nie, and J. Wen
+
+A Survey of Large Language Models
+.
+
+Frontiers of Computer Science
+ 
+20
+ (
+12
+).
+
+External Links: 
+ISSN 2095-2236
+,
+
+Link
+,
+
+Document
+
+Cited by: 
+§1
+.
+
+Zhao 
+et al.
+ (2017)
+
+Y. Zhao, X. Fang, and D. Simchi-Levi
+
+Uplift Modeling with Multiple Treatments and General Response Types
+.
+
+External Links: 
+1705.08492
+,
+
+Link
+
+Cited by: 
+§5.1
+.
+
+Zheng 
+et al.
+ (2023)
+
+L. Zheng, W. Chiang, Y. Sheng, S. Zhuang, Z. Wu, Y. Zhuang, Z. Lin, Z. Li, D. Li, E. P. Xing, H. Zhang, J. E. Gonzalez, and I. Stoica
+
+Judging LLM-as-a-Judge with MT-Bench and Chatbot Arena
+.
+
+External Links: 
+2306.05685
+,
+
+Link
+
+Cited by: 
+§4.1.3
+.
+
+Zhong 
+et al.
+ (2022)
+
+K. Zhong, F. Xiao, Y. Ren, Y. Liang, W. Yao, X. Yang, and L. Cen
+
+DESCN: Deep Entire Space Cross Networks for Individual Treatment Effect Estimation
+.
+
+In 
+Proceedings of the 28th ACM SIGKDD Conference on Knowledge Discovery and Data Mining
+,
+
+KDD ’22
+, 
+New York, NY, USA
+, 
+pp. 4612–4620
+.
+
+External Links: 
+ISBN 9781450393850
+,
+
+Link
+,
+
+Document
+
+Cited by: 
+§5.1
+.
+
+Zhou 
+et al.
+ (2023)
+
+H. Zhou, S. Li, G. Jiang, J. Zheng, and D. Wang
+
+Direct heterogeneous causal learning for resource allocation problems in marketing
+.
+
+In 
+Proceedings of the Thirty-Seventh AAAI Conference on Artificial Intelligence and Thirty-Fifth Conference on Innovative Applications of Artificial Intelligence and Thirteenth Symposium on Educational Advances in Artificial Intelligence
+,
+
+AAAI’23/IAAI’23/EAAI’23
+.
+
+External Links: 
+ISBN 978-1-57735-880-0
+,
+
+Link
+,
+
+Document
+
+Cited by: 
+§5.1
+.
+
+Appendix A 
+LP Relaxation: Fractional Accounts
+
+Let 
+. The constraints of the LP relaxation consist of 
+ account-choice equalities and two budget inequalities; after adding slack variables, every basic feasible solution has 
+ basic variables. Because 
+ and the feasible solutions considered satisfy 
+, the two budget constraints cannot both be tight (otherwise 
+), so at least one slack variable is positive and basic, and at most 
+ basic variables come from 
+. Each account has at least one 
+, so at most one account has two positive components, that is, at most one account is fractional. If neither budget constraint is tight, all accounts are integral. The property holds for basic optimal solutions; an interior-point solution requires crossover. It bounds the number of fractional accounts, not the objective loss after rounding or the feasibility of the integer problem.
+
+Appendix B 
+Implementation Details
+
+Candidate discount factors are 
+. The target subsidy rate is 68%, with an allowed interval of 
+. Qwen3-Next-80B-A3B-Instruct estimates Agent response curves. DeepSeek-V4-Flash orchestrates the harness, reads capability reports, and performs review. CASH uses a routine quota of 20% and an audit rate of 5%. In CASH (all calls), each evaluated account-day incurs one estimation request and one orchestration request. The judge is a gradient-boosted tree and requires no LLM call. In the license ablation of RQ4, the reused review responses were generated with license information in the prompt. Error intervals use a nominal 95% coverage level. Regional admission uses a 95% posterior upper bound and a 10% tolerated exceedance probability. The exploration settings are 
+, and HiGHS independently verifies the allocation. Account scale is the mean discounted revenue over the previous 7 cycles, and its 
+ octiles on development data define 8 scale buckets 
+ that stay frozen during evaluation. Regions cross these buckets with the 16 levels, giving 128 regions, and historical off-grid actions are mapped to the nearest level. The support kernels of Eq. (
+5
+) are 
+ and 
+ over level indices, so support comes from the same scale bucket and from the same or an adjacent level. Regional evidence is kept for at most 
+ cycles with decay 
+. Matched-admission analysis operates at 60% coverage.
+
+In the quota experiments, the call-value regressor targets 
+, where 
+ is the prediction selected by a cross-fitted Judge. Signed gains are symmetrically clipped at the training-set 99th-percentile threshold and fitted with squared loss, measuring prediction-error reduction before orchestration.
+
+Appendix C 
+Routing, Allocation and Exploration Details
+
+With an Agent-licensed level, ambiguous preferences or strongly diverging predictions trigger review,
+
+(C.1)
+
+where
+
+(C.2)
+
+with 
+. For two non-empty disjoint licenses, 
+ marks a license conflict and also triggers review. For reviewed accounts, CASH assembles both curves with their errors, support, licensed levels and 
+ into a capability report 
+ and calls the orchestrating agent, whose choice 
+ lies in 
+:
+
+(C.3)
+
+Eq. (
+10
+) has only two cross-account budget constraints. Because 
+ and 
+, the two cannot be tight simultaneously, so the LP relaxation has a basic optimal solution in which at most one account is fractional (Appendix 
+A
+). We solve the LP relaxation by a search over the dual prices of the two budget constraints, round the fractional account and repair the constraints by single-account swaps; HiGHS solves the same relaxation independently to verify the result. We measure repair by the two-sided violation
+
+(C.4)
+
+If the solution is still infeasible, accounts are switched to 
+Fallback
+ in decreasing order of their contribution to the violation; a switch is accepted only if it strictly decreases 
+, and the full constraints are verified again at the end. If repair and exploration cancellation still leave an infeasible allocation, the offline allocation procedure returns failure without producing a new executable plan.
+
+Exploration accounts are sampled from frozen regional candidate pools. The pool is first filtered by business rules, keeping accounts whose levels belong to 
+, with an agent risk review added as a variant when operating information is available; once frozen, it is randomly assigned by a fixed rule to disjoint regional pools 
+, and exploration accounts of region 
+ are drawn at random from 
+ and executed at a level of region 
+. The pool, exclusion reasons, draw probabilities, and cancellations and replacements before execution are all logged.
+
+Because feedback matures with delay 
+, EPCG compares two paths at the same time 
+. Without exploration, existing evidence ages under the window and decay, giving admission 
+. With exploration, 
+ simulated feedback samples are added on top of the same aging. Simulation 
+ draws 
+ from Eq. (
+12
+), selects 
+ accounts from 
+ by the actual sampling rule, generates 
+, merges them with weight 
+ into each account’s existing evidence and recomputes admission, giving 
+. Both paths use the same reference traffic, aging rule and fixed license conditions; EPCG then follows Eq. (
+15
+).
+
+Algorithm 1
+ 
+ One decision cycle of CASH (cycle 
+)
+
+1:
+
+            
+            
+          Compute and project 
+; determine 
+; the plugin yields 
+, 
+, 
+ and 
+
+2:
+
+            
+            
+          Select accounts by Eq. (
+8
+); audit remaining accounts with the prediction agent at probability 
+, for learning only
+
+3:
+
+            
+            
+          For 
+: 
+Tool
+ if 
+; otherwise 
+Fallback
+
+4:
+
+for
+ each account with 
+ 
+do
+
+5:
+
+            
+            
+            Obtain 
+ from the prediction agent; project as in §
+3.1
+ (
+ on failure); compute 
+, 
+ and 
+; set 
+
+6:
+
+            
+            
+            If 
+, call the orchestrating agent and update 
+ by Eq. (
+C.3
+)
+
+7:
+
+end
+ 
+for
+
+8:
+
+            
+            
+          Form frozen pools 
+; compute EPCG by Eq. (
+15
+); allocate the quota by Eq. (
+16
+)
+
+9:
+
+            
+            
+          Solve Eq. (
+10
+) with explorations fixed; repair by 
+; cut explorations if infeasible
+
+10:
+
+            
+            
+          In offline allocation, return failure if infeasibility remains
+
+11:
+
+            
+            
+          After feedback matures, update windowed evidence, 
+, 
+, calibration and the judge; retrain on schedule
+
+Appendix D 
+Additional Experimental Results
+
+D.1. 
+Temporal Uncertainty of Online Gains
+
+We resample daily aggregates from September 14 to October 14, 2026, always pairing CASH and Control on the same sampled dates. The primary analysis draws five blocks with replacement from the 25 overlapping, non-circular seven-day blocks, concatenates them, and retains the first 31 dates. Each replicate recomputes group-level ratios from the summed numerators and denominators; it does not average daily lifts. We use 50,000 replicates and the 2.5th and 97.5th percentiles. Table 
+4
+ reports sensitivity to block length. These are pointwise, approximate temporal intervals from 31 daily aggregates, not account-clustered or randomization-based intervals. Trends and overlapping LTV windows limit coverage claims.
+
+Table 4
+. 
+Approximate 95% temporal bootstrap intervals for relative gains (%).
+
+Block length
+
+Revenue
+
+ADVV
+
+7-day LTV
+
+3 days
+
+[12.79, 18.24]
+
+[16.16, 23.61]
+
+[13.26, 18.82]
+
+5 days
+
+[12.26, 18.31]
+
+[15.53, 23.87]
+
+[12.41, 19.46]
+
+7 days
+
+[12.05, 17.77]
+
+[15.05, 23.18]
+
+[11.86, 19.63]
+
+D.2. 
+Further Offline Results
+
+Table 5
+. 
+Prediction accuracy and total LLM calls.
+
+Method
+
+MAE
+
+RMSE
+
+Calls
+
+Tool
+
+345.58
+
+1336.51
+
+0
+
+Agent
+
+360.17
+
+1328.32
+
+20,143
+
+Agent Routing
+
+348.87
+
+1319.32
+
+40,286
+
+Judge Routing
+
+340.31
+
+1326.79
+
+20,143
+
+CASH
+
+337.99
+
+1281.63
+
+6,119
+
+CASH (all calls)
+
+336.80
+
+1267.70
+
+40,286
+
+D.2.1. 
+Support tiers
+
+Table 
+6
+ groups samples by the support of the Tool in its training data, with cut points fixed from states known during development.
+
+Table 6
+. 
+Errors and Agent win rates by Tool support.
+
+Support
+
+Samples
+
+Tool MAE
+
+Agent MAE
+
+Agent wins
+
+Low
+
+7,488
+
+442.73
+
+465.33
+
+46.8%
+
+Medium
+
+6,614
+
+330.75
+
+339.91
+
+53.1%
+
+High
+
+6,041
+
+241.40
+
+252.02
+
+46.4%
+
+Table 7
+. 
+Value-weighted licensed coverage gains with Tool frozen, in points; means over three seeds, brackets give the seed range of the difference.
+
+Gap
+
+Feedback
+
+EPCG
+
+Random
+
+Diff. [range]
+
+Weekend
+
+215
+
++2.06
+
+0.29
+
++2.34 [2.03, 2.67]
+
+Revenue spike
+
+315
+
++2.74
+
++0.35
+
++2.39 [2.33, 2.42]
+
+Volatile
+
+320
+
++2.75
+
+0.37
+
++3.12 [2.84, 3.58]
+
+Table 8
+. 
+Capability information in difficult-account review. Violations count unlicensed choices.
+
+Review input
+
+Violations
+
+MAE
+
+RMSE
+
+No capability information
+
+66
+
+479.60
+
+1868.40
+
+License list
+
+0
+
+474.15
+
+1797.35
+
+Full capability report
+
+0
+
+466.96
+
+1805.06
+
+Table 9
+. 
+Future Tool errors for the large, high-volatility gap after updating on acquired feedback. Mean 
+ standard deviation over three seeds.
+
+Feedback
+
+Acquisition
+
+MAE
+
+RMSE
+
+480
+
+Random
+
+EPCG
+
+Agent + EPCG
+
+960
+
+Random
+
+EPCG
+
+Agent + EPCG
+
+1,920
+
+Random
+
+EPCG
+
+Agent + EPCG
+
+D.2.2. 
+Routine-call quotas
+
+Table 
+10
+ compares prediction accuracy and call counts across routine quotas.
+At the 20% quota, the 6,119 calls consist of 4,832 estimations, including 803 audits, and 1,287 reviews. The 40% and 60% quotas add calls without improving MAE, and CASH (all calls) improves it only slightly.
+
+Table 10
+. 
+CASH accuracy and call counts by routine quota.
+
+Routine quota
+
+Total calls
+
+MAE
+
+20% (deployed)
+
+6,119
+
+337.99
+
+40%
+
+11,384
+
+338.22
+
+60%
+
+16,446
+
+338.34
+
+CASH (all calls)
+
+40,286
+
+336.80
+
+D.2.3. 
+License conditions
+
+On the same common cohort, with the same account-size buckets and 12,085 admitted samples per source and method, adding support to local calibration lowers Tool MAE from 230.53 to 229.09 and Agent MAE from 250.83 to 250.37. Adding regional admission further lowers these errors to 211.92 and 220.72, respectively.
+
+D.2.4. 
+Acquisition baselines
+
+In an independent masked replay, the average Spearman correlation between the predicted regional gain and the realized coverage gain is 0.384 for EPCG, 0.352 for value-first, 0.134 for boundary-first and 0.078 for uncertainty-first acquisition; value-first is better on some slices. On the replay of RQ6, the mean predicted coverage gain is 1.31 points against a realized 1.94 points. Removing the value weight from EPCG leaves 12 of the 15 combinations unchanged.
+
+D.2.5. 
+Routing and solver statistics
+
+In CASH (all calls), the orchestrating agent selects Tool for 34.76% and Agent for 65.24% of account-days. In each evaluation period, the LP has one fractional account, and repair changes at most one account. Final allocations meet the predicted subsidy-rate constraint.
+
+D.2.6. 
+Holm correction
+
+The Holm correction in RQ6 covers 36 paired MAE comparisons of Agent + EPCG against Random, EPCG, Rule + EPCG and Random50 + EPCG over three gaps and three feedback quotas, using 1,000 account-clustered paired bootstrap replicates.
+
+Appendix E 
+Account-Level Effective Sample Size
+
+Suppose the weights 
+ are fixed and the exceedance rates of accounts in a region are independent with common mean 
+ and variance 
+, which corresponds to perfectly correlated observations within an account. The weighted mean 
+ has variance
+
+(E.1)
+
+matching the variance of the mean of 
+ independent binary samples and motivating the pseudo-count in Eq. (
+12
+). With the same marginals and fixed weights, observations within an account that are not perfectly correlated give a smaller account-level variance, so the variance estimate with pseudo-count 
+ tends to be conservative. The derivation matches variances only and does not establish nominal coverage of the credible interval; bidding coupling across accounts, within-region heterogeneity and distribution drift can cause deviations. Since the true regional exceedance probability is not observable, we check on time slices the realized exceedance frequency of admitted regions in later cycles, the share of admissions followed by exceedance, and the agreement between predicted EPCG and realized coverage change.
+
