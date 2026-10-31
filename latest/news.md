@@ -1,6 +1,6 @@
 # News candidates — 2026-10-31 (IST)
 
-Generated 2026-10-31 06:22 UTC. Showing 209 items first seen in the last 18 h or published in the last 30 h; 275 older items from the 3-day window are only in news.json.
+Generated 2026-10-31 07:01 UTC. Showing 206 items first seen in the last 18 h or published in the last 30 h; 272 older items from the 3-day window are only in news.json.
 Each item appears once, in the first section it matches. Dates are as reported by the source ("date unknown" = page with no date).
 
 ## By priority topic
@@ -14,7 +14,7 @@ Each item appears once, in the first section it matches. Dates are as reported b
 ### Agents (1)
 - [2026-10-30 12:04 UTC] Throwback to Cloudflare’s pay per crawl for AI agents — Rick Orford - Trading Stocks and Options For All on MSN — https://www.msn.com/en-us/news/other/throwback-to-cloudflare-s-pay-per-crawl-for-ai-agents/vi-AA2gr8r3 · Agents, Crawl · +1 other hits
 
-### Crawl (22)
+### Crawl (23)
 - [2026-10-31 05:43 UTC] Google and Bing back one robots.txt rule to opt out of AI training — PPC Land — https://ppc.land/google-and-bing-back-one-robots-txt-rule-to-opt-out-of-ai-training/ · Crawl, GEO/AEO, Clicks & measurement · +1 other hits
 - [2026-10-31 04:43 UTC] OpenAI and Google Plan One AI Training Opt-Out While Search Stays Open — GitHub — (Google News link; search the headline) · Crawl
 - [2026-10-31 02:00 UTC] Google, Anthropic and others to support new AI crawling opt-out standard — SiliconANGLE — (Google News link; search the headline) · Crawl
@@ -22,6 +22,7 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-10-30 21:51 UTC] OpenAI and Google to adopt a 'common signal' in robots.txt for AI training. What bloggers, company site owners, and landing page creators need to know — note — https://note.com/adhd_bakusoku/n/n23b4ea299154?hl=en · Crawl
 - [2026-10-30 21:05 UTC] OpenAI, Google, Microsoft, and Anthropic say they will adopt a new standard that publishers can use to opt out of being scraped by AI across multiple crawlers (Emma Roth/The Verge) — Techmeme — https://www.techmeme.com/261030/p26#a261030p26 · Crawl
 - [2026-10-30 20:59 UTC] AI Giants Unite Behind Universal Scraping Opt-Out Standard — The Tech Buzz — (Google News link; search the headline) · Crawl
+- [2026-10-30 20:55 UTC] OpenAI, Google, Microsoft and Anthropic back a shared AI-scraping opt-out — Mezha.net — (Google News link; search the headline) · Crawl
 - [2026-10-30 20:09 UTC] OpenAI Will Honor Shared Robots.txt Signal for AI Training — www.tokenpost.com — (Google News link; search the headline) · Crawl · +1 other hits
 - [2026-10-30 18:41 UTC] Reddit is Moving to a 'Logged-In Experience' to Combat Scrapers and AI Overviews — IGN — (Google News link; search the headline) · Crawl, GEO/AEO
 - [2026-10-30 18:27 UTC] OpenAI to Honor Shared Robots.txt Signal for AI Training Preferences — Unite.AI — https://www.unite.ai/openai-to-honor-shared-robots-txt-signal-for-ai-training-preferences/ · Crawl · +2 other hits
@@ -38,10 +39,10 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-10-29 18:57 UTC] Google AI opt-out test finds unexpected drop in organic clicks — Search Engine Land — (Google News link; search the headline) · Crawl
 - [2026-10-29 17:01 UTC] OpenAI, Google and Microsoft back a shared AI training opt-out. None honours it yet — ctol.digital — https://ctol.digital/news/ai-training-opt-out-robots-txt-internet-draft/ · Crawl
 
-### Ads (23)
+### Ads (22)
+- [2026-10-31 06:33 UTC] Ads are now inside AI Mode in Australia. The free links moved up a fortnight ago. Neither is a coincidence. — Webcoda — (Google News link; search the headline) · Ads, GEO/AEO
 - [2026-10-30 17:03 UTC] Google AI Mode Tests Clearer Labels for Sponsored Ads 2026 — ALM Corp — (Google News link; search the headline) · Ads, GEO/AEO · +1 other hits
 - [2026-10-30 16:10 UTC] ChatGPT ads are live in SA — Bizcommunity on MSN — https://www.msn.com/en-za/technology/tech-companies/chatgpt-ads-are-live-in-sa/ar-AA2grhFO · Ads
-- [2026-10-30 15:52 UTC] Ads in Google Search AI Mode — Thurrott.com — (Google News link; search the headline) · Ads, GEO/AEO · +1 other hits
 - [2026-10-30 15:17 UTC] ChatGPT Gets Wider Ads, Multi-Image Ads Expands, Expansion & More — Search Engine Roundtable — https://www.seroundtable.com/chatgpt-ads-update-42427.html · Ads · +1 other hits
 - [2026-10-30 14:03 UTC] Google expands AI Mode ads to 10 markets, including Southeast Asia — ContentGrip — https://www.contentgrip.com/google-ai-mode-ads-expansion/ · Ads, GEO/AEO · +2 other hits
 - [2026-10-30 13:25 UTC] ChatGPT Ads Are Live. Here’s Why LLM Visibility Tracking Matters More, Not Less — The Good Men Project — (Google News link; search the headline) · Ads · +1 other hits
@@ -50,18 +51,17 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-10-30 11:41 UTC] Bing Showing Ads Within AI Overviews — Search Engine Roundtable — https://www.seroundtable.com/bing-ads-copilot-ai-overviews-42416.html · GEO/AEO, Ads
 - [2026-10-30 11:41 UTC] Microsoft Bing Showing Ads Within Copilot AI Overviews — Search Engine Roundtable — (Google News link; search the headline) · Ads, GEO/AEO · +1 other hits
 - [2026-10-30 11:36 UTC] Google to put more ads in AI Mode as AI search slows revenue growth — MediaNama — (Google News link; search the headline) · Ads, GEO/AEO
-- [2026-10-30 10:14 UTC] Even more ads are coming to Google search, Google says — Mashable — https://mashable.com/tech/more-ads-are-coming-to-google-search-ai-mode · Ads, GEO/AEO · +1 other hits
+- [2026-10-30 10:14 UTC] Even more ads are coming to Google search, Google says — Mashable — https://mashable.com/tech/more-ads-are-coming-to-google-search-ai-mode · Ads, GEO/AEO
 - [2026-10-30 07:00 UTC] Google Begins AI Overview Ads Rollout to More Countries, Calls These Sponsored Links — Tech Times — (Google News link; search the headline) · (already listed on an earlier day) · Ads, GEO/AEO
+- [2026-10-30 06:10 UTC] ChatGPT Ads Automatic Adjustments Set to Default On: Checklist for Advertisers — note — https://note.com/noahs_nalog/n/n9dbcacd643b4?hl=en · Ads
 - [2026-10-30 05:07 UTC] ChatGPT ads are live: Being ready counts more than being early — The Media Online — (Google News link; search the headline) · (already listed on an earlier day) · Ads
 - [2026-10-30 03:51 UTC] Google Expands AI Mode Ads to 10 More Countries and US Follow-Up Queries — affiversemedia.com — https://www.affiversemedia.com/google-ai-mode-ads-expansion/ · Ads, GEO/AEO
-- [2026-10-30 00:43 UTC] Here’s Why You’re About to See More Ads in Google’s AI Overviews — CNET — https://www.msn.com/en-us/money/general/here-s-why-you-re-about-to-see-more-ads-in-google-s-ai-overviews/ar-AA2gptqQ · (already listed on an earlier day) · Ads, GEO/AEO · +3 other hits
 - [2026-10-29 23:04 UTC] Miami Cyber Brings Free Anthropic-Sponsored Claude Workshops to Florida — The National Law Review — (Google News link; search the headline) · Ads
 - [2026-10-29 20:51 UTC] OpenAI Adds Visual Format, Makes ChatGPT Ads More Measurable 10/06/2026 — MediaPost — (Google News link; search the headline) · Ads
 - [2026-10-29 20:24 UTC] Google Reveals How AI Search Is Reshaping What Users Query via @sejournal, @brookeosmundson — Search Engine Journal — https://www.searchenginejournal.com/google-search-behavior-shifts-2027-ads-strategy/594971/ · GEO/AEO, Ads
 - [2026-10-29 19:47 UTC] What Google’s Search Ad Revenue Numbers Signal For AI Search Spend via @sejournal, @brookeosmundson — Search Engine Journal — https://www.searchenginejournal.com/googles-q3-selloff-raises-advertiser-concerns-about-ai-search/595005/ · GEO/AEO, Ads
 - [2026-10-29 16:32 UTC] ChatGPT Ads: I spent 9,000 yen to promote my parental leave game. 28 people clicked—how many actually played it? — note — https://note.com/studio_zaiya/n/n7354403a33c7?hl=en · Ads
 - [2026-10-29 08:13 UTC] Coupler.io Launches ChatGPT Ads and StackAdapt Connectors for Unified Ad Reporting and AI Analytics — Big News Network.com — (Google News link; search the headline) · Ads
-- [2026-10-29 02:15 UTC] [Latest] ChatGPT Advertising Case Study! Results from about 2 weeks of test delivery show conversions acquired at about 1/4 of the target CPA — note — https://note.com/dashboardcojp/n/n9f88ef379f9d?hl=en · Ads
 
 ### Search / AEO / GEO (24)
 - [2026-10-31 05:54 UTC] Google faces EU complaint from five French publisher groups over AI Overviews — PPC Land — https://ppc.land/google-faces-eu-complaint-from-five-french-publisher-groups-over-ai-overviews/ · GEO/AEO · +1 other hits
@@ -81,18 +81,18 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-10-30 13:20 UTC] Why AI Visibility Is Not the Same as Customer Trust — International Business Times — https://www.ibtimes.com/search-rankings-ai-visibility-customer-trust-3809233 · Clicks & measurement
 - [2026-10-30 13:00 UTC] Google AI Overviews are pushing News Boxes out of search results: Study — Search Engine Land — https://www.msn.com/en-us/news/news/google-ai-overviews-are-pushing-news-boxes-out-of-search-results-study/ar-AA2grAMX · GEO/AEO · +2 other hits
 - [2026-10-30 12:45 UTC] Reddit says Google's AI Mode sends it almost no traffic — applescoop.org — https://applescoop.org/story/reddit-google-ai-mode-no-traffic-search-referrals-huffman · GEO/AEO
-- [2026-10-30 11:40 UTC] Reddit Will Soon Require You to Be Logged In, Likely Because of AI Overviews — IGN India — https://in.ign.com/ai/275824/reddit-will-soon-require-you-to-be-logged-in-likely-because-of-ai-overviews · GEO/AEO
+- [2026-10-30 11:40 UTC] Reddit will soon require you to be logged in, likely because of AI overviews — IGN on MSN — https://www.msn.com/en-us/news/other/reddit-will-soon-require-you-to-be-logged-in-likely-because-of-ai-overviews/ar-AA2gsT2L · GEO/AEO
 - [2026-10-30 11:30 UTC] Reddit's referrals drop 1M a week as CEO blames Google AI Mode — Dealroom — (Google News link; search the headline) · GEO/AEO
 - [2026-10-30 10:28 UTC] Best Answer Engine Optimization Tools in 2026: Be the Top Brand in AI — Technology Org — (Google News link; search the headline) · Brand/product recommendation, GEO/AEO
 - [2026-10-30 07:00 UTC] What Search Console Can Still Tell You When Indexing Data Lags — Search Engine Journal — https://www.searchenginejournal.com/what-search-console-can-still-tell-you-when-indexing-data-lags/595016/
-- [2026-10-30 06:00 UTC] Woman with a rare disorder goes to the hospital. Then she sees a ChatGPT search history on her paperwork: 'We're cooked' — The Mary Sue — https://www.msn.com/en-us/health/general/woman-with-a-rare-disorder-goes-to-the-hospital-then-she-sees-a-chatgpt-search-history-on-her-paperwork-we-re-cooked/ar-AA2gorNa · (already listed on an earlier day) · GEO/AEO · +1 other hits
+- [2026-10-30 06:00 UTC] Woman with a rare disorder goes to the hospital. Then she sees a ChatGPT search history on her paperwork: 'We're cooked' — The Mary Sue — https://www.msn.com/en-us/news/other/woman-with-a-rare-disorder-goes-to-the-hospital-then-she-sees-a-chatgpt-search-history-on-her-paperwork-were-cooked/ar-AA2gorNa · (already listed on an earlier day) · GEO/AEO · +1 other hits
 - [2026-10-30 05:50 UTC] Wellows Launches Free AI Visibility Report Tool for Brands and Agencies — openPR.com — (Google News link; search the headline) · (already listed on an earlier day) · Brand/product recommendation
 - [2026-10-28 17:00 UTC] Reddit Stock Drops 23% as Google AI Features Pressure User Growth — Gadget Review — https://www.gadgetreview.com/reddit-stock-drops-23-as-google-ai-features-pressure-user-growth · GEO/AEO
 
-### Model & lab launches (news search) (60)
-- [2026-10-31 05:30 UTC] Apple Intelligence Finally Reaches Chinese iPhones, Powered by Alibaba's Qwen — Trending on Weibo — (Google News link; search the headline)
+### Model & lab launches (news search) (56)
+- [2026-10-31 06:41 UTC] Grok Bot vs Claude Duet: Which AI Agent Fits Your Business in 2026? — TechBullion — (Google News link; search the headline)
+- [2026-10-31 06:31 UTC] Mistral's Le Chonk is now a top open model for coding, ranking alongside Codex GPT-6.1 Terra — ZDNET — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-10-31 04:51 UTC] Apple Intelligence Hits China in December With Alibaba Qwen — TechJuice — https://www.techjuice.pk/apple-intelligence-china-ios-27-3-alibaba-qwen/ · +1 other hits
-- [2026-10-31 03:31 UTC] Mistral's Le Chonk is now a top open model for coding, ranking alongside Codex GPT-6.1 Terra — ZDNET — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-10-31 03:15 UTC] Alibaba, Apple partner to bring Qwen to Apple Intelligence for users in China — Global Times — https://www.globaltimes.cn/page/202610/1373351.shtml · +1 other hits
 - [2026-10-31 03:05 UTC] Apple Brings AI to China: Qwen Moves Into Siri, Developers Get First Access on Nov. 4 — BigGo Finance — https://finance.biggo.com/news/d37ab43e-dccf-44bf-b680-3b3fb8de6145 · +1 other hits
 - [2026-10-31 02:53 UTC] DeepSeek Website Code Points to Cyber, a Dedicated Cybersecurity Model in Limited Testing — Pandaily — (Google News link; search the headline)
@@ -103,20 +103,18 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-10-30 20:01 UTC] Anthropic Blocks Claude Code from Recreating Specific Vid... — X — (Google News link; search the headline)
 - [2026-10-30 19:11 UTC] Anthropic Launches New Claude Tools to Measure AI Spending and Value — Channel Insider — (Google News link; search the headline)
 - [2026-10-30 17:54 UTC] Ep13. Silicon Valley’s Political 180, META AI, COVID Postmortem | BG2 w/ Bill Gurley & Brad Gerstner｜BG2Pod — finance.biggo.com — (Google News link; search the headline)
-- [2026-10-30 17:00 UTC] A Claude Model Autonomously Chose a Gene Therapy and Operated on a Mouse Brain — lapaasvoice.com — https://lapaasvoice.com/a-claude-model-autonomously-chose-a-gene-therapy-and-operated-on-a-mouse-brain/
-- [2026-10-30 17:00 UTC] Google Gemini Live Could Soon Work Offline on Android Without Internet — lapaasvoice.com — https://lapaasvoice.com/google-gemini-live-could-soon-work-offline-on-android-without-internet/
 - [2026-10-30 17:00 UTC] Google Launches Gemini 4 Carbon With State-Of-The-Art Cybersecurity Capabilities — Cyber Security News — https://cybersecuritynews.com/google-launches-gemini-4-carbon/ · GEO/AEO
+- [2026-10-30 17:00 UTC] Google Gemini Live Could Soon Work Offline on Android Without Internet — lapaasvoice.com — https://lapaasvoice.com/google-gemini-live-could-soon-work-offline-on-android-without-internet/
 - [2026-10-30 17:00 UTC] Mistral Opens 1 Trillion-Parameter AI Model for Cyber Defense — lapaasvoice.com — https://lapaasvoice.com/mistral-opens-1-trillion-parameter-ai-model-for-cyber-defense/ · (already listed on an earlier day) · GEO/AEO
 - [2026-10-30 17:00 UTC] DeepSeek Raises $16B at $74B Pre-Money [2026] — shattered.io — https://shattered.io/deepseek-16-billion-funding-round-tencent-catl-state-funds-2026/
+- [2026-10-30 17:00 UTC] Moonshot Launches 3D Make in Kimi, Turning AI Prompts Into 3D Models, Websites and Games — lapaasvoice.com — https://lapaasvoice.com/moonshot-launches-3d-make-in-kimi-turning-ai-prompts-into-3d-models-websites-and-games/
 - [2026-10-30 16:51 UTC] [AI] OpenAI and Foxconn Consider New Collaboration: The Current State of Hardware Development Supporting AI — note — https://note.com/good_fairy858/n/n9c460699968c?hl=en
 - [2026-10-30 16:25 UTC] AI Productivity Advances as Claude Introduces Legal Artifacts and GitHub Copilot Fusion Cuts Coding Costs — Tekedia — (Google News link; search the headline)
 - [2026-10-30 16:00 UTC] Anthropic Drops Coding Interviews on One Team as Claude Outpaces Its Hiring Tests — xenospectrum — https://xenospectrum.com/en/anthropic-coding-interview-ai-takehome/
 - [2026-10-30 13:52 UTC] Mistral Releases Trillion-Parameter Open-Weight Large 4 AI Model to Expand Sovereign Cybersecurity Capabilities — Tekedia — (Google News link; search the headline) · GEO/AEO
 - [2026-10-30 13:31 UTC] BingX Launches Anthropic Pre-IPO Trading and 500,000 USDT Prize Pool — FF News — (Google News link; search the headline)
-- [2026-10-30 13:30 UTC] Mistral Releases Open-Source Weights for Large 4 AI Model with 1 Trillion Parameters — ForkLog — https://forklog.com/en/mistral-releases-open-source-weights-for-large-4-ai-model-with-1-trillion-parameters/ · GEO/AEO · +1 other hits
+- [2026-10-30 13:30 UTC] Mistral Releases Open-Source Weights for Large 4 AI Model with 1 Trillion Parameters — ForkLog — (Google News link; search the headline) · GEO/AEO
 - [2026-10-30 12:56 UTC] Tencent and Alibaba's Same-Generation Flagship AI Models Face Off Next Week as Yao Shunyu and Liu Dayiheng Compete Head-to-Head for the First Time — BigGo Finance — (Google News link; search the headline) · GEO/AEO
-- [2026-10-30 11:05 UTC] Kimi K3.1 Pro and DeepSeek V4.1-Flash Were Trained on GPT-6 Astra, a Report Says — What That Establishes — OrcaRouter — (Google News link; search the headline)
-- [2026-10-30 11:05 UTC] Kimi K3.1 Pro en DeepSeek V4.1-Flash zijn volgens een rapport getraind op GPT-6 Astra — wat dat vaststelt — OrcaRouter — (Google News link; search the headline)
 - [2026-10-30 11:00 UTC] Cognizant commits more than 25,000 professionals to OpenAI delivery as enterprises move frontier AI into production — PR Newswire — (Google News link; search the headline)
 - [2026-10-30 10:58 UTC] OpenAI rebuilds its Model Spec on five values and retires most style rules — BetaNews — https://betanews.com/article/openai-model-spec-five-values-style-rules/
 - [2026-10-30 10:32 UTC] OpenAI Explains Four-Layer Safety System to Detect Misaligned AI Behaviour — Gadgets 360 — (Google News link; search the headline)
@@ -130,30 +128,28 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-10-30 06:47 UTC] DeepSeek V4.1 Pro vs Kimi K3.1 Pro: Two Flagships That Are Both Still Loading — OrcaRouter — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-10-30 06:46 UTC] OpenAI releases five principles for AI model behavior: be faithful to human intent — 디지털투데이 — (Google News link; search the headline) · GEO/AEO
 - [2026-10-30 05:16 UTC] Anthropic launches tools to track enterprise AI spending — TechGig — (Google News link; search the headline) · (already listed on an earlier day)
+- [2026-10-30 04:34 UTC] 1 Trillion Parameter 'Mistral Large 4' Released! Major Workspace Update Included | Today's AI x Stocks [10/30] — note — https://note.com/yuuji_ai_news/n/n5f182bb075aa?hl=en
 - [2026-10-30 04:10 UTC] Anthropic IPO mega valuation: Top finance mind Aswath Damodaran estimates Claude maker's worth at $1.475 trn — Mint on MSN — https://www.msn.com/en-in/news/other/anthropic-ipo-mega-valuation-top-finance-mind-aswath-damodaran-estimates-claude-makers-worth-at-1475-trn/ar-AA2gpl2W
 - [2026-10-30 02:46 UTC] Anthropic, Developer of Claude, Files for IPO: Rapid Growth, Massive Losses, and the Reality of AI Investment — note — https://note.com/cader/n/n454a4082585f?hl=en
 - [2026-10-30 02:36 UTC] DeepSeek AI vs Kimi vs MiniMax vs Terra: 17x Gap [2026] — tech-insider.org — (Google News link; search the headline) · (already listed on an earlier day) · +1 other hits
 - [2026-10-30 02:06 UTC] DeepSeek Harness Pre-Release Lets Its Main Agent Hand Off Tasks to Local Codex and Claude Code — Pandaily — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-10-30 01:52 UTC] DeepSeek V4.1 Pro vs V4 Pro: One Has a Price Sheet — OrcaRouter — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-10-30 00:41 UTC] OpenAI Updates Model Spec With Five Core Values to Guide GPT Behavior — phemex — https://phemex.com/news/article/openai-updates-model-spec-with-five-core-values-to-guide-gpt-behavior-101896
-- [2026-10-30 00:24 UTC] Mistral Releases Large 4 Weights for Self-Hosted AI — FindArticles — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-10-29 22:03 UTC] Mistral open-sources AI model despite warning it could aid cyberattacks — InfoWorld — https://www.infoworld.com/article/4242654/mistral-open-sources-ai-model-despite-warning-it-could-aid-cyberattacks.html · GEO/AEO
 - [2026-10-29 21:06 UTC] Kimi K3.1 Pro cyber filtering and its 81% score — NeoTeo — (Google News link; search the headline)
 - [2026-10-29 20:06 UTC] Claude can now flag your chats to Anthropic if it detects indecent behaviour — India Today on MSN — https://www.msn.com/en-in/news/other/claude-can-now-flag-your-chats-to-anthropic-if-it-detects-indecent-behaviour/ar-AA2gnYMs
 - [2026-10-29 18:30 UTC] Google launches Gemini 4 Carbon with focus on coding, cybersecurity — The New Indian Express — (Google News link; search the headline)
 - [2026-10-29 17:01 UTC] Mistral AI opens trillion-parameter model for cybersecurity — YourStory — https://yourstory.com/ai-story/mistral-ai-trillion-parameter-cybersecurity-model
-- [2026-10-29 17:01 UTC] DeepSeek V4.1 Pro vs DeepSeek V4 Pro: The Flagship You Can Call and the One You Cannot — orcarouter.ai — https://www.orcarouter.ai/blog/deepseek-v4-1-pro-vs-deepseek-v4-pro
-- [2026-10-29 15:45 UTC] Oracle launches AI security mesh with OpenAI to fix flaws — IT Brief UK — (Google News link; search the headline)
+- [2026-10-29 15:45 UTC] Oracle launches AI security mesh with OpenAI to fix flaws — SecurityBrief Asia — (Google News link; search the headline)
 - [2026-10-29 15:25 UTC] Moonshot AI Eyes IPO as Kimi K3 Drives ARR to $300M — TechRepublic — (Google News link; search the headline)
 - [2026-10-29 14:00 UTC] First AI Game Index: Claude Dominates Game Development, but OpenAI Captures the Players — TechBullion — (Google News link; search the headline)
 - [2026-10-29 13:49 UTC] Google launches Gemini 4 Carbon, its most powerful AI, and you won't be able to try it — Korben — (Google News link; search the headline)
 - [2026-10-29 10:15 UTC] OpenAI set to launch most capable GPT model after delayed rollout — DD News — (Google News link; search the headline)
 - [2026-10-29 08:50 UTC] Google launches Gemini 4 Carbon with advanced cyber defence — YourStory.com — (Google News link; search the headline)
-- [2026-10-29 01:27 UTC] Individual Moderation Settings for Grok API: 3 Constraints Companies Should Know — note — https://note.com/noahs_nalog/n/n72eb04831137?hl=en
 
-### B2B buyer AI / adoption (19)
+### B2B buyer AI / adoption (18)
+- [2026-10-31 05:19 UTC] Gartner Says 44% of CEOs Struggle to Prove Financial Returns from AI Investments — digital terminal — https://digitalterminal.in/trending/gartner-says-44-of-ceos-struggle-to-prove-financial-returns-from-ai-investments · +1 other hits
 - [2026-10-30 22:58 UTC] Stop Selling Autonomy: What 3,222 Enterprise Reviews Say AI Agent Buyers Want — G2 Learn Hub — (Google News link; search the headline)
-- [2026-10-30 22:20 UTC] Gartner Says 44% of CEOs Struggle to Prove Financial Returns from AI Investments — Digital Terminal — https://digitalterminal.in/trending/gartner-says-44-of-ceos-struggle-to-prove-financial-returns-from-ai-investments
 - [2026-10-30 21:34 UTC] Google Public Sector Summit 2026: AI Moves From Possibility To Mission — Forrester — (Google News link; search the headline)
 - [2026-10-30 20:03 UTC] AI Search Is Growing Faster Than Its Business Model — Forrester — (Google News link; search the headline) · GEO/AEO
 - [2026-10-30 19:07 UTC] When Brand Becomes 'Miscellaneous,' Your ChatGPT Visibility Goes With It — CMSWire — https://www.cmswire.com/digital-marketing/when-brand-becomes-miscellaneous-your-chatgpt-visibility-goes-with-it/ · Brand/product recommendation · +1 other hits
@@ -162,7 +158,6 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-10-30 13:33 UTC] Predictions 2027: Human Connection Will Be The Next Battleground For Customer Success And Service — Forrester — (Google News link; search the headline)
 - [2026-10-30 12:30 UTC] 39 Industry Experts On What Is Holding B2B Brands Back From Spending On Creators — Net Influencer — (Google News link; search the headline) · Brand/product recommendation
 - [2026-10-30 12:00 UTC] 10 Best B2B Market Research Tools for Enterprises in 2026 — ET CIO — (Google News link; search the headline)
-- [2026-10-30 11:59 UTC] The AI Search Measurement Gap Brands Must Close In 2027 And Beyond — Search Engine Journal — https://www.searchenginejournal.com/the-ai-search-measurement-gap-brands-must-close-in-2027-and-beyond/593881/ · Brand/product recommendation, GEO/AEO
 - [2026-10-30 11:09 UTC] When AI Shops For The Customer: What Agentic Commerce Means For Merchants — Forbes — https://www.forbes.com/sites/visa/2026/10/30/when-ai-shops-for-the-customer-what-agentic-commerce-means-for-merchants/ · Brand/product recommendation
 - [2026-10-30 08:39 UTC] Best AI Agents for Manufacturing Operations: Which Draft Work, Not Just Answers? — aijourn — https://aijourn.com/best-ai-agents-for-manufacturing-operations/
 - [2026-10-30 03:45 UTC] How ESM Strengthens Business Resilience In Complex B2B Organizations — Forbes — https://www.forbes.com/councils/forbestechcouncil/2026/10/30/how-esm-strengthens-business-resilience-in-complex-b2b-organizations/
@@ -172,11 +167,12 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-10-29 13:00 UTC] Jedify to Showcase Data Agents and LLM Token Cost Benchmark at the Gartner® Supply Chain Planning Summit 2026 — GlobeNewswire — (Google News link; search the headline)
 - [2026-10-29 06:00 UTC] Forrester expects marketers to scale back a third of their AI projects next year. Decide which third before finance does — Inc.com on MSN — https://www.msn.com/en-us/news/other/forrester-expects-marketers-to-scale-back-a-third-of-their-ai-projects-next-year-decide-which-third-before-finance-does/ar-AA2gqgVT
 
-### Sites with no usable feed (via Google News site: search) (8)
+### Sites with no usable feed (via Google News site: search) (9)
 - [2026-10-30 20:09 UTC] Perplexity AI — Perplexity — (Google News link; search the headline) · (already listed on an earlier day) · GEO/AEO
 - [2026-10-30 18:55 UTC] See Duet Coming: AgenticTrust Now Identifies Anthropic’s Personal Agent — HUMAN Security — (Google News link; search the headline)
 - [2026-10-30 16:52 UTC] Teradyne, Inc. Stock Price: Quote, Forecast, Splits & News (TER) — Perplexity — (Google News link; search the headline) · (already listed on an earlier day) · GEO/AEO
 - [2026-10-30 14:00 UTC] Core Web Vitals optimization can be a waste of time — Search Engine Land — (Google News link; search the headline)
+- [2026-10-30 06:52 UTC] Arxis, Inc. Class A Common Stock Stock Price: Quote, Forecast, Splits & News (ARXS) — Perplexity — (Google News link; search the headline) · GEO/AEO
 - [2026-10-29 14:00 UTC] Is AI search ghosting your brand? Here’s how to fight back — Search Engine Land — (Google News link; search the headline) · Brand/product recommendation, GEO/AEO
 - [2026-10-29 13:00 UTC] You don’t need more ads. You need more creative variables. — Search Engine Land — (Google News link; search the headline)
 - [2026-10-29 12:00 UTC] You’re not winning by refusing to link to competitors — Search Engine Land — (Google News link; search the headline)
@@ -185,6 +181,7 @@ Each item appears once, in the first section it matches. Dates are as reported b
 ## Other items from source feeds
 
 ### Labs (official feeds + trackers) (19)
+- [2026-10-31 06:30 UTC] As AI models commoditize, lasting wealth will accrue to those controlling chokepoints like distribution, payment rails, and a stablecoin dollar, not to the labs (The Commanding Heights) — Techmeme — https://www.techmeme.com/261031/p6#a261031p6 · GEO/AEO
 - [2026-10-31 06:10 UTC] When talking about local inference, Sam Altman says supply-constrained DRAM is better used in data centers than sitting in PCs and "being used 5% of the time" (Andrew E. Freedman/Tom's Hardware) — Techmeme — https://www.techmeme.com/261031/p5#a261031p5
 - [2026-10-31 05:15 UTC] Sources: neoclouds CoreWeave, Nebius, and Nscale have effectively been shut out of the bond market in recent weeks as lenders and investors demand tougher terms (Wall Street Journal) — Techmeme — https://www.techmeme.com/261031/p4#a261031p4
 - [2026-10-31 05:10 UTC] S&P downgraded Meta's outlook from stable to negative, citing high capex and negative free cash flow; META fell 15% in October, its worst month in four years (Jonathan Vanian/CNBC) — Techmeme — https://www.techmeme.com/261031/p3#a261031p3 · Citation & source selection
@@ -199,7 +196,6 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-10-30 20:55 UTC] OpenAI tightens limits on the weapons-related information that ChatGPT provides teens, even when a question appears harmless, as part of new safeguards (Reuters) — Techmeme — https://www.techmeme.com/261030/p25#a261030p25
 - [2026-10-30 20:35 UTC] Intel stock closed down 28.58% on Friday, its worst day since the 1970s and wiping ~$12B off US government's stake, after issuing weaker-than-expected guidance (CNBC) — Techmeme — https://www.techmeme.com/261030/p24#a261030p24
 - [2026-10-30 20:25 UTC] Reddit closed down 29.27% on Friday, the worst drop since becoming a public company in 2024, after it forecast weak Q4 revenue (Caleigh Keating/CNBC) — Techmeme — https://www.techmeme.com/261030/p23#a261030p23
-- [2026-10-30 20:00 UTC] Alphabet, Meta, Microsoft, Amazon, and Oracle have a collective $3T+ in AI spending commitments over the coming years, including Alphabet's $1T and Meta's $800B (Brody Ford/Bloomberg) — Techmeme — https://www.techmeme.com/261030/p22#a261030p22
 - [2026-10-30 09:00 UTC] Community safety report and new protections for teens — OpenAI News — https://openai.com/index/community-safety-report-and-new-protections-for-teens
 - [2026-10-30 00:00 UTC] Fair use benefits everyone — OpenAI News — https://openai.com/index/fair-use-benefits-everyone
 - [2026-10-29 00:00 UTC] Credit Saison achieves 954% ROI in a ChatGPT Enterprise pilot — OpenAI News — https://openai.com/index/credit-saison
@@ -208,7 +204,8 @@ Each item appears once, in the first section it matches. Dates are as reported b
 ### Search engines (official) (1)
 - [2026-10-30 15:52 UTC] Your content, your choice: clearer preferences for training and grounding — Bing Search Blog — https://blogs.bing.com/search/2026/10/your-content-your-choice-clearer-preferences-for-training-and-grounding/
 
-### SEO / search press (16)
+### SEO / search press (17)
+- [2026-10-31 07:00 UTC] Google Opens Connected Apps Preview For AI Mode & Gemini via @sejournal, @MattGSouthern — Search Engine Journal — https://www.searchenginejournal.com/google-connected-apps-preview-ai-mode-gemini/595268/ · GEO/AEO
 - [2026-10-31 05:52 UTC] Game: Search and social still argue about who found the customer — PPC Land — https://ppc.land/game-search-and-social-still-argue-about-who-found-the-customer-2/ · (already listed on an earlier day) · +1 other hits
 - [2026-10-30 19:47 UTC] Reddit CEO Says Google’s AI Mode ‘Does Not Drive Traffic’ via @sejournal, @MattGSouthern — Search Engine Journal — https://www.searchenginejournal.com/reddit-to-test-login-only-mode-as-google-search-traffic-drops/595270/ · GEO/AEO
 - [2026-10-30 19:00 UTC] The AI Search Measurement Gap Brands Must Close In 2027 And Beyond via @sejournal, @gregjarboe — Search Engine Journal — https://www.searchenginejournal.com/the-ai-search-measurement-gap-brands-must-close-in-2027-and-beyond/593881/ · GEO/AEO, Brand/product recommendation

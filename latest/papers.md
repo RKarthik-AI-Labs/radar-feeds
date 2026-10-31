@@ -1,7 +1,7 @@
 # Paper candidates — 2026-10-31 (IST)
 
-Generated 2026-10-31 06:22 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
-Totals: 1 new topic matches · 0 other new cs.IR · 151 seen in earlier runs.
+Generated 2026-10-31 07:01 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Totals: 1 new topic matches · 0 other new cs.IR · 150 seen in earlier runs.
 Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
 
 ## New papers matching your topics (1), highest score first
@@ -17,7 +17,7 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 
 ## Other new cs.IR papers, title only (0)
 
-## Already listed on an earlier day, still inside the look-back window (151)
+## Already listed on an earlier day, still inside the look-back window (150)
 - Useful Diversity or Hallucinated Variety? Persona-Conditioned Synthetic Query Generation for E-Commerce Search — https://arxiv.org/abs/2610.35102 (score 20)
 - Predicting What Answer Engines Cite: Open Decision Models, Rerankers and a Distilled 4B Student on Ten Engines under Controlled Retrieval — https://arxiv.org/abs/2610.38090 (score 18)
 - Does the Citation Matter? Quality, Grounding, and Physician-Rubric Accuracy of Google's AI Overviews for Medical Information — https://arxiv.org/abs/2610.39339 (score 18)
@@ -73,7 +73,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Evaluating Conversational Explainability in Healthcare: Comparing the Explainability Assistant and a Traditional XAI Dashboard — https://arxiv.org/abs/2610.39634 (score 7)
 - Decompose, Estimate, Select: Coverage-Aware Context Construction for Long-Form RAG — https://arxiv.org/abs/2610.40314 (score 7)
 - Retrieving from Your Own Mistakes: On-Policy Training of Embedding Models for Multi-Hop Retrieval-Augmented Generation — https://arxiv.org/abs/2610.40409 (score 7)
-- A Certified Robustness Framework for Backdoor Poisoning Attacks using $f$-Divergences — https://arxiv.org/abs/2610.34934 (score 6)
 - Then there is prompt injection, a malicious email, ...: The Wild Wide West of OpenClaw Agentic System Security — https://arxiv.org/abs/2610.35451 (score 6)
 - Evaluating DeepSeek V4.1 Flash-1017 for loss of control and harmful manipulation risks — https://arxiv.org/abs/2610.35671 (score 6)
 - Towards a Unified Framework of Optimal Input-Side Dimensional Configuration for Deep CTR Prediction — https://arxiv.org/abs/2610.35695 (score 6)
