@@ -1,7 +1,7 @@
 # Paper candidates — 2026-10-31 (IST)
 
-Generated 2026-10-31 07:01 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
-Totals: 1 new topic matches · 0 other new cs.IR · 150 seen in earlier runs.
+Generated 2026-10-31 07:27 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Totals: 1 new topic matches · 0 other new cs.IR · 149 seen in earlier runs.
 Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
 
 ## New papers matching your topics (1), highest score first
@@ -17,7 +17,7 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 
 ## Other new cs.IR papers, title only (0)
 
-## Already listed on an earlier day, still inside the look-back window (150)
+## Already listed on an earlier day, still inside the look-back window (149)
 - Useful Diversity or Hallucinated Variety? Persona-Conditioned Synthetic Query Generation for E-Commerce Search — https://arxiv.org/abs/2610.35102 (score 20)
 - Predicting What Answer Engines Cite: Open Decision Models, Rerankers and a Distilled 4B Student on Ten Engines under Controlled Retrieval — https://arxiv.org/abs/2610.38090 (score 18)
 - Does the Citation Matter? Quality, Grounding, and Physician-Rubric Accuracy of Google's AI Overviews for Medical Information — https://arxiv.org/abs/2610.39339 (score 18)
@@ -44,7 +44,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Mechanistic Failure Modes of Weight Pruning in Transformer Language Models — https://arxiv.org/abs/2610.37126 (score 9)
 - Measuring Where Intent Gets Lost in Agentic Smart Contract Synthesis — https://arxiv.org/abs/2610.37830 (score 9)
 - What Hallucinations Have We Measured? Semantic Illusion, Confabulation, and Expressed Uncertainty — https://arxiv.org/abs/2610.38520 (score 9)
-- GUIFlow: Temporal Redundancy-Aware Incremental Inference for GUI Agents — https://arxiv.org/abs/2610.34959 (score 8)
 - GuardRAG: A Post-Retrieval Defense against Poisoning Attacks in Retrieval-Augmented Generation — https://arxiv.org/abs/2610.35071 (score 8)
 - Did the Model Use That? Counterfactual Training Boosts Self-Attribution in Language Models — https://arxiv.org/abs/2610.35295 (score 8)
 - Governing Enterprise AI Traffic at Scale: Design and Operation of a Policy-Driven, Multi-Vendor LLM Gateway on Envoy — https://arxiv.org/abs/2610.35509 (score 8)
