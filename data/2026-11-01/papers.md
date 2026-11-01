@@ -1,14 +1,14 @@
 # Paper candidates — 2026-11-01 (IST)
 
-Generated 2026-11-01 01:11 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
-Totals: 0 new topic matches · 0 other new cs.IR · 105 seen in earlier runs.
+Generated 2026-11-01 06:45 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Totals: 0 new topic matches · 0 other new cs.IR · 96 seen in earlier runs.
 Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
 
 ## New papers matching your topics (0), highest score first
 
 ## Other new cs.IR papers, title only (0)
 
-## Already listed on an earlier day, still inside the look-back window (105)
+## Already listed on an earlier day, still inside the look-back window (96)
 - Predicting What Answer Engines Cite: Open Decision Models, Rerankers and a Distilled 4B Student on Ten Engines under Controlled Retrieval — https://arxiv.org/abs/2610.38090 (score 18)
 - Does the Citation Matter? Quality, Grounding, and Physician-Rubric Accuracy of Google's AI Overviews for Medical Information — https://arxiv.org/abs/2610.39339 (score 18)
 - Beyond fabrication: Misattributed numbers in papers written by AI research agents — https://arxiv.org/abs/2610.38691 (score 17)
@@ -26,7 +26,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Letting AI Formulate the Research Question: Autonomous Research Agents — https://arxiv.org/abs/2610.39620 (score 10)
 - Heterogeneous Co-Evolution Learning for Tool-Efficient Search Agents with Zero Labels — https://arxiv.org/abs/2610.39682 (score 10)
 - rTaste: Do Research Agents Have Taste? Evaluating Early Stage Research Judgment — https://arxiv.org/abs/2610.40488 (score 10)
-- Quantifying and Prioritizing Stealthy Source-Manipulation Threats Against Multi-Source Anomaly Detectors — https://arxiv.org/abs/2610.36693 (score 9)
 - Mechanistic Failure Modes of Weight Pruning in Transformer Language Models — https://arxiv.org/abs/2610.37126 (score 9)
 - Measuring Where Intent Gets Lost in Agentic Smart Contract Synthesis — https://arxiv.org/abs/2610.37830 (score 9)
 - What Hallucinations Have We Measured? Semantic Illusion, Confabulation, and Expressed Uncertainty — https://arxiv.org/abs/2610.38520 (score 9)
@@ -52,8 +51,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Evaluating Conversational Explainability in Healthcare: Comparing the Explainability Assistant and a Traditional XAI Dashboard — https://arxiv.org/abs/2610.39634 (score 7)
 - Decompose, Estimate, Select: Coverage-Aware Context Construction for Long-Form RAG — https://arxiv.org/abs/2610.40314 (score 7)
 - Retrieving from Your Own Mistakes: On-Policy Training of Embedding Models for Multi-Hop Retrieval-Augmented Generation — https://arxiv.org/abs/2610.40409 (score 7)
-- TOPS: Reshaping Flow Source and Transport for Multi-Task Robot Manipulation — https://arxiv.org/abs/2610.36694 (score 6)
-- Is Token Confidence Just Chain Length? A Signal-Processing Audit of Reasoning Traces — https://arxiv.org/abs/2610.36709 (score 6)
 - ActiveAlign: Aligning Egocentric Manipulation via Active Perception — https://arxiv.org/abs/2610.36859 (score 6)
 - Beyond Similarity Search: Knowledge Graph Metadata Enrichment for Enterprise Retrieval-Augmented Generation — https://arxiv.org/abs/2610.37728 (score 6)
 - Rethinking Positional Encoding and Interaction Granularity for CTR Prediction — https://arxiv.org/abs/2610.37140 (score 6)
@@ -74,11 +71,8 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Manifest-Assisted Retrieval in Artificial Intelligence Search: Evidence Gaps and a Security Evaluation — https://arxiv.org/abs/2610.38361 (score 4)
 - Federated Recommender Agents — https://arxiv.org/abs/2610.39289 (score 4)
 - Try Before You Evolve: Ranking-Scored Trials for Recursive Self-Improvement of Recommender Systems — https://arxiv.org/abs/2610.39352 (score 4)
-- Monitor Accuracy Isn't the Answer: A Decision-Value Framework for Evaluating AI Agent Restart Monitors — https://arxiv.org/abs/2610.36544 (score 3)
 - Coverage Under Contradiction: A Benchmark for Negation-Aware Retrieval — https://arxiv.org/abs/2610.37162 (score 3)
 - Beyond IPS: Reliable Counterfactual Evaluation in Multi-Stage Ad Systems without Logged Propensities — https://arxiv.org/abs/2610.40112 (score 3)
-- QESChunker: A Single Objective Unifies Overlapping and Non-Overlapping Chunking for RAG — https://arxiv.org/abs/2610.36557 (score 2)
-- Governed Sovereign RAG for Public Administration: Tripartite Epistemic Routing, Facet-Guided Clarification, and Deterministic Numeric Verification in Citizen Services — https://arxiv.org/abs/2610.36561 (score 2)
 - Do We Need an LLM to Know Why Sources Conflict? Decision Models for Knowledge-Conflict Typing in RAG — https://arxiv.org/abs/2610.36915 (score 2)
 - When Is Additional Retrieval Worthwhile? A Cost-Aware Study of Evidence Gain and Answer Reliability in RAG — https://arxiv.org/abs/2610.37358 (score 2)
 - Quantum-Inspired Pairwise Ranking Aggregation via Active LLM Feedback — https://arxiv.org/abs/2610.38683 (score 1)
