@@ -1,6 +1,6 @@
 # Paper candidates — 2026-11-01 (IST)
 
-Generated 2026-11-01 06:45 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Generated 2026-11-01 06:54 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
 Totals: 0 new topic matches · 0 other new cs.IR · 96 seen in earlier runs.
 Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
 
