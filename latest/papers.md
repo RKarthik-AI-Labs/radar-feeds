@@ -1,14 +1,14 @@
 # Paper candidates — 2026-11-01 (IST)
 
-Generated 2026-11-01 06:54 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
-Totals: 0 new topic matches · 0 other new cs.IR · 96 seen in earlier runs.
+Generated 2026-11-01 07:37 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Totals: 0 new topic matches · 0 other new cs.IR · 94 seen in earlier runs.
 Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
 
 ## New papers matching your topics (0), highest score first
 
 ## Other new cs.IR papers, title only (0)
 
-## Already listed on an earlier day, still inside the look-back window (96)
+## Already listed on an earlier day, still inside the look-back window (94)
 - Predicting What Answer Engines Cite: Open Decision Models, Rerankers and a Distilled 4B Student on Ten Engines under Controlled Retrieval — https://arxiv.org/abs/2610.38090 (score 18)
 - Does the Citation Matter? Quality, Grounding, and Physician-Rubric Accuracy of Google's AI Overviews for Medical Information — https://arxiv.org/abs/2610.39339 (score 18)
 - Beyond fabrication: Misattributed numbers in papers written by AI research agents — https://arxiv.org/abs/2610.38691 (score 17)
@@ -29,7 +29,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Mechanistic Failure Modes of Weight Pruning in Transformer Language Models — https://arxiv.org/abs/2610.37126 (score 9)
 - Measuring Where Intent Gets Lost in Agentic Smart Contract Synthesis — https://arxiv.org/abs/2610.37830 (score 9)
 - What Hallucinations Have We Measured? Semantic Illusion, Confabulation, and Expressed Uncertainty — https://arxiv.org/abs/2610.38520 (score 9)
-- Robust LLM Data Selection via Content-Invariant Gradient Attribution — https://arxiv.org/abs/2610.36755 (score 8)
 - GUI-JEPA: Candidate-Conditioned JEPA Latents as a Fast Action Policy for Mobile GUI Agents — https://arxiv.org/abs/2610.36877 (score 8)
 - KL-MOPD: Discrepancy-Aware Multi-Objective On-Policy Distillation for Generative Recommendation — https://arxiv.org/abs/2610.36973 (score 8)
 - Does Your Generalist Skill Optimizer Really Incentivize Agentic Tasks? Rethinking Skill Optimization via Bipartite Attribution — https://arxiv.org/abs/2610.37201 (score 8)
