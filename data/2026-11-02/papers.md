@@ -1,7 +1,7 @@
 # Paper candidates — 2026-11-02 (IST)
 
-Generated 2026-11-02 07:42 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
-Totals: 27 new topic matches · 11 other new cs.IR · 44 seen in earlier runs.
+Generated 2026-11-02 08:10 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Totals: 27 new topic matches · 11 other new cs.IR · 43 seen in earlier runs.
 Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
 
 ## New papers matching your topics (27), highest score first
@@ -272,7 +272,7 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Peeling the Matryoshka: Extracting Ontological Structure from Retrieval Embeddings — https://arxiv.org/abs/2610.41785
 - Recommendation Feedback Loops Shape Urban Income Segregation and Venue Visitation — https://arxiv.org/abs/2610.41911
 
-## Already listed on an earlier day, still inside the look-back window (44)
+## Already listed on an earlier day, still inside the look-back window (43)
 - Does the Citation Matter? Quality, Grounding, and Physician-Rubric Accuracy of Google's AI Overviews for Medical Information — https://arxiv.org/abs/2610.39339 (score 18)
 - Beyond fabrication: Misattributed numbers in papers written by AI research agents — https://arxiv.org/abs/2610.38691 (score 17)
 - How Specific Do I Need to Be? Effects of User Query Underspecification on Deep Research Agents — https://arxiv.org/abs/2610.39413 (score 17)
@@ -297,7 +297,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Appreciation Teaches Unauthorized Execution: Self-Evolution Degrades the Robustness of Personal Agents to Indirect Prompt Injection — https://arxiv.org/abs/2610.39122 (score 6)
 - A Sequential Decision Framework for Evaluating LLM-Guided Search — https://arxiv.org/abs/2610.39231 (score 6)
 - SEAL: Sealed Queries for Local Sanitization against Indirect Prompt Injection — https://arxiv.org/abs/2610.39758 (score 6)
-- CoWalk: Cooperative Walks for Agentic Batch Queries on Disk-Resident Graphs — https://arxiv.org/abs/2610.38404 (score 5)
 - Federated Recommender Agents — https://arxiv.org/abs/2610.39289 (score 4)
 - Try Before You Evolve: Ranking-Scored Trials for Recursive Self-Improvement of Recommender Systems — https://arxiv.org/abs/2610.39352 (score 4)
 - Beyond IPS: Reliable Counterfactual Evaluation in Multi-Stage Ad Systems without Logged Propensities — https://arxiv.org/abs/2610.40112 (score 3)
