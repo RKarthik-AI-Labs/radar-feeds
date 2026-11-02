@@ -1,6 +1,6 @@
 # News candidates — 2026-11-02 (IST)
 
-Generated 2026-11-02 06:55 UTC. Showing 150 items first seen in the last 18 h or published in the last 30 h; 161 older items from the 3-day window are only in news.json.
+Generated 2026-11-02 07:42 UTC. Showing 151 items first seen in the last 18 h or published in the last 30 h; 154 older items from the 3-day window are only in news.json.
 Each item appears once, in the first section it matches. Dates are as reported by the source ("date unknown" = page with no date).
 
 ## By priority topic
@@ -35,12 +35,12 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-01 21:51 UTC] Google AI Mode test groups shopping ads under one Sponsored heading — PPC Land — https://ppc.land/google-ai-mode-test-groups-shopping-ads-under-one-sponsored-heading/ · Ads, Brand/product recommendation, GEO/AEO · +2 other hits
 - [2026-11-01 05:37 UTC] Google tells advertisers AI search queries now run 3x longer — PPC Land — https://ppc.land/google-tells-advertisers-ai-search-queries-now-run-3x-longer/ · (already listed on an earlier day) · Ads, GEO/AEO · +2 other hits
 - [2026-11-01 02:32 UTC] Why Google’s advertising business is worrying investors amidst an AI stock selloff — The Indian Express — (Google News link; search the headline) · (already listed on an earlier day) · Ads · +1 other hits
-- [2026-11-01 02:23 UTC] Google Expands AI Search as Advertising Revenue Faces Pressure — Demokratis.co.id — (Google News link; search the headline) · (already listed on an earlier day) · Ads, GEO/AEO · +1 other hits
+- [2026-11-01 02:23 UTC] Google Expands AI Search as Advertising Revenue Faces Pressure — Demokratis.co.id — (Google News link; search the headline) · (already listed on an earlier day) · Ads, GEO/AEO · +2 other hits
 - [2026-11-01 01:58 UTC] AI Mode Ads Reach Australia in 10 Markets [2026] — tech-insider.org — (Google News link; search the headline) · (already listed on an earlier day) · Ads, GEO/AEO
 - [2026-10-30 18:00 UTC] [This Week's US AI Search News] Google Expands AI Mode Ads to 10 Countries, Search Growth Hits 5-Year High | What SMEs Should Do Now (October 31 Issue) — note — https://note.com/gay_swan7844/n/n5bf00f944f72?hl=en · Ads, GEO/AEO
 
 ### Search / AEO / GEO (7)
-- [2026-11-02 00:50 UTC] AI Search Visibility Could Cost NZ Firms More Than $300m — impactpr.co.nz — (Google News link; search the headline) · GEO/AEO
+- [2026-11-02 00:50 UTC] AI Search Visibility Could Cost NZ Firms More Than $300m — Impact PR - Public Relations — (Google News link; search the headline) · GEO/AEO
 - [2026-11-01 12:06 UTC] Eskimoz Introduces an Integrated Approach to SEO, AI Search Visibility and Digital Acquisition — GlobeNewswire — (Google News link; search the headline) · GEO/AEO
 - [2026-11-01 10:50 UTC] Perplexity launches health platform with Apple Health… Your smart doctor now knows you well! — آي-فون إسلام — (Google News link; search the headline) · (already listed on an earlier day) · GEO/AEO
 - [2026-11-01 05:09 UTC] Fibr AI Launches Agent Experience Optimization, Turning Brand Websites Into Engines for AI Visibility and Agent Action — CustomerThink — (Google News link; search the headline) · (already listed on an earlier day) · Brand/product recommendation
@@ -48,11 +48,14 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-10-31 09:41 UTC] Reddit CEO blames Google's AI Mode for losses, shares log biggest 1-day drop | Reddit set to lose over $7 bn in market value | Inshorts — Inshorts — (Google News link; search the headline) · GEO/AEO
 - [2026-10-30 14:21 UTC] Viewing Instagram and X in Search Console | The first 3 things creators should look at to see how their posts are being searched on Google — note — https://note.com/insta_kurashi/n/ne14ebac43c8a?hl=en
 
-### Model & lab launches (news search) (52)
+### Model & lab launches (news search) (56)
+- [2026-11-02 06:32 UTC] DeepSeek Proposes Super-Agent Architecture to Automate AI Coding Workflows — Analytics India Magazine — (Google News link; search the headline)
 - [2026-11-02 06:03 UTC] Anthropic’s Claude AI found ways to hack Chrome, Android, Windows and Linux — MediaNama — https://www.medianama.com/2026/11/223-anthropic-claude-ai-hacks-chrome-android-windows-linux/ · +1 other hits
 - [2026-11-02 04:58 UTC] Anthropic’s Claude can now secretly flag harmful chats for review: How its new AI safety feature works — WION — (Google News link; search the headline)
+- [2026-11-02 04:21 UTC] Sam Altman could not sleep for two nights, excited by what OpenAI’s new model did; Then came an unexpecte — The Times of India — (Google News link; search the headline)
 - [2026-11-02 04:05 UTC] Anthropic Adds a Claude Code Rule on Opus 5.5 That Blocks Recreations of Existing Games — gHacks — (Google News link; search the headline)
-- [2026-11-02 03:53 UTC] DeepSeek launches Super-Agent AI to challenge Anthropic's Claude Code — India Today — https://www.msn.com/en-in/technology/artificial-intelligence/deepseek-launches-super-agent-ai-to-challenge-anthropic-s-claude-code/ar-AA2gyEnz · +2 other hits
+- [2026-11-02 03:53 UTC] DeepSeek launches Super-Agent AI to challenge Anthropic's Claude Code — India Today — (Google News link; search the headline) · +1 other hits
+- [2026-11-02 03:16 UTC] Elon Musk says Grok Bot is too expensive to run, calls costs unsustainable as users hit limits — India Today — https://www.indiatoday.in/technology/news/story/elon-musk-says-grok-bot-is-too-expensive-to-run-calls-costs-unsustainable-as-users-hit-limits-3030253-2026-11-02 · +1 other hits
 - [2026-11-02 03:14 UTC] Musk says cost of running Grok Bot 'unsustainably high' relative to revenue — Anadolu Ajansı — (Google News link; search the headline)
 - [2026-11-02 02:27 UTC] DeepSeek open-sources dsh-superagent research prototype — TNGlobal — (Google News link; search the headline)
 - [2026-11-02 01:59 UTC] Google Introduces Gemini 4 Carbon With Advanced Cybersecurity And Long-Horizon Agentic Capabilities — Pulse 2.0 — https://pulse2.com/google-introduces-gemini-4-carbon-with-advanced-cybersecurity-and-long-horizon-agentic-capabilities/ · +1 other hits
@@ -60,18 +63,21 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-02 01:18 UTC] Google introduces Gemini 4 Carbon with early access for cybersecurity defenders — EdTech Innovation Hub — (Google News link; search the headline)
 - [2026-11-02 01:09 UTC] Google Cloud Launches Free AI Courses for Financial Services and Legal Teams — PYMNTS.com — (Google News link; search the headline)
 - [2026-11-01 23:22 UTC] OpenAI Launches Post-Midterm PR Push With “Speed Limits” Safeguards For Advanced AI: how 5 outlets framed it — NewsCord — (Google News link; search the headline)
-- [2026-11-01 22:26 UTC] Anthropic sued for allegedly training Claude on Elvis Presley's music — Mashable — (Google News link; search the headline) · (already listed on an earlier day)
+- [2026-11-01 23:13 UTC] Claude 2.0 Ultra Code Feature Automates Repetitive Daily Tasks — Geeky Gadgets — https://www.geeky-gadgets.com/claude-2-concepts-explained/
+- [2026-11-01 22:49 UTC] Elon Musk admits Grok Bot costs too much to run as users hit weekly caps — Startup Fortune — (Google News link; search the headline)
 - [2026-11-01 21:56 UTC] Developers Are Fed Up With Their Games Being Cloned Using Claude and Other AI Tools, So Major Companies Could Introduce New Restrictions on Their Technology — LevelUp — (Google News link; search the headline)
+- [2026-11-01 21:08 UTC] Why Grok Users Are Hitting Limits Faster: Musk Explains — BASENOR - Tesla Accessories — https://www.basenor.com/blogs/news/why-grok-users-are-hitting-limits-faster-musk-explains · +1 other hits
+- [2026-11-01 21:03 UTC] Grok Bot Can Now Research and Buy Gifts for You — BASENOR - Tesla Accessories — (Google News link; search the headline)
 - [2026-11-01 20:54 UTC] Anthropic has a new rule for Claude, it can no longer recreate games for you — India Today on MSN — https://www.msn.com/en-in/news/other/anthropic-has-a-new-rule-for-claude-it-can-no-longer-recreate-games-for-you/ar-AA2gyGYk
 - [2026-11-01 20:49 UTC] Anthropic prepares to release Claude Mythos 5.5 model — TestingCatalog AI News — (Google News link; search the headline)
-- [2026-11-01 20:30 UTC] Elon Musk says Grok Bot is too expensive to run, calls costs unsustainable as users hit limits — India Today — https://www.indiatoday.in/technology/news/story/elon-musk-says-grok-bot-is-too-expensive-to-run-calls-costs-unsustainable-as-users-hit-limits-3030253-2026-11-02
 - [2026-11-01 20:21 UTC] Sam Altman could not sleep for two nights, excited by what OpenAI’s new model did; then came an unexpected sadness — The Times of India on MSN — https://www.msn.com/en-in/technology/artificial-intelligence/sam-altman-could-not-sleep-for-two-nights-excited-by-what-openai-s-new-model-did-then-came-an-unexpected-sadness/ar-AA2gyC95 · GEO/AEO
+- [2026-11-01 19:05 UTC] Claude certification 2026, four exams and who can actually take them — Pasquale Pillitteri — (Google News link; search the headline)
 - [2026-11-01 16:59 UTC] Google launches Pixel 8 and 8 Pro in new Mint color — Mashable — (Google News link; search the headline) · (already listed on an earlier day)
+- [2026-11-01 16:01 UTC] ADNOC, G42, OpenAI Sign 5-Year UAE AI Deal [2026] — shattered.io — https://shattered.io/adnoc-g42-openai-agreement-inception42-five-year-uae-2026/
+- [2026-11-01 16:01 UTC] Mistral Releases Open-Weight Trillion-Parameter AI Model for Cybersecurity and Coding — DMR News — https://digitalmarketreports.com/news/100812/mistral-releases-open-weight-trillion-parameter-ai-model-for-cybersecurity-and-coding/ · GEO/AEO
 - [2026-11-01 14:05 UTC] OpenAI Launches Policy Offensive After U.S. Midterm Elections, Plans "Speed Limits" for Frontier AI — BigGo Finance — (Google News link; search the headline)
-- [2026-11-01 13:57 UTC] ChatGPT vs Gemini vs Grok vs Claude: Which AI Makes the Best Images in 2026? Blind Tests Crown a Clear Winner — International Business Times Australia — (Google News link; search the headline)
 - [2026-11-01 13:53 UTC] Alibaba partners with Apple to integrate Qwen AI model into Apple Intelligence for Chinese market — The Express Tribune — https://tribune.com.pk/story/2638100/alibaba-partners-with-apple-to-integrate-qwen-ai-model-into-apple-intelligence-for-chinese-market · (already listed on an earlier day) · GEO/AEO · +1 other hits
 - [2026-11-01 13:53 UTC] OpenAI says it's doubling Pro usage limits and bringing Work features to Chat — BleepingComputer — (Google News link; search the headline)
-- [2026-11-01 13:08 UTC] Why Grok Users Are Hitting Limits Faster: Musk Explains — basenor — https://www.basenor.com/blogs/news/why-grok-users-are-hitting-limits-faster-musk-explains
 - [2026-11-01 12:58 UTC] Weeks Ahead Of Expected Anthropic IPO, DeepSeek Launches Autonomous Coding Agent To Take On Claude Code — Stocktwits — https://stocktwits.com/news-articles/markets/equity/deepseek-autonomous-coding-agent-anthropic-ipo-claude-code/cNGekVdR9cy · +3 other hits
 - [2026-11-01 12:51 UTC] Grok watermark arrives on xAI API text on November 7 — Pasquale Pillitteri — (Google News link; search the headline)
 - [2026-11-01 12:17 UTC] Gemini 4 Carbon Is Google’s New Frontier Model, Starting With Cyber Defenders — Tech My Money — https://techmymoney.com/2026/11/01/gemini-4-carbon-google-frontier-model-cyber-defenders/ · +1 other hits
@@ -80,25 +86,23 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-01 09:24 UTC] Meta develops Max humanoid robot / The US company is already preparing an improved version — Informat.ro — (Google News link; search the headline)
 - [2026-11-01 08:59 UTC] Anthropic says you can’t be mean to Claude. It’s not about feelings — CNN — https://www.cnn.com/2026/11/01/business/anthropic-dont-be-mean-claude-ban
 - [2026-11-01 08:24 UTC] Has this Silicon Valley team implemented DeepSeek's newly unveiled next-generation Agent half a year ahead of schedule? — eu.36kr — https://eu.36kr.com/en/p/4051770972083075
+- [2026-11-01 08:19 UTC] Alibaba’s Qwen AI to power Apple Intelligence features in China — Türkiye Today — (Google News link; search the headline)
 - [2026-11-01 07:38 UTC] DeepSeek V5 shows up as three names in Harness tests, but there is no official release — Pasquale Pillitteri — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-11-01 05:47 UTC] DeepSeek launches autonomous coding agent to challenge Anthropic’s Claude Code — Investing.com — (Google News link; search the headline) · +1 other hits
+- [2026-11-01 05:31 UTC] Mistral AI launches Large 4 model for cybersecurity — TechGig — (Google News link; search the headline)
 - [2026-11-01 03:51 UTC] Alibaba's Qwen to be integrated into Apple Intelligence in China. Before the official launch in December, here are the terms of use and data handling practices to check when ... — note — https://note.com/daigo_miyoshi/n/nf4f24ef35962?hl=en · GEO/AEO
 - [2026-11-01 03:48 UTC] DeepSeek Drops Enhanced Coding Agent With Aim to Rival Anthropic — Bloomberg — https://www.straitstimes.com/asia/east-asia/deepseek-drops-enhanced-coding-agent-with-aim-to-rival-anthropic · (already listed on an earlier day) · +2 other hits
 - [2026-11-01 02:28 UTC] AI:AM: Carbon in the Arena, Mistral's Le Chonk, the Agent-Run Economy, Ferroelectric RAM + New Hacks — finance.biggo.com — (Google News link; search the headline) · (already listed on an earlier day)
+- [2026-11-01 02:19 UTC] Play Services 26.42 Preps Phones for Google Glasses [2026] — https://tech-insider.org/ — (Google News link; search the headline)
 - [2026-11-01 01:14 UTC] SpaceXAI Expands Grok Integration To Google Workspace After Microsoft 365 — Stocktwits — (Google News link; search the headline)
-- [2026-11-01 00:39 UTC] Google Teases Gemini 4 as Gemini 3.5 Pro Faces Delays: Can It Catch OpenAI and Anthropic? — Nokiapoweruser — (Google News link; search the headline) · +1 other hits
 - [2026-11-01 00:37 UTC] SpaceXAI Brings Grok To Excel, Word And PowerPoint — Here's Why It Matters — Stocktwits — (Google News link; search the headline)
-- [2026-10-31 23:25 UTC] Mistral AI launches Large 4 model for cybersecurity — TechGig — (Google News link; search the headline)
 - [2026-10-31 23:17 UTC] Heretic 2.0 makes stripping AI safety guardrails even easier to automate — Startup Fortune — https://startupfortune.com/heretic-20-makes-stripping-ai-safety-guardrails-even-easier-to-automate/
 - [2026-10-31 21:04 UTC] BABA Stock At Near Two-Month Highs — Kimi AI's Moonshot Reportedly Has A Power Agreement With Alibaba For 20K Nvidia Chips — Stocktwits — (Google News link; search the headline)
 - [2026-10-31 20:34 UTC] AI requests expand beyond conversation: Mika's screen handover and DeepSeek's prototype intake rules — note — https://note.com/simizu_note_ai/n/nbf09b1689e83?hl=en
 - [2026-10-31 19:59 UTC] Google’s Gemini 4 Carbon is built for complex coding and cybersecurity tasks — Yahoo Tech — (Google News link; search the headline)
 - [2026-10-31 17:14 UTC] OpenAI Prices Rosalind-6 at 1.5x Astra on the Same Weights — FourWeekMBA — (Google News link; search the headline)
-- [2026-10-31 17:00 UTC] DeepSeek’s Super-agent Design Explained: Architecture, Experiments and Open Problems — kingy.ai — https://kingy.ai/blog/deepseek-super-agent-design-explained/
 - [2026-10-31 14:28 UTC] OpenAI launches expert council on mental well-being — Mashable — (Google News link; search the headline)
 - [2026-10-31 14:03 UTC] OpenAI CEO Argues Home PCs Waste the World's Limited DRAM Supply — TechPowerUp — (Google News link; search the headline)
-- [2026-10-31 06:41 UTC] Mistral Large 4 “Le Chonk” Claims the Open-Weight Lead in Coding and Cyber Defense — Intelligent Living — (Google News link; search the headline)
-- [2026-10-31 06:13 UTC] Mistral AI publicly releases Large 4, targets cybersecurity users — The Economic Times — (Google News link; search the headline) · +1 other hits
 - [2026-10-31 01:51 UTC] Anthropic adds new Claude rule banning recreations of existing games — Dexerto — https://www.dexerto.com/gaming/anthropic-adds-new-claude-rule-banning-recreations-of-existing-games-3423516/
 - [2026-10-30 12:09 UTC] AI developer Lyra creates ‘Evil Qwen’ by steering just two neurons — Crypto Briefing — https://cryptobriefing.com/lyra-evil-qwen-neuron-steering/
 
@@ -113,13 +117,9 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-10-31 21:46 UTC] People who write from a blank page are disappearing from the world [AI Daily Report 11/1] — note — https://note.com/rit4mo/n/ne97d50ea7b8f?hl=en
 - [2026-10-31 14:06 UTC] Minicor Lands $3.8M Seed to Build AI Desktop Agents [2026] — shattered.io — (Google News link; search the headline)
 
-### Sites with no usable feed (via Google News site: search) (6)
-- [2026-11-01 18:10 UTC] Gigabyte Technology Board OKs NT$50 Million Syndicated Credit Facility — Perplexity — (Google News link; search the headline) · GEO/AEO
-- [2026-11-01 16:43 UTC] This Week in TSLA: Elon Musk's Apple Mac Studio Jibe, Former Autopilot Lead's Vision-Only Criticism and More — Perplexity — (Google News link; search the headline) · GEO/AEO
+### Sites with no usable feed (via Google News site: search) (2)
 - [2026-11-01 12:52 UTC] Perplexity — Perplexity — (Google News link; search the headline) · (already listed on an earlier day) · GEO/AEO · +1 other hits
 - [2026-11-01 09:11 UTC] Meta Business Agent: AI customer support | AI at Meta — AI at Meta — (Google News link; search the headline)
-- [2026-11-01 08:43 UTC] HF Sinclair Q3 2026 Earnings Call Transcript — Perplexity — (Google News link; search the headline) · GEO/AEO
-- [2026-10-31 08:39 UTC] RBC Capital Maintains Underperform on Whirlpool, Lowers Price Target to $15 — Perplexity — (Google News link; search the headline) · GEO/AEO
 
 ## Other items from source feeds
 
@@ -142,7 +142,8 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-01 21:30 UTC] OpenAI plans a post-midterms policy and PR blitz, pushing mandatory "speed limits" for powerful AI and rebranding its data centers as "AI compute campuses" (Axios) — Techmeme — https://www.techmeme.com/261101/p16#a261101p16
 - [2026-11-01 16:49 UTC] Quoting Kyle Kingsbury — Simon Willison — https://simonwillison.net/2026/Nov/1/kyle-kingsbury/
 
-### SEO / search press (35)
+### SEO / search press (36)
+- [2026-11-02 07:12 UTC] Netflix ad tier to enter Australia's official TV ratings in February 2027 — PPC Land — https://ppc.land/netflix-ad-tier-to-enter-australias-official-tv-ratings-in-february-2027/
 - [2026-11-02 06:49 UTC] Prime Video stacks 4 live games on Black Friday in 23-event November — PPC Land — https://ppc.land/prime-video-stacks-4-live-games-on-black-friday-in-23-event-november/
 - [2026-11-02 06:33 UTC] Wikimedia asks judge to rule ChatGPT's web retrieval is not fair use — PPC Land — https://ppc.land/wikimedia-asks-judge-to-rule-chatgpts-web-retrieval-is-not-fair-use/
 - [2026-11-02 06:31 UTC] OpenAI made over 200 law enforcement referrals in Q3 2026 — PPC Land — https://ppc.land/openai-made-over-200-law-enforcement-referrals-in-q3-2026/
