@@ -1,0 +1,4747 @@
+ProSearch: Benchmarking Multi-Constraint Protocol Retrieval in Experimental Science
+https://arxiv.org/abs/2610.41396
+License: CC zero (redistribution permitted)
+(source: arXiv html)
+
+
+
+ProSearch: Benchmarking Multi-Constraint Protocol Retrieval in Experimental Science 
+
+Wenliang Liang
+  Zhiyuan Ning
+  Haolin Chen
+
+†
+†
+thanks: 
+Equal contribution.
+†
+†
+thanks: 
+Project lead.
+
+Affiliation: 
+ Computer Network Information Center, Chinese Academy of Sciences
+
+Affiliation: 
+ Institute of Zoology, Chinese Academy of Sciences
+
+Affiliation: 
+ University of Chinese Academy of Sciences
+
+Affiliation: 
+ Westlake University
+
+Email: 
+ningzhiyuan@westlake.edu.cn
+
+  
+
+Yuanchun Zhou
+  Wenjuan Cui
+  Yi Du
+
+†
+†
+thanks: 
+Corresponding author.
+
+Email: 
+chenhaolin23@mails.ucas.ac.cn{wlliang,zyc,wenjuancui,duyi}@cnic.cn
+
+Affiliation: 
+ Computer Network Information Center, Chinese Academy of Sciences
+
+Affiliation: 
+ University of Chinese Academy of Sciences
+
+Abstract
+
+In AI for Science scenarios, experimental design and method reproduction require retrieving protocols that satisfy multiple interdependent constraints, yet existing benchmarks lack systematic evaluation of this capability. To address this gap, we introduce ProSearch, a benchmark for multi-constraint protocol retrieval in experimental science. ProSearch has three key features: (1) realism, with queries grounded in real experimental records and expert-defined templates; (2) complexity, with 60 experimental fields and their dependencies; and (3) diagnosticity, with 3–5 explicit constraints per query, including numerical and negation constraints. We construct ProSearch through LLM-based extraction, data-driven constraint selection, controlled query generation, and evidence-based relevance validation. The resulting benchmark contains 1,515 queries across six experimental science domains.
+We conduct extensive experiments on ProSearch with 19 representative retrievers and complementary analyses. The best-performing retriever achieves an average nDCG@10 of only 0.290, which improves to 0.474 with reranking. Structured diagnostic analysis shows that explicit constraint matching provides a strong ranking signal, while manual error analysis identifies joint constraint binding as a key bottleneck. ProSearch provides a testbed for systematically evaluating scientific retrieval systems. 
+1
+1
+
+1
+
+          
+          
+          
+        We provide our code in 
+https://github.com/kg4sci/ProSearch
+, data in 
+https://huggingface.co/datasets/kg4sci/ProSearch
+.
+
+1 
+Introduction
+
+As AI for Science advances, artificial intelligence systems are increasingly being used for scientific tasks 
+(
+Xie et al., 2025
+; 
+Weng et al., 2026
+)
+ such as experimental design 
+(
+Ma et al., 2025
+; 
+Wang et al., 2026
+)
+ and protocol reproduction 
+(
+Gridach et al., 2025
+; 
+Chen et al., 2025b
+)
+. In these settings, systems must not only understand the research question but also retrieve actionable methodological evidence from the scientific literature to identify protocols that meet specific experimental requirements 
+(
+Kasmaee et al., 2025
+)
+. In this context, protocol retrieval has become an important foundational capability for AI for Science 
+(
+Kon et al., 2025
+; 
+Eger et al., 2025
+; 
+Gupta et al., 2022
+; 
+Gu et al., 2021
+)
+.
+
+Beyond topical relevance, protocol retrieval aims to identify method paragraphs describing experimental protocols that satisfy multiple specific conditions 
+(
+Liu et al., 2026
+)
+. For example, a researcher may require a specific cell line to be cultured at 
+C while excluding the use of DMEM as the culture medium. Retrieval systems must not only identify these conditions but also verify that they hold within the same coherent experimental configuration. However, method paragraphs often describe multiple experimental configurations or variants within the same context 
+(
+Sun et al., 2025
+)
+. Therefore, even when all query conditions appear in the same paragraph, they may correspond to different experimental procedures, leading keyword-based retrieval methods to produce false matches.
+
+Existing benchmarks provide limited evaluation of this capability 
+(
+Zhong et al., 2025
+; 
+Ajith et al., 2024
+; 
+Chen et al., 2026
+)
+. Traditional scientific datasets focus on abstract-level fact verification or passage-level question answering 
+(
+Wadden et al., 2020
+; 
+Jin et al., 2019
+)
+. More recent reasoning-intensive benchmarks, such as BRIGHT 
+(
+Su et al., 2025
+)
+, introduce queries that require inference beyond surface-level matching, but do not impose explicit multi-constraint requirements. MultiConIR 
+(
+Lu et al., 2025
+)
+ addresses multi-constraint retrieval, yet focuses on structured items rather than unstructured scientific text. Existing evaluations do not adequately measure whether retrievers can jointly bind multiple constraints to a single experimental variant.
+
+However, constructing such a benchmark presents several challenges 
+Song et al. (2026)
+. First, realistic protocol queries are not readily available in existing retrieval datasets and cannot be generated by simply combining keywords. They must reflect meaningful experimental needs and follow valid experimental logic. Moreover, a plausible query does not necessarily have supporting evidence in the retrieval corpus. Query construction must therefore be grounded in real experimental protocols. Finally, relevance labeling requires verifying that the retrieved text supports all query constraints within a consistent experimental configuration, making reliable annotation difficult to automate.
+
+To address these challenges, we develop an expert-guided construction pipeline. Domain experts define experimental fields, dependencies, and query templates. We instantiate these templates using values from extracted protocol records and select constraint combinations in the corpus. LLM-assisted filtering and query generation then produce meaningful natural-language queries. For relevance labeling, we use structured records to identify candidate paragraphs but determine final relevance from the original text, labeling a paragraph as relevant only when a single experimental configuration supports all query constraints. Through this pipeline, we introduce 
+ProSearch
+, a multi-constraint protocol retrieval benchmark comprising 1,515 queries across six experimental science domains. ProSearch has three key characteristics: (1) 
+realism
+, with queries grounded in real experimental records and expert-defined templates; (2) 
+complexity
+, with 60 experimental fields and their dependencies; and (3) 
+diagnosticity
+, with 3–5 explicit constraints per query, including numerical and negation constraints.
+
+To assess current retrieval capabilities on ProSearch, we conduct a series of comprehensive experiments. Our evaluation of 19 retrievers shows that ProSearch is a major challenge; even the best models achieve an average nDCG@10 of only 0.290, leaving large room for improvement. We find that reranking improves this score to 0.474, while query reformulation yields only modest gains. Structured diagnostic analysis based on extracted protocol records achieves an average nDCG@10 of 0.774, increasing to 0.814 when dense similarity is used to break ties. Manual error analysis further reveals that 90% of sampled top-ranked non-relevant paragraphs violate at least one query constraint, highlighting constraint binding as a key bottleneck. Overall, we hope ProSearch serves as a testbed for building both better retrievers and next generation scientific agents that can truly handle complex experimental logic.
+
+2 
+Related Work
+
+Scientific retrieval benchmarks.
+
+As retrieval systems increasingly support scientific research 
+(
+Pan et al., 2026
+)
+, benchmarks have been developed to evaluate a broad range of tasks.
+SCIDOCS 
+(
+Cohan et al., 2020
+)
+ and SciRepEval 
+(
+Singh et al., 2023
+)
+ evaluate scientific document representations.
+SciFact 
+(
+Wadden et al., 2020
+)
+ focuses on scientific claim verification, while PubMedQA 
+(
+Jin et al., 2019
+)
+ and BioASQ 
+(
+Nentidis et al., 2025
+)
+ address biomedical question answering.
+TREC-COVID 
+(
+Roberts et al., 2020
+)
+ and LitSearch 
+(
+Ajith et al., 2024
+)
+ evaluate scientific literature retrieval.
+Other work focuses more specifically on the relevance of scientific methods.
+CSFCube 
+(
+Mysore et al., 2021
+)
+ evaluates scientific paper relevance based on research objectives, methods, and results.
+MIR 
+(
+Garikaparthi et al., 2025
+)
+ focuses on retrieving papers that can provide methodological inspiration for a research problem.
+However, methodological relevance does not necessarily mean that specific experimental conditions are satisfied.
+ProSearch focuses on method paragraphs and evaluates whether they provide evidence that jointly satisfies multiple experimental requirements.
+
+Table 1: 
+
+Comparison of ProSearch with representative retrieval benchmarks.
+
+Sci.
+ denotes scientific IR, and 
+Evidence Unit
+ denotes retrieval granularity.
+For 
+Query Construction
+, 
+Hum.
+, 
+LLM
+, and 
+Constr.
+ denote human involvement, LLM use, and explicit multi-constraint queries.
+For 
+Relevance Requirement
+, 
+Hard
+, 
+Bind.
+, and 
+Proc.
+ denote mandatory satisfaction of all query requirements, joint grounding of requirements to the same target context, and process, mechanism, or workflow-level reasoning, respectively.
+
+Benchmark
+
+# Queries
+
+Sci.
+
+Evidence Unit
+
+Query Construction
+
+Relevance Requirement
+
+Hum.
+
+LLM
+
+Constr.
+
+Hard
+
+Bind.
+
+Proc.
+
+MultiConIR 
+(
+Lu et al., 2025
+)
+
+23,070
+
+✗
+
+Structured Item
+
+✗
+
+✓
+
+✓
+
+✓
+
+✓
+
+✗
+
+BRIGHT 
+(
+Su et al., 2025
+)
+
+1,384
+
+✗
+
+Document
+
+✓
+
+✗
+
+✗
+
+✗
+
+✗
+
+✓
+
+FollowIR 
+(
+Weller et al., 2025a
+)
+
+102
+
+✗
+
+Document
+
+✓
+
+✗
+
+✗
+
+✓
+
+✗
+
+✗
+
+TREC-COVID 
+(
+Roberts et al., 2020
+)
+
+50
+
+✓
+
+Document
+
+✓
+
+✗
+
+✗
+
+✗
+
+✗
+
+✗
+
+SciFact 
+(
+Wadden et al., 2020
+)
+
+1,409
+
+✓
+
+Abstract
+
+✓
+
+✗
+
+✗
+
+✗
+
+✗
+
+✗
+
+BioASQ-13b 
+(
+Nentidis et al., 2025
+)
+
+5,729
+
+✓
+
+Passage
+
+✓
+
+✗
+
+✗
+
+✗
+
+✗
+
+✓
+
+ChemRAG-Bench 
+(
+Zhong et al., 2025
+)
+
+1,932
+
+✓
+
+Passage
+
+✓
+
+✗
+
+✗
+
+✗
+
+✗
+
+✓
+
+LitSearch 
+(
+Ajith et al., 2024
+)
+
+597
+
+✓
+
+Document
+
+✓
+
+✓
+
+✗
+
+✗
+
+✗
+
+✗
+
+ProSearch
+
+1,515
+
+✓
+
+Method Paragraph
+
+✓
+
+✓
+
+✓
+
+✓
+
+✓
+
+✓
+
+Constraint-aware and reasoning-intensive retrieval.
+
+Recent benchmarks evaluate whether systems can handle requirements beyond topical relevance.
+FollowIR 
+(
+Weller et al., 2025a
+)
+ and related instruction-following benchmarks 
+(
+Song et al., 2025
+; 
+Zhou et al., 2025
+)
+ study whether retrievers can follow query-level constraints.
+MultiConIR 
+(
+Lu et al., 2025
+)
+ studies multi-constraint retrieval over structured items, while Box Embeddings 
+(
+Dasgupta et al., 2023
+)
+ explore attribute intersections and negation.
+BRIGHT 
+(
+Su et al., 2025
+)
+ focuses on reasoning-intensive retrieval where relevant documents require inference beyond surface matching.
+ProSearch differs by emphasizing joint constraint binding within unstructured experimental methods text.
+A method paragraph may describe multiple experimental configurations.
+Even when all parameters required by a query appear in the same paragraph, they may belong to different experimental configurations.
+ProSearch therefore requires all query constraints to be jointly satisfied within the same experimental configuration.
+Table 
+1
+ compares representative retrieval benchmarks in terms of retrieval units, query construction, and relevance requirements.
+
+3 
+ProSearch
+
+In this section, we present ProSearch, a multi-constraint protocol retrieval benchmark for experimental science. We first define the protocol retrieval task (Section  
+3.1
+). Then, we detail our expert-guided construction pipeline (Section  
+3.2
+). Finally, we evaluate the benchmark’s quality through expert assessments (Section  
+3.3
+). Table 
+2
+ summarizes the benchmark statistics.
+
+3.1 
+Task Formulation
+
+Given a query 
+ and a retrieval corpus 
+, where each 
+ is a method paragraph, the goal is to rank paragraphs according to whether they satisfy the experimental requirements specified by 
+.
+Each query is associated with a set of protocol constraints 
+.
+Each constraint is represented as 
+, where 
+ denotes a domain-specific protocol field, 
+ denotes the operator, and 
+ denotes the required value.
+Table 
+20
+ illustrates how protocol fields, operators, and values are instantiated as query constraints.
+
+A method paragraph may describe multiple experimental configurations.
+Therefore, we define paragraph relevance at the protocol-record level.
+Let 
+ denote the set of protocol records described in paragraph 
+.
+Each record corresponds to one coherent experimental configuration and does not combine evidence across different configurations in the same paragraph.
+A paragraph 
+ is relevant to query 
+ if and only if there exists at least one protocol record 
+ that satisfies all constraints in 
+:
+
+(1)
+
+Table 2: 
+
+Data statistics of ProSearch.
+
+ denotes the number of queries, 
+ denotes the number of paragraphs, and 
+ denotes the average number of positive paragraphs per query.
+Average lengths are computed using GPT-2 tokens.
+#Field Templates denotes the number of field combinations used to construct queries.
+Top-10 Coverage denotes the fraction of queries covered by the ten most frequent field templates.
+
+Total Number
+
+Avg. Length
+
+Query Diversity
+
+Examples
+
+Domain
+
+#Field Templates
+
+Top-10 Coverage
+
+Cell Culture
+
+284
+
+46,004
+
+7.1
+
+22.0
+
+218.7
+
+14
+
+97.2%
+
+Tab. 
+41
+
+Immunotechnology
+
+264
+
+93,315
+
+9.0
+
+26.9
+
+228.1
+
+26
+
+85.6%
+
+Tab. 
+42
+
+Electrochemistry
+
+201
+
+91,375
+
+8.7
+
+28.0
+
+231.4
+
+44
+
+58.7%
+
+Tab. 
+43
+
+Organic Synthesis
+
+252
+
+30,371
+
+9.8
+
+26.1
+
+262.2
+
+57
+
+49.2%
+
+Tab. 
+44
+
+Inorganic Materials
+
+247
+
+46,136
+
+4.0
+
+27.2
+
+217.7
+
+104
+
+34.8%
+
+Tab. 
+45
+
+Polymer Materials
+
+267
+
+50,977
+
+4.7
+
+25.4
+
+228.4
+
+37
+
+70.4%
+
+Tab. 
+46
+
+3.2 
+Dataset Construction
+
+In this section, we present the construction of ProSearch. Our pipeline (Figure 
+1
+) is designed to ensure: (1) 
+Retrieval Usefulness
+, where queries represent meaningful requests that reflect the actual information needs of domain researchers; and (2) 
+Verifiability
+, where paragraph relevance is determined by explicit, evidence-grounded validation.
+
+Expert-Guided Modeling.
+
+To construct meaningful multi-constraint protocol queries, we first collaborate with domain experts to define experimental fields and their usage rules, then organize these fields through shared roles and query templates.
+
+Domain Coverage and Field Selection.
+
+We cover six domains: Cell Culture, Immunotechnology, Electrochemistry, Organic Synthesis, Inorganic Materials, and Polymer Materials.
+For each domain, an expert identifies a representative experiment type and selects fields according to three criteria:
+(1) 
+Experimental relevance
+ requires a field to describe a key aspect of the target protocol, such as cell type or medium in cell culture.
+(2) 
+Textual extractability and standardizability
+ requires that field values can be identified in method paragraphs and normalized under controlled rules.
+(3) 
+Discriminative power
+ refers to the ability to distinguish protocols with similar goals but different configurations. For example, temperature alone provides little discrimination when most protocols use 37 
+∘
+C.
+Experts also specify each field’s value type, permitted operators, dependencies, and usage rules.
+
+Role-based Template Design.
+
+To organize fields consistently across domains, we classify them into four functional roles.
+
+Goal
+ denotes the primary experimental target anchoring each query template, such as the target cell type in cell culture.
+
+Input
+ covers materials, samples, or reagents; 
+Condition
+ covers experimental parameters such as temperature, concentration, time, or atmosphere; and 
+Method
+ covers procedural operations, treatments, or measurements.
+We define 20 shared role-level templates (Appendix Table 
+21
+), each containing 3–5 role slots.
+These role-level templates are instantiated with domain-specific fields to generate candidate field-level templates.
+
+Field-level Template Filtering.
+
+Not every field combination generated from a role-level template forms a meaningful retrieval request.
+We therefore filter field-level templates using the expert-defined dependencies and usage rules.
+For example, the role-level template 
+Goal + Input + Condition
+ can produce 
+Cell Type + Basal Medium + Confluence
+. This combination is filtered out because Confluence depends on Culture Mode. In contrast, 
+Cell Type + Basal Medium + Confluence + Culture Mode
+, generated from 
+Goal + Input + Condition + Method
+, satisfies the dependency and is retained.
+Complete field definitions, rules, and templates are provided in Appendix 
+B.1
+.
+
+Corpus Collection and Paragraph Filtering.
+
+For each domain, we collect English open-access research articles published between 2020 and 2025 via OpenAlex 
+(
+Priem et al., 2022
+)
+.
+We use GROBID 
+(
+Lopez, 2009
+)
+ to reconstruct section structures and paragraph boundaries.
+We identify method-related sections by matching top-level section headings against expert-defined patterns and retain paragraphs from these sections.
+We exclude non-paragraph content, such as tables and figure captions, and discard paragraphs exceeding 2,048 GPT-2 tokens.
+The retained method paragraphs form the retrieval corpus 
+.
+Further details are provided in Appendix 
+B.2
+.
+
+Figure 1: 
+
+ProSearch data construction pipeline.
+
+Protocol Record Construction.
+
+A method paragraph may describe multiple experimental configurations, such as different material combinations or reaction conditions.
+To avoid mixing conditions from different configurations, we use GPT-5.2 to extract a separate structured record for each configuration based on expert-defined experimental fields.
+Each record preserves the field values and their supporting text spans from the original paragraph, grounding the extraction in textual evidence. Since the same experimental value may be expressed differently across papers, we then use GPT-5.2 to normalize the extracted field values 
+(
+Ai et al., 2025
+)
+.
+For closed-set fields, we select the most specific predefined category supported by the text.
+For open-set fields, we normalize synonymous expressions while preserving the specific identities supported by the original text.
+Further details are provided in Appendix 
+E
+.
+
+Query Construction.
+
+We instantiate the filtered field-level templates with values from a single normalized protocol record to generate candidate constraint sets. For each set, we compute its support count using the extracted records, counting a paragraph once if at least one of its records satisfies all constraints. We retain sets with support counts between 3 and 8 to balance task specificity and evaluation stability, excluding overly broad constraint sets and those with insufficient structured support. We then sample constraint sets stratified by constraint count and use GPT-5.4 to filter out scientifically uninformative sets and convert the retained ones into natural-language queries 
+(
+Cai et al., 2023
+)
+. We use Claude Sonnet 4.6 to evaluate the queries along three dimensions:
+(1) 
+Faithfulness
+, ensuring no constraints are added or omitted;
+(2) 
+Clarity
+, ensuring natural and unambiguous expression; and (3) 
+Retrieval Usefulness
+, confirming that the query represents a meaningful scientific request.
+Only queries passing all three checks are retained. This process yields 1,551 constructed queries across the six domains.
+Figure 
+3
+ summarizes the resulting query patterns.
+Detailed sampling statistics and filtering examples are provided in
+Appendix 
+B.3
+.
+
+Relevance Labeling.
+
+Since exhaustive labeling is impractical, we use structured records to construct an annotation pool of potentially relevant paragraphs for each query. We first identify paragraphs containing at least one extracted record matching all query constraints as 
+exact-support candidates
+.
+Extraction omissions or normalization inconsistencies may cause exact matching to miss relevant paragraphs.
+We therefore also include 
+near-miss candidates
+: paragraphs containing at least one extracted record matching all but one constraint.
+We sample up to 100 near-miss candidates per query.
+Both candidate types are defined by structured matching over extracted records and do not determine relevance labels.
+We then use GPT-5.4 to judge candidate relevance based on the original paragraph text.
+The model examines experimental configurations separately and labels a paragraph as relevant only when the text supports all query constraints within the same configuration.
+Of the 1,551 constructed queries, 36 had no associated relevance judgments (qrels) and were excluded from retrieval evaluation, leaving 1,515 queries in the final evaluation set.
+More details are provided in Appendix 
+E
+.
+
+3.3 
+Data Quality Evaluation
+
+Query Quality.
+
+Criterion
+
+Pass Rate
+
+Faithfulness
+
+100%
+
+Clarity
+
+100%
+
+Retrieval Usefulness
+
+91.7%
+
+Table 3: 
+Expert evaluation of query quality on 120 sampled queries.
+
+We draw a stratified sample of 120 queries for expert evaluation, including 45 from Cell Culture and 15 from each of the other five domains. As shown in Table 
+3
+, all sampled queries are faithful to their structured constraints and clearly expressed, while 91.7% are judged useful for retrieval. The remaining cases mainly involve insufficient experimental context, such as electrochemical queries asking for applied potential without specifying the material or reaction being studied.
+
+Domain
+
+Accuracy
+
+Cell Culture
+
+91.7%
+
+Electrochemistry
+
+95.6%
+
+Immunotechnology
+
+88.9%
+
+Inorganic Materials
+
+80.0%
+
+Organic Synthesis
+
+93.3%
+
+Polymer Materials
+
+84.4%
+
+Overall
+
+89.1%
+
+Table 4: 
+
+Expert agreement with relevance labels across six domains.
+The audit includes 60 pairs from Cell Culture and
+45 from each other domain.
+
+Domain
+
+Exact-Support
+
+Near-Miss
+
+NM Contrib.
+
+Cell Culture
+
+95.6%
+
+4.3%
+
+52.9%
+
+Electrochemistry
+
+83.1%
+
+9.5%
+
+70.0%
+
+Immunotechnology
+
+91.3%
+
+6.8%
+
+69.7%
+
+Inorganic Materials
+
+90.5%
+
+4.7%
+
+30.4%
+
+Organic Synthesis
+
+87.1%
+
+17.2%
+
+72.0%
+
+Polymer Materials
+
+90.0%
+
+5.6%
+
+37.6%
+
+Overall
+
+90.1%
+
+7.5%
+
+59.8%
+
+Table 5: 
+
+Annotation pool statistics in ProSearch.
+Exact-Support and Near-Miss report the percentages of
+candidates labeled relevant in each group.
+NM Contrib. denotes the fraction of all identified
+positives originating from near-miss candidates.
+
+Label Quality
+
+We independently audit 285 query–paragraph pairs across six domains. As shown in Table 
+4
+, expert judgments agree with the GPT-5.4 relevance labels in 89.1% of cases overall. For Immunotechnology, independent double annotation yielded Cohen’s 
+. To assess validator sensitivity, we sample 300 queries (50 per domain) and re-judge all 16,700 pairs in their original annotation pools using Qwen3-235B and Claude Sonnet 4.6. Their agreements with GPT-5.4 are 66.5% and 90.2%, respectively. Despite this variation in label agreement, the resulting retriever rankings remain highly correlated with those obtained using GPT-5.4 labels, with Spearman’s 
+ and 
+, respectively.
+
+Annotation Pool Analysis.
+
+Table 
+5
+ reports the relevance judgments for the two candidate groups. Exact-Support candidates have a positive rate of 90.1%, while 7.5% of Near-Miss candidates are also judged relevant. Notably, Near-Miss candidates account for 59.8% of all identified positives, demonstrating their importance in recovering relevant paragraphs missed by exact structured matching.
+
+4 
+Experiments
+
+4.1 
+Experimental Setup
+
+We evaluate 19 retrievers on ProSearch, spanning sparse lexical retrieval, general dense retrieval, scientific retrieval, and reasoning-oriented retrieval.
+We include BM25 
+(
+Robertson and Zaragoza, 2009
+)
+ as a classical sparse retriever; general-purpose dense retrievers 
+(
+Ma et al., 2023
+)
+ including Sentence-BERT 
+(
+Reimers and Gurevych, 2019
+)
+, Harrier-OSS-v1-0.6B
+2
+2
+
+2
+
+https://huggingface.co/microsoft/harrier-oss-v1-0.6b
+, BGE-M3 
+(
+Chen et al., 2024
+)
+, GTE-large 
+(
+Li et al., 2023
+)
+, NV-Embed-v2 
+(
+Lee et al., 2024
+)
+, and Qwen3-Embedding-8B 
+(
+Zhang et al., 2025
+)
+; scientific retrievers including SPECTER2 
+(
+Singh et al., 2023
+)
+, SciNCL 
+(
+Ostendorff et al., 2022
+)
+, PubMedBERT-base-embeddings 
+(
+Gu et al., 2021
+)
+, BioClinical-ModernBERT 
+(
+Sounack et al., 2025
+)
+, ChemicalBERT-uncased 
+3
+3
+
+3
+
+https://huggingface.co/recobo/chemical-bert-uncased
+, ChEmbed-prog 
+(
+Kasmaee et al., 2025
+)
+, and MatSciBERT 
+(
+Gupta et al., 2022
+)
+; and reasoning-oriented retrievers including BGE-Reasoner-Embed 
+(
+Chen et al., 2025a
+)
+, ReasonIR-8B 
+(
+Shao et al., 2025
+)
+, ReasonEmbed 
+(
+Chen et al., 2025a
+)
+, INF-X-Retriever
+4
+4
+
+4
+
+https://huggingface.co/infly/inf-retriever-v1-pro
+, and DIVER-Retriever 
+(
+Long et al., 2025
+)
+. We use nDCG@10 as the main evaluation metric. More details are provided in Appendix 
+D
+.
+
+4.2 
+Main Results
+
+ProSearch remains challenging for existing retrieval systems.
+
+Results in Table 
+6
+ show that ProSearch is highly challenging, with the best model achieving an average nDCG@10 of 0.290, indicating that existing retrieval models cannot reliably perform multi-constraint protocol retrieval. We observe that general-purpose dense retrievers achieve the best overall performance, which may be attributed to their broader training data coverage. In addition, scientific retrievers generally perform poorly, implying that adaptation on scientific text does not improve protocol retrieval performance. Interestingly, reasoning-oriented retrievers still lag behind the strongest general-purpose dense retrievers, suggesting that existing reasoning signals are not sufficient for ProSearch. The task requires not only domain-specific understanding, but also multi-constraint reasoning, including constraint dependencies within a coherent protocol. We also observe large performance differences across domains, with much lower scores on Immunotechnology and Electrochemistry, indicating that the difficulty of ProSearch is closely related to how experimental protocols are described and how constraints interact in different domains.
+
+Table 6: 
+
+The performance of retrieval models on ProSearch.
+We report nDCG@10 for six domains: Cell Culture (Cell.), Immunotechnology (Immuno.), Electrochemistry (Electro.), Organic Synthesis (Organic), Inorganic Materials (Inorg.), and Polymer Materials (Polymer).
+Avg. denotes the average score across the six domains.
+The best and second-best scores are bold and underlined, respectively.
+
+Retriever
+
+Cell.
+
+Immuno.
+
+Electro.
+
+Organic
+
+Inorg.
+
+Polymer
+
+Avg.
+
+Sparse lexical retrieval
+
+BM25
+
+0.136
+
+0.011
+
+0.079
+
+0.132
+
+0.217
+
+0.297
+
+0.145
+
+General-purpose dense retrieval
+
+Sentence-BERT
+
+0.082
+
+0.012
+
+0.064
+
+0.122
+
+0.263
+
+0.065
+
+0.101
+
+GTE-large
+
+0.222
+
+0.041
+
+0.127
+
+0.184
+
+0.441
+
+0.182
+
+0.199
+
+BGE-M3
+
+0.254
+
+0.025
+
+0.106
+
+0.216
+
+0.369
+
+0.326
+
+0.216
+
+Harrier-OSS-v1-0.6B
+
+0.261
+
+0.049
+
+0.159
+
+0.198
+
+0.467
+
+0.177
+
+0.219
+
+NV-Embed-v2
+
+0.358
+
+0.070
+
+0.184
+
+0.290
+
+0.448
+
+0.310
+
+0.277
+
+Qwen3-Embedding-8B
+
+0.386
+
+0.092
+
+0.175
+
+0.282
+
+0.495
+
+0.309
+
+0.290
+
+Scientific retrieval
+
+MatSciBERT
+
+0.011
+
+0.003
+
+0.001
+
+0.013
+
+0.002
+
+0.002
+
+0.005
+
+ChemicalBERT-uncased
+
+0.043
+
+0.001
+
+0.027
+
+0.026
+
+0.040
+
+0.055
+
+0.032
+
+SPECTER2
+
+0.077
+
+0.005
+
+0.003
+
+0.069
+
+0.157
+
+0.060
+
+0.062
+
+SciNCL
+
+0.098
+
+0.034
+
+0.036
+
+0.099
+
+0.190
+
+0.020
+
+0.080
+
+PubMedBERT-base-embeddings
+
+0.069
+
+0.001
+
+0.039
+
+0.104
+
+0.213
+
+0.059
+
+0.081
+
+BioClinical-ModernBERT
+
+0.142
+
+0.011
+
+0.053
+
+0.093
+
+0.272
+
+0.084
+
+0.109
+
+ChEmbed-prog
+
+0.161
+
+0.007
+
+0.056
+
+0.179
+
+0.401
+
+0.147
+
+0.158
+
+Reasoning-oriented retrieval
+
+ReasonIR-8B
+
+0.079
+
+0.006
+
+0.021
+
+0.120
+
+0.092
+
+0.043
+
+0.060
+
+INF-X-Retriever
+
+0.295
+
+0.039
+
+0.134
+
+0.208
+
+0.328
+
+0.193
+
+0.200
+
+ReasonEmbed
+
+0.268
+
+0.066
+
+0.150
+
+0.201
+
+0.425
+
+0.164
+
+0.212
+
+BGE-Reasoner-Embed
+
+0.285
+
+0.069
+
+0.152
+
+0.240
+
+0.435
+
+0.215
+
+0.233
+
+DIVER-Retriever
+
+0.284
+
+0.072
+
+0.170
+
+0.262
+
+0.476
+
+0.267
+
+0.255
+
+Table 7: 
+
+The effect of query formulation strategies on ProSearch using Qwen3-Embedding-8B as the retriever.
+We report nDCG@10 for six domains.
+Avg. denotes the average score across the six domains, and 
+Avg. denotes the change over the original query formulation.
+The best score on each dataset is shown in bold and the second best is underlined.
+
+Query Formulation
+
+Cell.
+
+Immuno.
+
+Electro.
+
+Organic
+
+Inorg.
+
+Polymer
+
+Avg.
+
+Avg.
+
+Original
+
+0.386
+
+0.092
+
+0.175
+
+0.282
+
+0.495
+
+0.309
+
+0.290
+
+0.000
+
+Query Decomposition
+
+0.317
+
+0.068
+
+0.091
+
+0.205
+
+0.454
+
+0.254
+
+0.232
+
+Structured Query
+
+0.324
+
+0.080
+
+0.138
+
+0.250
+
+0.494
+
+0.189
+
+0.246
+
+INF-Query-Aligner
+5
+5
+footnotemark: 
+
+5
+
+0.382
+
+0.075
+
+0.141
+
+0.233
+
+0.487
+
+0.196
+
+0.252
+
+HyDE 
+(
+Gao et al., 2023
+)
+
+0.359
+
+0.098
+
+0.154
+
+0.262
+
+0.501
+
+0.255
+
+0.272
+
+TongSearch-QR 
+(
+Qin et al., 2025
+)
+
+0.385
+
+0.092
+
+0.172
+
+0.265
+
+0.505
+
+0.288
+
+0.285
+
+Reasoning-augmented 
+(
+Su et al., 2025
+)
+
+0.408
+
+0.111
+
+0.179
+
+0.309
+
+0.494
+
+0.359
+
+0.310
+
+DIVER-QExpand 
+(
+Long et al., 2025
+)
+
+0.374
+
+0.117
+
+0.205
+
+0.327
+
+0.558
+
+0.318
+
+0.317
+
+Query rewriting brings limited gains.
+
+Prior work has shown that query rewriting and query expansion can improve retrieval by reducing the mismatch between the original query and target documents 
+(
+Gao et al., 2023
+; 
+Jagerman et al., 2023
+)
+. Therefore, we investigate whether query formulation affects protocol retrieval by comparing several variants using Qwen3-Embedding-8B (Table 
+7
+). Detailed definitions and representative examples for each query variant are provided in Appendix 
+C.2
+. Results show that only DIVER-QExpand and Reasoning-augmented Query yield modest improvements over the original query. This indicates that while iterative feedback and explicit constraint emphasis are beneficial, the gains remain limited. Specifically, HyDE tends to introduce hallucinated details that dilute specific experimental parameters, while Query Decomposition fragments the protocol into partial matches, losing the necessary interdependencies between constraints. These error patterns suggest that a key bottleneck is retrievers’ limited ability to jointly validate all constraints within a single experimental configuration.
+
+Table 8: 
+
+The performance of reranking models on ProSearch.
+We report nDCG@10 after reranking the top-100 candidate lists retrieved by Qwen3-Embedding-8B.
+Avg. denotes the average score across the six domains.
+The best score on each dataset is shown in bold and the second best is underlined.
+
+Model
+
+Cell.
+
+Immuno.
+
+Electro.
+
+Organic
+
+Inorg.
+
+Polymer
+
+Avg.
+
+First-stage retrieval
+
+Qwen3-Embedding-8B
+
+0.386
+
+0.092
+
+0.175
+
+0.282
+
+0.495
+
+0.309
+
+0.290
+
+Reranking on top-100 candidates
+
+BGE-Reranker-v2-m3 
+(
+Chen et al., 2024
+)
+
+0.481
+
+0.192
+
+0.247
+
+0.336
+
+0.705
+
+0.416
+
+0.396
+
+Rank-R1 
+(
+Zhuang et al., 2025
+)
+
+0.521
+
+0.227
+
+0.269
+
+0.408
+
+0.622
+
+0.478
+
+0.421
+
+Rank1 
+(
+Weller et al., 2025b
+)
+
+0.592
+
+0.266
+
+0.241
+
+0.416
+
+0.598
+
+0.457
+
+0.428
+
+DIVER-GroupRank-7B 
+(
+Long et al., 2026
+)
+
+0.586
+
+0.255
+
+0.262
+
+0.468
+
+0.705
+
+0.531
+
+0.468
+
+ReasonRank-8B 
+(
+Liu et al., 2025
+)
+
+0.577
+
+0.276
+
+0.314
+
+0.483
+
+0.637
+
+0.547
+
+0.472
+
+Qwen3-Reranker 
+(
+Zhang et al., 2025
+)
+
+0.579
+
+0.301
+
+0.294
+
+0.485
+
+0.692
+
+0.490
+
+0.474
+
+Reranking substantially improves retrieval performance.
+
+We further examine whether reranking can improve ProSearch by reranking the top-100 paragraphs retrieved by Qwen3-Embedding-8B with several representative rerankers. Results in Table 
+8
+ show that reranking substantially improves retrieval performance, increasing the average nDCG@10 from 0.290 to 0.474. This indicates that the first-stage retriever can retrieve paragraphs containing relevant experimental constraints, but accurate ranking requires jointly judging multiple constraints, including their dependencies, and whether each constraint is fully satisfied. In addition, performance remains low on challenging domains such as Immunotechnology and Electrochemistry. Overall, reranking is effective but still insufficient, suggesting that significant room remains for improving fine-grained protocol ranking.
+
+Expanding the retrieval scope makes protocol evidence harder to locate.
+
+To examine retrieval performance beyond method sections, we expand the corpus to all body paragraphs while keeping the queries, relevance criteria, and paragraph-level retrieval unit unchanged. This increases the corpus size by 5.8
+ on average. As shown in Table 
+9
+, all four representative retrievers experience performance drops, with Qwen3-Embedding-8B decreasing from 0.290 to 0.206 in average nDCG@10. However, their relative ranking remains unchanged. These results suggest that full-text paragraph retrieval introduces an additional evidence-localization challenge, while the overall retrieval conclusions remain consistent.
+
+Retriever
+
+Method-only
+
+All-body
+
+BM25
+
+0.145
+
+0.089
+
+BGE-Reasoner-Embed
+
+0.233
+
+0.164
+
+NV-Embed-v2
+
+0.277
+
+0.197
+
+Qwen3-Embedding-8B
+
+0.290
+
+0.206
+
+Table 9: 
+
+Comparison of retrieval performance over method paragraphs
+and all body paragraphs across six domains, measured by
+average nDCG@10.
+
+Method
+
+Success@10
+
+P@10
+
+MRR
+
+Tavily Search
+
+0.300
+
+0.077
+
+0.209
+
+Tavily Agent
+
+0.800
+
+0.353
+
+0.694
+
+Table 10: 
+
+Open-world evidence retrieval performance on 30 ProSearch
+queries, with five randomly sampled from each domain.
+
+4.3 
+Analysis
+
+Explicit constraint matching provides a strong retrieval signal.
+
+To assess the role of structured constraint information in
+protocol retrieval, we compare text-based retrieval with two
+diagnostic settings that use extracted protocol records.
+As shown in Table 
+11
+,
+Structured Diagnostic achieves an average nDCG@10 of 0.774,
+compared with 0.290 for Qwen3-Embedding-8B, while
+Hybrid Diagnostic further improves the score to 0.814.
+These results suggest that matching constraints within
+individual experimental configurations provides an effective
+ranking signal that is not fully captured by text similarity.
+These findings motivate retrieval approaches that
+combine explicit constraint matching with semantic ranking.
+
+Table 11: 
+
+Structured diagnostic analysis on average nDCG@10 across six domains.
+Structured ranks paragraphs by the maximum number of query
+constraints matched by any single extracted protocol record,
+averaging over 20 randomized tie orderings.
+Hybrid uses the same matching scores but breaks ties
+using Qwen3-Embedding-8B similarity.
+
+Method
+
+Cell
+
+Electro
+
+Immuno
+
+Inorg
+
+Organic
+
+Polymer
+
+Avg.
+
+Qwen3-Embedding-8B
+
+0.386
+
+0.175
+
+0.092
+
+0.495
+
+0.282
+
+0.309
+
+0.290
+
+Structured Diagnostic
+
+0.789
+
+0.698
+
+0.682
+
+0.875
+
+0.773
+
+0.829
+
+0.774
+
+Hybrid Diagnostic
+
+0.858
+
+0.741
+
+0.723
+
+0.910
+
+0.795
+
+0.859
+
+0.814
+
+Retrieval performance varies with query characteristics.
+
+We further analyze retrieval performance by constraint count,
+numeric and negation constraints, and constraint roles.
+As detailed in Appendix 
+D.4
+,
+constraint count is not a consistent indicator of retrieval
+difficulty across domains.
+Numeric constraints exhibit domain-dependent patterns,
+while queries involving negation generally show lower
+retrieval performance.
+Role-level analysis further shows that queries containing
+
+Condition
+ constraints achieve lower average nDCG@10
+for both BM25 and Qwen3-Embedding-8B, whereas
+
+Method
+ constraints show no comparable decrease.
+Together, these findings highlight the importance of
+interpreting experimental conditions in context and
+associating them with the correct experimental configurations.
+
+Agentic search improves open-world protocol retrieval.
+
+We further examine protocol retrieval in an open-world setting
+using 30 queries, with five randomly sampled from each domain.
+We compare two approaches: 
+Tavily Search
+ uses the
+Tavily API
+6
+6
+
+6
+
+https://www.tavily.com/
+ to search
+the web with the original query and extract evidence passages,
+while 
+Tavily Agent
+ uses a LangChain
+agent
+7
+7
+
+7
+
+https://reference.langchain.com/python/langchain/agents/factory/create_agent
+
+with Tavily tools to perform query reformulation and iterative search.
+We evaluate Success@10, which measures whether at least one
+relevant passage appears in the top 10; P@10, the proportion
+of relevant passages in the top 10; and MRR, the mean reciprocal
+rank of the first relevant passage.
+As shown in Table 
+10
+,
+Tavily Agent substantially outperforms direct web search
+across all three metrics, demonstrating the benefit of
+agentic retrieval for locating relevant experimental evidence.
+Nevertheless, its P@10 remains at 0.353, indicating that
+many retrieved passages still fail to satisfy all query constraints.
+
+Figure 2: 
+
+Manual error analysis of Qwen3-Embedding-8B. For each domain, we manually examine the two highest-ranked non-relevant results for each of 25 sampled queries.
+
+Constraint violations dominate top-ranked retrieval errors.
+
+To characterize retrieval failures, we sample 25 queries
+per domain and inspect the two highest-ranked paragraphs
+labeled non-relevant by Qwen3-Embedding-8B for each query,
+yielding 300 query–paragraph pairs.
+Each pair is assigned a primary category: Numeric,
+Categorical, or Negation violation, Topic-only, or
+Unlabeled positive. When multiple constraints are violated,
+we prioritize Negation over Numeric over Categorical. Representative examples are provided in Appendix 
+D.5
+.
+
+As shown in Figure 
+2
+,
+constraint violations account for 90% of the examined cases,
+with different error patterns across domains.
+Categorical violations dominate in Cell Culture and
+Organic Synthesis, whereas Numeric violations are especially
+frequent in Immunotechnology and Polymer Materials.
+In Immunotechnology, errors often involve missing quantitative
+conditions or mismatched assay procedures, while
+Electrochemistry exhibits mismatches in concentration,
+scan parameters, and experimental systems.
+These findings indicate that the main challenge is not
+merely identifying relevant experimental topics, but
+accurately determining whether the specified constraints
+are satisfied within a single experimental configuration.
+
+5 
+Conclusion
+
+In this work, we introduce ProSearch, the first benchmark dedicated to multi-constraint protocol retrieval in experimental science. Our evaluation shows that current retrievers, including those specialized for reasoning, struggle to retrieve paragraphs that satisfy multiple experimental constraints within a single coherent protocol variant. Structured diagnostic analysis shows that explicit constraint matching provides a strong ranking signal, while manual error analysis highlights joint constraint binding as a key bottleneck. We hope ProSearch provides a new perspective for evaluating scientific retrieval and inspires further research into building more logically robust IR systems.
+
+6 
+Limitations
+
+While ProSearch provides a systematic evaluation of multi-constraint protocol retrieval, several limitations remain. First, the field schemas and constraint rules are designed by domain experts for selected experimental protocol types across six domains, limiting coverage of other experimental procedures and requiring additional expert effort for extension. Second, ProSearch focuses on individual method paragraphs and does not evaluate evidence integration across multiple paragraphs, tables, or supplementary materials. Third, LLM-based protocol extraction and relevance labeling, together with annotation pools constructed from extracted records, may introduce errors or omit relevant evidence. Although expert audits and robustness analyses support the stability of the main retrieval findings, systematic biases cannot be fully ruled out. Finally, while the queries are grounded in real experimental records, they are generated using templates and may not fully reflect researchers’ actual information needs. Whether benchmark scores translate into retrieval usefulness in real scientific workflows also remains to be established. Future work will extend ProSearch to cross-paragraph protocol retrieval and incorporate researcher-authored queries and human evaluations to assess its practical applicability.
+
+7 
+Acknowledgments and Disclosures
+
+This work was supported by the Natural Science Foundation of China under Grant No. T2322027 and 62442204. We thank Ludi Wang, Yang Gao, Yang Chen, Wanping Xia, Shuaishuai Xu, Haolin Chen, and Xiaoyue Wang for their assistance with data annotation.
+
+The authors declare no competing interests.
+
+Appendix A 
+Broader Impacts
+
+ProSearch is intended to support research on more reliable scientific evidence retrieval.
+By focusing on method paragraphs and protocol-level constraints, it may help develop retrieval systems and scientific agents that better locate experimental evidence for protocol design, literature analysis, and reproducibility-oriented research.
+
+However, ProSearch should not be treated as providing authoritative experimental recommendations.
+Retrieval systems may still return incomplete or incorrect evidence, which could lead to flawed experimental decisions if used without expert verification.
+The benchmark may also reflect biases in English open-access scientific literature.
+Therefore, systems developed using ProSearch should be used as decision-support tools, and retrieved protocol evidence should be checked against the original papers before practical use.
+
+Appendix B 
+Details of Dataset Construction
+
+B.1 
+Expert-Guided Protocol Modeling
+
+Field schemas.
+
+Each domain is associated with an expert-defined field schema that specifies the protocol fields used for query construction.
+Each field is annotated with its role, value type, and whether it can be used in negated constraints or as an exploration field.
+Tables 
+12
+–
+17
+ list the complete field schemas for the six domains.
+
+Table 12: 
+
+Field schema used to represent experimental protocols in the cell culture domain.
+Neg. and Exp. indicate whether the field can be used in negated constraints and exploration queries, respectively, where T denotes true and F denotes false.
+
+Field
+
+Role
+
+Value Type
+
+Neg.
+
+Exp.
+
+Description
+
+cultured_cells.
+
+cell_type
+
+Goal
+
+Categorical
+
+F
+
+F
+
+Cell line or cell type, such as A549, HeLa, or primary fibroblasts.
+
+culture_medium.
+
+basal_medium
+
+Input
+
+Categorical
+
+T
+
+T
+
+Basal culture medium, such as DMEM, RPMI-1640, or IMDM.
+
+culture_medium.serum.
+
+identity
+
+Input
+
+Categorical
+
+T
+
+T
+
+Serum identity or serum-free condition, such as fetal bovine serum, horse serum, or serum-free medium.
+
+culture_substrate_or_coating
+
+Input
+
+Categorical
+
+T
+
+T
+
+Culture substrate or coating, such as collagen-coated plates, Matrigel, or poly-D-lysine.
+
+culture_medium.serum.
+
+concentration
+
+Condition
+
+Numeric / Range
+
+F
+
+T
+
+Serum concentration, usually expressed as a percentage.
+
+seeding_density
+
+Condition
+
+Numeric / Range
+
+F
+
+T
+
+Cell seeding density, usually expressed as cells per well, cells per dish, or cells per area.
+
+differentiation_state
+
+Condition
+
+Categorical
+
+F
+
+F
+
+Cell differentiation or activation state; retained in extraction but not used for query construction.
+
+confluence
+
+Condition
+
+Numeric / Range
+
+F
+
+T
+
+Cell confluence before treatment or passage, usually expressed as a percentage.
+
+culture_mode
+
+Method
+
+Categorical
+
+F
+
+T
+
+Culture mode, such as 2D monolayer culture, 3D spheroid culture, or suspension culture.
+
+Field dependency rules.
+
+Some fields require additional contextual fields to form meaningful query constraints.
+For example, a seeding density value should be interpreted together with the corresponding cell type and culture mode, while an electrochemical potential should be anchored by the reference electrode and measurement method.
+Table 
+19
+ lists the complete dependency rules used during query construction.
+
+Role-level templates.
+
+Role-level templates define abstract query structures using protocol roles.
+Each template consists of a fixed role template and, when applicable, an exploration role.
+The complete set of role-level templates is shown in Table 
+21
+.
+
+Field-level templates.
+
+Field-level templates instantiate the role-level templates with concrete fields from each domain schema.
+We enumerate valid field combinations and filter them using field dependency rules and field-level usage flags.
+Table 
+18
+ reports the resulting template statistics, and Table 
+22
+ gives representative examples.
+
+Table 13: 
+
+Field schema for the immunotechnology domain.
+
+Field
+
+Role
+
+Value Type
+
+Neg.
+
+Exp.
+
+Description
+
+protein_targets.
+
+target
+
+Goal
+
+Categorical
+
+F
+
+F
+
+Protein target measured in the assay, such as AKT, ERK, or GAPDH.
+
+normalization_control
+
+Input
+
+Categorical
+
+T
+
+T
+
+Normalization or loading control used for comparison, such as 
+-actin, GAPDH, or tubulin.
+
+sample_type
+
+Input
+
+Categorical
+
+F
+
+F
+
+Type of biological sample, such as cell lysate, tissue lysate, serum, or purified protein.
+
+blocking_solution.
+
+identity
+
+Input
+
+Categorical
+
+T
+
+T
+
+Identity of the blocking solution, such as milk, BSA, or skim milk.
+
+protein_targets.
+
+target_form
+
+Condition
+
+Categorical
+
+F
+
+F
+
+Target form or modification state, such as phosphorylated or total protein; retained in extraction but not used for query construction.
+
+blocking_solution.
+
+concentration
+
+Condition
+
+Numeric / Range
+
+F
+
+T
+
+Concentration of the blocking solution, typically expressed as a percentage.
+
+gel_percentage
+
+Condition
+
+Numeric / Range
+
+F
+
+T
+
+SDS-PAGE gel percentage; retained as an exploration field but not used as a fixed query constraint.
+
+loading_amount
+
+Condition
+
+Numeric / Range
+
+F
+
+T
+
+Sample loading amount, typically expressed in units such as 
+g per lane.
+
+lysis_buffer
+
+Method
+
+Categorical
+
+F
+
+T
+
+Lysis buffer used for protein extraction, such as RIPA buffer or NP-40 lysis buffer.
+
+Table 14: 
+
+Field schema for the electrochemistry domain.
+
+Field
+
+Role
+
+Value Type
+
+Neg.
+
+Exp.
+
+Description
+
+working_electrode
+
+Method
+
+Categorical
+
+F
+
+F
+
+Working electrode material or type, such as glassy carbon, platinum, or nickel foam.
+
+electrolytes.
+
+chemical
+
+Input
+
+Categorical
+
+T
+
+T
+
+Electrolyte chemical species, such as KOH, H
+2
+SO
+4
+, Na
+2
+SO
+4
+, or KCl.
+
+reference_electrode
+
+Method
+
+Categorical
+
+F
+
+T
+
+Reference electrode used in the electrochemical setup, such as Ag/AgCl, SCE, or RHE.
+
+target_species
+
+Goal
+
+Categorical
+
+F
+
+F
+
+Electrochemical target species or reaction subject, such as oxygen, hydrogen, nitrate, or glucose.
+
+electrolytes.
+
+concentration
+
+Condition
+
+Numeric / Range
+
+F
+
+T
+
+Electrolyte concentration, typically expressed in units such as M, mM, or wt%.
+
+temperature
+
+Condition
+
+Numeric / Range
+
+F
+
+T
+
+Experimental temperature, usually expressed in 
+∘
+C.
+
+scan_rate
+
+Condition
+
+Numeric / Range
+
+F
+
+T
+
+Potential scan rate used in voltammetry measurements, typically expressed in mV/s.
+
+applied_potential
+
+Condition
+
+Numeric / Range
+
+F
+
+T
+
+Applied or scanned potential, typically expressed in V; its interpretation usually depends on the reference electrode and measurement method.
+
+measurement_method
+
+Method
+
+Categorical
+
+F
+
+T
+
+Electrochemical measurement method, such as cyclic voltammetry, linear sweep voltammetry, chronoamperometry, or EIS.
+
+Table 15: 
+
+Field schema for the organic synthesis domain.
+
+Field
+
+Role
+
+Value Type
+
+Neg.
+
+Exp.
+
+Description
+
+transformation_type
+
+Goal
+
+Categorical
+
+F
+
+F
+
+Type of chemical transformation, such as cross-coupling, arylation, amination, borylation, or C–H activation.
+
+substrates
+
+Input
+
+Categorical
+
+F
+
+T
+
+Reactant or substrate class used in the reaction, such as aryl halides, boronic acids, amines, or alkynes.
+
+catalysts.
+
+name
+
+Input
+
+Categorical
+
+F
+
+T
+
+Catalyst identity or catalytic species, such as Pd, Ni, Cu catalysts, or named catalyst complexes.
+
+ligands
+
+Input
+
+Categorical
+
+F
+
+T
+
+Ligand used with the catalyst system, such as phosphine, bipyridine, or N-heterocyclic carbene ligands.
+
+catalysts.
+
+loading
+
+Condition
+
+Numeric
+
+F
+
+T
+
+Catalyst loading, typically expressed as mol%; retained as an exploration field but not used as a fixed query constraint.
+
+bases
+
+Condition
+
+Categorical
+
+T
+
+T
+
+Base used in the reaction, such as K
+2
+CO
+3
+, Cs
+2
+CO
+3
+, NaOtBu, or triethylamine.
+
+additives
+
+Condition
+
+Categorical
+
+F
+
+T
+
+Additive or auxiliary reagent used to promote or modify the reaction.
+
+solvents
+
+Condition
+
+Categorical
+
+T
+
+T
+
+Reaction solvent or solvent mixture, such as toluene, dioxane, DMF, DMSO, or water.
+
+activation_mode
+
+Method
+
+Categorical
+
+F
+
+T
+
+Activation or reaction mode, such as thermal heating, photoredox activation, electrochemical activation, or microwave irradiation.
+
+Table 16: 
+
+Field schema for the inorganic materials domain.
+
+Field
+
+Role
+
+Value Type
+
+Neg.
+
+Exp.
+
+Description
+
+target_material
+
+Goal
+
+Categorical
+
+F
+
+F
+
+Target inorganic material or composition to be synthesized, such as an oxide, perovskite, spinel, or ceramic material.
+
+precursors
+
+Input
+
+Categorical
+
+F
+
+T
+
+Starting precursor materials used for synthesis, such as metal oxides, carbonates, nitrates, or salts.
+
+dopant_or_additive.
+
+identity
+
+Input
+
+Categorical
+
+T
+
+T
+
+Identity of the dopant or additive introduced into the material system.
+
+dopant_or_additive.
+
+amount
+
+Condition
+
+Numeric / Range
+
+F
+
+T
+
+Amount or concentration of the dopant or additive, such as molar ratio, atomic percentage, or weight percentage.
+
+atmosphere
+
+Condition
+
+Categorical
+
+T
+
+T
+
+Processing atmosphere, such as air, oxygen, nitrogen, argon, vacuum, or reducing atmosphere.
+
+heating_rate
+
+Condition
+
+Numeric / Range
+
+F
+
+T
+
+Heating rate used during thermal processing, usually expressed in 
+∘
+C/min.
+
+pressing_pressure
+
+Condition
+
+Numeric / Range
+
+F
+
+T
+
+Pressure used for pellet pressing or compaction, usually expressed in MPa.
+
+sintering.
+
+temperature
+
+Condition
+
+Numeric / Range
+
+F
+
+T
+
+Sintering temperature, usually expressed in 
+∘
+C.
+
+sintering.
+
+time
+
+Condition
+
+Numeric / Range
+
+F
+
+T
+
+Sintering duration, usually expressed in hours.
+
+post_treatment.
+
+temperature
+
+Condition
+
+Numeric / Range
+
+F
+
+T
+
+Temperature used in post-treatment steps such as annealing, calcination, or heat treatment.
+
+post_treatment.
+
+time
+
+Condition
+
+Numeric / Range
+
+F
+
+T
+
+Duration of post-treatment steps such as annealing, calcination, or heat treatment.
+
+synthesis_route
+
+Method
+
+Categorical
+
+F
+
+T
+
+Synthesis route or processing method, such as solid-state reaction, sol-gel synthesis, or ceramic processing.
+
+post_treatment.
+
+type
+
+Method
+
+Categorical
+
+F
+
+T
+
+Type of post-treatment operation, such as annealing, calcination, sintering, quenching, or heat treatment.
+
+Table 17: 
+
+Field schema for the polymer materials domain.
+
+Field
+
+Role
+
+Value Type
+
+Neg.
+
+Exp.
+
+Description
+
+polymer_system
+
+Goal
+
+Categorical
+
+F
+
+F
+
+Polymer or resin system under study, such as PEGDA, GelMA, polyurethane acrylate, or epoxy acrylate.
+
+polymer_concentration
+
+Condition
+
+Numeric
+
+F
+
+T
+
+Polymer concentration in the formulation, typically expressed as wt%, vol%, or concentration per unit volume.
+
+photoinitiators.
+
+name
+
+Input
+
+Categorical
+
+T
+
+T
+
+Identity of the photoinitiator, such as Irgacure 2959, LAP, or TPO.
+
+crosslinking_agent.
+
+name
+
+Input
+
+Categorical
+
+T
+
+T
+
+Identity of the crosslinking agent, such as MBAA, PEGDA, or other crosslinking reagents.
+
+photoinitiators.
+
+loading
+
+Condition
+
+Numeric
+
+F
+
+T
+
+Amount or loading of the photoinitiator, typically expressed as wt%, mol%, or phr.
+
+crosslinking_agent.
+
+loading
+
+Condition
+
+Numeric
+
+F
+
+T
+
+Amount or loading of the crosslinking agent, typically expressed as wt%, mol%, or phr.
+
+wavelength
+
+Condition
+
+Numeric / Range
+
+F
+
+T
+
+Irradiation wavelength used for curing or polymerization, usually expressed in nm.
+
+intensity
+
+Condition
+
+Numeric / Range
+
+F
+
+T
+
+Light intensity during irradiation, usually expressed in mW/cm
+2
+.
+
+exposure_time
+
+Condition
+
+Numeric / Range
+
+F
+
+T
+
+Irradiation or exposure time, usually expressed in minutes or seconds.
+
+light_source_type
+
+Method
+
+Categorical
+
+F
+
+T
+
+Type of light source used for curing or photopolymerization, such as UV lamp, UV LED, mercury lamp, or visible-light source.
+
+Table 18: 
+
+Field-level template statistics by domain.
+No Exp. denotes templates without an exploration field.
+Input, Cond., and Method denote templates whose exploration field belongs to the corresponding protocol role.
+The columns 3, 4, and 5 denote the total number of constraints in a template.
+Numeric denotes templates containing at least one numeric field, Neg. denotes templates containing at least one field eligible for negation, and Neither denotes templates containing neither numeric nor negation-eligible fields.
+
+Domain
+
+Explore Role
+
+# Constraints
+
+Template Properties
+
+Total
+
+No Exp.
+
+Input
+
+Cond.
+
+Method
+
+3
+
+4
+
+5
+
+Numeric
+
+Neg.
+
+Neither
+
+Cell Culture
+
+9
+
+13
+
+10
+
+5
+
+9
+
+15
+
+13
+
+28
+
+31
+
+0
+
+37
+
+Electrochemistry
+
+17
+
+5
+
+25
+
+8
+
+16
+
+24
+
+15
+
+50
+
+44
+
+0
+
+55
+
+Immunotechnology
+
+7
+
+6
+
+9
+
+7
+
+10
+
+13
+
+6
+
+23
+
+12
+
+4
+
+29
+
+Inorganic Materials
+
+103
+
+65
+
+198
+
+42
+
+55
+
+136
+
+217
+
+361
+
+251
+
+10
+
+408
+
+Organic Synthesis
+
+23
+
+26
+
+47
+
+15
+
+31
+
+50
+
+30
+
+8
+
+60
+
+47
+
+111
+
+Polymer Materials
+
+22
+
+16
+
+31
+
+13
+
+20
+
+37
+
+25
+
+75
+
+76
+
+0
+
+82
+
+Table 19: 
+
+Field dependency rules used during query construction.
+Each rule specifies the contextual fields that must be known when the trigger field is used.
+
+Trigger Field
+
+Required Fields
+
+Cell Culture
+
+culture_medium.serum.concentration
+
+culture_medium.serum.identity
+, 
+culture_medium.basal_medium
+
+culture_medium.serum.identity
+
+culture_medium.basal_medium
+
+seeding_density
+
+cultured_cells.cell_type
+, 
+culture_mode
+
+differentiation_state
+
+cultured_cells.cell_type
+
+confluence
+
+cultured_cells.cell_type
+, 
+culture_mode
+
+Immunotechnology
+
+protein_targets.target_form
+
+protein_targets.target
+
+blocking_solution.concentration
+
+blocking_solution.identity
+
+gel_percentage
+
+protein_targets.target
+
+normalization_control
+
+sample_type
+
+loading_amount
+
+sample_type
+
+lysis_buffer
+
+sample_type
+
+Electrochemistry
+
+electrolytes.concentration
+
+electrolytes.chemical
+
+applied_potential
+
+reference_electrode
+, 
+measurement_method
+
+scan_rate
+
+measurement_method
+
+Organic Synthesis
+
+catalysts.loading
+
+catalysts.name
+
+ligands
+
+catalysts.name
+
+Inorganic Materials
+
+dopant_or_additive.amount
+
+dopant_or_additive.identity
+
+post_treatment.temperature
+
+post_treatment.type
+
+post_treatment.time
+
+post_treatment.type
+
+pressing_pressure
+
+synthesis_route
+
+Polymer Materials
+
+photoinitiators.loading
+
+photoinitiators.name
+
+crosslinking_agent.loading
+
+crosslinking_agent.name
+
+wavelength
+
+photoinitiators.name
+
+intensity
+
+photoinitiators.name
+, 
+wavelength
+
+exposure_time
+
+photoinitiators.name
+, 
+wavelength
+
+Table 20: 
+
+Examples of protocol fields and constraints in Cell Culture.
+Protocol fields are organized by their roles and instantiated with operators and values to form query constraints.
+Dependent fields denote expert-defined dependencies used to avoid underspecified constraints, such as requiring seeding density to be anchored by the corresponding cell type.
+
+Role
+
+Field
+
+Operator
+
+Value
+
+Explanation
+
+Dependent Fields
+
+Goal
+
+Cell type
+
+HUVEC
+
+Uses HUVEC cells
+
+–
+
+Input
+
+Basal medium
+
+DMEM
+
+Does not use DMEM
+
+–
+
+Condition
+
+Seeding density
+
+ cells/well
+
+Seeded at 
+ cells/well
+
+Cell type
+
+Condition
+
+Seeding density
+
+between
+
+–
+ cells/well
+
+Seeded within this density range
+
+Cell type
+
+Method
+
+Culture mode
+
+3D
+
+Uses 3D culture
+
+–
+
+Table 21: 
+
+Role-level templates used for query construction.
+Fixed Role Template specifies the protocol roles instantiated as fixed query constraints.
+Explore Role denotes the role of the field whose value is to be recovered; “–” indicates that the template does not include an exploration field.
+The number of constraints counts both fixed constraints and the exploration field when present.
+
+Template ID
+
+Fixed Role Template
+
+Explore Role
+
+# Constraints
+
+T1
+
+Goal + Input + Condition
+
+–
+
+3
+
+T2
+
+Goal + Input + Method
+
+–
+
+3
+
+T3
+
+Goal + Input + Input + Condition
+
+–
+
+4
+
+T4
+
+Goal + Input + Condition + Method
+
+–
+
+4
+
+T5
+
+Goal + Input + Condition + Condition + Method
+
+–
+
+5
+
+T6
+
+Goal + Input
+
+Input
+
+3
+
+T7
+
+Goal + Condition
+
+Input
+
+3
+
+T8
+
+Goal + Input + Condition
+
+Input
+
+4
+
+T9
+
+Goal + Condition + Method
+
+Input
+
+4
+
+T10
+
+Goal + Input + Condition + Method
+
+Input
+
+5
+
+T11
+
+Goal + Input
+
+Condition
+
+3
+
+T12
+
+Goal + Method
+
+Condition
+
+3
+
+T13
+
+Goal + Input + Condition
+
+Condition
+
+4
+
+T14
+
+Goal + Input + Method
+
+Condition
+
+4
+
+T15
+
+Goal + Input + Condition + Method
+
+Condition
+
+5
+
+T16
+
+Goal + Input
+
+Method
+
+3
+
+T17
+
+Goal + Condition
+
+Method
+
+3
+
+T18
+
+Goal + Input + Condition
+
+Method
+
+4
+
+T19
+
+Goal + Input + Input
+
+Method
+
+4
+
+T20
+
+Goal + Input + Input + Condition
+
+Method
+
+5
+
+Table 22: 
+
+Representative field-level templates in the inorganic materials domain.
+Each example is shown in two rows: the role-level template specifies the fixed roles and exploration role, while the field-level template instantiates them with concrete fields from the domain schema.
+
+Template ID
+
+Level
+
+Fixed Template
+
+Explore Role/Field
+
+T1
+
+Role-level
+
+Goal + Input + Condition
+
+–
+
+Field-level
+
+target_material
+ + 
+dopant_or_additive.identity
+ + 
+atmosphere
+
+–
+
+T5
+
+Role-level
+
+Goal + Input + Condition + Condition + Method
+
+–
+
+Field-level
+
+target_material
+ + 
+precursors
+ + 
+sintering.temperature
+ + 
+sintering.time
+ + 
+synthesis_route
+
+–
+
+T6
+
+Role-level
+
+Goal + Input
+
+Input
+
+Field-level
+
+target_material
+ + 
+dopant_or_additive.identity
+
+precursors
+
+T14
+
+Role-level
+
+Goal + Input + Method
+
+Condition
+
+Field-level
+
+target_material
+ + 
+precursors
+ + 
+synthesis_route
+
+sintering.time
+
+T16
+
+Role-level
+
+Goal + Input
+
+Method
+
+Field-level
+
+target_material
+ + 
+dopant_or_additive.identity
+
+post_treatment.type
+
+T20
+
+Role-level
+
+Goal + Input + Input + Condition
+
+Method
+
+Field-level
+
+target_material
+ + 
+dopant_or_additive.identity
+ + 
+precursors
+ + 
+sintering.time
+
+synthesis_route
+
+B.2 
+Corpus Collection and Paragraph Filtering
+
+Article retrieval.
+
+We collect open-access articles from OpenAlex using domain-specific search queries designed by domain experts.
+The queries aim to retrieve experimental articles that are likely to contain method-level details, while excluding reviews, surveys, perspectives, and other non-experimental article types.
+Table 
+23
+ lists the complete search queries used for the six experimental domains.
+
+Table 23: 
+
+Search queries used to collect candidate articles for each experimental domain.
+
+Domain
+
+Search Query
+
+Cell Culture
+
+(cell culture OR cell line OR in vitro)
+AND (DMEM OR RPMI OR IMDM OR DMEM/F12 OR DMEM-F12 OR alpha-MEM OR McCoy’s 5A OR FBS OR fetal bovine serum OR serum-free OR incubat* OR seeded OR seeding density OR confluence OR culture medium)
+NOT (review OR meta-analysis OR survey OR perspective)
+
+Immunotechnology
+
+(western blot OR immunoblot OR immunoblotting OR western blotting)
+AND (primary antibody OR secondary antibody OR membrane OR SDS-PAGE OR 1: OR ECL OR TBST)
+NOT (review OR meta-analysis OR survey OR perspective)
+
+Electrochemistry
+
+(electrochem* OR electrochemical OR electrocatal* OR cyclic voltammetry OR linear sweep voltammetry OR voltammetry OR potentiostat OR galvanostat)
+AND (electrolyte OR electrode OR three-electrode OR reference electrode OR Ag/AgCl OR RHE)
+NOT (review OR meta-analysis OR survey OR perspective OR benchmarking OR standardization OR protocol)
+
+Organic Synthesis
+
+(cross-coupling OR cross coupling OR coupling OR arylation OR amination OR borylation OR Suzuki OR Heck OR Sonogashira OR Buchwald-Hartwig OR C-H activation OR photoredox OR electrochemical)
+AND (metal-catalyzed OR transition-metal-catalyzed OR catalyzed OR catalytic OR catalyst OR Pd OR Ni OR Cu)
+AND (ligand OR base OR solvent OR reaction conditions OR atmosphere)
+NOT (review OR meta-analysis OR survey OR perspective OR editorial)
+
+Inorganic Materials
+
+(solid-state synthesis OR solid state synthesis OR solid-state reaction OR solid state reaction OR conventional solid-state OR ceramic method OR mixed-oxide OR mixed oxide OR calcination OR sintering OR anneal* OR heat treatment OR heat-treat* OR firing OR fired)
+AND (ceramic* OR oxide* OR metal oxide* OR perovskite* OR spinel* OR ferrite* OR titanate*)
+NOT (review OR meta-analysis OR survey OR perspective)
+
+Polymer Materials
+
+(photopolymer* OR photopolymerization OR UV cur* OR UV-cur* OR UV curable OR photo cur* OR light cur* OR UV irradiation OR light irradiation OR photoinitiator OR photo-initiator OR UV lamp OR UV LED OR UV-LED)
+NOT (review OR meta-analysis OR survey OR perspective)
+
+Method paragraph pool construction.
+
+After retrieving candidate articles, we download the available full texts and parse them with GROBID into TEI XML files. We remove paragraphs from footnotes, endnotes, reference lists, bibliographies, captions, figures, and tables.
+To construct the method paragraph pool, we identify method-related sections from the parsed top-level section headings.
+A section is selected if its heading matches case-insensitive heading patterns covering both generic experimental sections and domain-specific method sections.
+Table 
+24
+ summarizes the main heading patterns used for method section identification. Within the selected method-related sections, we extract TEI paragraph elements as candidate method paragraphs.
+We also remove paragraphs longer than 2048 GPT-2 tokens.
+Each retained method paragraph is stored with its article DOI, section heading, paragraph text, and source type.
+
+Table 24: 
+
+Section heading patterns used to identify method-related sections from GROBID TEI outputs.
+The patterns include generic experimental headings and domain-specific headings for the six experimental domains.
+
+Category
+
+Heading Patterns
+
+Generic method headings
+
+experimental section, experimental part, experimental details, experimental methods, experimental procedures, experimental setup, experimental design, experimental conditions, experiments, materials and methods, methods and materials, methods, methodology, materials preparation, sample preparation, preparation of samples, preparation of materials, preparation of compounds, preparation of polymers, synthesis and characterization, characterization, characterization methods, measurements, instrumentation, analytical methods
+
+Cell culture
+
+cell culture, cell culture methods, cell culture conditions, culture conditions, cell lines, in vitro experiments, cell treatment, cell treatments, incubation conditions
+
+Immunotechnology
+
+western blot, western blotting, immunoblot, immunoblotting, ELISA, flow cytometry, immunofluorescence, immunostaining, immunohistochemistry, antibodies, SDS-PAGE, protein extraction, sample processing
+
+Electrochemistry
+
+electrochemical methods, electrochemical measurements, electrochemical characterization, electrochemical testing, electrochemical evaluation, electrode preparation, electrolyte preparation, cell assembly, electrochemical setup, cyclic voltammetry, linear sweep voltammetry, chronoamperometry, chronopotentiometry, impedance spectroscopy, EIS
+
+Organic synthesis
+
+general procedure, typical procedure, synthetic procedure, synthetic details, synthesis of, preparation of, reaction conditions, catalytic conditions, substrate scope, optimization of reaction, optimization of conditions
+
+Inorganic materials
+
+solid-state synthesis, solid state synthesis, solid-state reaction, solid state reaction, calcination, sintering, sintered, annealing, annealed, firing, pellet preparation, powder preparation, ceramic processing, fabrication, materials fabrication
+
+Polymer Materials
+
+photopolymerization, photopolymerization procedure, UV curing, UV-curing, photocuring, photo-curing, light curing, UV irradiation, light irradiation, photoinitiated polymerization, photoinitiator, resin preparation, formulation preparation, monomer formulation, sample preparation, film preparation, hydrogel preparation, curing conditions
+
+Full paragraph pool construction.
+
+In addition to the method paragraph pool, we construct a full paragraph pool for the full-text retrieval analysis.
+This pool is extracted from all TEI body sections rather than only matched method-related sections.
+We apply the same paragraph-level filters to remove footnotes, endnotes, reference lists, bibliographies, captions, figures, tables, and length outliers.
+
+Corpus construction statistics.
+
+Table 
+25
+ reports the corpus construction statistics for each domain, including the number of retrieved articles, downloaded full texts, method paragraph candidates, and full paragraph candidates.
+
+Table 25: 
+
+Corpus construction statistics by domain.
+Retrieved Articles denotes the number of records returned by the OpenAlex search queries.
+Downloaded Articles denotes the number of full texts successfully downloaded.
+Method Pool Size denotes the number of paragraphs extracted from matched method-related sections.
+Full Pool Size denotes the number of retained body paragraphs used for full-text retrieval analysis.
+
+Domain
+
+Retrieved Articles
+
+Downloaded Articles
+
+Method Pool Size
+
+Full Pool Size
+
+Cell Culture
+
+15,600
+
+9,633
+
+46,004
+
+311,042
+
+Immunotechnology
+
+33,400
+
+19,909
+
+93,315
+
+644,077
+
+Electrochemistry
+
+42,040
+
+13,879
+
+91,375
+
+409,133
+
+Organic Synthesis
+
+14,420
+
+7,669
+
+30,371
+
+197,506
+
+Inorganic Materials
+
+26,910
+
+8,794
+
+46,136
+
+240,380
+
+Polymer Materials
+
+18,045
+
+9,360
+
+50,977
+
+283,907
+
+B.3 
+Query Construction Details
+
+This section provides additional details on query construction in ProSearch.
+We describe how candidate constraint sets are instantiated from protocol records, how they are selected and sampled, how weak constraint sets are filtered, and how the retained constraint sets are converted into natural-language queries.
+
+Instantiating constraint sets from protocol records.
+
+Given the field-level templates described in Section 
+B.1
+, we instantiate candidate constraint sets using the normalized protocol records.
+For each field-level template, all fields are filled using values from a single protocol record.
+If any required field is missing in that record, the candidate is discarded.
+This prevents the resulting constraint set from combining conditions that come from different experimental configurations.
+Categorical values are instantiated as equality constraints, numeric point values as equality constraints, and numeric intervals as range constraints.
+The allowed operators for each field follow the field schema.
+
+Selecting and sampling constraint sets.
+
+For each candidate constraint set, we compute its support count, defined as the number of unique paragraphs containing at least one protocol record that satisfies all constraints.
+We retain candidates with support counts between 3 and 8.
+The lower bound ensures that each retained candidate has multiple structurally supported paragraphs before validation, while the upper bound removes constraint sets that are too frequent to represent a specific protocol search need.
+For candidate constraint sets with an exploration field, we additionally require the explored field to have multiple distinct observed values among the supporting records.
+This avoids generating questions whose answer is either unavailable or nearly constant in the corpus.
+For constraint sets with negation, we only use negated values that occur sufficiently often in the corpus, so that the negated condition reflects a meaningful alternative rather than a rare value.
+From the remaining candidates, we sample constraint sets for each domain.
+Sampling is stratified by constraint count, so that the final benchmark includes queries with different levels of constraint complexity.
+
+Filtering constraint sets with an LLM.
+
+We further use GPT-5.4 to assess whether each sampled constraint set forms a meaningful protocol retrieval request.
+This filtering step targets cases that satisfy the automatic construction rules but remain scientifically underspecified or too broad for retrieval evaluation.
+Common rejected cases include constraint sets with missing experimental context, overly broad negated constraints, or explored fields whose values depend on omitted setup information.
+Examples of rejected constraint sets and their rejection reasons are shown in Table 
+26
+.
+
+Table 26: 
+
+Representative constraint sets rejected during LLM-based usability filtering.
+These cases are structurally valid but are excluded since they do not define well-specified or scientifically meaningful protocol retrieval requests.
+
+Rejected constraint set
+
+Rejection reason
+
+Cell culture
+
+culture_medium.basal_medium
+
+RPMI-1640
+
+culture_medium.serum.concentration
+
+10%
+
+culture_medium.serum.identity
+
+fetal bovine serum
+
+cultured_cells.cell_type
+
+prostate cancer
+
+The cell type value is too broad to define a stable cell culture target.
+
+Electrochemistry
+
+electrolytes.chemical
+
+PBS
+
+measurement_method
+
+EIS
+
+scan_rate
+
+50 mV/s
+
+target_species
+
+K
+3
+[Fe(CN)
+6
+]/K
+4
+[Fe(CN)
+6
+]
+
+The setup is methodologically inconsistent because scan rate is not a stable defining parameter for EIS.
+
+Immunotechnology
+
+blocking_solution.concentration
+
+5%
+
+blocking_solution.identity
+
+skim milk
+
+protein_targets.target
+
+LIMK1
+
+The constraint set is dominated by a minor blocking condition and lacks stronger assay anchors such as sample type or normalization context.
+
+Inorganic materials
+
+precursors
+
+alumina
+
+sintering.temperature
+
+1600 
+∘
+C
+
+target_material
+
+Al
+2
+O
+3
+
+The precursor and target material describe the same alumina system, making the constraint set redundant and weak as a retrieval request.
+
+Organic synthesis
+
+solvents
+
+DME
+
+substrates
+
+N-(prop-2-yn-1-yl)benzamide
+
+transformation_type
+
+Suzuki coupling
+
+The substrate and transformation type do not form a coherent reaction setup, so the solvent query is not well anchored.
+
+Polymer materials
+
+photoinitiators.name
+
+dye
+
+polymer_system
+
+PEGDA
+
+wavelength
+
+405 nm
+
+The photoinitiator value is too generic to define a reliable PEGDA photocuring setup.
+
+Generating natural-language queries.
+
+After constraint set filtering, GPT-5.4 is used to convert each retained constraint set into a natural-language query.
+The generated queries are then filtered by Claude Sonnet 4.6 for faithfulness, clarity, and retrieval usefulness.
+Rejected examples and their rejection reasons are provided in Table 
+27
+.
+
+Table 27: 
+
+Representative generated queries rejected during LLM-based query quality filtering.
+Each example is generated from a structured constraint set but fails at least one of the three quality checks: faithfulness (F), clarity (C), and retrieval usefulness (U).
+
+Rejected query and structured constraints
+
+Scores and rejection reason
+
+Cell culture
+
+Query:
+ What seeding density is used for A549 cells cultured in 2D?
+
+Structured constraints:
+
+culture_mode
+
+2D
+
+cultured_cells.cell_type
+
+A549
+
+seeding_density
+
+null
+
+Scores:
+ F=1, C=1, U=0.
+
+Reason:
+
+The fixed context is too sparse. A549 cells in 2D culture define a common baseline setup, so the query is too generic to retrieve specific experimental evidence.
+
+Immunotechnology
+
+Query:
+ What normalization control other than AKT is used for PTEN Western blotting in tissue lysate with 30 
+g loading?
+
+Structured constraints:
+
+loading_amount
+
+30 
+g
+
+normalization_control
+
+AKT
+
+protein_targets.target
+
+PTEN
+
+sample_type
+
+tissue lysate
+
+Scores:
+ F=1, C=1, U=0.
+
+Reason:
+
+AKT is a signaling protein rather than a standard normalization control, so the negated normalization-control constraint is scientifically unstable.
+
+Organic synthesis
+
+Query:
+ What solvent is used for cross-coupling of aryl halides?
+
+Structured constraints:
+
+substrates
+
+aryl halide
+
+transformation_type
+
+cross-coupling
+
+solvents
+
+null
+
+Scores:
+ F=1, C=1, U=0.
+
+Reason:
+
+The fixed conditions are too broad. Aryl-halide cross-coupling covers many reaction classes, catalysts, and bases, so the solvent target is not meaningfully constrained.
+
+Polymer materials
+
+Query:
+ Find photocuring experiments using TMPTA with DQ1 as the photoinitiator at 1.35
+10
+-3
+–1.80
+10
+-3
+ M.
+
+Structured constraints:
+
+photoinitiators.loading
+
+between
+
+1.35--1.80
+10
+-3
+ M
+
+photoinitiators.name
+
+DQ1
+
+polymer_system
+
+TMPTA
+
+Scores:
+ F=1, C=1, U=0.
+
+Reason:
+
+The molarity-based loading range is an unstable retrieval anchor for this polymer curing setup, where photoinitiator loading is more commonly specified by mass or molar fraction.
+
+Construction and filtering statistics.
+
+Table 
+28
+ summarizes the main statistics of constraint set construction and query filtering.
+The construction statistics show that the template-based procedure produces a large pool of candidate constraint sets in each domain.
+Automatic filtering and sampling then reduce this pool to a controlled set of candidates for LLM-based usability checking.
+This indicates that query construction in ProSearch is not based on arbitrary field combinations, but is constrained by structured support, field usage rules, and sampling requirements.
+
+Table 28: 
+
+Constraint set construction and filtering statistics.
+Field-level templates denote the number of field-level templates used for each domain.
+Constructed sets are candidate constraint sets instantiated from field-level templates and protocol records.
+After automatic filtering denotes deduplicated candidates after support, exploration-field, and negation-related filtering.
+Eligible for sampling denotes candidates satisfying the final sampling requirements.
+Sampled sets are selected for LLM-based usability filtering.
+
+Statistic
+
+Cell.
+
+Electro.
+
+Immuno.
+
+Inorg.
+
+Organic
+
+Polymer
+
+Field-level templates
+
+37
+
+55
+
+29
+
+408
+
+111
+
+82
+
+Constructed sets
+
+16,181
+
+143,381
+
+434,912
+
+648,472
+
+171,753
+
+23,177
+
+After automatic filtering
+
+723
+
+10,018
+
+38,232
+
+1,906
+
+10,271
+
+876
+
+Eligible for sampling
+
+723
+
+7,083
+
+38,232
+
+1,906
+
+10,271
+
+876
+
+Sampled sets
+
+300
+
+300
+
+300
+
+300
+
+300
+
+300
+
+Final evaluation queries
+
+284
+
+201
+
+264
+
+247
+
+252
+
+267
+
+Constraint diversity.
+
+Figure 
+3
+ characterizes the constraint patterns of the final query set after construction and filtering.
+Across domains, ProSearch is dominated by 3- and 4-constraint queries, while 5-constraint queries are retained when sufficient structured support is available.
+This distribution reflects the realism constraint in our query design: the queries are more specific than broad topical searches, but avoid overly narrow combinations that domain experts would be unlikely to ask in practice.
+Numeric constraints are frequent in strongly parameterized domains such as electrochemistry, inorganic materials, and polymer materials.
+Negation constraints appear in a substantial fraction of queries, allowing ProSearch to test whether retrievers can exclude protocols with disallowed conditions rather than only match positive evidence.
+Overall, these statistics show that ProSearch queries are grounded in real structured records while covering diverse constraint patterns beyond topical matching.
+
+Figure 3: 
+
+Query composition of ProSearch across domains.
+The three panels show the distributions of constraint counts, numeric constraints, and negation constraints, respectively.
+
+Appendix C 
+Experimental Details
+
+C.1 
+Models and instructions
+
+For each retrieval model evaluated in ProSearch, Table 
+29
+ provides the model category, parameter size, architecture, official maximum input length for queries and documents, whether instructions are used, the specific checkpoint, and the license.
+
+Table 29: 
+
+Details of the 19 retrieval models evaluated in 
+ProSearch
+.
+We report the model size, architecture, official maximum input length, whether an instruction is used for retrieval, the checkpoint or implementation, and the license.
+Max 
+ and Max 
+ denote the official maximum input length for queries and documents, respectively.
+For BM25, the model size is not applicable and the maximum input length is unbounded in principle.
+For models whose license is not explicitly stated in the public model card, we report the most likely license based on the upstream release.
+
+Model
+
+Size
+
+Architecture
+
+Max 
+
+Max 
+
+Instruction
+
+Version / Checkpoint
+
+License
+
+Sparse lexical retrieval
+
+BM25
+
+N/A
+
+Sparse
+
+No
+
+rank_bm25.BM25Okapi
+
+Apache-2.0
+
+General-purpose dense retrieval
+
+Sentence-BERT
+
+109M
+
+Encoder
+
+384
+
+384
+
+No
+
+sentence-transformers/all-mpnet-base-v2
+
+Apache-2.0
+
+Harrier-OSS-v1
+
+0.6B
+
+Decoder
+
+32768
+
+32768
+
+No
+
+microsoft/harrier-oss-v1-0.6b
+
+MIT
+
+BGE-M3
+
+568M
+
+Encoder
+
+8192
+
+8192
+
+No
+
+BAAI/bge-m3
+
+MIT
+
+GTE-large
+
+434M
+
+Encoder
+
+8192
+
+8192
+
+No
+
+Alibaba-NLP/gte-large-en-v1.5
+
+Apache-2.0
+
+NV-Embed-v2
+
+8B
+
+Decoder
+
+32768
+
+32768
+
+Yes
+
+nvidia/NV-Embed-v2
+
+CC-BY-NC-4.0
+
+Qwen3-Embedding-8B
+
+8B
+
+Decoder
+
+32768
+
+32768
+
+Yes
+
+Qwen/Qwen3-Embedding-8B
+
+Apache-2.0
+
+Scientific retrieval
+
+SPECTER2
+
+110M
+
+Encoder
+
+512
+
+512
+
+No
+
+allenai/specter2_base
+
+Apache-2.0
+
+SciNCL
+
+110M
+
+Encoder
+
+512
+
+512
+
+No
+
+malteos/scincl
+
+MIT
+
+PubMedBERT-base
+
+109M
+
+Encoder
+
+512
+
+512
+
+No
+
+NeuML/pubmedbert-base-embeddings
+
+Apache-2.0
+
+BioClinical-ModernBERT
+
+150M
+
+Encoder
+
+8192
+
+8192
+
+No
+
+thomas-sounack/BioClinical-ModernBERT-base
+
+MIT
+
+ChemicalBERT-uncased
+
+110M
+
+Encoder
+
+512
+
+512
+
+No
+
+recobo/chemical-bert-uncased
+
+Apache-2.0
+
+ChEmbed-prog
+
+137M
+
+Encoder
+
+8192
+
+8192
+
+No
+
+BASF-AI/ChEmbed-prog
+
+CC-BY-NC-4.0
+
+MatSciBERT
+
+110M
+
+Encoder
+
+512
+
+512
+
+No
+
+m3rg-iitd/matscibert
+
+MIT
+
+Reasoning-oriented retrieval
+
+BGE-Reasoner-Embed
+
+8B
+
+Decoder
+
+32768
+
+32768
+
+Yes
+
+BAAI/bge-reasoner-embed-qwen3-8b-0923
+
+Apache-2.0
+
+ReasonIR-8B
+
+8B
+
+Decoder
+
+131072
+
+131072
+
+No
+
+reasonir/ReasonIR-8B
+
+CC-BY-NC-4.0
+
+ReasonEmbed
+
+8B
+
+Decoder
+
+32768
+
+32768
+
+Yes
+
+hanhainebula/reason-embed-qwen3-8b-0928
+
+Apache-2.0
+
+INF-X-Retriever
+
+7B
+
+Decoder
+
+32768
+
+32768
+
+Yes
+
+infly/inf-retriever-v1-pro
+
+Apache-2.0
+
+DIVER-Retriever
+
+4B
+
+Decoder
+
+40000
+
+40000
+
+No
+
+AQ-MedAI/Diver-Retriever-4B
+
+Apache-2.0
+
+Table 
+30
+ lists the instructions and adapter settings used in our experiments.
+Instruction-based retrievers prepend a task description to the query following the format used in our implementation.
+Models without instructions encode the original query and paragraph text directly.
+
+Table 30: 
+
+Instructions used for retrieval models in ProSearch.
+The placeholder {query} denotes the original natural-language query.
+
+Models
+
+Query input
+
+NV-Embed-v2, BGE-Reasoner-Embed, INF-X-Retriever, ReasonEmbed
+
+Instruct: Given a web search query, retrieve paragraphs that answer the question
+
+Query: {query}
+
+Qwen3-Embedding-8B, Harrier-OSS-v1, DIVER-Retriever
+
+Instruct: Given a question, retrieve paragraphs that answer the question
+
+Query:{query}
+
+C.2 
+Query variant experiments
+
+To evaluate whether transforming the original natural-language query improves protocol retrieval, we generate several query variants for each query.
+These variants are used as retrieval inputs while keeping the document corpus, retriever, and evaluation protocol unchanged.
+This setting allows us to isolate the effect of query formulation from changes in the retrieval model.
+
+Table 31: 
+
+Prompts used for query variant experiments.
+
+Query Decomposition
+
+Given a retrieval query, decompose it into a small set of simpler retrieval sub-queries.
+
+First, identify internally the query intent and the constraints in the query.
+Then generate the smallest non-redundant set of sub-queries that together cover the original constraints.
+
+Requirements:
+(1) Each sub-query must remain a natural question.
+(2) Each sub-query must preserve the original query intent.
+For an exploration query, it must still ask about the same field as the original query.
+For a reproduction query, it must still ask for a setup/protocol/paragraph satisfying constraints.
+(3) Each sub-query should keep only part of the original constraints, so that it is simpler than the original query.
+(4) Different sub-queries should reflect different retained constraints, not paraphrases of the same reduced query.
+(5) Together, the sub-queries should cover all original constraints.
+(6) Use as few sub-queries as possible.
+(7) Do not introduce new constraints or change the meaning of the original query.
+
+Examples:
+
+Query: What applied potential is used (vs SCE) at 25
+∘
+C with an Au working electrode?
+
+Decomposition:
+[
+“What applied potential is used (vs SCE) with an Au working electrode?”,
+“What applied potential is used (vs SCE) at 25
+∘
+C?”
+]
+
+Query: Find an electrochemistry experimental protocol describing cyclic voltammetry (CV) performed in acetate buffer using an AGCE working electrode.
+
+Decomposition:
+[
+“Find an electrochemistry experimental protocol describing cyclic voltammetry (CV) performed in acetate buffer.”,
+“Find an electrochemistry experimental protocol describing cyclic voltammetry (CV) using an AGCE working electrode.”
+]
+
+Return only a JSON-style list of plain question strings.
+
+Query: {query}
+
+Structured Query
+
+No generation prompt is used.
+We directly use the structured constraint representation as the retrieval input.
+
+HyDE
+
+Given the query, write a short scientific paragraph

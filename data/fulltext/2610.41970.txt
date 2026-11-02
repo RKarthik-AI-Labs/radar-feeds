@@ -1,0 +1,2178 @@
+When Does Test-Time Search Help World Action Models? An Empirical Audit of Candidate Selection and Simulator Integrity
+https://arxiv.org/abs/2610.41970
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+When Does Test-Time Search Help World Action Models? An Empirical Audit of Candidate Selection and Simulator Integrity
+
+Jun Liu
+
+Affiliation: 
+CMU
+
+  
+
+Dajie Sun
+
+Affiliation: 
+UC Berkeley
+
+  
+
+Zhenglun Kong
+
+Affiliation: 
+Harvard University
+
+  
+
+Zhenjiang Fan
+
+Affiliation: 
+Stanford University
+
+  
+
+Peiyan Dong
+
+Affiliation: 
+MIT
+
+  
+
+Fan Yang
+
+Affiliation: 
+Fujitsu
+
+  
+
+Wenbin Zhang
+
+Affiliation: 
+Florida International University
+
+  
+
+Geng Yuan
+
+Affiliation: 
+University of Georgia
+
+  
+
+Xue Lin
+
+Affiliation: 
+Northeastern University
+
+  
+
+Yanzhi Wang,
+Dong Huang
+
+Affiliation: 
+CMU
+
+Affiliation: 
+Northeastern University
+
+Affiliation: 
+EmbodyX Inc
+
+Abstract
+
+World-action models increasingly apply test-time scaling, spending extra
+inference computation on candidate selection and adaptive allocation to
+improve control. Such gains are credible only when candidates carry
+exploitable signal, nominal compute savings become real speedup, and
+evaluation stays reliable. We audit all three on Cosmos Policy and
+RoboCasa with a premise-first, pre-registered methodology. On clean data,
+a learned value selector is 1.66 pp worse than random; a hindsight oracle
+gains only 1.40 pp, with an episode-level interval spanning zero; and
+82% of states show identical candidate outcomes, leaving little
+selection headroom. Token pruning cuts per-forward FLOPs by up to 47% but yields at most a measured 1.15
+ end-to-end speedup on the deployed path (1.25
+ on a
+decode-excluded path), short of a 1.5
+ target, and our
+adaptive-allocation experiment is inconclusive under a power gate. We
+further identify and fix a silent rendering corruption whose rate rises
+sharply along compute-heavy planning paths while leaving the official
+direct-policy result unaffected, and release a detector, fix, and
+scripts. These findings show why test-time scaling should be audited as a
+chain of premises (decision signal, realized efficiency, evaluation
+integrity) rather than by success rate alone. Conclusions are scoped to
+the tested configuration.
+
+1 
+Introduction
+
+Figure 2
+: 
+A premise-first audit of test-time scaling in Cosmos Policy
+on RoboCasa. 
+(1) Planning selection.
+ Limited variation in
+candidate outcomes constrains the headroom for selection, and the
+deployable value selector underperforms random selection, while the
+hindsight oracle provides only modest evidence of improvement.
+
+(2) Adaptive allocation.
+ Substantial nominal FLOPs reductions
+translate into modest end-to-end latency gains, while the joint
+allocation effect remains unresolved at the available noise and
+statistical power.
+
+(3) Evaluation reliability.
+ Rendering corruption becomes much
+more frequent in the compute-intensive planning path than under
+direct-policy or best-of-
+ evaluation, while the official direct-policy
+result remains essentially unaffected. All findings are scoped to the
+tested Cosmos Policy–RoboCasa configuration.
+
+World-action models (WAMs) such as Cosmos Policy 
+[
+14
+]
+
+adapt large pretrained video models into robot policies that jointly
+generate actions, future states, and values within a shared latent
+diffusion process. A central promise of this design is 
+test-time
+scaling
+: by generating candidate actions, predicting their future
+consequences, and evaluating them with a value function, WAMs can
+allocate additional inference-time computation to identify promising
+actions. Related peer-reviewed work has explored complementary aspects
+of this problem, including model-based planning with action-conditioned
+video world models 
+[
+27
+]
+ and efficient diffusion-based
+robot policies through one-step distillation 
+[
+22
+]
+,
+training-free adaptive caching 
+[
+11
+]
+, and rollout-adaptive
+pruning and activation reuse 
+[
+12
+]
+.
+
+Yet whether extra inference-time computation improves control remains
+insufficiently examined. More computation helps only if it exposes
+decision-relevant candidate differences, produces practical end-to-end
+effects, and is evaluated reliably; success rates alone cannot distinguish
+a weak selection signal, unrealized compute savings, and simulator artifacts
+ 
+[
+17
+]
+. We therefore audit test-time scaling as a chain
+of premises rather than a single performance number: is useful signal
+present, do nominal savings translate into end-to-end gains, and does the
+evaluation path remain reliable under added computation?
+
+We instantiate this audit on Cosmos Policy and RoboCasa 
+[
+20
+]
+.
+Rather than proposing a planner, we combine paired candidate comparisons
+and a deployment-conditioned hindsight oracle, pre-registered decision
+criteria and a power gate, complete-query latency measurements, and a
+framebuffer-sentinel integrity check.
+
+The audit yields three findings.
+
+(1) Candidate selection is limited by the available
+signal, not just by the selector.
+
+On render-verified clean data, the deployable value selector performs
+
+ pp worse than random, and even a hindsight oracle (an upper bound)
+gains only 
+ pp with an interval including zero, because in 
+ of
+query states all candidates share an outcome. This does not show selection
+is generally ineffective; it shows selector quality must be read alongside
+the separability of the candidates it receives.
+
+(2) Nominal compute reduction is not a reliable proxy
+for practical acceleration.
+
+Directly timing the complete query, token pruning yields at most a
+measured 
+ end-to-end speedup on the deployed path
+(
+ with future-image decode excluded), below the pre-specified
+
+ target, because the gain is bounded by the irreducible
+autoencoder encode and decode. A separate joint-allocation diagnostic
+falls below the measurement’s noise resolution and did not clear its power
+gate, so it is inconclusive rather than evidence of no effect.
+
+(3) Evaluation integrity can depend on the inference
+path being evaluated.
+
+We identify and fix a silent rendering corruption in the
+RoboCasa/
+robosuite
+ stack whose frequency is small under the
+official direct-policy protocol but rises sharply in the compute-intensive
+planning path. It is more than a generic simulator bug: changing
+inference-time computation changes exposure to a measurement failure, so
+the compute-intensive paths that realize test-time scaling are the most
+exposed.
+
+Together, these findings make the contribution a testable audit
+methodology and a configuration-specific case study, not a claim that
+test-time scaling fails for all WAMs.
+
+2 
+Related Work
+
+World models for control.
+
+World models that predict action-conditioned futures have advanced
+rapidly, spanning diffusion-based video prediction
+
+[
+1
+, 
+7
+, 
+4
+]
+, 3D and persistent
+representations 
+[
+26
+, 
+19
+]
+, and
+manipulation-specific models 
+[
+13
+]
+. The backbone we
+study, Cosmos Policy 
+[
+14
+]
+, follows the joint action-video line in which
+actions, futures, and values are produced within a single denoising
+process 
+[
+7
+]
+. We do not propose a new
+world model; we audit whether the inference-time computation layered on
+top of such a model improves control.
+
+Efficient world-model inference.
+
+Because prediction and planning in these models are costly, a growing
+body of work reduces their inference cost, through sparse imagination of
+rollouts 
+[
+4
+]
+, disentangled dynamics prediction
+
+[
+23
+]
+, efficient on-policy rollout in diffusion world
+models 
+[
+5
+]
+, and warm-started prediction that reuses
+spatiotemporal consistency 
+[
+15
+]
+. These methods report
+nominal compute reductions. We audit whether such reductions convert to
+end-to-end latency on a representative stack, and find that token-level
+savings are capped by an irreducible encoding fraction rather than
+realized as speedup, and that the joint allocation effect lies below the
+measurement noise floor. X-WAM 
+[
+6
+]
+ audit underscores why architectural avenues can be more fruitful than token pruning alone for practical speedups.
+
+Test-time scaling and candidate selection.
+
+A parallel line scales inference by sampling and selecting candidate
+actions, through verifier-free scoring 
+[
+9
+]
+, relative
+action critics 
+[
+16
+]
+, and reward-ranked world-model
+rollouts 
+[
+24
+]
+; analogous strategies in text and
+digital-agent settings use self-verification, process reward models, and
+execution-free critics 
+[
+25
+, 
+2
+, 
+8
+, 
+21
+, 
+9
+]
+. These works propose selectors and report
+positive scaling. We instead audit whether the selection signal exists,
+and find a learned value selector worse than random on a strong base
+policy where candidate outcomes rarely differ.
+
+Reliability of policy evaluation.
+
+Recent work asks whether simulator- and world-model-based evaluation is
+trustworthy, training learned evaluators to match real rollouts
+
+[
+18
+]
+, testing robustness under real-to-sim translation
+
+[
+10
+]
+, and reducing evaluation cost while
+preserving rankings 
+[
+3
+]
+. These address the
+fidelity of a learned evaluator or a synthesized scene. Our reliability
+finding is at the level of the evaluation stack itself: a silent
+rendering corruption in the standard RoboCasa and 
+robosuite
+
+pipeline whose rate rises with per-query inference compute, for which we
+release a detector and a fix.
+
+3 
+A Diagnostic Methodology for Test-Time Compute
+
+Because extra inference compute can change outputs without improving
+control, success-rate movements alone are not evidence of scaling gains.
+Our pre-registered, falsification-first audit tests for usable candidate
+signal and reliable evaluation before interpreting success
+(Section 
+6
+).
+
+3.1 
+Verify the Premise Before Measuring the Gain
+
+Before evaluating an inference-time mechanism, we test whether its
+required signal exists. For best-of-
+ planning, candidate outcomes must
+differ in ways a selector can recover; we test this directly in
+Section 
+4
+, rather than infer it from downstream success.
+Supplement Figure 
+5
+ summarizes the audit gates.
+
+3.2 
+Causal Ablation and an Oracle Headroom Estimate
+
+For each query state, we replay all 
+ candidates under a fixed
+continuation policy and let a hindsight oracle select a successful one.
+This estimates outcome-level selection headroom in the current candidate
+pool; because it uses unavailable outcome information, it is not deployable.
+We also probe input importance by leave-one-out patch masking, trusting the
+probe only if irrelevant background ranks below relevant end-effector and
+contact regions in a pre-registered sanity check.
+
+3.3 
+Pre-Registration and Statistical Power Control
+
+For the selection audit, we fix decision thresholds and the
+replicate-consistency gate before inspecting the corresponding data and
+report the gate’s verdict even when it fails. A power gate avoids launching
+experiments unlikely to yield a verdict: from a smoke sample, we estimate
+the paired-residual standard deviation 
+ and project the
+two-sided confidence-interval half-width at the planned sample size,
+
+(1)
+
+launching the full run only if 
+,
+the separation between the pre-registered outcomes; otherwise the run is not
+launched. Every reported
+comparison states its bootstrap resampling unit and interval, so that an
+effect whose significance depends on that choice is presented as such
+rather than as a settled result. Closed-loop success is measured by
+snapshot replay, in which we restore a state, execute a candidate action
+chunk, and continue under a fixed dense base policy, rather than
+inferred from a single-step action deviation.
+
+3.4 
+Scope
+
+Our empirical findings are limited to Cosmos Policy on RoboCasa.
+The audit components—premise checks, oracle headroom, a power gate, and
+render-integrity verification—can also inform audits of other diffusion
+control policies. We release a framebuffer-sentinel detector, a fix for
+the identified OpenGL-context bug, and reproduction scripts; the detector
+principle may transfer across backends, but this fix is stack-specific.
+
+Figure 3
+: 
+Auditing best-of-
+ planning selection. (a) Success-rate difference against the random baseline for the deployable value selector and the hindsight oracle, under state-level and episode-level bootstrap, with 95% CIs. The value selector is below zero under both schemes; the oracle estimate crosses zero under episode-level resampling and is an upper bound, not a deployable selector. (b) Only a minority of query states show any outcome variation across candidates and repeated executions, leaving little for a selector to recover in the rest; a stricter decomposition (Supplement Section 
+13
+) further separates stable between-candidate differences from variation that is not stable across repeats.
+
+4 
+Auditing Best-of-
+ Planning Selection
+
+We apply the audit to best-of-
+ planning, comparing the model’s
+value-based ordering with random selection and estimating outcome-level
+headroom using a hindsight oracle.
+
+4.1 
+Setup
+
+On render-verified clean data, we compare the value selector, random
+selection, and the deployment-conditioned hindsight oracle on paired
+sets of 
+ candidates with common continuation seeds. Differences
+from random are reported with state-within-task and episode-within-task
+bootstrap intervals.
+
+Continuation protocol.
+
+In snapshot replay, each candidate’s first 
+ steps of a generated
+
+-step chunk are executed, stopping on success; the episode then replans
+every 
+ steps under a fixed base policy until success or the 
+-step
+task limit. The base policy uses one sample, all tokens, 
+ denoising steps,
+and no value head; all selectors share the same outcome matrix and
+continuation seeds (
+). This controls the candidate’s single-switch
+effect but does not reproduce the full deployment distribution. The selection
+audit’s 
+-step continuation is distinct from the 
+-versus-
+-step
+allocation factorial, whose dense reference is 
+.
+
+4.2 
+Weak Selection Signal and a Negative Value Selector
+
+The value selector is 
+ pp worse than random (95% CIs: state
+bootstrap 
+; episode bootstrap 
+), driven
+largely by TurnOnStove (
+ pp). Excluding that task, the state-weighted
+estimate remains negative (
+ pp; episode CI 
+; state
+CI 
+). Thus, the result is not uniform across tasks, but no
+task reverses into a measured value-selector benefit.
+
+The hindsight oracle’s gain is 
+ pp, with a state-bootstrap CI of
+
+ pp and an episode-bootstrap CI of 
+ pp.
+Under the pre-registered rule, the missed replicate-consistency gate and
+episode-level interval make this weak, inconclusive evidence. With 
+,
+the reliability estimate is only about 
+ (Supplement
+Section 
+10
+); we therefore do not infer a definitive ceiling
+from either the cross-fitted estimate or the in-sample 
+ pp maximum.
+More structurally, outcomes vary across candidates and/or repeats in only
+
+ states (
+; Fig. 
+3
+b). The within-state
+ICC is 
+, which indicates limited repeat agreement under this protocol;
+the decomposition below distinguishes stable separation from variation
+not stable across repeats.
+
+How much of this separability is real?
+
+Outcome uniformity is not explained simply by near-identical actions:
+states with no outcome variation have no smaller action-space dispersion
+(Supplement Section 
+13
+), though geometric diversity need not
+be task-relevant. Of the 
+ varying states, 
+ show stable separation
+(one candidate succeeds in both repeats and another fails in both); the other
+
+ do not meet this criterion. A label-shuffle null expects about 
+
+stable-separable states, so the observed 
+ are not 
+ confirmed
+opportunities. The descriptive oracle contribution is 
+ pp for the
+first group and 
+ pp for the second; the pooled oracle gain under the
+null is 
+ pp. With only two repeats, reproducible selection headroom
+remains uncertain.
+
+4.3 
+Interpretation
+
+Under this configuration, the negative value-selector result is clear,
+whereas reproducible oracle headroom remains uncertain. The oracle measures
+outcome-level headroom only for the observed candidates and specified
+single-switch continuation, not general decision relevance. We therefore
+make no claim that planning is universally ineffective; alternative
+candidate-generation and continuation policies remain untested.
+
+Figure 4
+: 
+Detectability of the joint interaction effect. The decisive comparison is threshold-free: the preliminary systematic component (
+) is below the mean per-state noise floor (
+) and comparable to the temporal main effect (
+) (noise 
+th percentile 
+), so the effect cannot be resolved at any threshold. Under the locked threshold 
+ the minimum detectable effect is 
+ to 
+ (
+ to 
+ times the main effect), shown for reference. Values are from a 
+-state smoke sample whose preregistered power gate was not cleared, so the full factorial was not launched.
+
+Table 1
+: 
+Measured per-forward FLOPs (a), measured end-to-end query speedup under
+whole-frame token pruning (b), and the measured dense-query component breakdown
+(c), on Cosmos Policy (RoboCasa, batch 1, 5 denoising steps, 11 latent frames
+
+ 196 tokens 
+ 2156; NVIDIA RTX A6000, bf16, eager, 
+). Panel (b)
+directly times the complete query, dense against pruned, not a composition of
+component times: the deployed path is the query as the eval calls it
+(future-image decode and value extraction included); the decode-excluded path
+removes future-image decode on both sides and is most favorable to pruning. This
+is a latency-only measurement (dropped frames receive zero output), so action
+quality is not assessed; no pruning level on either path reaches the
+pre-registered 
+ target. Setup, environment and result-file paths are
+in Supplement Section 
+9
+.
+
+(a) Per-forward compute (FLOPs, measured via FlopCounterMode: matmul 
+ SDPA)
+
+Pruning level
+
+Tokens
+
+TFLOP
+
+Nominal saving
+
+of which SDPA (TFLOP)
+
+Dense
+
+2156
+
+8.535
+
+—
+
+1.319
+
+Drop 1 future image
+
+1960
+
+7.682
+
+10.0%
+
+1.111
+
+Drop 2 future images
+
+1764
+
+6.846
+
+19.8%
+
+0.921
+
+All future images
+
+1568
+
+6.028
+
+29.4%
+
+0.748
+
+All future frames
+
+1372
+
+5.228
+
+38.7%
+
+0.593
+
+All future frames 
+ value
+
+1176
+
+4.446
+
+47.9%
+
+0.455
+
+(b) End-to-end query speedup (ms / 
+, measured, 
+)
+
+Pruning level
+
+Deployed path
+
+Decode-excluded
+
+?
+
+Dense
+
+1254.9 / —
+
+0
+812.7 / —
+
+—
+
+Drop 1 future image
+
+1232.1 / 1.019
+
+0
+791.2 / 1.027
+
+no
+
+Drop 2 future images
+
+1171.0 / 1.072
+
+0
+728.9 / 1.115
+
+no
+
+All future images
+
+1140.5 / 1.100
+
+0
+699.8 / 1.161
+
+no
+
+All future frames
+
+1096.5 / 1.144
+
+0
+654.0 / 1.243
+
+no
+
+All future frames 
+ value
+
+1088.9 / 
+1.152
+
+0
+648.6 / 
+1.253
+
+no
+
+(c) Dense component (ms, measured)
+
+Component (per query)
+
+ms
+
+VAE encode (
+)
+
+238.0
+
+DiT forward (
+, summed)
+
+530.7
+
+Future-image VAE decode
+
+434.4
+
+Full query
+
+1241.8
+
+5 
+A Feasibility Audit of Adaptive Compute Allocation
+
+We audit whether reducing denoising steps or processing fewer tokens
+can deliver practical efficiency on this stack. Because the preregistered
+criteria are end-to-end latency and a resolvable joint interaction effect,
+and the power gate was not cleared, this is a feasibility diagnostic rather
+than a confirmatory test of joint allocation.
+
+5.1 
+Nominal FLOPs Savings Do Not Convert to Wall-Clock Savings
+
+Dropping all future frames plus the value frame removes 
+ of
+per-forward FLOPs, but direct complete-query timing shows only 
+
+speedup on the deployed eager path and 
+ when future-image decode
+is excluded; neither reaches the preregistered 
+ target
+(Table 
+1
+). This fixed whole-frame mask adds no
+per-token scoring. The five DiT forwards account for 
+ ms of the
+
+ ms dense query, while VAE encode (
+ ms) and future-image decode
+(
+ ms) are not reduced by token pruning. This is a latency-only result
+(dropped frames receive zero output); full settings and per-level latency
+percentiles are in Supplement Section 
+9
+ and Table 
+3
+.
+
+5.2 
+The Preliminary Interaction Effect Is Below the Noise Resolution
+
+We then ask whether a joint-allocation benefit could be resolved on this
+stack even if present. Using the pre-registered factorial diagnostic of
+Section 
+3
+, crossing two denoising schedules with full, key-token, and
+uniform-token (
+) selection, the joint-allocation effect is the
+uniform-token interaction
+
+(2)
+
+under exact additivity, where 
+ is the paired closed-loop success at
+denoising schedule 
+ under selection 
+, relative to the baseline
+
+. Because seed noise largely cancels in this
+difference-in-differences structure, with a measured effective
+correlation of 
+, the residual noise is small but
+structured: per-state noise magnitude has mean 
+ and 
+th
+percentile 
+. The systematic component, estimated after
+noise-bias removal from a 
+-state smoke sample, is about 
+.
+
+The decisive comparison is independent of any chosen threshold: the
+preliminary systematic component (
+) is smaller than the mean
+noise floor (
+) and comparable to the temporal main effect
+itself (
+) in the same states. A joint effect that is smaller
+than the per-state noise it must be read against cannot be resolved from
+this measurement, whatever decision threshold is adopted.
+Figure 
+4
+ places these quantities on the same absolute scale.
+For completeness, under the currently locked threshold 
+
+(Supplement Eq. 
+3
+) the
+minimum detectable interaction is 
+ to 
+, that is 
+ to
+
+ times the temporal main effect; we note that this range depends on
+the threshold calibration still pending sign-off, and it will be
+recomputed for the camera-ready version, but the threshold-free
+comparison above does not depend on it.
+
+This is inconclusive, not a null result: the full factorial was not
+launched because the power gate failed. The estimated sample requirement—
+hundreds to roughly two thousand states, is an extrapolation from the current
+detection limit (Supplement Section 
+10
+), not a verified power
+result. Whether joint allocation helps on this stack remains open.
+
+5.3 
+Implications
+
+Efficiency claims should pair FLOPs with complete-query latency, and
+allocation claims should be judged against a preregistered detection limit.
+Here, token-pruning savings miss the latency target and the smoke-scale joint
+effect is unresolved; this does not establish that adaptive allocation is
+ineffective in general.
+
+6 
+Evaluation Reliability: A Silent Rendering Corruption
+
+We identify a third threat to test-time-scaling evaluation: silent,
+compute-dependent rendering corruption in the RoboCasa/
+robosuite
+
+stack, to which compute-intensive inference paths are more exposed.
+
+6.1 
+Mechanism
+
+The corruption originates in OpenGL context management during
+environment resets. On a hard reset the stack constructs a new
+simulation instance while an orphaned instance remains eligible for
+garbage collection; when the orphan is later collected, its GL context
+is freed while a different context is active, silently invalidating the
+framebuffer of the live environment. Subsequent renders return corrupted
+observations, frozen or noise-like frames, with no error raised. Figure 
+ contrasts a corrupted frame with the correct render of the same state. We confirm the mechanism with a framebuffer sentinel that pre-fills each
+render target with a marker and flags targets left substantially
+untouched after rendering.
+1
+1
+
+1
+
+              
+              
+              
+              
+              
+              
+              
+            We attribute this corruption to OpenGL context management during hard resets in the tested stack, confirmed by our framebuffer sentinel and eliminated by our fix. We have not sought maintainer confirmation of the root-cause attribution.
+
+6.2 
+Effect on the Official Direct-Policy Benchmark
+
+We first ask whether this corruption materially affects the officially
+reported RoboCasa numbers. We run the unmodified official evaluation
+file in two arms, bug-present and render-fixed, paired episode by
+episode on the four tasks where our baseline run exhibited corruption,
+over 50 consecutive episodes each (200 paired episodes), with the
+framebuffer sentinel active throughout.
+
+Task
+
+Succ (bug
+fix)
+
+Corrupt
+
+Flips
+
+PnPCounterToMicrowave
+
+3
+
+PnPMicrowaveToCounter
+
+3
+
+PnPStoveToCounter
+
+1
+
+TurnSinkSpout
+
+1
+
+Total
+
+Table 2: 
+Paired bug-vs-fix comparison under the official direct-policy
+protocol. All three outcome flips are corrupted episodes moving from
+failure to success; none move the other way. Among the 192 uncorrupted
+episodes, success is identical in both arms.
+
+As Table 
+2
+ shows, under the direct-policy
+protocol the measured corruption rate is 
+ (
+ per episode
+in the bug arm, and zero in the fixed arm), and the paired effect of
+fixing it is 
+ successes over 200 episodes. All flips move corrupted
+episodes from failure to success, so the corruption understates success.
+Extrapolated to the full 24-task, 50-episode protocol, the effect is
+about 
+ pp and never exceeds an upper bound of 
+ pp. We
+conclude that the officially reported direct-policy figure of 
+ is
+not materially affected: the corruption is real and present in the
+official stack, but its direct-policy impact is small and in the
+direction of underreporting success.
+
+6.3 
+Corruption Scales with Per-Inference Compute
+
+The direct-policy result does not bound the risk for test-time scaling,
+because corruption frequency depends on how much computation each query
+allocates. We observe a sharp, monotone dependence:
+
+•
+
+Direct policy
+ (one forward pass per query): 
+ of
+episodes corrupted, paired-verified in
+Table 
+2
+.
+
+•
+
+Direct-mode best-of-
+ (
+ candidates, simple
+forward passes): 
+ episodes corrupted, with identical success
+(
+) in both arms. Additional sampling alone does not raise the
+rate.
+
+•
+
+Planning mode
+ (separate future-state and value calls per
+query, substantially more allocation per query): up to 
+ of
+episodes corrupted.
+
+The 
+ figure is observed under a compute-heavy planning
+configuration and should be read as an upper-bound illustration of the
+trend, not as the corruption rate of any standard benchmark. RoboCasa
+provides no native planning-mode evaluation, and this configuration is
+non-standard; the official repository exposes best-of-
+ planning only
+for a real-robot platform that does not pass through 
+robosuite
+,
+so the planning-path corruption touches no number the official
+benchmark reports. On the LIBERO stack, which on a hard reset explicitly
+destroys the prior simulation before constructing a new one and so
+leaves no orphan, the trigger condition is not met; we infer from the
+source that the reported LIBERO figure is unaffected, though we did not
+run that environment.
+
+6.4 
+Implications
+
+The official direct-policy result is largely unaffected, but compute-heavy
+planning is more exposed. Studies using this stack should verify render
+integrity before attributing gains to inference-time methods.
+
+7 
+Discussion
+
+Our three audits are independent, but they point in the same direction:
+on the tested Cosmos Policy configuration, the computation added at
+inference time to realize test-time scaling does not buy what it is
+assumed to buy, and part of the apparent benefit reported in this
+setting can arise from evaluation artifacts rather than from the method.
+
+What the findings do and do not say.
+ None of the three
+results claims that planning, adaptive allocation, or test-time scaling is
+useless in general; each is stated at the scope of the tested
+configuration. The planning result is that the deployable selector is
+worse than random and that selection headroom is small, not that no
+selector can ever help. The allocation result is that nominal FLOPs
+savings do not convert to end-to-end speedup here, together with a
+detectability statement from a smoke-scale sample whose preregistered
+power gate was not cleared, not a confirmed null. The reliability result
+is that a real, compute-dependent corruption exists in the official stack
+while leaving the reported direct-policy number essentially intact.
+
+A methodology, not only a set of negative results.
+ The value
+of a negative audit depends on whether its measurements can be trusted,
+which is why the diagnostic methodology is our primary contribution.
+Premise-first verification keeps us from building on a signal that does
+not exist; the oracle bounds the achievable gain before any selector is
+tuned; the power gate stops an experiment that cannot yield a verdict
+before it consumes compute; and render-integrity checking protects every
+closed-loop number. These components are model-agnostic and transfer to
+any audit of test-time compute in a diffusion-based control policy, even
+though the specific render fix is tied to the stack we study. We release
+the detector, fix, scripts, and preregistered protocols so the audits can
+be repeated. Our strongest limitation is scope: whether these findings
+generalize to other models, simulators, or real hardware is an open
+question the methodology is designed to answer rather than presuppose, and
+we see the audits not as a verdict against inference-time computation but
+as checks that should precede any claim that test-time scaling improves
+control.
+
+8 
+Conclusion
+
+We presented an empirical audit of test-time scaling in a representative
+world-action model, Cosmos Policy on RoboCasa, built around a
+premise-first, pre-registered methodology with explicit statistical
+power control and render-integrity verification. The audit yields three
+independent reasons an apparent gain may not be real: best-of-
+
+candidate selection carries little usable signal and its deployable
+selector is worse than random; nominal compute savings from token-level
+allocation do not convert to practical speedup, and the joint allocation
+effect lies below the system’s noise resolution; and a silent,
+compute-dependent rendering corruption inflates the reliability risk of
+exactly the compute-intensive inference paths that test-time scaling
+relies on, while leaving the official direct-policy benchmark intact. We
+release the methodology and tools so that these checks can be applied
+before performance gains are attributed to test-time scaling rather than
+to unverified assumptions or evaluation artifacts.
+
+References
+
+[1]
+
+E. Alonso, A. Jelley, V. Micheli, A. Kanervisto, A. Storkey, T. Pearce, and F. Fleuret
+ (2024)
+
+Diffusion for world modeling: visual details matter in atari
+.
+
+In 
+The Thirty-eighth Annual Conference on Neural Information Processing Systems
+,
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+[2]
+
+A. Bilal, M. A. Mohsin, M. Umer, A. Subhan, H. Rizwan, A. Mohsin, and D. F. Hougen
+ (2026)
+
+What if we allocate test-time compute adaptively?
+.
+
+In 
+Forty-third International Conference on Machine Learning
+,
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+[3]
+
+Y. Chen, H. Zhuang, WenboLi, S. Wang, X. Zhao, and Q. Wu
+ (2026)
+
+ManipEvalAgent: promptable and efficient evaluation framework for robotic manipulation policies
+.
+
+In 
+The Fourteenth International Conference on Learning Representations
+,
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+[4]
+
+J. Chun, Y. Jeong, and T. Kim
+ (2026)
+
+Sparse imagination for efficient visual world model planning
+.
+
+In 
+The Fourteenth International Conference on Learning Representations
+,
+
+External Links: 
+Link
+
+Cited by: 
+§2
+,
+
+§2
+.
+
+[5]
+
+L. Cohen, O. Nabati, K. Wang, N. Kumar, and S. Mannor
+ (2026)
+
+Horizon imagination: efficient on-policy rollout in diffusion world models
+.
+
+In 
+The Fourteenth International Conference on Learning Representations
+,
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+[6]
+
+J. Guo, Q. Li, P. Li, Z. Chen, N. Sun, Y. Su, H. Wang, Y. Zhang, X. Li, and H. Liu
+ (2026)
+
+Unified 4d world action modeling from video priors with asynchronous denoising
+.
+
+arXiv preprint arXiv:2604.26694
+.
+
+Cited by: 
+§2
+.
+
+[7]
+
+Y. Guo, Y. Hu, J. Zhang, Y. Wang, X. Chen, C. Lu, and J. Chen
+ (2024)
+
+Prediction with action: visual policy learning via joint denoising process
+.
+
+In 
+The Thirty-eighth Annual Conference on Neural Information Processing Systems
+,
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+[8]
+
+X. Hua, S. Yue, and J. Ren
+ (2026)
+
+Learning to explore: scaling agentic reasoning via exploration-aware policy optimization
+.
+
+In 
+Forty-third International Conference on Machine Learning
+,
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+[9]
+
+S. Jang, D. Kim, C. Kim, Y. Kim, and J. Shin
+ (2026)
+
+Verifier-free test-time sampling for vision-language-action models
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Vol. 
+2026
+, 
+pp. 139997–140017
+.
+
+Cited by: 
+§2
+.
+
+[10]
+
+Y. Jangir, Y. Zhang, K. Yamazaki, C. Zhang, K. Tu, T. Ke, L. Ke, Y. Bisk, and K. Fragkiadaki
+ (2026)
+
+RobotArena $\infty$: scalable robot benchmarking via real-to-sim translation
+.
+
+In 
+The Fourteenth International Conference on Learning Representations
+,
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+[11]
+
+K. Ji, Y. Meng, H. Cui, Y. Li, J. Zhou, S. Hua, L. Chen, and Z. Wang
+ (2026)
+
+Block-wise Adaptive Caching for Accelerating Diffusion Policy
+.
+
+In 
+International Conference on Learning
+Representations (ICLR)
+,
+
+External Links: 
+Link
+
+Cited by: 
+§1
+.
+
+[12]
+
+K. Ji, J. Zhou, Y. Meng, Y. Li, H. Cui, and Z. Wang
+ (2026)
+
+Sparse ActionGen: Accelerating Diffusion Policy with Real-time Pruning
+.
+
+In 
+Proceedings of the 43rd International
+Conference on Machine Learning
+,
+
+Proceedings of Machine Learning Research
+, Vol. 
+306
+, 
+pp. 51692–51711
+.
+
+External Links: 
+Link
+
+Cited by: 
+§1
+.
+
+[13]
+
+B. Kim, T. Kim, J. Lee, and H. Joo
+ (2026)
+
+Dexterous world models
+.
+
+In 
+Conference on Computer Vision and Pattern Recognition 2026
+,
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+[14]
+
+M. J. Kim, Y. Gao, T. Lin, Y. Lin, Y. Ge, G. Lam, P. Liang, S. Song, M. Liu, C. Finn, and J. Gu
+ (2026)
+
+Cosmos policy: fine-tuning video models for visuomotor control and planning
+.
+
+In 
+The Fourteenth International Conference on Learning Representations
+,
+
+External Links: 
+Link
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+[15]
+
+J. Li, Y. Cong, Y. Wang, H. Xia, S. Huang, Y. Zhang, N. Xu, and G. Dai
+ (2026)
+
+STEP: warm-started visuomotor policies with spatiotemporal consistency prediction
+.
+
+In 
+Forty-third International Conference on Machine Learning
+,
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+[16]
+
+W. Li, X. Su, Y. Cao, H. Xu, X. Xia, S. You, Y. Chen, and C. Xu
+ (2026)
+
+VLA-ATTC: adaptive test-time compute for VLA models with relative action critic model
+.
+
+In 
+Forty-third International Conference on Machine Learning
+,
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+[17]
+
+X. Li, K. Hsu, J. Gu, O. Mees, K. Pertsch, H. R. Walke, C. Fu, I. Lunawat, I. Sieh, S. Kirmani, S. Levine, J. Wu, C. Finn, H. Su, Q. Vuong, and T. Xiao
+ (2024)
+
+Evaluating real-world robot manipulation policies in simulation
+.
+
+In 
+8th Annual Conference on Robot Learning
+,
+
+External Links: 
+Link
+
+Cited by: 
+§1
+.
+
+[18]
+
+Y. Li, J. Wen, Z. Zhou, Y. Chen, C. Shen, Y. Peng, and Y. Zhu
+ (2026)
+
+Scaling robot policy evaluation via discrete diffusion world model
+.
+
+In 
+Forty-third International Conference on Machine Learning
+,
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+[19]
+
+G. Lu, B. Jia, P. Li, Y. Chen, Z. Wang, Y. Tang, and S. Huang
+ (2025)
+
+Gwm: towards scalable gaussian world models for robotic manipulation
+.
+
+In 
+2025 IEEE/CVF International Conference on Computer Vision (ICCV)
+,
+
+pp. 9263–9274
+.
+
+Cited by: 
+§2
+.
+
+[20]
+
+S. Nasiriany, S. Nasiriany, A. Maddukuri, and Y. Zhu
+ (2026)
+
+RoboCasa365: a large-scale simulation framework for training and benchmarking generalist robots
+.
+
+In 
+International Conference on Learning Representations (ICLR)
+,
+
+Cited by: 
+§1
+.
+
+[21]
+
+K. Shum, B. Hui, J. Chen, L. Zhang, J. Yang, Y. Huang, J. Lin, J. He, 
+et al.
+ (2026)
+
+SWE-rm: execution-free feedback for software engineering agents
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Vol. 
+2026
+, 
+pp. 143426–143446
+.
+
+Cited by: 
+§2
+.
+
+[22]
+
+Z. Wang, Z. Li, A. Mandlekar, Z. Xu, J. Fan, Y. Narang, L. Fan, Y. Zhu, Y. Balaji, M. Zhou, M. Liu, and Y. Zeng
+ (2025)
+
+One-step diffusion policy: fast visuomotor policies via diffusion distillation
+.
+
+In 
+Proceedings of the 42nd International Conference on Machine Learning
+,
+
+ICML’25
+.
+
+Cited by: 
+§1
+.
+
+[23]
+
+S. Yin, K. Yin, W. Chen, Y. Liu, G. Li, and L. Lin
+ (2026)
+
+DDP-WM: disentangled dynamics prediction for efficient world models
+.
+
+In 
+Forty-third International Conference on Machine Learning
+,
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+[24]
+
+J. Zhang, M. Jiang, N. Dai, T. Lu, A. Uzunoglu, S. Zhang, Y. Wei, J. Wang, V. M. Patel, P. P. Liang, D. Khashabi, C. Peng, R. Chellappa, T. Shu, A. Yuille, Y. Du, and J. Chen
+ (2026)
+
+World-in-world: world models in a closed-loop world
+.
+
+In 
+The Fourteenth International Conference on Learning Representations
+,
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+[25]
+
+E. Zhao, P. Awasthi, and S. Gollapudi
+ (2025)
+
+Sample, scrutinize and scale: effective inference-time search by scaling verification
+.
+
+In 
+Forty-second International Conference on Machine Learning
+,
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+[26]
+
+S. Zhou, Y. Du, Y. Yang, L. Han, P. Chen, D. Yeung, and C. Gan
+ (2026)
+
+Learning 3d persistent embodied world models
+.
+
+Advances in Neural Information Processing Systems
+ 
+38
+, 
+pp. 104807–104829
+.
+
+Cited by: 
+§2
+.
+
+[27]
+
+F. Zhu, H. Wu, S. Guo, Y. Liu, C. Cheang, and T. Kong
+ (2025)
+
+Irasim: a fine-grained world model for robot manipulation
+.
+
+In 
+2025 IEEE/CVF International Conference on Computer Vision (ICCV)
+,
+
+pp. 9834–9844
+.
+
+Cited by: 
+§1
+.
+
+Supplementary Material 
+
+9 
+Timing Measurement Details
+
+This supplement documents the measurement setup behind
+Table 
+1
+ and the single-forward mechanism that explains
+why per-forward savings do not carry the whole query. All figures are directly
+measured; none are composed from component times.
+
+Environment.
+
+NVIDIA RTX A6000, PyTorch 2.7.0 with CUDA 12.8 and cuDNN 90701, model
+nvidia/Cosmos-Policy-RoboCasa-Predict2-2B with weights in bf16, latent shape
+
+ (11 latent frames 
+ 196 tokens 
+ 2156), batch 1, and
+5 denoising steps per action query (confirmed as exactly 5 DiT forwards per
+call). The only tracked code modification is a logging patch to
+
+run_robocasa_eval.py
+ (commit 
+18a2acc
+).
+
+End-to-end protocol (Table 
+1
+b).
+
+For each pruning level and each of the two paths (deployed, and
+decode-excluded), we time the complete action-inference query, dense against
+pruned, under the deployed eager backend. We discard warmup and then record
+
+ timed queries per cell, reporting the median with the 
+th and 
+th
+percentiles; the directory 
+out_e2e_prune/raw.jsonl
+ holds all 420
+timed calls. Paired per-state speedups agree with the reported median ratios to
+within 
+. The decode-excluded dense baseline is directly measured at
+
+ ms (it is not the decode-subtracted estimate used before this run). The
+whole-frame prune is applied inside the real query path; because whole-frame
+pruning is a fixed structural mask, there is no per-token scoring step, and the
+frame slicing and scatter-back run inside the timed region, so the measured
+speedups carry full real overhead for this pruning type.
+
+Why the whole query was measured eager.
+
+The complete query contains host-side control flow, host-device copies and array
+post-processing that cannot be CUDA Graph captured without restructuring the
+code, so no graph-timed stage is mixed into the end-to-end numbers. Eager is in
+any case the deployed evaluation backend.
+
+Single-forward mechanism (not an end-to-end result).
+
+To locate the ceiling of the pruned stage, we separately time the DiT forward in
+isolation. Under CUDA Graph the single forward speeds up by at most 
+
+(dense 
+ ms to all-future-frames-plus-value 
+ ms), with output
+bit-identical to eager. This is a single-forward, CUDA-Graph measurement and is
+not directly comparable to the eager end-to-end speedups in
+Table 
+1
+b; we report it only to show that even a forward
+driven nearly to its floor cannot carry the query, because the five DiT forwards
+are under half of the end-to-end latency (Table 
+1
+c)
+while VAE encode and future-image decode are not reducible by token pruning.
+
+FLOPs.
+
+Per-forward FLOPs in Table 
+1
+a are measured with
+FlopCounterMode (matmul 
+ SDPA).
+
+Reproduction.
+
+The summary is regenerated from the raw timings by
+
+E2E_MODE=summarize python3 probes/ARC_gate_m1/gm1_e2e_prune.py
+;
+
+out_e2e_prune/
+ also contains 
+E2E_PRUNE_REPORT.md
+,
+
+summary.json
+ and 
+meta.json
+.
+
+10 
+Statistical Definitions
+
+Decision threshold.
+
+The pre-registered interaction threshold is
+
+(3)
+
+the larger of a seed-noise floor and a fraction of the temporal main effect, so
+that a declared interaction must exceed both the noise and a meaningful share of
+the main effect.
+
+Oracle headroom reliability.
+
+With 
+ replicate rollouts per state, the reliability of the mean candidate
+estimate follows the Spearman–Brown form
+
+(4)
+
+With the measured intraclass correlation 
+ and 
+,
+
+, so a single continuation ranks candidates with only about
+
+ reliability and the cross-fitted oracle estimate is itself noisy.
+
+11 
+The Premise-First Audit Procedure
+
+Figure 5
+: 
+The premise-first methodology as a chain of gates. Each candidate
+test-time-scaling gain passes three checks in order before it is credited:
+verify that the decision signal exists (causal ablation and oracle ceiling); a
+statistical power gate that halts a run which cannot resolve the pre-registered
+outcome; and closed-loop measurement under framebuffer-sentinel render-integrity
+checking. A “no” at the first gate reports a negative result and at the second
+an inconclusive one, separating a genuine negative from an underpowered or
+invalid measurement.
+
+Figure 
+5
+ shows the audit as a single procedure: three gates
+applied in order before any test-time-scaling gain is credited. Each gate
+corresponds to one of the three ways an apparent gain can fail, and to one of
+the paper’s three audits.
+
+The first gate verifies the premise that the added computation exposes a usable
+decision signal, using the causal ablation and oracle-ceiling construction of
+Section 
+6
+; when no signal exists the result is reported as negative rather than
+pursued further, as in the planning audit of Section 
+4
+. The second gate is
+statistical: from a smoke sample it projects the confidence-interval width at the
+full sample size and halts the run when the pre-registered outcome cannot be
+resolved, so compute is not spent on an experiment that cannot yield a verdict,
+and the outcome is reported as inconclusive rather than as evidence of absence,
+as in the allocation audit of Section 
+5
+. The third gate measures closed-loop
+success under the framebuffer-sentinel render check and routes the verdict by
+pre-registered thresholds, the render-integrity guard whose necessity the
+reliability audit of Section 
+6
+ establishes.
+
+The value of the procedure is in its two “no” branches: they separate a
+genuine negative from an underpowered or invalid measurement, a distinction that
+success rate alone cannot make. The gates are model-agnostic and apply to any
+audit of test-time compute in a diffusion-based control policy; only the render
+fix itself is specific to the stack we study.
+
+12 
+End-to-End Latency Under Token Pruning
+
+Table 
+3
+ reports the full measurement behind
+Table 
+1
+(b): both query paths at all six pruning levels,
+with the 10th and 90th percentiles over the 
+ timed queries per cell. Three
+observations follow, all from directly measured values.
+
+First, the end-to-end speedup grows monotonically but sublinearly with the
+nominal FLOPs reduction. Cutting 
+ of per-forward FLOPs (all future frames
+plus value) buys only 
+ of wall-clock on the deployed path and 
+ on
+the decode-excluded path; the remaining time is dominated by the autoencoder
+encode and future-image decode, which token pruning does not touch.
+
+Second, the decode-excluded path scales better at every level, reaching
+
+ against 
+ on the deployed path at the most aggressive
+prune. Removing the fixed future-image decode shrinks the denominator and
+enlarges the share of the query that pruning can act on, yet even this
+most-favorable configuration stops well short of the 
+ target.
+
+Third, the percentile spread is tight: the 10th and 90th percentiles lie within
+about 
+ of the median at every cell, so the medians are stable and the
+sub-
+ conclusion is not an artifact of run-to-run variance. No pruning
+level on either path reaches 
+.
+
+Table 3
+: 
+Full end-to-end query latency under whole-frame token pruning, both
+paths, all levels (Cosmos Policy, RoboCasa, batch 1, 5 denoising steps; NVIDIA
+RTX A6000, bf16, eager). Every value is directly measured over 
+ timed
+queries per cell; median with the 10th and 90th percentiles. The deployed path
+is the query as the eval calls it (future-image decode and value extraction
+included); the decode-excluded path removes future-image decode on both sides.
+Speedup is dense median divided by pruned median. No pruning level on either
+path reaches the pre-registered 
+ target. This expands the medians and
+speedups of main-body Table 
+1
+(b).
+
+Deployed path
+
+Decode-excluded path
+
+Pruning level
+
+Tokens
+
+Median (ms)
+
+p10–p90 (ms)
+
+Median (ms)
+
+p10–p90 (ms)
+
+Dense
+
+2156
+
+1254.9
+
+1248.9–1257.1
+
+1.000
+
+812.7
+
+808.6–814.5
+
+1.000
+
+Drop 1 future image
+
+1960
+
+1232.1
+
+1226.7–1233.8
+
+1.019
+
+791.2
+
+786.7–792.5
+
+1.027
+
+Drop 2 future images
+
+1764
+
+1171.0
+
+1168.7–1172.6
+
+1.072
+
+728.9
+
+727.0–730.6
+
+1.115
+
+All future images
+
+1568
+
+1140.5
+
+1136.6–1142.8
+
+1.100
+
+699.8
+
+697.0–703.2
+
+1.161
+
+All future frames
+
+1372
+
+1096.5
+
+1093.9–1099.3
+
+1.144
+
+654.0
+
+652.0–656.5
+
+1.243
+
+All future frames 
+ value
+
+1176
+
+1088.9
+
+1086.4–1092.2
+
+1.152
+
+648.6
+
+647.0–651.9
+
+1.253
+
+13 
+Candidate Diversity and Outcome Separability
+
+These diagnostics address whether the limited selection headroom in Section 4 is
+an artifact of near-identical candidates or of replicate noise. They are
+descriptive and read only saved files (candidate actions, per-candidate closed
+outcomes with two repeats, and value scores); they do not run inference, and they
+do not claim that greater diversity would improve success.
+
+Candidates are diverse, not degenerate.
+
+For each state we z-score the seven action dimensions across the dataset, flatten
+each candidate’s executed 16-step chunk to a 112-vector, and take the mean
+pairwise Euclidean distance among the eight candidates. No state has identical
+candidates (minimum dispersion 
+). States without outcome variation show
+
+greater
+ absolute dispersion than states with it (pooled median 
+ vs
+
+; Mann–Whitney 
+; Spearman 
+ against outcome
+degree), a pattern driven mainly by TurnOnStove. Scale-free coefficient-of-
+variation metrics show no significant group difference (
+–
+), so the
+difference is largely one of absolute action magnitude. Value-score dispersion is
+uniformly tiny (median standard deviation 
+) and unrelated
+to outcome variation in the pooled analysis (
+), consistent with a value
+selector that carries little usable ranking signal; TurnOnStove, where the value
+selector is worst, is the only task with larger value dispersion on varying
+states.
+
+Decomposing outcome variation.
+
+The 
+ of 
+ states with any variation (across eight candidates and two
+repeats) split into those with a stable between-candidate difference and those
+without one. We call a state stably separable when some candidate succeeds in
+both repeats while another fails in both.
+
+Task
+
+States
+
+Varying
+
+Stably sep.
+
+No stable sep.
+
+No variation
+
+OpenSingleDoor
+
+37
+
+0
+
+0
+
+0
+
+37
+
+PnPCounterToCab
+
+78
+
+10
+
+6
+
+4
+
+68
+
+TurnOnStove
+
+76
+
+33
+
+14
+
+19
+
+43
+
+TurnOffStove
+
+72
+
+5
+
+0
+
+5
+
+67
+
+Pooled
+
+263
+
+48
+
+20
+
+28
+
+215
+
+Table 4: 
+Of 
+ varying states, only 
+ (
+) have a stable
+between-candidate outcome difference; the other 
+ exhibit variation without
+satisfying the stable-separation criterion. All 
+ are graded (
+ vs 
+ or
+
+ vs 
+); none is a full-repeat flip. Repeat disagreement concentrates in
+TurnOnStove (per-candidate repeat agreement 
+ vs 
+–
+ elsewhere).
+
+Even the stable states are near chance.
+
+A within-state null that independently shuffles the candidate labels in each
+repeat (preserving each repeat’s success count but breaking candidate identity
+across repeats, 
+ draws) expects 
+ stably separable states by
+chance, against the observed 
+; the excess is about 
+ states, mostly
+PnPCounterToCab. The cross-fitted hindsight oracle (same estimator as the main
+text) gains 
+ pp pooled, decomposing as 
+ pp from the 
+ stably
+separable states and 
+ pp from the 
+ states without stable separation
+(on which the cross-fitted oracle never beats random). Under this specific
+label-shuffle null the pooled cross-fitted oracle has a near-zero mean gain
+(
+ pp), providing no indication of upward inflation under the null; with
+only two repeats per candidate, the amount of reproducible selection headroom
+remains uncertain. This contribution split is exploratory: the grouping is itself
+defined from the two repeats and is subject to sampling randomness.
+
+Limitations.
+
+Actions cover only the executed first 
+ of the 
+ generated steps. With two
+repeats per candidate we cannot adjudicate per state whether a stable separation
+is real or coincidental; the graded (
+-valued) states are indistinguishable
+from noise at this sample size. States within an episode are not independent and
+the reported 
+-values are not corrected for multiple comparisons, so they are
+exploratory rather than confirmatory. The diagnostics cover four tasks and three
+episodes and do not speak to other candidate counts, sampling temperatures, or
+continuation policies. Full numbers and reproducible scripts are in
+
+probes/P5_oracle/
+ (
+p5_diversity.py
+, 
+p5_noise_decomp.py
+).
+

@@ -1,0 +1,3808 @@
+Pix2Evidence: A Multimodal RAG System for Text and Visual Evidence
+https://arxiv.org/abs/2610.41335
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+Pix2Evidence: A Multimodal RAG System for Text and Visual Evidence
+
+Ziniu Liu
+
+Affiliation: 
+Tongji University
+
+Affiliation: 
+Tencent Yuanbao
+denghao1984@tongji.edu.cn  dezhiye@tencent.com
+
+  
+
+Xiaoyang Chen
+
+Affiliation: 
+Tencent Yuanbao
+denghao1984@tongji.edu.cn  dezhiye@tencent.com
+
+  
+
+Dezhi Ye
+
+  
+
+Jie Liu
+
+Affiliation: 
+Tencent Yuanbao
+denghao1984@tongji.edu.cn  dezhiye@tencent.com
+
+  
+
+Jin Ma
+
+Affiliation: 
+Tencent Yuanbao
+denghao1984@tongji.edu.cn  dezhiye@tencent.com
+
+  
+
+Hao Deng
+
+†
+†
+thanks: 
+Corresponding author
+
+Affiliation: 
+Tongji University
+
+Abstract
+
+Retrieval-augmented generation (RAG) over visually rich documents must
+find both relevant content and the evidence that supports an answer.
+Screenshot retrieval preserves images and page structure, but written
+facts within screenshots also need to be searchable.
+Moreover, topical relevance alone does not identify which retrieved
+tile contains evidence for the answer.
+We introduce Pix2Evidence, a multimodal RAG system that encodes each
+screenshot tile together with its available transcription into a
+single fused image–text representation, so that layout and readable
+text are considered jointly during retrieval.
+To guide evidence selection, a vision-language teacher describes the
+visible content that supports each training question.
+We use these descriptions to adapt the retriever, then rerank the
+retrieved candidates before answer generation. Extensive experiments demonstrate that Pix2Evidence outperforms state-of-the-art methods.
+Across five widely-used Wikipedia QA benchmarks, the non-reranked Pix2Evidence leads the main
+comparison in answer accuracy on four.
+On MMSearch, it reaches 26.0%, 4.4 percentage points above PixelRAG.
+We will release the code and share derived data where licensing
+and privacy reviews permit.
+
+1 
+Introduction
+
+Retrieval-augmented generation (RAG) grounds answers in an external
+document collection 
+(
+Guu et al., 2020
+; 
+Lewis et al., 2020
+)
+.
+A retriever selects candidate sources, and a reader generates an answer
+from the material it receives 
+(
+Karpukhin et al., 2020
+; 
+Izacard and Grave, 2021
+)
+.
+Open-domain QA often uses web content: Natural Questions pairs queries
+with Wikipedia pages 
+(
+Kwiatkowski et al., 2019
+)
+, while WebQA draws on both visual and
+textual web sources 
+(
+Chang et al., 2022
+)
+.
+
+Vision-based retrieval can preserve information that is difficult to
+capture as plain text, including images, tables, and page layout.
+Document image retrievers represent rendered pages rather than relying
+only on extracted text 
+(
+Ma et al., 2024
+; 
+Faysse et al., 2024
+; 
+Yu et al., 2024
+)
+.
+PixelRAG applies this approach to Wikipedia QA by indexing screenshot
+tiles at scale 
+(
+Wang et al., 2026
+)
+.
+However, many questions still depend on written facts such as names,
+dates, and numbers.
+When these facts are embedded in an image, a retriever must recognise
+the text visually before it can match it to the question.
+This motivates encoding the text together with the visual tile in a
+single fused representation, so that written facts become directly
+available for retrieval without discarding visual and layout cues.
+
+Retrieving relevant content is only the first step.
+A tile may match a question’s topic without containing the fact needed
+for the answer, especially when the reader sees only a few tiles 
+(
+Yang et al., 2026
+)
+.
+Standard question and document supervision 
+(
+Xiong et al., 2021
+)
+ identifies a relevant tile
+but does not directly describe the content within it that supports the
+answer.
+We therefore generate question-conditioned descriptions of visible
+answer evidence during training.
+A vision-language teacher uses the question, a positive tile, and the
+reference answer to describe the supporting content.
+These descriptions provide evidence-focused supervision for adapting
+the retriever.
+
+Figure 1: 
+An overview of our data construction pipeline, which consists
+of two parts. (1) Screenshot Text Transcription: Text is extracted and
+transcribed from image patches using Qwen3-VL-4B-Instruct.
+(2) Question-Conditioned Evidence Descriptions: A high-capacity model
+serves as a teacher to generate evidence description text, facilitating
+alignment during training.
+
+Pix2Evidence addresses these two needs with fused multimodal retrieval
+and evidence-guided training.
+Our retrieval component integrates textual and visual information: it
+jointly encodes each screenshot and its available transcription into a
+shared multimodal representation, retrieves candidates from this fused
+view, and reranks them before passing them to the reader.
+During training, the teacher descriptions make the supporting evidence
+explicit.
+We use them to align the candidate rankings induced by a question and
+its evidence description, alongside contrastive learning.
+In this way, retriever adaptation attends not only to which tile is
+relevant, but also to the evidence that makes it useful for answering.
+Figure 
+2
+ illustrates the inference setting;
+Sections 
+3
+ and 
+4
+ detail the data and
+training procedure.
+
+We evaluate the complete system on five Wikipedia QA benchmarks over
+approximately 7.1 million pages and 28.2 million screenshot tiles.
+Our non-reranked configuration numerically exceeds PixelRAG in answer
+accuracy on four benchmarks.
+On MMSearch it reaches 26.0%, an improvement of 4.4 percentage points
+over PixelRAG.
+Additional configurations examine how the input representation,
+candidate fusion, and reader depth affect these outcomes.
+Our contributions are:
+
+•
+
+Starting from PixelRAG’s rendered screenshot tiles, we create
+transcriptions for indexing and teacher descriptions of
+answer evidence for retriever training.
+
+•
+
+We develop a multimodal RAG system that fuses image and text
+into a single retrievable representation and adapts its encoder with
+evidence-guided training.
+
+•
+
+We evaluate the system across five QA benchmarks and multiple
+configurations. Its non-reranked configuration scores above PixelRAG on four and exceeds both text-extraction baselines on all five.
+
+2 
+Related Work
+
+Retrieval-augmented generation.
+
+REALM and RAG incorporate external retrieval into language modelling
+and knowledge-intensive prediction 
+(
+Guu et al., 2020
+; 
+Lewis et al., 2020
+)
+.
+DPR learns dense question–passage representations 
+(
+Karpukhin et al., 2020
+)
+, and
+Fusion-in-Decoder combines multiple passages during generation
+
+(
+Izacard and Grave, 2021
+)
+.
+Beyond initial retrieval, instruction-following language models can
+rerank candidate passages, as demonstrated by RankGPT 
+(
+Sun et al., 2023
+)
+.
+Readers do not always handle distracting retrieved contexts reliably
+
+(
+Shen et al., 2024
+)
+.
+We study this selection problem in multimodal RAG, where text and
+visual content may offer different routes to the same answer.
+
+Figure 2: 
+Overview of Pix2Evidence. Top: training candidate set for
+question 
+ with positive, negative, and in-batch tiles; dashed
+distributions align question ranking 
+ to evidence ranking 
+.
+Bottom: tiles 
+ are encoded by 
+ into a
+fused image–text index; query 
+ retrieves top-
+ candidates, a
+vision-language reranker selects top-
+, and a reader answers. The
+example’s highlighted row gives US$155 million.
+
+Visual documents and screenshot retrieval.
+
+Document understanding models combine text, layout, and image features,
+as in LayoutLMv3 
+(
+Huang et al., 2022
+)
+, or generate directly from document
+images without a separate OCR module, as in Donut 
+(
+Kim et al., 2022
+)
+.
+WebSRC pairs page screenshots with HTML and questions that require
+structural understanding 
+(
+Chen et al., 2021
+)
+.
+VisualMRC studies answer generation from document images collected
+across web domains 
+(
+Tanaka et al., 2021
+)
+.
+These tasks show why reading web content involves both text and visual
+organisation, although neither evaluates our web-scale retrieval setup.
+For retrieval, DSE encodes screenshots into dense representations
+
+(
+Ma et al., 2024
+)
+; ColPali extends late interaction from ColBERT to visual
+pages 
+(
+Khattab and Zaharia, 2020
+; 
+Faysse et al., 2024
+)
+.
+VisRAG retrieves document images for vision-language generation
+
+(
+Yu et al., 2024
+)
+, and PixelRAG scales screenshot retrieval to web
+QA 
+(
+Wang et al., 2026
+)
+.
+SERVAL indexes model-generated page descriptions 
+(
+Nguyen et al., 2025
+)
+.
+We instead index transcribed text from screenshot tiles and reserve
+question-conditioned descriptions for training.
+ViDoRe V3 evaluates retrieval, grounding, and generation in visually
+rich documents 
+(
+Loison et al., 2026
+)
+.
+Our setting keeps web tiles as retrieval units and studies how both
+textual and visual views affect evidence selection.
+
+Hybrid retrieval and multimodal evidence fusion.
+
+WebQA asks systems to select and combine visual and textual web sources
+
+(
+Chang et al., 2022
+)
+.
+MultiModalQA studies questions that require reasoning across text,
+tables, and images 
+(
+Talmor et al., 2021
+)
+.
+Both illustrate the need for evidence beyond a single text passage,
+but they use different task settings from our Wikipedia tile index.
+MuRAG retrieves from a multimodal memory 
+(
+Chen et al., 2022
+)
+, while VisRAG
+passes retrieved document images to a vision language generator
+
+(
+Yu et al., 2024
+)
+.
+In our system, the retriever encodes each tile together with its
+available transcription in one fused representation, so that readable
+text and layout are considered jointly rather than in separate indexes.
+
+Evidence-guided retrieval supervision.
+
+Contrastive learning distinguishes positive documents from negatives
+
+(
+van den Oord et al., 2018
+; 
+Karpukhin et al., 2020
+)
+.
+RocketQA improves dense retrieval with additional negatives and data
+augmentation 
+(
+Qu et al., 2021
+)
+.
+Other work uses generated supervision: GPL combines synthetic queries
+with relevance labels from a cross encoder to adapt dense retrieval
+
+(
+Wang et al., 2022
+)
+.
+ReAlign generates question-focused descriptions for selected regions
+of a document page, then aligns document rankings induced by the
+question and those descriptions 
+(
+Yang et al., 2026
+)
+.
+We keep a distributional alignment objective but change what the
+supervision is attached to.
+Our teacher describes evidence inside a fixed screenshot tile, using the
+training question and reference answer as guidance, and these
+descriptions supervise the same encoder that produces our fused tile
+representation.
+Unlike ReAlign’s region selection, our pipeline does not predict
+bounding boxes.
+
+3 
+Data Construction
+
+We use the Wikipedia screenshots already rendered and tiled by
+PixelRAG 
+(
+Wang et al., 2026
+)
+ as our visual corpus.
+The corpus used here comprises approximately 7.1 million pages and
+28.2 million tiles, each linked to its source page.
+On top of these images, we construct two distinct kinds of text.
+As shown in Fig 
+1
+, query-independent transcriptions serve as index content, whereas
+query-focused evidence descriptions provide training supervision.
+The latter depend on a training question and reference answer and are
+not available as test-time document fields.
+Appendix 
+A
+ reports corpus counts.
+
+3.1 
+Screenshot Text Transcription
+
+We process every indexed tile 
+ with Qwen3-VL-4B-Instruct
+
+(
+Bai et al., 2025
+)
+ to transcribe visible text as 
+ in reading order.
+The prompt discourages completion of words cut off at tile boundaries.
+Transcriptions are cached independently of retrieval questions and
+reference answers. We then perform quality, length, and format checks on the resulting transcriptions.
+About 85% of indexed tiles have nonempty transcriptions; tiles with
+no visible text retain an empty text field and use image-only inputs.
+
+3.2 
+Question-Conditioned Evidence Descriptions
+
+Inspired by ReAlign 
+(
+Yang et al., 2026
+)
+, we use
+Qwen3-VL-32B-Instruct 
+(
+Bai et al., 2025
+)
+ as a teacher to generate 
+
+descriptions of the evidence that supports the question for each training triple 
+.
+The question defines what information is needed; the reference answer
+
+ helps the teacher locate that information in the positive tile 
+.
+The generation instruction asks for supporting content visible in
+the tile, rather than an unsupported restatement of the answer.
+The resulting descriptions supply answer-conditioned training signals
+intended to focus the multimodal retriever on useful evidence.
+It differs from ReAlign’s region descriptions 
+(
+Yang et al., 2026
+)
+ because
+we describe fixed screenshot tiles and do not select bounding boxes.
+
+Every training question has a supervision text 
+.
+When generated descriptions are available, we sample one uniformly at
+each training use; otherwise, we concatenate the question and its
+reference answer to form 
+.
+The reference answer helps the teacher locate supporting content
+during data construction.
+This supervision is used only for training and is not introduced at
+inference.
+
+4 
+Pix2Evidence Framework
+
+4.1 
+Overview
+
+Let 
+ with 
+ denote a screenshot
+tile, its transcription, and its source identifier.
+Each tile is encoded together with its transcription into a fused
+image–text representation. An overview of Pix2Evidence is shown in Fig 
+2
+.
+
+At inference, Pix2Evidence retrieves the top-
+ candidates from this
+fused index (Section 
+4.2.1
+), reranks them with a
+vision-language reranker (Section 
+4.2.2
+), and passes the
+top-
+ tiles to the reader.
+The retriever is trained offline with evidence-guided supervision: a
+contrastive term pulls the question toward its positive tile
+(Section 
+4.3.1
+), and an alignment term makes the
+question-side ranking follow the ranking induced by an evidence
+supervision text (Section 
+4.3.3
+).
+Evidence descriptions are used only during training; inference relies
+solely on the question and indexed document content.
+
+NQ
+
+NQ-Tables
+
+SimpleQA
+
+MMSearch
+
+EVQA
+
+Method
+
+Recall
+
+Acc
+
+Recall
+
+Acc
+
+Recall
+
+Acc
+
+Recall
+
+Acc
+
+Recall
+
+Acc
+
+No retrieval
+
+13.1
+
+10.9
+
+6.4
+
+13.5
+
+27.3
+
+Text-based retrieval
+
+mwparserfromhell
+
+48.6
+
+27.7
+
+35.0
+
+18.3
+
+72.9
+
+58.4
+
+–
+
+12.9
+
+3.2
+
+30.7
+
+Trafilatura
+
+45.8
+
+29.4
+
+37.7
+
+21.9
+
+79.3
+
+69.0
+
+–
+
+13.5
+
+3.2
+
+29.2
+
+Pixel-based retrieval
+
+PixelRAG (base)
+
+53.5
+
+31.0
+
+45.5
+
+24.3
+
+79.9
+
+70.3
+
+–
+
+19.9
+
+17.0
+
+39.4
+
+PixelRAG
+
+58.9
+
+31.1
+
+50.7
+
+25.8
+
+83.1
+
+72.8
+
+–
+
+21.6
+
+33.2
+
+40.1
+
+Fused retrieval
+
+Pix2Evidence
+
+60.6
+
+32.1
+
+56.8
+
+25.7
+
+86.0
+
+73.4
+
+–
+
+26.0
+
+30.8
+
+40.6
+
+Pix2Evidence (+reranker)
+
+57.8
+
+33.2
+
+55.8
+
+27.1
+
+86.9
+
+77.6
+
+–
+
+23.0
+
+33.0
+
+40.3
+
+Table 1: 
+Main results on five Wikipedia QA benchmarks. We use LLM-judged for SimpleQA, MMSearch, EVQA; EM for NQ and NQ-Tables.
+MMSearch has no gold articles, so its recall is not reported. Bold marks
+the best value in each column.
+
+4.2 
+Inference Pipeline
+
+4.2.1 
+Multimodal Retrieval
+
+We adapt Qwen3-VL-Embedding-2B 
+(
+Li et al., 2026
+)
+ with LoRA
+
+(
+Hu et al., 2022
+)
+ in its language and vision components.
+For tile 
+, 
+ is its screenshot, 
+ is its
+transcription, and 
+ identifies the source page.
+A shared encoder 
+ maps an input to a normalised vector;
+
+ denotes its adapted parameters.
+We apply query and document input templates according to their roles.
+The notation 
+ is the vector for question 
+, and
+
+ encodes the image with its available text.
+If 
+ is empty, the input contains only 
+.
+
+The retrieval score is
+
+(1)
+
+where angle brackets denote a vector inner product.
+A FAISS index supports search over these normalised vectors
+
+(
+Johnson et al., 2021
+)
+.
+Appendix 
+A.3
+ describes the input roles and the
+availability of their prompt templates.
+
+For a question 
+, let 
+ be the ranked list of at most 
+
+hits returned by the fused retriever:
+
+(2)
+
+The operator 
+ returns the highest-scoring
+hits in rank order.
+
+ counts hit positions in the resulting list.
+We pass 
+ to the reranking stage;
+Appendix 
+A.5
+ specifies candidate input
+formats.
+
+4.2.2 
+Cross-Modal Reranking
+
+Qwen3-VL-Reranker-2B 
+(
+Li et al., 2026
+)
+ jointly scores each
+question–candidate pair without task-specific reranker training.
+Given the candidate list 
+ from the fused retrieval
+stage, we compute for each candidate input 
+
+(3)
+
+Here 
+ is the vision-language reranker with parameters 
+,
+
+ is the relevance score of candidate input 
+, and
+
+ returns the indices 
+ of the 
+
+highest-scoring candidates.
+We derive 
+ from the yes/no logits and pass those candidates to
+the reader with the question.
+The reranker input format for the fused retrieval path is detailed
+in Appendix 
+A.5
+.
+
+4.3 
+Training
+
+4.3.1 
+Contrastive Retrieval Objective
+
+For question 
+, let 
+ denote its positive tile and
+
+ the training candidate set containing
+
+, mined negatives, and in-batch candidates gathered across
+devices.
+We define the question-side ranking distribution
+
+(4)
+
+where 
+ is the encoder similarity between the question
+and the fused image–text representation of candidate 
+, and 
+
+is the softmax temperature.
+Following standard contrastive retrieval training, we minimise
+
+(5)
+
+4.3.2 
+Evidence-Guided Alignment
+
+The contrastive term above only uses the question side and does not
+exploit evidence supervision.
+Let 
+ be the evidence supervision text for question 
+ from
+Section 
+3.2
+, and let
+
+ be the ranking distribution induced by
+
+ over the same candidate set.
+We align the question-side ranking with this evidence-side ranking by
+
+(6)
+
+where 
+ is Kullback–Leibler divergence and 
+
+stops gradients through 
+, so that 
+ is updated toward the
+evidence-induced target.
+This makes the evidence text act as a target for the question-side
+ranking, which is the side used at inference time.
+
+4.3.3 
+Overall Training Objective
+
+The total objective combines the contrastive and alignment terms:
+
+(7)
+
+ balances the two terms; we set 
+ in all
+experiments, and both distributions use 
+.
+Our training signal comes from descriptions of answer evidence in
+fixed screenshot tiles.
+We adapt the ranking alignment objective of ReAlign 
+(
+Yang et al., 2026
+)
+
+to these tile-level descriptions rather than selected visual regions.
+The adapted encoder builds the fused image–text index used in the
+main retrieval pipeline.
+
+Alignment
+
+Weight 
+
+QA
+
+Contrastive only
+
+–
+
+0.7725
+
+Forward KL
+
+0.20
+
+0.7825
+
+Reverse KL
+
+0.20
+
+0.7800
+
+Description (cosine)
+
+0.10
+
+0.7750
+
+Reverse KL
+
+0.05
+
+0.7750
+
+Description (cosine)
+
+0.20
+
+0.7725
+
+Forward KL
+
+0.05
+
+0.7900
+
+Table 2: 
+Ablation on evidence-alignment objectives. Weight 
+ is
+the coefficient of the alignment term in Eq. 
+7
+.
+“Description (cosine)” applies a cosine penalty between question and
+description embeddings.
+
+5 
+Experiments
+
+5.1 
+Evaluation Setting
+
+Benchmarks.
+
+We evaluate Natural Questions (NQ) 
+(
+Kwiatkowski et al., 2019
+)
+, NQ-Tables,
+SimpleQA 
+(
+Wei et al., 2024
+)
+, MMSearch 
+(
+Jiang et al., 2024
+)
+, and
+Encyclopedic-VQA (EVQA) 
+(
+Mensink et al., 2023
+)
+ on Wikipedia QA.
+The main comparison reports answer accuracy and gold-article evidence
+recall; MMSearch has no gold articles for recall evaluation.
+
+Baselines.
+
+We compare text extraction with mwparserfromhell and Trafilatura
+
+(
+Barbaresi, 2021
+)
+, screenshot retrieval with PixelRAG (base) and
+PixelRAG 
+(
+Wang et al., 2026
+)
+, and Pix2Evidence with and without reranking.
+Table 
+1
+ presents the main comparison.
+
+Configuration.
+
+The main experiment uses Qwen3-VL-4B-Instruct as the reader and GPT-4.1 
+(
+OpenAI, 2025
+)
+
+to judge answer accuracy.
+Scores use a 0–100 scale unless stated otherwise.
+NQ and NQ-Tables are evaluated with either LLM-judged answer
+accuracy or exact match (EM), depending on the experiment.
+We identify the measure used in each table and figure; further
+protocol details appear in Appendix 
+B
+.
+
+Embedding input
+
+Reader input
+
+SimpleQA
+
+Image + Text
+
+Image + Text
+
+73.4
+
+Image + Text
+
+Image
+
+67.9
+
+Image + Text
+
+Text
+
+71.9
+
+Text
+
+Image
+
+60.6
+
+Text
+
+Image + Text
+
+66.2
+
+Image
+
+Image
+
+69.0
+
+Table 3: 
+Retrieval–reader modality ablation on SimpleQA. We vary the
+input modality at both stages. Bold indicates the highest score.
+
+5.2 
+Main Results
+
+Table 
+1
+ presents the main comparison.
+Without reranking, Pix2Evidence already achieves better results than
+both text-extraction and screenshot-retrieval baselines on most
+benchmarks, especially on MMSearch and EVQA, reaching 26.0 and 40.6,
+respectively.
+This shows that fusing visual and textual information in a single
+retrieval view provides stronger evidence than using either modality
+alone.
+
+Adding the vision-language reranker further improves answer accuracy
+on NQ, NQ-Tables, and SimpleQA, reaching 33.2, 27.1, and 77.6,
+respectively.
+Compared with PixelRAG, these gains are 2.1, 1.3, and 4.8 percentage
+points.
+The reranked configuration also raises SimpleQA evidence recall from
+83.1 to 86.9 and NQ-Tables recall from 50.7 to 55.8.
+The non-reranked configuration remains strongest on MMSearch at 26.0
+and EVQA at 40.6, which allows the reranking stage to be enabled or
+disabled according to the target scenario.
+
+Figure 3: 
+Effect of reading depth and reranking across four benchmarks.
+Pix2Evidence and Pix2Evidence (reranker) are evaluated at
+
+. NQ and NQ-Tables use EM in the follow-up runs;
+
+ denotes the number of items supplied to the reader.
+
+Fusion
+
+SimpleQA
+
+EVQA
+
+NQ (EM)
+
+NQ-Tables (EM)
+
+MMSearch
+
+Max
+
+64.6
+
+30.4
+
+29.9
+
+21.7
+
+19.0
+
+RRF
+
+63.7
+
+30.4
+
+31.6
+
+24.4
+
+22.0
+
+z-score
+
+67.3
+
+33.5
+
+29.8
+
+24.4
+
+20.3
+
+Min–max
+
+66.0
+
+30.8
+
+30.7
+
+24.2
+
+20.3
+
+Table 4: 
+Fusion-rule ablation for a dual-branch extension without
+reranking (
+). The two branches are an image–text retriever and a
+text-only retriever, with candidates deduplicated by tile. NQ and NQ-Tables use EM. Bold marks column-wise best scores, including ties.
+
+5.3 
+Evidence-Alignment Variants
+
+Table 
+2
+ examines how we train with
+teacher-generated evidence descriptions. Following PixelRAG 
+(
+Wang et al., 2026
+)
+, we use a development subset for evaluation.
+Contrastive only uses 
+.
+Forward KL aligns the question-side ranking 
+ to the
+evidence-side ranking 
+ via
+
+,
+which is the direction used in our method, while reverse KL uses the
+opposite direction.
+Description alignment instead applies a cosine penalty between the
+question and description embeddings.
+The weight 
+ is the coefficient of the alignment term in
+
+(Eq. 
+7
+).
+
+Among the recorded variants, forward KL with 
+ achieves
+the highest QA score, 0.7900, versus 0.7725 for contrastive only.
+It also exceeds forward KL at 
+ (0.7825) and reverse KL
+at 
+ (0.7750).
+We therefore adopt forward KL with 
+ in the final system.
+
+5.4 
+Retrieval–Reader Modality Ablation
+
+Table 
+3
+ varies the document embedding and
+reader inputs on SimpleQA; Text denotes corpus transcriptions.
+The best configuration uses Image+Text at both stages, reaching 73.4.
+
+We then fix one stage and vary the other.
+With the embedding fixed to Image+Text, the multimodal reader scores
+73.4, compared with 71.9 for text-only reading and 67.9 for image-only
+reading.
+With the multimodal reader fixed, joint embedding scores 73.4,
+compared with 66.2 for text-only embedding.
+These comparisons show that combining visual and textual information
+benefits both retrieval and reading.
+
+5.5 
+Dual-Branch Fusion Ablation
+
+Our main pipeline uses a single fused image–text retrieval view.
+As an extension, we analyze how a dual-branch design would behave if a
+text-only branch were added, and compare four fusion rules without
+reranking at 
+ (Table 
+4
+).
+All variants use the same image–text and text branches, with
+candidates deduplicated by tile.
+Max keeps the larger raw score for each tile; RRF sums reciprocal ranks
+with offset 60 
+(
+Cormack et al., 2009
+)
+; z-score and min–max normalise each branch’s
+scores within a query before summation.
+
+Fusion changes how the two retrieval views prioritise shared
+candidates.
+Relative to Max, z-score raises SimpleQA from 64.6 to 67.3 and EVQA
+from 30.4 to 33.5.
+RRF achieves the highest NQ EM at 31.6 and the highest MMSearch score
+at 22.0, and ties z-score on NQ-Tables EM at 24.4.
+No single rule dominates across all benchmarks, but every fusion rule
+outperforms Max on at least one benchmark, showing that combining
+normalised scores or branch rankings is more effective than taking the
+maximum raw score.
+
+5.6 
+Effect of Reading Depth
+
+Figure 
+3
+ varies 
+ from one to three and compares
+both Pix2Evidence configurations with PixelRAG, PixelRAG (base), and
+Trafilatura at different reading depth.
+
+Across all evaluated depths, both Pix2Evidence configurations
+consistently outperform the baselines, and the margin is often large.
+For example, on MMSearch, the non-reranked Pix2Evidence reaches 26.0
+at 
+, compared with 21.6 for PixelRAG, a gain of 4.4 points.
+The reranked configuration also reaches 23.0, still above the baseline.
+This advantage remains stable across the evaluated reading depths.
+
+Reader
+
+Params
+
+SimpleQA
+
+EVQA
+
+NQ (EM)
+
+NQ-Tables (EM)
+
+MMSearch
+
+Qwen3-VL family
+
+  Qwen3-VL-2B
+
+2.3B
+
+0.700
+
+0.324
+
+0.244
+
+0.251
+
+0.213
+
+  Qwen3-VL-4B
+
+4B
+
+0.776
+
+0.403
+
+0.332
+
+0.271
+
+0.230
+
+  Qwen3-VL-8B
+
+8B
+
+0.794
+
+0.433
+
+0.314
+
+0.289
+
+0.263
+
+Qwen3.5 family
+
+  Qwen3.5-2B
+
+2B
+
+0.752
+
+0.421
+
+0.235
+
+0.229
+
+0.213
+
+  Qwen3.5-4B
+
+4B
+
+0.798
+
+0.435
+
+0.335
+
+0.271
+
+0.273
+
+  Qwen3.5-9B
+
+9B
+
+0.813
+
+0.467
+
+0.272
+
+0.305
+
+0.300
+
+Table 5: 
+Reader-model ablation with single-branch image–text
+retrieval and vision-language reranking (
+, 
+). Values are on a 0–1 scale; NQ and NQ-Tables use EM.
+Bold marks each column’s observed maximum.
+
+Setting
+
+Pixel fraction
+
+SimpleQA
+
+NQ (EM)
+
+NQ-Tables (EM)
+
+MMSearch
+
+Baseline
+
+77.6
+
+33.2
+
+27.1
+
+23.0
+
+Downsample 
+
+76.4
+
+33.3
+
+26.5
+
+22.0
+
+Downsample 
+
+74.4
+
+33.4
+
+27.7
+
+24.0
+
+Downsample 
+
+74.0
+
+33.3
+
+26.8
+
+20.3
+
+Table 6: 
+Image downsampling on the single-branch Pix2Evidence (reranker)
+configuration (
+, 
+), without compression-specific fine-tuning.
+Text is unchanged.
+
+5.7 
+Reader Model Ablation
+
+Table 
+5
+ compares readers from the Qwen3-VL 
+(
+Bai et al., 2025
+)
+ and
+Qwen3.5 
+(
+Qwen Team, 2026
+)
+ families under the same single-branch image–text retrieval
+and vision-language reranking setting.
+The Qwen3.5 family performs better overall than Qwen3-VL at comparable
+or smaller parameter scales.
+Qwen3.5-9B gives the best observed results on four benchmarks:
+SimpleQA at 0.813, EVQA at 0.467, NQ-Tables at 0.305, and MMSearch at
+0.300.
+Qwen3.5-4B achieves the highest NQ at 0.335 and also reaches 0.798 on
+SimpleQA.
+These results indicate that stronger readers generally bring greater
+benefits to the system.
+The system remains effective across all evaluated reader sizes, and
+its performance generally improves as the reader becomes stronger.
+
+5.8 
+Image Downsampling
+
+Table 
+6
+ evaluates image downsampling. We apply Lanczos downsampling, which reduces each image side by
+
+ and its nominal area by a factor of 
+. Text is kept unchanged.
+Additional text-length, candidate-pool, and reading-depth results
+appear in Appendix 
+C
+.
+
+Moderate downsampling largely preserves answer quality.
+At 
+, SimpleQA only drops from 77.6 to 76.4, while NQ slightly
+improves from 33.2 to 33.3 and NQ-Tables changes from 27.1 to 26.5.
+Stronger compression at 
+ reduces SimpleQA to 74.0 and MMSearch to
+20.3, while NQ remains stable at 33.3.
+Overall, these results show that moderate image downsampling generally
+retains most of the measured answer quality with fewer input pixels,
+and that SimpleQA and MMSearch are more sensitive to stronger
+compression than NQ and NQ-Tables in these runs.
+
+6 
+Conclusion
+
+We presented Pix2Evidence, a multimodal RAG system for question
+answering over Wikipedia pages.
+It treats each page as a collection of screenshot tiles and encodes
+each tile together with its available transcription into a fused
+image–text representation, so that layout and readable text are
+considered jointly rather than as separate retrieval views.
+At inference time, the fused retriever returns candidate tiles, a
+vision-language reranker selects the most relevant ones, and a reader
+generates the answer from the question and the selected evidence.
+For training, a teacher model produces descriptions of
+answer-supporting evidence, which guide the retriever through a
+contrastive objective and an evidence-alignment term.
+Across five Wikipedia QA benchmarks, the non-reranked system scores above
+PixelRAG in answer accuracy and leads the main comparison on four.
+Its 26.0% MMSearch accuracy exceeds PixelRAG by 4.4 percentage
+points.
+The results underline a practical distinction: retaining rich document
+content is useful, but a RAG system must also deliver the right
+evidence to the reader.
+Extensive experiments demonstrate the effectiveness of Pix2Evidence.
+
+Limitations
+
+Our evaluation focuses on English Wikipedia QA and a limited set of
+model configurations.
+Although we test readers from two model families, the sweep does not
+cover other architectures, larger scales, or non-English domains.
+A broader reader-model evaluation, including multilingual and
+domain-specific settings, remains future work. The fused image–text index and the vision-language reranker introduce
+additional storage and computation compared with a text-only pipeline.
+Our input-budget study varies pixel area and text length, but it does
+not measure peak memory and end-to-end latency.
+These factors are important for practical deployment, especially when
+the reader context is large. A complete cost evaluation and more efficient indexing and reranking
+designs therefore remain future work.
+For example, one could explore compressed index representations,
+lightweight rerankers, or adaptive reranking that is applied only when
+the initial retrieval is uncertain.
+
+Ethical Considerations
+
+We adhere to the ethical guidelines of the research community.
+All experiments use publicly available datasets and open-source models,
+ensuring transparency and reproducibility.
+We have not collected new data involving human subjects or personally
+identifiable information.
+
+The datastore contains rendered web pages and may include copyrighted
+material or personal information.
+Retrieved evidence improves traceability, but it does not establish
+that a source is correct or appropriate to disclose.
+Reference answers condition training descriptions only and are not
+provided during test-time retrieval or generation.
+Our method focuses on retrieval and evidence selection and does not
+modify the underlying safety alignment of the reader models.
+
+References
+
+Bai 
+et al.
+ (2025)
+
+S. Bai, Y. Cai, R. Chen, K. Chen, X. Chen, Z. Cheng, L. Deng, W. Ding, C. Gao, C. Ge, W. Ge, Z. Guo, Q. Huang, J. Huang, F. Huang, B. Hui, S. Jiang, Z. Li, M. Li, M. Li, K. Li, Z. Lin, J. Lin, X. Liu, J. Liu, C. Liu, Y. Liu, D. Liu, S. Liu, D. Lu, R. Luo, C. Lv, R. Men, L. Meng, X. Ren, X. Ren, S. Song, Y. Sun, J. Tang, J. Tu, J. Wan, P. Wang, P. Wang, Q. Wang, Y. Wang, T. Xie, Y. Xu, H. Xu, J. Xu, Z. Yang, M. Yang, J. Yang, A. Yang, B. Yu, F. Zhang, H. Zhang, X. Zhang, B. Zheng, H. Zhong, J. Zhou, F. Zhou, J. Zhou, Y. Zhu, and K. Zhu
+
+Qwen3-VL technical report
+.
+
+arXiv preprint arXiv:2511.21631
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§3.1
+,
+
+§3.2
+,
+
+§5.7
+.
+
+Barbaresi (2021)
+
+A. Barbaresi
+
+Trafilatura: A web scraping library and command-line tool for text discovery and extraction
+.
+
+In 
+Proceedings of the 59th Annual Meeting of the Association for Computational Linguistics and the 11th International Joint Conference on Natural Language Processing: System Demonstrations
+,  
+H. Ji, J. C. Park, and R. Xia (Eds.)
+,
+
+Online
+, 
+pp. 122–131
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§B.3
+,
+
+§5.1
+.
+
+Chang 
+et al.
+ (2022)
+
+Y. Chang, M. Narang, H. Suzuki, G. Cao, J. Gao, and Y. Bisk
+
+WebQA: multihop and multimodal QA
+.
+
+In 
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)
+,
+
+pp. 16495–16504
+.
+
+External Links: 
+Link
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+Chen 
+et al.
+ (2022)
+
+W. Chen, H. Hu, X. Chen, P. Verga, and W. Cohen
+
+MuRAG: multimodal retrieval-augmented generator for open question answering over images and text
+.
+
+In 
+Proceedings of the 2022 Conference on Empirical Methods in Natural Language Processing
+,
+
+pp. 5558–5570
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Chen 
+et al.
+ (2021)
+
+X. Chen, Z. Zhao, L. Chen, J. Ji, D. Zhang, A. Luo, Y. Xiong, and K. Yu
+
+WebSRC: a dataset for web-based structural reading comprehension
+.
+
+In 
+Proceedings of the 2021 Conference on Empirical Methods in Natural Language Processing
+,
+
+pp. 4173–4185
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Cormack 
+et al.
+ (2009)
+
+G. V. Cormack, C. L. A. Clarke, and S. Buettcher
+
+Reciprocal rank fusion outperforms Condorcet and individual rank learning methods
+.
+
+In 
+Proceedings of the 32nd International ACM SIGIR Conference on Research and Development in Information Retrieval
+,
+
+pp. 758–759
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§5.5
+.
+
+Faysse 
+et al.
+ (2024)
+
+M. Faysse, H. Sibille, T. Wu, B. Omrani, G. Viaud, C. Hudelot, and P. Colombo
+
+ColPali: efficient document retrieval with vision language models
+.
+
+External Links: 
+2407.01449
+,
+
+Document
+,
+
+Link
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+Gao 
+et al.
+ (2021)
+
+L. Gao, Y. Zhang, J. Han, and J. Callan
+
+Scaling deep contrastive learning batch size under memory limited setup
+.
+
+In 
+Proceedings of the 6th Workshop on Representation Learning for NLP (RepL4NLP-2021)
+,
+
+pp. 316–321
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§A.4
+.
+
+Guu 
+et al.
+ (2020)
+
+K. Guu, K. Lee, Z. Tung, P. Pasupat, and M. Chang
+
+Retrieval augmented language model pre-training
+.
+
+In 
+Proceedings of the 37th International Conference on Machine Learning
+,
+
+Proceedings of Machine Learning Research
+, Vol. 
+119
+, 
+pp. 3929–3938
+.
+
+External Links: 
+Link
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+Hu 
+et al.
+ (2022)
+
+E. J. Hu, Y. Shen, P. Wallis, Z. Allen-Zhu, Y. Li, S. Wang, L. Wang, and W. Chen
+
+LoRA: low-rank adaptation of large language models
+.
+
+In 
+International Conference on Learning Representations
+,
+
+External Links: 
+Link
+
+Cited by: 
+§4.2.1
+.
+
+Huang 
+et al.
+ (2022)
+
+Y. Huang, T. Lv, L. Cui, Y. Lu, and F. Wei
+
+LayoutLMv3: pre-training for document AI with unified text and image masking
+.
+
+In 
+Proceedings of the 30th ACM International Conference on Multimedia
+,
+
+pp. 4083–4091
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Izacard and Grave (2021)
+
+G. Izacard and E. Grave
+
+Leveraging passage retrieval with generative models for open domain question answering
+.
+
+In 
+Proceedings of the 16th Conference of the European Chapter of the Association for Computational Linguistics: Main Volume
+,  
+P. Merlo, J. Tiedemann, and R. Tsarfaty (Eds.)
+,
+
+Online
+, 
+pp. 874–880
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+Jiang 
+et al.
+ (2024)
+
+D. Jiang, R. Zhang, Z. Guo, Y. Wu, J. Lei, P. Qiu, P. Lu, Z. Chen, C. Fu, G. Song, P. Gao, Y. Liu, C. Li, and H. Li
+
+MMSearch: benchmarking the potential of large models as multi-modal search engines
+.
+
+External Links: 
+2409.12959
+,
+
+Link
+
+Cited by: 
+§5.1
+.
+
+Johnson 
+et al.
+ (2021)
+
+J. Johnson, M. Douze, and H. Jégou
+
+Billion-scale similarity search with GPUs
+.
+
+IEEE Transactions on Big Data
+ 
+7
+ (
+3
+), 
+pp. 535–547
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§4.2.1
+.
+
+Karpukhin 
+et al.
+ (2020)
+
+V. Karpukhin, B. Oguz, S. Min, P. Lewis, L. Wu, S. Edunov, D. Chen, and W. Yih
+
+Dense passage retrieval for open-domain question answering
+.
+
+In 
+Proceedings of the 2020 Conference on Empirical Methods in Natural Language Processing (EMNLP)
+,  
+B. Webber, T. Cohn, Y. He, and Y. Liu (Eds.)
+,
+
+Online
+, 
+pp. 6769–6781
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§1
+,
+
+§2
+,
+
+§2
+.
+
+Khattab and Zaharia (2020)
+
+O. Khattab and M. Zaharia
+
+ColBERT: efficient and effective passage search via contextualized late interaction over BERT
+.
+
+In 
+Proceedings of the 43rd International ACM SIGIR Conference on Research and Development in Information Retrieval
+,
+
+pp. 39–48
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Kim 
+et al.
+ (2022)
+
+G. Kim, T. Hong, M. Yim, J. Nam, J. Park, J. Yim, W. Hwang, S. Yun, D. Han, and S. Park
+
+OCR-free document understanding transformer
+.
+
+In 
+Computer Vision – ECCV 2022
+,
+
+pp. 498–517
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Kwiatkowski 
+et al.
+ (2019)
+
+T. Kwiatkowski, J. Palomaki, O. Redfield, M. Collins, A. Parikh, C. Alberti, D. Epstein, I. Polosukhin, J. Devlin, K. Lee, K. Toutanova, L. Jones, M. Kelcey, M. Chang, A. M. Dai, J. Uszkoreit, Q. Le, and S. Petrov
+
+Natural questions: a benchmark for question answering research
+.
+
+Transactions of the Association for Computational Linguistics
+ 
+7
+, 
+pp. 452–466
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§B.1
+,
+
+§1
+,
+
+§5.1
+.
+
+Kwon 
+et al.
+ (2023)
+
+W. Kwon, Z. Li, S. Zhuang, Y. Sheng, L. Zheng, C. H. Yu, J. E. Gonzalez, H. Zhang, and I. Stoica
+
+Efficient memory management for large language model serving with PagedAttention
+.
+
+In 
+Proceedings of the 29th Symposium on Operating Systems Principles
+,
+
+pp. 611–626
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§A.4
+.
+
+Lewis 
+et al.
+ (2020)
+
+P. Lewis, E. Perez, A. Piktus, F. Petroni, V. Karpukhin, N. Goyal, H. Küttler, M. Lewis, W. Yih, T. Rocktäschel, S. Riedel, and D. Kiela
+
+Retrieval-augmented generation for knowledge-intensive NLP tasks
+.
+
+In 
+Advances in Neural Information Processing Systems
+,  
+H. Larochelle, M. Ranzato, R. Hadsell, M.F. Balcan, and H. Lin (Eds.)
+,
+
+Vol. 
+33
+, 
+pp. 9459–9474
+.
+
+External Links: 
+Link
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+Li 
+et al.
+ (2026)
+
+M. Li, Y. Zhang, D. Long, K. Chen, S. Song, S. Bai, Z. Yang, P. Xie, A. Yang, D. Liu, J. Zhou, and J. Lin
+
+Qwen3-VL-Embedding and Qwen3-VL-Reranker: a unified framework for state-of-the-art multimodal retrieval and ranking
+.
+
+External Links: 
+2601.04720
+,
+
+Link
+
+Cited by: 
+§C.2
+,
+
+§4.2.1
+,
+
+§4.2.2
+.
+
+Loison 
+et al.
+ (2026)
+
+A. Loison, Q. Macé, A. Edy, V. Xing, T. Balough, G. d. S. P. Moreira, B. Liu, M. Faysse, C. Hudelot, and G. Viaud
+
+ViDoRe V3: a comprehensive evaluation of retrieval augmented generation in complex real-world scenarios
+.
+
+In 
+Proceedings of the 64th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)
+,
+
+pp. 16570–16600
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Ma 
+et al.
+ (2024)
+
+X. Ma, S. Lin, M. Li, W. Chen, and J. Lin
+
+Unifying multimodal retrieval via document screenshot embedding
+.
+
+In 
+Proceedings of the 2024 Conference on Empirical Methods in Natural Language Processing
+,
+
+pp. 6492–6505
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+Mensink 
+et al.
+ (2023)
+
+T. Mensink, J. Uijlings, L. Castrejon, A. Goel, F. Cadar, H. Zhou, F. Sha, A. Araujo, and V. Ferrari
+
+Encyclopedic VQA: visual questions about detailed properties of fine-grained categories
+.
+
+In 
+Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV)
+,
+
+pp. 3113–3124
+.
+
+External Links: 
+Link
+
+Cited by: 
+§B.1
+,
+
+§5.1
+.
+
+Nguyen 
+et al.
+ (2025)
+
+T. Nguyen, Y. Lei, J. Ju, and A. Yates
+
+SERVAL: surprisingly effective zero-shot visual document retrieval powered by large vision and language models
+.
+
+In 
+Proceedings of the 2025 Conference on Empirical Methods in Natural Language Processing
+,
+
+pp. 30807–30822
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+OpenAI (2025)
+
+OpenAI
+
+Introducing GPT-4.1 in the API
+.
+
+Note: 
+https://openai.com/index/gpt-4-1/
+Accessed: 2025-05-20
+
+Cited by: 
+§5.1
+.
+
+Qu 
+et al.
+ (2021)
+
+Y. Qu, Y. Ding, J. Liu, K. Liu, R. Ren, W. X. Zhao, D. Dong, H. Wu, and H. Wang
+
+RocketQA: an optimized training approach to dense passage retrieval for open-domain question answering
+.
+
+In 
+Proceedings of the 2021 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies
+,
+
+pp. 5835–5847
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Qwen Team (2026)
+
+Qwen Team
+
+Qwen3.5: towards native multimodal agents
+.
+
+External Links: 
+Link
+
+Cited by: 
+§5.7
+.
+
+Shen 
+et al.
+ (2024)
+
+X. Shen, R. Blloshmi, D. Zhu, J. Pei, and W. Zhang
+
+Assessing “implicit” retrieval robustness of large language models
+.
+
+In 
+Proceedings of the 2024 Conference on Empirical Methods in Natural Language Processing
+,
+
+pp. 8988–9003
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Sun 
+et al.
+ (2023)
+
+W. Sun, L. Yan, X. Ma, S. Wang, P. Ren, Z. Chen, D. Yin, and Z. Ren
+
+Is ChatGPT good at search? investigating large language models as re-ranking agents
+.
+
+In 
+Proceedings of the 2023 Conference on Empirical Methods in Natural Language Processing
+,
+
+pp. 14918–14937
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Talmor 
+et al.
+ (2021)
+
+A. Talmor, O. Yoran, A. Catav, D. Lahav, Y. Wang, A. Asai, G. Ilharco, H. Hajishirzi, and J. Berant
+
+MultiModalQA: complex question answering over text, tables and images
+.
+
+In 
+International Conference on Learning Representations
+,
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+Tanaka 
+et al.
+ (2021)
+
+R. Tanaka, K. Nishida, and S. Yoshida
+
+VisualMRC: machine reading comprehension on document images
+.
+
+Proceedings of the AAAI Conference on Artificial Intelligence
+ 
+35
+ (
+15
+), 
+pp. 13878–13888
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+van den Oord 
+et al.
+ (2018)
+
+A. van den Oord, Y. Li, and O. Vinyals
+
+Representation learning with contrastive predictive coding
+.
+
+External Links: 
+1807.03748
+,
+
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Wang 
+et al.
+ (2022)
+
+K. Wang, N. Thakur, N. Reimers, and I. Gurevych
+
+GPL: generative pseudo labeling for unsupervised domain adaptation of dense retrieval
+.
+
+In 
+Proceedings of the 2022 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies
+,
+
+pp. 2345–2360
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Wang 
+et al.
+ (2026)
+
+Y. Wang, Z. Li, Z. Wang, P. Teiletche, L. Jin, M. Zaharia, J. E. Gonzalez, and S. Min
+
+PIXELRAG: web screenshots beat text for retrieval-augmented generation
+.
+
+External Links: 
+2606.28344
+,
+
+Document
+,
+
+Link
+
+Cited by: 
+§A.1
+,
+
+Appendix A
+,
+
+§B.1
+,
+
+§B.2
+,
+
+§B.3
+,
+
+§C.3
+,
+
+§1
+,
+
+§2
+,
+
+§3
+,
+
+§5.1
+,
+
+§5.3
+.
+
+Wei 
+et al.
+ (2024)
+
+J. Wei, N. Karina, H. W. Chung, Y. J. Jiao, S. Papay, A. Glaese, J. Schulman, and W. Fedus
+
+Measuring short-form factuality in large language models
+.
+
+External Links: 
+2411.04368
+,
+
+Link
+
+Cited by: 
+§B.1
+,
+
+§5.1
+.
+
+Wolfson 
+et al.
+ (2025)
+
+T. Wolfson, H. Trivedi, M. Geva, Y. Goldberg, D. Roth, T. Khot, A. Sabharwal, and R. Tsarfaty
+
+MoNaCo: more natural and complex questions for reasoning across dozens of documents
+.
+
+Transactions of the Association for Computational Linguistics
+ 
+13
+, 
+pp. 1–30
+.
+
+External Links: 
+Link
+
+Cited by: 
+§B.1
+.
+
+Xiong 
+et al.
+ (2021)
+
+L. Xiong, C. Xiong, Y. Li, K. Tang, J. Liu, P. N. Bennett, J. Ahmed, and A. Overwijk
+
+Approximate nearest neighbor negative contrastive learning for dense text retrieval
+.
+
+In 
+International Conference on Learning Representations
+,
+
+External Links: 
+Link
+
+Cited by: 
+§1
+.
+
+Yang 
+et al.
+ (2026)
+
+H. Yang, Y. Ji, Z. Xu, Z. Liu, Y. Yan, Z. Chen, S. Wang, Y. Gu, and G. Yu
+
+ReAlign: optimizing the visual document retriever with reasoning-guided fine-grained alignment
+.
+
+External Links: 
+2604.07419
+,
+
+Document
+,
+
+Link
+
+Cited by: 
+§1
+,
+
+§2
+,
+
+§3.2
+,
+
+§4.3.3
+.
+
+Yu 
+et al.
+ (2024)
+
+S. Yu, C. Tang, B. Xu, J. Cui, J. Ran, Y. Yan, Z. Liu, S. Wang, X. Han, Z. Liu, and M. Sun
+
+VisRAG: vision-based retrieval-augmented generation on multi-modality documents
+.
+
+External Links: 
+2410.10594
+,
+
+Link
+
+Cited by: 
+§1
+,
+
+§2
+,
+
+§2
+.
+
+Appendix A 
+System and Data Construction
+
+This appendix distinguishes the PixelRAG screenshot source
+
+(
+Wang et al., 2026
+)
+ from our transcription, evidence supervision, and
+retrieval implementation.
+The corpus counts below describe the subset indexed for Pix2Evidence,
+not a new rendering effort.
+
+A.1 
+Rendered Wikipedia Corpus
+
+Screenshot source.
+
+We use the Wikipedia images already rendered and tiled by PixelRAG
+
+(
+Wang et al., 2026
+)
+, rather than rerendering the pages ourselves.
+Its rendering procedure uses an 875-pixel viewport width and divides
+long pages into non-overlapping tiles of up to 1024 pixels in height.
+Each tile retains a link to its source article.
+The image corpus used in our index contains 7,123,459 Wikipedia pages
+and 28,244,361 tiles (Table 
+7
+); these counts differ from
+those reported for PixelRAG’s full corpus.
+We will release the exact source snapshot and our indexed subset together with the indexed data.
+
+Item
+
+Count
+
+Wikipedia pages
+
+7,123,459
+
+Screenshot tiles
+
+28,244,361
+
+Tiles with nonempty transcriptions
+
+23,948,959
+
+Training questions
+
+39,482
+
+Training tile occurrences
+
+118,446
+
+Questions with descriptions
+
+39,205
+
+Hard negatives per question
+
+2
+
+Table 7: 
+Corpus and selected training data. Transcription covers the
+indexed tiles; the transcription count includes only nonempty text.
+Training occurrences include one positive and two negatives per
+question.
+
+Counting units.
+
+All indexed tiles are processed for transcription, but a tile without
+visible text may have an empty transcription.
+The 23,948,959 figure counts distinct tiles with nonempty text,
+approximately 85% of the indexed corpus, not transcription coverage.
+Training tile occurrences instead count one positive and two negatives
+per question; they are not distinct tile records.
+
+A.2 
+Text Sources and Supervision
+
+Corpus transcription.
+
+Qwen3-VL-4B-Instruct processes every indexed tile for visible text,
+with a 2048-token output limit.
+The prompt discourages completion of words cut off at tile boundaries.
+A 
+[NO TEXT]
+ response is stored as an empty string.
+Transcriptions are cached independently of the question and answer;
+when no text is visible, the fused retriever uses an image-only input.
+Text is truncated to a fixed character cap before encoding.
+
+Training evidence descriptions.
+
+For each training question, positive tile, and reference answer,
+Qwen3-VL-32B-Instruct is prompted to generate 
+ descriptions of
+visible answer evidence; 
+ is configurable and the reported run
+uses 
+.
+Generation uses temperature 0.7, a 1024-token output limit, and
+images resized to a maximum side of 2048 pixels.
+Generated descriptions are available for 39,205 of 39,482 questions.
+One is sampled uniformly at each training use; for questions without
+generated descriptions, the question and answer are concatenated.
+Thus every training question has supervision text.
+The answer helps the teacher locate evidence during data construction.
+The supervision is used only during training, not at inference.
+We apply quality, length, and format checks before sampling the
+descriptions.
+
+A.3 
+Model Inputs and Data-Production Prompts
+
+Input roles.
+
+Table 
+8
+ lists the input fields used at each stage.
+In Section 
+4.2.1
+, 
+ denotes the embedding of
+a query-template input, and 
+ denotes a
+document-template input containing the tile image and available text,
+or the image alone when 
+ is empty.
+The text-only input 
+ is used only in the text-only
+ablation.
+
+Stage
+
+Input fields
+
+Transcription
+
+Tile image; text-visible transcription instruction
+
+Evidence teacher
+
+Training question, positive tile, reference answer
+
+Query embedding
+
+Question in query role
+
+Document embedding
+
+Tile image and available transcription
+
+Reranking
+
+Question and retrieved candidate payload
+
+Answer generation
+
+Question and selected evidence items
+
+Table 8: 
+Inputs used at each stage. The document embedding uses the
+fused image–text input; a text-only document input is used only in
+the text-only ablation.
+
+Benchmark
+
+Task family
+
+Subset size
+
+Main-table measure
+
+Natural Questions
+
+Text and Wikipedia QA
+
+1,000
+
+EM, article recall
+
+NQ-Tables
+
+Structured Wikipedia QA
+
+1,000
+
+EM, article recall
+
+SimpleQA
+
+Factual Wikipedia QA
+
+1,000
+
+GPT-4.1 judged accuracy, article recall
+
+MMSearch
+
+Multimodal QA
+
+300
+
+GPT-4.1 judged accuracy; no article recall
+
+Encyclopedic VQA
+
+Image-grounded QA
+
+749
+
+GPT-4.1 judged accuracy, article recall
+
+Table 9: 
+Wikipedia benchmark subsets used in our evaluation, together with
+their task families, subset sizes, and main-table evaluation measures.
+All five tasks query our Wikipedia tile index, while NQ and NQ-Tables use
+exact match and the remaining benchmarks use GPT-4.1 judged accuracy.
+
+Retrieval path / hit
+
+Reranker input
+
+Fused path: image hit
+
+Image; text if available
+
+Dual-view ablation: image hit
+
+Image only
+
+Dual-view ablation: text hit
+
+Text
+
+Table 10: 
+Reranker inputs. The fused path is the main pipeline; the
+dual-view entries belong to the fusion ablation in
+Section 
+5.5
+.
+
+Data-production prompts.
+
+Qwen3-VL-4B-Instruct produces the corpus transcription 
+ of
+Section 
+3.1
+ from the tile image, and
+Qwen3-VL-32B-Instruct produces the training supervision 
+ of
+Section 
+3.2
+ from the positive tile.
+Figure 
+4
+ reproduces both prompts verbatim; line
+breaks are added for display only.
+For the evidence description, 
+ is the number of requested
+descriptions, set to three in the reported run, and 
+ is the
+training question.
+The final line appends 
+, a training-only marker of the
+form 
+\nGolden answer (use only to locate the
+evidence; do NOT quote it verbatim as the whole description):
+ followed
+by the reference answer.
+
+Transcription prompt
+
+Image input
+
+{screenshot tile}
+
+You are a precise OCR engine. Transcribe ALL text that is actually
+visible in this image, in natural reading order (top to bottom, left to
+right).
+
+Rules:
+
+1. Transcribe only text that is visibly present. This image is a crop
+and may cut through words, sentences, or tables — do NOT complete
+cut-off text and do NOT guess anything that is not shown.
+
+2. Do NOT describe images, icons, layout, colors, or formatting.
+
+3. Preserve the wording and numbers exactly; keep line breaks between
+distinct lines/paragraphs.
+
+4. If the image contains no readable text, output exactly: [NO TEXT]
+
+Output only the transcribed text, with no preamble or commentary.
+
+Evidence-description prompt
+
+Positive tile
+
+{screenshot tile}
+
+You are given a screenshot tile cropped from a rendered web/document
+page, and a question. This tile was retrieved as the evidence that
+answers the question. Think step by step about which visible content in
+the tile supports the answer, then write {k} SELF-CONTAINED evidence
+descriptions that each explain — grounded in what is actually visible
+in this tile — WHY this tile is relevant to and answers the question.
+Each description must stand on its own as a faithful summary of the
+tile’s query-relevant evidence.
+
+Guidelines:
+
+1. Ground every description in content actually visible in the tile; do
+not invent facts, and do not complete text that is cut off at the crop
+boundary.
+
+2. Name the key evidence (entities, numbers, dates, titles) explicitly
+and include the immediate context needed to interpret it; do not clip
+numbers or symbols.
+
+3. For tables/charts, mention the relevant header/row/column or
+legend/axis/unit so the evidence is interpretable.
+
+4. Make the {k} descriptions genuinely different in wording and
+emphasis (different salient evidence or phrasing), not trivial
+paraphrases — this diversity is used for sampling during training.
+
+5. Each description should read like a short factual passage that, on
+its own, would let a retriever match it to the question.
+
+Output format
+ — a single JSON object, no markdown fence, no
+extra text:
+
+{"think": "your brief step-by-step reasoning", "descriptions":
+["desc 1", "desc 2", …]}
+
+Question: {query}{answer_hint}
+
+Figure 4: 
+The two data-production prompts, reproduced verbatim:
+(top) tile transcription for the corpus text view and (bottom)
+question-conditioned evidence descriptions for retriever training.
+
+A.4 
+Retriever Training
+
+Optimisation.
+
+The recorded launch uses batch size 32, gradient-cache chunks of two
+
+(
+Gao et al., 2021
+)
+, learning rate 
+, 20 warm-up steps, and a
+cosine schedule capped at 350 steps.
+A text warm-up stage uses about 15K question and answer pairs for
+50 steps. The selected retriever checkpoint is at step 100. The visual-token limit is 4096.
+Three H800 80GB GPUs train the retriever; a fourth serves the reader
+through vLLM 
+(
+Kwon et al., 2023
+)
+.
+
+Alignment objective.
+
+Question and evidence-description distributions share a temperature
+of approximately 0.07.
+The forward objective in Section 
+4.3.3
+ weights the KL
+term by 0.05 and stops gradients through the question-induced target.
+For the reverse-KL variant, the description-induced distribution is
+detached and the query branch can still receive gradients.
+
+Development subset.
+
+The development subset, adopted from PixelRAG, is a compact
+mini-datastore for embedding ablations, containing 400 questions and
+7,426 tiles.
+For each question, it includes all tiles from the gold article plus the
+top-100 tiles retrieved by the base embedding model, mixing relevant and
+irrelevant candidates.
+We use this subset for our training alignment ablation.
+
+A.5 
+Candidate Processing and Reader Inputs
+
+Candidate lists.
+
+Our main fused retrieval path returns a single ranked list and passes
+the top-
+ hits to the reranker.
+In the ablation study, we use a dual-view recall of text and fused
+image–text to obtain the candidate list, and deduplicate documents
+that appear in both views.
+This variant is used only for the fusion ablation in
+Section 
+5.5
+.
+The fusion ablation deduplicates by tile and compares Max, RRF,
+z-score, and min–max without reranking.
+We apply per-query score normalisation before summation.
+
+Appendix B 
+Evaluation Protocol
+
+B.1 
+Benchmark Details
+
+Benchmark groups.
+
+NQ, NQ-Tables, and SimpleQA mainly test factual answers in text or
+structured page content.
+MMSearch and Encyclopedic VQA add image-grounded questions.
+Table 
+9
+ lists the benchmarks used in our
+evaluation and their subset sizes.
+We report these subset sizes.
+
+Natural Questions (NQ).
+
+We use 1,000 questions associated with Wikipedia articles 
+(
+Kwiatkowski et al., 2019
+)
+.
+Answers are checked against the available reference aliases.
+This is a text-centric task, but the supporting content can include
+structured page elements.
+
+NQ-Tables.
+
+We evaluate 1,000 table-oriented Wikipedia questions.
+Tables and infoboxes make the presentation of structured facts
+relevant to retrieval and reading.
+
+SimpleQA.
+
+We use 1,000 short factual questions 
+(
+Wei et al., 2024
+)
+.
+We use the Wikipedia datastore to retrieve evidence for them.
+The answer-bearing fact can appear in a paragraph, list, infobox,
+or table; a retrieved article is not necessarily the correct tile.
+
+MMSearch.
+
+We include all 300 end-to-end examples:
+171 include a query image and 129 contain text only.
+Although their topics extend beyond Wikipedia, the retrieval backend
+in this comparison is the Wikipedia tile index.
+MMSearch does not supply gold article URLs for the article-recall
+column, which is therefore marked unavailable.
+
+Encyclopedic VQA (EVQA).
+
+We use 749 automatic questions from the landmarks portion of
+Encyclopedic VQA 
+(
+Mensink et al., 2023
+)
+.
+The iNaturalist portion is excluded because some query images are
+unavailable in its official release.
+This is a visual question answering task grounded in fine-grained
+entity information.
+The shorthand EVQA in the main table denotes this subset, not every
+category of the full benchmark.
+
+MoNaCo.
+
+The separate agent evaluation contains 1,315 multi-hop Wikipedia
+questions per recorded run, all completed
+(Section 
+C.3
+) 
+(
+Wolfson et al., 2025
+)
+.
+PixelRAG’s reference protocol uses a GPT-5 ReAct controller with a
+single search tool, up to 20 search calls per question and five hits
+per call 
+(
+Wang et al., 2026
+)
+.
+MoNaCo Judge-F1 must not be read as the Wikipedia QA accuracy in
+Table 
+1
+.
+
+Transcription cap (chars)
+
+SimpleQA
+
+NQ (EM)
+
+NQ-Tables (EM)
+
+Baseline
+
+77.6
+
+33.2
+
+27.1
+
+128
+
+72.1
+
+29.7
+
+24.7
+
+256
+
+72.6
+
+31.8
+
+25.4
+
+512
+
+72.8
+
+32.3
+
+24.7
+
+1024
+
+73.9
+
+33.3
+
+25.3
+
+2048
+
+76.7
+
+32.9
+
+25.4
+
+Table 11: 
+Transcription truncation using the fused image–text retrieval
+view with reranking, native-resolution images, 
+, and 
+.
+NQ and NQ-Tables report exact match; other reported scores follow
+their respective benchmark protocols.
+
+Setting
+
+SimpleQA
+
+NQ (EM)
+
+NQ-Tables (EM)
+
+MMSearch
+
+Baseline
+
+5
+
+3
+
+77.6
+
+33.2
+
+27.1
+
+23.0
+
+Larger pool
+
+10
+
+3
+
+80.9
+
+34.2
+
+27.4
+
+25.7
+
+Larger pool
+
+20
+
+3
+
+82.0
+
+35.0
+
+28.1
+
+25.0
+
+Larger pool
+
+50
+
+3
+
+82.2
+
+33.7
+
+28.1
+
+25.0
+
+Longer context
+
+5
+
+5
+
+77.7
+
+33.6
+
+26.4
+
+25.3
+
+Table 12: 
+Candidate-pool size and reading-depth extensions for the fused
+image–text retrieval view with reranking.
+
+ is the number of candidates supplied to the reranker; 
+ is the
+number of items supplied to the reader. Images and text retain the
+baseline input settings. NQ and NQ-Tables report EM.
+
+B.2 
+Scoring and Grading
+
+Answer accuracy.
+
+The main table uses Qwen3-VL-4B-Instruct as the reader and GPT-4.1 to
+judge generated answers, reporting the share judged correct on a
+0–100 scale.
+PixelRAG’s reference grading protocol classifies answers as
+CORRECT, INCORRECT, or NOT_ATTEMPTED and scores only CORRECT as one
+
+(
+Wang et al., 2026
+)
+.
+For NQ and NQ-Tables, that protocol accepts up to ten gold answer
+aliases joined as alternatives.
+Its grader configuration specifies temperature zero, seed 42,
+and a maximum of 1,000 output tokens.
+
+Evidence recall.
+
+Article recall at reading depth 
+ records whether an item in the
+selected top 
+ comes from a gold source article, matched by URL,
+not whether the item contains the answer.
+The main comparison uses a three-item reader context unless specified
+otherwise.
+The MMSearch recall column is unavailable because it has no
+annotated gold articles in this protocol.
+
+Other evaluation scales.
+
+The later fusion and input-budget studies use exact match (EM) for NQ
+and NQ-Tables, without the main table’s LLM judging.
+Alignment variants report a QA value on a 0–1 scale.
+The MoNaCo appendix reports Judge-F1 on a 0–1 scale.
+The Qwen3.5 reader batch also uses a 0–1 scale; NQ and NQ-Tables there
+are EM-only, while the remaining benchmarks retain their own judging
+protocols.
+Scores from these different records cannot be compared by simply
+subtracting table cells.
+
+B.3 
+Baselines and Configuration
+
+Baselines.
+
+The main comparison includes no retrieval, two text extraction
+pipelines (mwparserfromhell and Trafilatura 
+(
+Barbaresi, 2021
+)
+),
+PixelRAG (base) and PixelRAG 
+(
+Wang et al., 2026
+)
+, and Pix2Evidence with
+and without reranking.
+The PixelRAG reference text indexes use 1,024-token chunks to balance
+the approximately 875 visual tokens in a screenshot tile; we follow
+the same chunk size for the local text baselines.
+
+Configuration.
+
+We evaluate the system mainly with two readers, Qwen3-VL-4B-Instruct and
+Qwen3.5-4B, whereas PixelRAG’s main table reports a single Qwen3.5-4B
+reader.
+Our main pipeline uses the fused image–text retriever and passes its
+top-
+ hits to reranking.
+The text-only branch and the dual-view retrieval that unions it with the image–text branch are evaluated in the ablation studies rather than in the main configuration.
+
+Retrieval
+
+Reranker (
+)
+
+EVQA
+
+SimpleQA
+
+NQ (EM)
+
+NQ-Tables (EM)
+
+MMSearch
+
+Fused
+
+no
+
+0.435
+
+0.759
+
+0.335
+
+0.247
+
+0.253
+
+Fused
+
+yes
+
+0.435
+
+0.798
+
+0.335
+
+0.271
+
+0.273
+
+Dual-view
+
+no
+
+0.326
+
+0.688
+
+0.305
+
+0.225
+
+0.250
+
+Dual-view
+
+yes
+
+0.399
+
+0.810
+
+0.355
+
+0.298
+
+0.273
+
+Table 13: 
+Qwen3.5 reader results at 
+ for the four retrieval
+settings. 
+Fused
+ is the single image–text view and
+
+dual-view
+ adds the text-only view. Values are on a 0–1 scale.
+NQ and NQ-Tables are EM-only; EVQA, SimpleQA, and MMSearch follow
+their own judging protocols.
+
+Retrieval
+
+Reranker (
+)
+
+EVQA
+
+SimpleQA
+
+NQ (EM)
+
+NQ-Tables (EM)
+
+MMSearch
+
+Fused
+
+no
+
+0.375
+
+0.632
+
+0.277
+
+0.204
+
+0.257
+
+Fused
+
+yes
+
+0.431
+
+0.766
+
+0.313
+
+0.229
+
+0.257
+
+Dual-view
+
+no
+
+0.263
+
+0.568
+
+0.257
+
+0.170
+
+0.187
+
+Dual-view
+
+yes
+
+0.377
+
+0.784
+
+0.316
+
+0.252
+
+0.263
+
+Table 14: 
+Qwen3.5 reader results at 
+ for the same four settings.
+Scale and benchmark-specific metrics follow
+Table 
+13
+.
+
+Appendix C 
+Additional Experiments
+
+C.1 
+Input and Candidate Budgets
+
+Text truncation.
+
+Table 
+11
+ starts from the full transcription and
+truncates it to a fixed number of characters, keeping
+native-resolution images, 
+ reranker candidates, and 
+ reader
+items with the fused image–text retrieval view and reranking.
+The untruncated run is the baseline, and each remaining row is an
+ablation that shortens the text supplied to the encoder.
+At 2048 characters the scores stay close to the baseline: SimpleQA is
+76.7 versus 77.6 (
+ points) and NQ EM is 32.9 versus 33.2
+(
+ points), while NQ-Tables EM falls from 27.1 to 25.4
+(
+ points).
+Truncating more aggressively lowers SimpleQA to 73.9 at 1024 characters
+and to 72.1–72.8 at 128–512 characters.
+NQ and NQ-Tables respond differently: NQ EM is essentially unchanged at
+1024 characters (
+ points) but drops to 32.3 and below at 512
+characters and shorter, whereas NQ-Tables EM stays within 24.7–25.4
+at every truncation length, so its loss is not recovered by keeping
+more text.
+Answer quality therefore declines as more text is removed, with the
+penalty concentrated in SimpleQA; a mild truncation such as 2048
+characters retains most of the measured quality and is a reasonable
+setting.
+
+Candidate-pool size.
+
+Table 
+12
+ fixes the reader depth at 
+
+and varies the reranker pool 
+, again with the fused image–text
+retrieval view and reranking.
+Relative to 
+, a pool of 20 raises SimpleQA by 4.4 points to
+82.0, NQ EM by 1.8 to 35.0, NQ-Tables EM by 1.0 to 28.1,
+and MMSearch by 2.0 to 25.0.
+At 
+, SimpleQA reaches 82.2, the highest score in this sweep,
+but increases only 0.2 points over 
+.
+NQ EM instead falls from 35.0 to 33.7; NQ-Tables EM stays at 28.1.
+MMSearch peaks at 
+ with 25.7 and is 25.0 at both larger pools.
+The gains against 
+ are therefore positive on all four reported
+benchmarks, but their size and best tested pool differ.
+Scoring 20 or 50 candidates requires four or ten times as many
+query–candidate scoring calls as scoring five, assuming one forward
+evaluation per pair.
+The pool size should therefore be chosen to balance answer quality
+against these additional scoring calls.
+
+Retrieval view(s)
+
+Index
+
+Rerank
+
+Judge-F1
+
+API cost (USD)
+
+GPU time (h)
+
+Text
+
+–
+
+no
+
+0.4755
+
+$57.43
+
+18.2
+
+Image
+
+base
+
+no
+
+0.4673
+
+–
+
+91.6
+
+Dual-view
+
+base
+
+no
+
+0.4708
+
+$57.26
+
+25.2
+
+Dual-view
+
+base
+
+yes
+
+0.4792
+
+$57.82
+
+24.7
+
+Dual-view
+
+aligned
+
+no
+
+0.4816
+
+$57.44
+
+16.3
+
+Dual-view
+
+aligned
+
+yes
+
+0.4688
+
+–
+
+18.1
+
+Table 15: 
+MoNaCo results, 1,315 questions per run. 
+Text
+ uses the
+transcription index and 
+image
+ the base screenshot index;
+
+dual-view
+ adds a text path to either screenshot index, and ours
+is the index that encodes each tile with its transcription. Judge-F1 is
+on a 0–1 scale; bold marks the best value.
+
+Reader context.
+
+At 
+, increasing 
+ from three to five changes SimpleQA by
++0.1 points, NQ EM by +0.4, NQ-Tables EM by 
+, and MMSearch by
++2.3.
+This complements the reading-depth study of
+Section 
+5.6
+: the reader can benefit from a longer
+context, but the change is small and not positive on every benchmark,
+whereas each additional item enlarges the reader’s input.
+A larger 
+ therefore trades more reading cost for a modest change in answer quality.
+
+C.2 
+More Ablations with the Qwen3.5 Reader
+
+Relation to the reader sweep.
+
+The Qwen3.5-4B row for the fused image–text view with reranking at
+
+ in Table 
+13
+ is also reported in the main
+reader-model comparison (Table 
+5
+).
+
+Configurations.
+
+Tables 
+13
+ and 
+14
+ report Qwen3.5
+reader runs at 
+ and 
+ under four retrieval settings.
+
+Fused
+ retrieves through the single view that encodes each tile
+together with its available transcription; 
+dual-view
+ adds a
+second view that indexes the transcriptions as text.
+Each setting is run with and without reranking, which uses
+Qwen3-VL-Reranker-2B 
+(
+Li et al., 2026
+)
+ to rescore the retrieved
+candidates before the top-
+ items are passed to the reader.
+The four rows therefore differ only in the retrieval views and whether
+reranking is applied.
+
+Interpretation.
+
+Without reranking, the fused view is stronger than the dual-view on
+every benchmark at 
+, and the same holds at 
+: at 
+,
+SimpleQA is 0.759 versus 0.688 and NQ EM is 0.335 versus 0.305, while
+MMSearch is 0.253 versus 0.250.
+Reranking changes this ordering.
+It raises the fused setting from 0.759 to 0.798 on SimpleQA and from
+0.247 to 0.271 on NQ-Tables EM, and lifts the dual-view further, from
+0.688 to 0.810 on SimpleQA and from 0.225 to 0.298 on NQ-Tables EM.
+With reranking, the dual-view therefore becomes the stronger choice on
+most benchmarks at 
+, leading on SimpleQA (0.810), NQ EM (0.355),
+and NQ-Tables EM (0.298), whereas the fused view keeps the best EVQA
+score (0.435).
+Increasing the reading depth from one item to three also improves both
+settings on most benchmarks: for the dual-view with reranking, SimpleQA
+rises from 0.784 to 0.810, NQ EM from 0.316 to 0.355, and NQ-Tables EM
+from 0.252 to 0.298.
+
+C.3 
+Agentic Search on MoNaCo
+
+Setting and metric.
+
+We evaluate our retrieval backends as the search tool of a GPT-5 ReAct
+agent on the full MoNaCo benchmark, 1,315 multi-hop Wikipedia questions.
+Only the search backend varies across conditions; the agent loop, the
+prompt, and the GPT-5 reader are identical, and every run completed all
+1,315 questions.
+The agent issues up to 15 search queries per question with three results
+per query, a shorter budget than the 20 queries with five hits each of
+PixelRAG’s reference protocol 
+(
+Wang et al., 2026
+)
+.
+MoNaCo answers are frequently multi-value lists, so we report judge-F1,
+computed from an LLM judge that scores each predicted answer against the
+reference answers.
+Table 
+15
+ reports judge-F1 on a 0–1 scale together
+with agent API cost and retrieval GPU time.
+
+Backends.
+
+Text-only search uses the transcription index, and image-only search the
+base screenshot index.
+Dual-view search unions a screenshot path with a second path that
+searches the transcriptions as text; the screenshot path uses either the
+base index or ours, which encodes each tile together with its
+transcription so that a single retrieved item carries both the rendered
+evidence and its text.
+
+Results.
+
+Judge-F1 ranges from 0.4673 to 0.4816 across the six runs.
+The best score comes from dual-view search on our index without
+reranking (0.4816).
+At the same retrieval design, our index adds 0.0108 over the base index
+(0.4708 to 0.4816), the largest effect in the table.
+Text-only search is competitive at 0.4755 and exceeds image-only search
+on the base index (0.4673), which matches our expectation that the
+transcription view contributes evidence a screenshot-only index can miss;
+combining the two views on our index then gives the best result.
+Reranking behaves differently on the two indexes: it raises the
+base-index dual-view setting from 0.4708 to 0.4792, but it does not help
+on our index (0.4816 to 0.4688), so its benefit is largest where
+first-stage retrieval is weaker.
+
+Cost.
+
+Agent-side cost varies little across the backends with complete usage:
+text-only search and the dual-view runs each accumulate 9.3–9.8M prompt
+tokens and cost $57.26–$57.82 per run.
+Adding the text view therefore leaves the agent’s conversation length
+essentially unchanged, because every retrieved item remains a screenshot
+tile rather than an extracted passage.
+Each reranker invocation adds about 1.2–1.4 seconds.
+On the retrieval side, our index is cheaper than the base index for the
+same design: 16.3 versus 25.2 hours for dual-view, and 18.1 versus 24.7
+hours with reranking.
+

@@ -1,0 +1,2610 @@
+Prevented is Not Protected: What Attack Success Rate Hides about RAG
+https://arxiv.org/abs/2610.40742
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+Prevented is Not Protected: What Attack Success Rate Hides about RAG
+
+Chahana Dahal
+
+Affiliation: 
+University of Nevada, Las Vegas
+
+Email: 
+chahana.dahal@unlv.edu
+
+  
+
+Zuobin Xiong
+
+Affiliation: 
+University of Nevada, Las Vegas
+
+Email: 
+zuobin.xiong@unlv.edu
+
+Abstract
+
+Retrieval-Augmented Generation (RAG) is vulnerable to knowledge poisoning, where adversaries manipulate retrieved evidence to influence model outputs.
+Existing defenses are primarily evaluated using attack success rate (ASR), which obscures defense-induced failures and the mechanisms behind apparent attack prevention.
+To address this issue, this work introduces 
+Aligned RAG Evaluation
+, a matched-query protocol that jointly examines clean and poisoned responses, with and without defense.
+By combining matched conditions analysis, LLM-judge endorsement, and retrieval dependence controls, the proposed framework distinguishes prevented from introduced failures, target mentions from LLM endorsement, and single-passage influence from evidence composition.
+Experiments on HotpotQA and Natural Questions reveal that existing defenses can introduce unexpected target-positive answers, although they can prevent some attacks, while evaluation criteria can also change defense rankings.
+Our findings expose critical blind spots in ASR-based evaluation and motivate a more comprehensive assessment of RAG poisoning defenses.
+The code and the evaluation artifact are available at 
+https://github.com/chxhana/aligned-rag-eval
+.
+
+†
+†
+
+      
+      
+    Under review.
+
+1 
+Introduction
+
+Retrieval-augmented generation (RAG) allows a language model to generate output using evidence retrieved from an external corpus 
+Lewis et al. (2020)
+, which, although effective, also makes the unreliable external corpus part of the model’s input.
+A RAG poisoning attacker can add crafted passages to the corpus, and those passages can be retrieved at the inference stage and steer the model toward an attacker-chosen answer 
+Zhong et al. (2023)
+; 
+Zou et al. (2025)
+.
+As a countermeasure, defense mechanisms should therefore reduce the malicious influence introduced by the attacker without degrading the system’s performance on clean/benign questions.
+However, most defenses of RAG poisoning evaluate whether a defense can 
+prevent
+ an attack from causing the model to answer desired targets 
+Zou et al. (2025)
+; 
+Xiang et al. (2026)
+; 
+Zhou et al. (2025)
+; 
+Zhang et al. (2025)
+, yet this approach is not a comprehensive evaluation.
+A defense mechanism can change the system’s behavior on many queries, including malicious and clean, 
+by blocking some poisoned answers, introducing new target-positive answers on other poisoned queries, or making the model abstain
+.
+Thus, a leaderboard that looks at only prevented attacks of a defense mechanism may not reflect the overall safety of the defended system.
+
+To address this issue, this paper introduces 
+Aligned RAG Evaluation
+, a low-cost yet effective mechanism that uses matched records to evaluate the impact of defense mechanisms.
+Particularly, we save four answers for each query to check the prevented and newly introduced attacks: clean retrieval without a defense, clean retrieval with a defense, poisoned retrieval without a defense, and poisoned retrieval with a defense, with all other variables fixed, including query, target, victim model, and decoding policy.
+In addition, we also save the retrieved passages and rerun answers after removing these passages, which allows us to check whether the model just mentioned the target, actually endorsed it, or needed both poisoned and legitimate evidence to produce it.
+This evaluation protocol is applied to PoisonedRAG passages 
+Zou et al. (2025)
+ on HotpotQA 
+Yang et al. (2018)
+ and Natural Questions (NQ) 
+Kwiatkowski et al. (2019)
+.
+Other than the basic evaluation, we also introduce
+
+split-knowledge
+, a probe where the target answers appear only when the injected passage is combined with existing legitimate evidence in the corpus.
+The enhanced protocol lets us compare two mechanisms: evidence displacement with PoisonedRAG and evidence composition with split-knowledge.
+
+The main results of this work demonstrate the claim: 
+prevented is not protected
+ in RAG defenses from different perspectives.
+(i) preventing attacks does not always lower risk.
+Under string labels, a defense can block poisoned target outputs while introducing new wrong answers.
+(ii) the choice of evaluation metric can substantially change the conclusions about defense.
+On the same saved outputs, a defense that appears ineffective under string matching becomes the strongest under LLL-judged endorsement.
+(iii) the retrieval score detectors fail when the retrieved context is mostly poisoned, e.g., we found that the detector intercepts 59 of 60 target-positive outputs when there is one poison in the context, but intercepts none with five poisoned.
+Together, these findings argue that RAG defenses should be evaluated as interventions on the whole system.
+A comprehensive defense report should show what the defense prevented, what it introduced, how it affected clean queries, and whether target strings were actually endorsed.
+
+Figure 1: 
+
+Overview of Aligned RAG Evaluation.
+
+The contributions of this paper are as follows.
+
+1.
+
+An auditable evaluation protocol.
+
+We define a four-condition record that joins clean and poisoned answers, with and without a defense, and stores retrieval exposure and removal controls for query- and passage-level audit.
+
+2.
+
+A split-knowledge probe.
+
+We introduce the split-knowledge probe where the attacker’s target depends on combining one injected passage with legitimate corpus evidence, which helps us analyze composition-dependent poisoning from single-passage dominance (§
+4.4
+).
+
+3.
+
+Across HotpotQA and NQ, we show that ASR-style summaries either hide introduced targets (§
+4.1
+), or depend on the scorer (§
+4.2
+), or face detector collapse when poison dominates the retrieved context (§
+4.3
+).
+
+4.
+
+We release 
+AlignedRAG-Eval
+, a pip-installable harness that applies the protocol to any defense with query-level JSONL outputs, which can produce transition tables, diagnostics, removal-control summaries when available, and audit packets for LLM or human rescoring.
+
+2 
+Aligned RAG Evaluation
+
+2.1 
+Four Matched Conditions
+
+1
+1
+
+1
+
+          
+          
+          
+        Due to page limit, the Related Works section is moved to Appendix 
+A
+
+For a RAG poisoning attack, the adversary’s target is to make the model answer the malicious or desired output.
+For each query 
+, we keep the attacker target 
+ fixed.
+We then retrieve two contexts from the target RAG system: a clean context 
+ from the original corpus 
+, and a poisoned context 
+ from 
+, where 
+ is the set of injected passages.
+Next, we can generate answers from the retrieved contexts with and without a defense.
+The contexts and answers can be organized into a matrix from the four matched conditions, as shown in Table 
+1
+, where each entry uses the same query, target, answering model, and decoding policy.
+
+Retrieval
+
+No defense
+
+Defense
+
+Clean
+
+Poisoned
+
+Table 1: 
+Four matched conditions for each query.
+
+ means the answer receives a positive target label.
+
+We define a 
+target-positive
+ answer according to the evaluation criterion: an answer is target-positive if it contains the attacker’s target string under string matching, or if it is semantically endorsed as the target under LLM-based judging.
+Let 
+=1 indicate answer is target-positive and 
+=0 otherwise, where 
+ denotes the retrieval condition: clean (
+) or poisoned (
+), and 
+ denotes whether the defense is off (
+) or on (
+).
+Let 
+ be the fraction of queries where 
+.
+For example, 
+ is the target-positive rate under poisoned retrieval with no defense, and 
+ is the target-positive rate under poisoned retrieval with defense.
+
+We first measure two opposite transitions under poisoned retrieval.
+Let Prevention 
+ be the fraction of all queries where the defense changes the answer from target-positive 
+ to target-negative 
+.
+Let Introduction 
+ be the fraction of all queries where the defense changes the answer from target-negative 
+ to target-positive 
+.
+The net target reduction is therefore
+
+(1)
+
+This difference matters because a defense can prevent some target-positive answers while introducing others in practice.
+However, the success attack rate metric reports only the first dimension, with the rate 
+ when 
+.
+Using the Net reduction 
+ reports the combined effect over the full query set.
+
+We also measure the defense’s effect on clean retrieval context for comparison.
+The clean-target change is calculated as follows:
+
+(2)
+
+where a positive 
+ means the adopted defense mechanism increases target-positive answers even when retrieval is clean.
+
+Finally, we compute a factorial contrast:
+
+(3)
+
+The factorial contrast measures how much a defense reduces the poisoning-induced increase in target-positive responses relative to clean retrieval.
+However, a positive contrast 
+ does not necessarily indicate improved security, as it may arise from an undesirable increase in target-positive responses under clean retrieval.
+Therefore, we interpret this metric jointly with net target reduction and clean-target change.
+For this reason, we always report 
+, 
+, and 
+ together with the absolute poisoned-target rate.
+
+2.2 
+Retrieval and Passage Dependence
+
+The four-condition record shows us how a target answer is changed, and the passage dependence tells us why it changes by testing which retrieved passages the answer depends on.
+To evaluate the dependence, we keep every selected query, including queries where no poison is retrieved.
+For each query, we record the retrieved passages, the ratio of poisoned contexts, whether legitimate supporting evidence was present, and the model’s answers under passage-removal controls.
+
+A target answer is defined as 
+newly induced
+ if the clean answer is target-negative but the poisoned answer is target-positive.
+When removing those poisoned passages, we keep the remaining passages in the same order and do not retrieve any replacements.
+Then, an answer is 
+injection-dependent
+ if the target-positive label disappears after we remove the poisoned passages from the context.
+Besides, we also run two smaller control experiments:
+A poison-only control that keeps only the poison passages and an individual-poison control that keeps one poison passage at a time.
+These control experiments show whether the poison works only as a group, or whether one injected passage is enough by itself.
+
+In the split-knowledge probe, the target-positive appears only when the model combines contexts from legitimate evidence in the corpus with injected evidence.
+Let 
+ denote the legitimate evidence passages, 
+ the injected passages, and 
+ the remaining retrieved passages.
+We evaluate the split-knowledge probe under four different contexts compositions: 
+, 
+, 
+, 
+.
+In addition, two cases are defined to facilitate the analysis: 
+strict case
+ and 
+strict newly induced case
+.
+A 
+strict case
+ checks whether the target-positive appears only when the model sees both legitimate and injected evidence together.
+The case is strict if the answer is target-positive with 
+ but target-negative with 
+, 
+, 
+.
+A 
+strict newly induced case
+ is an enhanced case of the strict case, which requires that the clean answer must be target-negative.
+Hence, the strict case is dependent on both 
+ and 
+, while the strict newly induced case introduces a new target-positive answer that was not present during clean retrieval.
+
+3 
+Experimental Setup
+
+Attacks and Models.
+
+We evaluate PoisonedRAG 
+Zou et al. (2025)
+ on 100 queries each from HotpotQA 
+Yang et al. (2018)
+ and Natural Questions (NQ) 
+Kwiatkowski et al. (2019)
+, using the corresponding BEIR corpora 
+Thakur et al. (2021)
+.
+We additionally evaluate a split-knowledge attack on HotpotQA, where the injected passage induces the target answer only when combined with legitimate retrieved evidence.
+For retrieval, we use Contriever 
+Izacard et al. (2021)
+ to retrieve the top-
+ passages in the main experiments.
+The split-knowledge experiments additionally evaluate BGE-base English (
+BAAI/bge-base-en-v1.5
+) 
+Xiao et al. (2024)
+.
+We use Llama-3-8B-Instruct 
+Llama Team (2024)
+ as the primary answering model.
+To assess whether our findings generalize across model sizes and families, Llama-3.1-70B-Instruct-AWQ 
+Lin et al. (2024)
+ using vLLM and Mistral-7B-Instruct-v0.3 
+Jiang et al. (2023)
+ are also evaluated.
+
+Defenses.
+
+We evaluate two categories of defenses: detection-based
+and pipeline-based defenses.
+Detection-based defenses analyze the retrieved context using graph-based features or retrieval-score statistics.
+If the resulting detection score exceeds a calibrated threshold, the system abstains from answering.
+We evaluate three pipeline-based defenses:
+KeywordAgg, adapted from released RobustRAG 
+Xiang et al. (2026)
+,
+TrustRAG filtering with conflict resolution 
+Zhou et al. (2025)
+ and our proposed prompt control baseline, which adds an instruction asking the model to be cautious about unreliable evidence.
+
+We preserve their core defense mechanisms while standardizing context inputs, model calls, decoding, and scoring, which allows all defenses to be evaluated on the same saved retrieval contexts.
+We evaluate pipeline-based defenses with the Llama
+models, while the Mistral experiments are limited
+to detection-based defenses because the pipeline adapters were built for the Llama-family victim.
+
+Metrics and Statistics.
+
+We evaluate attack outcomes using two scoring methods.
+First, we report target-string matching rates for comparability with prior RAG poisoning studies.
+Second, we use 
+gpt-4o-mini
+ as an LLM judge  
+Zheng et al. (2023)
+ to reassess the outputs from the main four-condition experiments.
+Unlike string matching, the LLM judge distinguishes between merely mentioning the attacker’s target and endorsing it as an answer.
+It also evaluates answer correctness against the reference and identifies abstentions.
+To assess the LLM judge’s reliability, we conduct a blinded human audit and sample additional cases involving label disagreements, defense-induced transitions, or uncertain judgments
+2
+2
+
+2
+
+              
+              
+              
+            We include the completed audit packet in the supplementary code materials, and the authors provide all audit labels on generated model outputs.
+. We also report 
+ for human and judge agreement.
+
+We quantify statistical uncertainty using 95% confidence intervals.
+For paired defense effects, we use nonparametric bootstrap intervals 
+Tibshirani and Efron (1993)
+, clustering resamples by shared injection group.
+For individual outcome rates, we report 95% Wilson score intervals 
+Wilson (1927)
+.
+Additional details on retrieval settings, detector calibration, judge prompts, and human audit sampling are provided in 
+Appendix D
+.
+
+Figure 2: 
+Pipeline transitions under automatic target-string matching, with 100 queries per panel.
+The green bar shows prevented target-positive answers, the orange shows introduced ones, and the diamond marks the total target-positive answers after defense.
+Dashed lines show the target-positive without defense.
+
+4 
+Experimental Results
+
+We structure our evaluation around four research questions (RQs) that examine the limitations of conventional attack success rate (ASR) in evaluating RAG security.
+
+RQ1
+: Defense Effectiveness.
+Does a defense reduce overall attack success and improve system security?
+
+RQ2
+: Evaluation Reliability.
+How do different attack success criteria affect conclusions about defense effectiveness?
+
+RQ3
+: Detection Robustness.
+How does the number of injected passages affect the effectiveness of poisoning detectors?
+
+RQ4
+: Evidence Dependence.
+Does a successful poisoning attack rely on a single injected passage, or on combining poisoned and legitimate evidence?
+
+Together, these questions examine what conventional
+ASR-based evaluation overlooks underlying successful attacks.
+
+4.1 
+RQ1: Defense Effectiveness
+
+We start by evaluating whether a defense reduces target-positive answers under poisoned retrieval.
+We compare defended and undefended answers for the same queries using the four-condition record.
+
+Prevented
+ targets are the change from positive to negative, and 
+Introduced
+ targets are the change from negative to positive.
+
+Undefended level
+ is the model performance without the defense, and 
+Defended answer
+ is its answer with defense.
+In this analysis, a target-string matching is positive when the answer contains the attacker target as a case-insensitive substring.
+
+Figure 
+2
+ shows that prevention does not always mean a lower target-positive rate.
+On HotpotQA with one poison passage (
+=1), the TrustRAG adapter prevents 20 target-positive answers but introduces 20 new, therefore, the final count is unchanged at 60/100.
+Similarly, KeywordAgg prevents 15 target-positive answers and introduces 15.
+However, at five poison passages (
+=5), TrustRAG prevents 65 targets and introduces only one, reducing the target-positive from 96 to 32.
+On NQ, similar observations are obtained, while the 5 poison samples are largely defended by TrustRAG.
+In summary, the prevention and introduction vary across different settings of existing defenses.
+
+Table 
+2
+ also demonstrates why 
+ should not be used alone to compare defenses.
+On HotpotQA with one poison, TrustRAG has 
+, but 
+ and 
+.
+The positive contrast comes entirely from more target-positive clean answers, with no reduction in poisoned positives.
+On NQ, 
+ is higher for TrustRAG than KeywordAgg (27 vs. 23), although KeywordAgg shows fewer poisoned positives (42 vs. 46) and smaller clean-target increase (
+ vs. 9).
+We therefore interpret 
+ alongside 
+, 
+, and the absolute poisoned-target rate.
+
+Figure 3: 
+The same defended and undefended outputs scored in two ways out of 100 queries per panel.
+Left points are automatic string-match counts, and right points are independent LLM-judged endorsements.
+
+Dataset
+
+Pipeline
+
+ [95% CI]
+
+ [95% CI]
+
+ [95% CI]
+
+HotpotQA 
+
+KeywordAgg
+
+0 [
+, 9]
+
+ [
+, 
+]
+
+ [
+, 3]
+
+1.000
+
+Prompt control
+
+ [
+, 
+]
+
+ [
+, 
+]
+
+ [
+, 
+]
+
+.029
+
+TrustRAG
+
+0 [
+, 13]
+
+12 [5, 21]
+
+12 [4, 22]
+
+1.000
+
+NQ 
+
+KeywordAgg
+
+22 [15, 28]
+
+1 [0, 3]
+
+23 [16, 29]
+
+Prompt control
+
+ [
+, 1]
+
+ [
+, 2]
+
+ [
+, 1]
+
+.263
+
+TrustRAG
+
+18 [10, 26]
+
+9 [6, 12]
+
+27 [18, 36]
+
+.002
+
+Table 2: 
+One-poison diagnostics.
+
+ is poisoned-target reduction, 
+ is clean-target increase, and 
+.
+
+4.2 
+Evaluation Reliability
+
+Although TrustRAG prevents 20 target-positive outputs and introduces 20 others under string matching (in HotpotQA, 
+=1), these balanced transitions do not necessarily reflect equivalent changes in actual attack success.
+Target-string matching identifies the presence of the attacker’s target but cannot distinguish its endorsement or rejection.
+To examine this distinction, we manually reviewed all 40 HotpotQA one-poison TrustRAG query pairs whose target-string labels changed.
+Among the 20 preventions, 16 were confirmed as genuine preventions, where the undefended answer endorsed the attacker target but the defended answer did not.
+In contrast, only 6 of the 20 introductions were confirmed as genuine introductions.
+In the remaining 14 cases, the defended answer mentioned the attacker target while questioning or rejecting the poisoned evidence, without endorsing it.
+Consequently, the audited transitions reveal 16 genuine preventions and 6 genuine introductions, compared with the balanced 20/20 transitions reported by string matching.
+These findings demonstrate that target-string matching can substantially overestimate defense-induced attack success by treating mentions or rejections of poisoned evidence as successful attacks, which undermines the evaluation reliability.
+
+In this section, we score the same saved answers with an independent LLM judge to check whether evaluation methods change the defense ranking.
+Figure 
+3
+ shows that target-string matching and LLM judge endorsement give different results for the same answers.
+On HotpotQA with one poison, the TrustRAG adapter and the undefended system both have 60 target-string positives.
+Under LLM-judged endorsement, TrustRAG has 11 positives compared with 35 without defense.
+On NQ with one poison, this target-positive of TrustRAG is higher than KeywordAgg (46 vs. 42) but the LLM-judged endorsement gives a lower score for TrustRAG than KeywordAgg (7 vs. 20).
+The results from Fig. 
+3
+ show that the scoring rule changes defense methods ranking.
+
+Remark.
+
+The LLM-judged endorsement positive rate includes only answers explicitly labeled as positive by the LLM judge, while uncertain judgments are reported separately.
+For example, on HotpotQA with one poisoned passage, the judge assigns uncertain labels to 9 undefended answers and 10 TrustRAG-defended answers as shown in Appendix 
+F
+ (Table 
+10
+).
+Thus, lower judged endorsement rates should not be interpreted as evidence that all remaining answers are safe.
+Unlike TrustRAG, which substantially reduces judged target endorsement, the prompt-only control increases endorsement from 35% to 61% on HotpotQA and from 42% to 55% on NQ with one poisoned passage.
+On HotpotQA, string matching also detects an increase, but its magnitude is smaller (12 vs. 26).
+This difference highlights the sensitivity of defense evaluation to the scoring rule.
+In particular, string matching treats any mention of the attacker target as a positive outcome, even when the answer explicitly rejects it.
+Judged endorsement instead evaluates whether the generated answer semantically supports the attacker’s target.
+
+Setting
+
+vs.
+
+Rates
+
+Diff.
+
+95% CI
+
+HotpotQA, 
+
+KeywordAgg
+
+79
+
+11–38
+
+[
+, 
+]
+
+HotpotQA, 
+
+Prompt
+
+80
+
+12–66
+
+[
+, 
+]
+
+HotpotQA, 
+
+KeywordAgg
+
+79
+
+10–71
+
+[
+, 
+]
+
+HotpotQA, 
+
+Prompt
+
+76
+
+11–93
+
+[
+, 
+]
+
+NQ, 
+
+KeywordAgg
+
+77
+
+9–23
+
+[
+, 
+]
+
+NQ, 
+
+Prompt
+
+78
+
+9–64
+
+[
+, 
+]
+
+NQ, 
+
+KeywordAgg
+
+79
+
+3–57
+
+[
+, 
+]
+
+NQ, 
+
+Prompt
+
+65
+
+3–91
+
+[
+, 
+]
+
+Table 3: 
+Paired differences in LLM-judged target endorsement on defended poisoned outputs.
+The negative difference (Diff.) means TrustRAG has lower score.
+
+Table 
+3
+ also compares defenses directly on same set of queries.
+For example, on NQ with one poison, 77 queries receive decisive labels (yes/no) for both TrustRAG and KeywordAgg.
+Within this subset, TrustRAG has 14.3 percentage points lower judged target endorsement, with a group-bootstrap interval of [
+, 
+].
+The difference is larger at five poisons.
+TrustRAG also has lower judged endorsement than the prompt control across both datasets and poison budgets.
+
+Figure 4: 
+Target-positive outcomes intercepted at nominal 1% calibration FPR, with 95% Wilson intervals for the interception rate.
+
+Agreement with Human Judgments.
+
+We additionally assess the reliability of the LLM judge through a blinded human audit of 100 outputs in Table 
+11
+.
+Human annotators provide binary yes/no labels, whereas the judge may additionally return 
+uncertain
+.
+For target endorsement, five outputs have no defined attacker target and are therefore labeled 
+not applicable (N/A)
+ by both evaluators.
+Among the remaining 95 outputs, the judge agrees with human annotations on 64, yielding an overall agreement of 69/100 when including the 5 N/A cases and treating uncertain labels as disagreements.
+
+The results show that agreement is substantially higher in decisive yes/no judgments: 64/69 for target endorsement and 67/71 for abstention.
+When uncertain judgments are counted as disagreements, the overall agreement is 50/98 for answer correctness and 67/99 for abstention.
+These findings support the use of judged endorsement as a complementary evaluation metric, while highlighting the need to report uncertain cases separately.
+
+Reduced Endorsement Does Not Imply Preserved Utility.
+
+A defense may reduce target endorsement by abstaining or generating vague responses rather than providing correct answers.
+To examine this trade-off, we evaluate clean-answer correctness on 200 held-out queries per dataset (Details are reported in Appendix 
+C
+).
+The LLM judge returns uncertain correctness labels for 147 of 200 TrustRAG responses on HotpotQA and 139 of 200 on NQ.
+These high uncertainty rates prevent us from drawing reliable conclusions about clean-answer utility.
+Thus, although TrustRAG substantially reduces judged target endorsement, whether it preserves answer quality on benign queries remains unresolved.
+
+4.3 
+Detection Robustness
+
+In this section, we investigate how the effectiveness of detection-based defenses changes as the number of injected passages increases.
+These defenses analyze the retrieved context before answer generation and trigger abstention when the detection score exceeds a threshold calibrated on clean retrieval contexts.
+We evaluate graph-based and retrieval-score-based detectors, with particular emphasis on score-gap and score-dispersion statistics.
+
+Figure 
+4
+ reveals a substantial decline in detection effectiveness as the number of injected passages increases on both datasets.
+On HotpotQA, both the score-gap and score-dispersion detectors intercept 59 of 60 target-positive outputs with one injected passage (
+), at a 1% false-positive rate.
+However, when the number of injected passages increases to five (
+), both detectors fail to intercept any of the 96 target-positive outputs under the same calibrated thresholds.
+A similar pattern emerges on NQ, where the score-gap and score-dispersion detectors intercept 32/64 and 36/64 target-positive outputs at 
+, respectively, but only 1/92 each at 
+.
+These results demonstrate that detection effectiveness can deteriorate sharply as poisoned passages increasingly dominate the retrieved context.
+
+To examine whether this degradation arises from retrieval encoding artifacts, we apply the same 512-token limit to both legitimate and injected passages.
+We additionally compare dot-product scoring with cosine similarity to control for differences in embedding norms.
+The detection collapse persists at 
+ under these settings, suggesting that unequal token limits and embedding norms do not explain the observed failure.
+
+The Generalization of Detection Failure.
+
+To examine whether the observed detection failure is specific to the victim model, we repeat the experiments using Mistral-7B-Instruct-v0.3 (Appendix 
+B
+, Figure 
+5
+).
+From the results, the attack remains effective, with target-positive rates increasing from 19% on clean HotpotQA queries to 80% and 100% under one and five injected passages, respectively.
+On NQ, the corresponding rates increase from 5% to 72% and 98%.
+Despite the high attack success rates, the score-gap detector’s interception rate drops sharply as the poison budget increases.
+At a 1% false-positive rate, interception decreases from 78/80 to 0/100 on HotpotQA and from 38/72 to 1/98 on NQ.
+These results indicate that the degradation of score-gap-based detection under higher poisoning budgets is not specific to Llama-3-8B-Instruct, but also generalizes to Mistral-7B-Instruct-v0.3.
+
+4.4 
+Evidence Dependence
+
+In this section, we investigate whether successful poisoning attacks depend on multiple injected passages or can be triggered by a single passage, since high attack success rates alone cannot distinguish these mechanisms.
+To examine this root cause, we conduct removal controls on poisoned target-positive cases: we regenerate responses after removing all injected passages and then with each injected passage retained individually.
+
+Single-Passage Sufficiency.
+
+Table 
+4
+ shows that a single injected passage is sufficient to reproduce the target-positive label in most PoisonedRAG cases.
+On NQ with 5 injected passages, 90/100 queries change from target-negative under clean retrieval to target-positive under poisoned retrieval.
+Among these newly induced cases, 87 revert to target-negative when all injected passages are removed.
+Moreover, among all 92 poisoned target-positive cases, at least one injected passage independently produces a target-positive response in 91 cases.
+This pattern also holds across the additional victim models: a single passage suffices for all 95 target-positive cases on HotpotQA with Llama-3.1-70B (Table 
+5
+) and for at least 94% of target-positive cases across the evaluated Mistral-7B settings (Appendix 
+B
+).
+These findings suggest that most newly induced target-positive outcomes depend on injected evidence, but rarely require multiple injected passages to act jointly.
+
+HotpotQA
+
+NQ
+
+Poison budget 
+
+1
+
+5
+
+1
+
+5
+
+Poisoned positives
+
+60
+
+96
+
+64
+
+92
+
+Newly induced
+
+46
+
+79
+
+62
+
+90
+
+Injection-dependent
+
+45
+
+74
+
+60
+
+87
+
+Single-passage sufficient
+
+57/60
+
+96/96
+
+60/64
+
+91/92
+
+Table 4: 
+PoisonedRAG evidence dependence with top-5 retrieval and Llama-3-8B under target-string labels.
+
+Victim
+
+Clean
+
+Poisoned
+
+Single suff.
+
+Llama-3-8B
+
+1
+
+17
+
+60
+
+57/60
+
+Llama-3.1-70B-AWQ
+
+1
+
+8
+
+57
+
+54/57
+
+Llama-3-8B
+
+5
+
+17
+
+96
+
+96/96
+
+Llama-3.1-70B-AWQ
+
+5
+
+8
+
+95
+
+95/95
+
+Table 5: 
+HotpotQA PoisonedRAG under victim scaling.
+
+Split-Knowledge and Evidence Composition.
+
+We further investigate whether attacks can induce responses that require combining legitimate evidence 
+ with an injected passage 
+.
+We defined the 
+strict case
+ as one in which the target appears when both 
+ and 
+ are present, but not when either passage or both are removed, while all background passages remain unchanged.
+Table 
+6
+ shows the results.
+Contriever and Llama-3-8B produce target-positive responses for 27 of 311 split-knowledge candidates, of which 23 are newly induced.
+However, only 7 satisfy the strict composition criterion, whereas 17 of the 27 target-positive cases can be triggered by an injected passage alone.
+We identify two strict cases with BGE cosine retrieval and none with Llama-3.1-70B.
+Although the larger model remains vulnerable to PoisonedRAG, it exhibits no strict split-knowledge successes in our experiments.
+Together, these results distinguish attacks driven by individually sufficient poisoned passages from those requiring the combination of legitimate and injected evidence.
+Split-knowledge thus serves as a diagnostic for evidence composition rather than evidence of greater attack effectiveness.
+
+Setting
+
+Clean
+
+Poisoned
+
+New
+
+Strict
+
+Single suff.
+
+Clean EM
+
+Contriever / Llama-3-8B
+
+10
+
+27
+
+23
+
+7
+
+17/27
+
+53
+
+BGE cosine512 / Llama-3-8B
+
+8
+
+18
+
+11
+
+2
+
+12/18
+
+66
+
+Contriever / Llama-3.1-70B-AWQ
+
+8
+
+18
+
+16
+
+0
+
+14/18
+
+111
+
+Table 6: 
+Split-knowledge attack on 311 fixed HotpotQA candidates.
+
+5 
+Conclusion
+
+In this work, we evaluated the reliability of RAG poisoning defenses other than just looking at the
+attack success rates.
+In addition, we introduce Aligned RAG Evaluation, which compares clean and poisoned responses with and without defense on matched queries to reveal both prevented and defense-induced failures.
+Experiments on HotpotQA and NQ show that defenses can introduce new target-positive answers, prompt-only controls may increase attacker-target endorsement, and retrieval-score detectors can fail when poisoned passages dominate the retrieved context.
+Our evaluation framework provides a more comprehensive
+assessment of defense effectiveness, reliability, and
+evidence dependence beyond aggregate ASR.
+
+Limitations
+
+The PoisonedRAG cells contain 100 queries each, and queries share injected passages in groups of ten.
+We account for this by using group-level bootstrap intervals and paired tests, rather than treating every query as fully independent.
+The defenses should be read as evaluations of our adapted KeywordAgg, TrustRAG, and prompt-control pipelines, not as exact reproductions of the original papers.
+This limitation does not affect the central methodological claim that a defense cannot be judged by prevented attacks alone, because protection also depends on what the defense introduces.
+
+Ethics Statement
+
+This work studies retrieval-corpus poisoning to improve RAG defense evaluation.
+We use existing benchmarks and released artifacts, report aggregate results, and do not attack live systems.
+We release code and records to support reproducible defense auditing.
+
+References
+
+Chang 
+et al.
+ (2025)
+
+Z. Chang, M. Li, X. Jia, J. Wang, Y. Huang, Z. Jiang, Y. Liu, and Q. Wang
+
+One shot dominance: knowledge poisoning attack on retrieval-augmented generation systems.
+.
+
+In 
+EMNLP (Findings)
+,
+
+pp. 18811–18825
+.
+
+Cited by: 
+Appendix A
+.
+
+Chen 
+et al.
+ (2026)
+
+Y. Chen, P. Chen, C. Yu, Y. Lin, Y. Wu, and W. Lee
+
+Tracing target answers in poisoned retrieval corpora via token influence attribution
+.
+
+arXiv preprint arXiv:2606.25721
+.
+
+Cited by: 
+Appendix A
+.
+
+Cohen-Wang 
+et al.
+ (2024)
+
+B. Cohen-Wang, H. Shah, K. Georgiev, and A. Mądry
+
+Contextcite: attributing model generation to context
+.
+
+Advances in Neural Information Processing Systems
+ 
+37
+, 
+pp. 95764–95807
+.
+
+Cited by: 
+Appendix A
+.
+
+Debenedetti 
+et al.
+ (2024)
+
+E. Debenedetti, J. Zhang, M. Balunovic, L. Beurer-Kellner, M. Fischer, and F. Tramèr
+
+Agentdojo: a dynamic environment to evaluate prompt injection attacks and defenses for llm agents
+.
+
+Advances in neural information processing systems
+ 
+37
+, 
+pp. 82895–82920
+.
+
+Cited by: 
+Appendix A
+.
+
+Greshake 
+et al.
+ (2023)
+
+K. Greshake, S. Abdelnabi, S. Mishra, C. Endres, T. Holz, and M. Fritz
+
+Not what you’ve signed up for: compromising real-world llm-integrated applications with indirect prompt injection
+.
+
+In 
+Proceedings of the 16th ACM workshop on artificial intelligence and security
+,
+
+pp. 79–90
+.
+
+Cited by: 
+Appendix A
+.
+
+Izacard 
+et al.
+ (2021)
+
+G. Izacard, M. Caron, L. Hosseini, S. Riedel, P. Bojanowski, A. Joulin, and E. Grave
+
+Unsupervised dense information retrieval with contrastive learning
+.
+
+arXiv preprint arXiv:2112.09118
+.
+
+Cited by: 
+§3
+.
+
+Jiang 
+et al.
+ (2023)
+
+A. Q. Jiang, A. Sablayrolles, A. Mensch, 
+et al.
+
+Mistral 7b
+.
+
+arXiv preprint arXiv:2310.06825
+.
+
+External Links: 
+Link
+
+Cited by: 
+§3
+.
+
+Kiela 
+et al.
+ (2021)
+
+D. Kiela, M. Bartolo, Y. Nie, D. Kaushik, A. Geiger, Z. Wu, B. Vidgen, G. Prasad, A. Singh, P. Ringshia, 
+et al.
+
+Dynabench: rethinking benchmarking in nlp
+.
+
+In 
+Proceedings of the 2021 conference of the North American chapter of the Association for Computational Linguistics: human language technologies
+,
+
+pp. 4110–4124
+.
+
+Cited by: 
+Appendix A
+.
+
+Kumar 
+et al.
+ (2026)
+
+P. Kumar, T. Nielson, T. Kolhe, S. Zala, and V. Li
+
+RAGuard: a layered defense framework for retrieval-augmented generation systems against data poisoning
+.
+
+arXiv preprint arXiv:2607.26339
+.
+
+Cited by: 
+Appendix A
+.
+
+Kwiatkowski 
+et al.
+ (2019)
+
+T. Kwiatkowski, J. Palomaki, O. Redfield, M. Collins, A. Parikh, C. Alberti, D. Epstein, I. Polosukhin, J. Devlin, K. Lee, 
+et al.
+
+Natural questions: a benchmark for question answering research
+.
+
+Transactions of the Association for Computational Linguistics
+ 
+7
+, 
+pp. 453–466
+.
+
+Cited by: 
+§1
+,
+
+§3
+.
+
+Lewis 
+et al.
+ (2020)
+
+P. Lewis, E. Perez, A. Piktus, F. Petroni, V. Karpukhin, N. Goyal, H. Küttler, M. Lewis, W. Yih, T. Rocktäschel, 
+et al.
+
+Retrieval-augmented generation for knowledge-intensive nlp tasks
+.
+
+Advances in neural information processing systems
+ 
+33
+, 
+pp. 9459–9474
+.
+
+Cited by: 
+§1
+.
+
+Liang 
+et al.
+ (2026)
+
+J. Liang, Y. Wang, C. Li, T. Jiang, R. Zhu, N. Gong, and T. Wang
+
+Graphrag under fire
+.
+
+In 
+2026 IEEE Symposium on Security and Privacy (SP)
+,
+
+pp. 195–212
+.
+
+Cited by: 
+Appendix A
+.
+
+Lin 
+et al.
+ (2024)
+
+J. Lin, J. Tang, H. Tang, S. Yang, W. Chen, W. Wang, G. Xiao, X. Dang, C. Gan, and S. Han
+
+Awq: activation-aware weight quantization for on-device llm compression and acceleration
+.
+
+Proceedings of machine learning and systems
+ 
+6
+, 
+pp. 87–100
+.
+
+Cited by: 
+§3
+.
+
+Llama Team (2024)
+
+A. @. M. Llama Team
+
+The llama 3 family of models
+.
+
+Note: 
+https://github.com/meta-llama/PurpleLlama/blob/main/Llama-Guard3/8B/MODEL_CARD.md
+
+Cited by: 
+§3
+.
+
+Perez and Ribeiro (2022)
+
+F. Perez and I. Ribeiro
+
+Ignore previous prompt: attack techniques for language models
+.
+
+arXiv preprint arXiv:2211.09527
+.
+
+Cited by: 
+Appendix A
+.
+
+Shafran 
+et al.
+ (2025)
+
+A. Shafran, R. Schuster, and V. Shmatikov
+
+Machine against the 
+rag
+: jamming 
+retrieval-augmented
+ generation with blocker documents
+.
+
+In 
+34th USENIX Security Symposium (USENIX Security 25)
+,
+
+pp. 3787–3806
+.
+
+Cited by: 
+Appendix A
+.
+
+Thakur 
+et al.
+ (2021)
+
+N. Thakur, N. Reimers, A. Rücklé, A. Srivastava, and I. Gurevych
+
+Beir: a heterogenous benchmark for zero-shot evaluation of information retrieval models
+.
+
+arXiv preprint arXiv:2104.08663
+.
+
+Cited by: 
+§3
+.
+
+Tibshirani and Efron (1993)
+
+R. J. Tibshirani and B. Efron
+
+An introduction to the bootstrap
+.
+
+Monographs on statistics and applied probability
+ 
+57
+ (
+1
+), 
+pp. 1–436
+.
+
+Cited by: 
+§3
+.
+
+Wei 
+et al.
+ (2025)
+
+Z. Wei, W. Chen, and Y. Meng
+
+InstructRAG: instructing retrieval-augmented generation via self-synthesized rationales
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Vol. 
+2025
+, 
+pp. 82731–82754
+.
+
+Cited by: 
+Appendix A
+.
+
+Wilson (1927)
+
+E. B. Wilson
+
+Probable inference, the law of succession, and statistical inference
+.
+
+Journal of the American Statistical Association
+ 
+22
+ (
+158
+), 
+pp. 209–212
+.
+
+Cited by: 
+§3
+.
+
+Xiang 
+et al.
+ (2026)
+
+C. Xiang, T. Wu, Z. Zhong, D. Wagner, D. Chen, and P. Mittal
+
+Certifiably robust rag against retrieval corruption
+.
+
+In 
+2026 IEEE Conference on Secure and Trustworthy Machine Learning (SaTML)
+,
+
+pp. 392–410
+.
+
+Cited by: 
+Appendix A
+,
+
+§1
+,
+
+§3
+.
+
+Xiao 
+et al.
+ (2024)
+
+S. Xiao, Z. Liu, P. Zhang, N. Muennighoff, D. Lian, and J. Nie
+
+C-pack: packed resources for general chinese embeddings
+.
+
+In 
+Proceedings of the 47th international ACM SIGIR conference on research and development in information retrieval
+,
+
+pp. 641–649
+.
+
+Cited by: 
+§3
+.
+
+Yang 
+et al.
+ (2018)
+
+Z. Yang, P. Qi, S. Zhang, Y. Bengio, W. Cohen, R. Salakhutdinov, and C. D. Manning
+
+HotpotQA: a dataset for diverse, explainable multi-hop question answering
+.
+
+In 
+Proceedings of the 2018 Conference on Empirical Methods in Natural Language Processing
+,  
+E. Riloff, D. Chiang, J. Hockenmaier, and J. Tsujii (Eds.)
+,
+
+Brussels, Belgium
+, 
+pp. 2369–2380
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§1
+,
+
+§3
+.
+
+Zhang 
+et al.
+ (2026)
+
+B. Zhang, H. Xin, Y. Chen, Z. Liu, B. Yi, T. Li, L. Nie, Z. Liu, and M. Fang
+
+Who taught the lie? responsibility attribution for poisoned knowledge in retrieval-augmented generation
+.
+
+In 
+2026 IEEE Symposium on Security and Privacy (SP)
+,
+
+pp. 4203–4222
+.
+
+Cited by: 
+Appendix A
+.
+
+Zhang 
+et al.
+ (2025)
+
+B. Zhang, H. Xin, J. Li, D. Zhang, M. Fang, Z. Liu, L. Nie, and Z. Liu
+
+Benchmarking poisoning attacks against retrieval-augmented generation
+.
+
+arXiv preprint arXiv:2505.18543
+.
+
+Cited by: 
+Appendix A
+,
+
+§1
+.
+
+Zheng 
+et al.
+ (2023)
+
+L. Zheng, W. Chiang, Y. Sheng, S. Zhuang, Z. Wu, Y. Zhuang, Z. Lin, Z. Li, D. Li, E. Xing, 
+et al.
+
+Judging llm-as-a-judge with mt-bench and chatbot arena
+.
+
+Advances in neural information processing systems
+ 
+36
+, 
+pp. 46595–46623
+.
+
+Cited by: 
+§3
+.
+
+Zhong 
+et al.
+ (2023)
+
+Z. Zhong, Z. Huang, A. Wettig, and D. Chen
+
+Poisoning retrieval corpora by injecting adversarial passages
+.
+
+In 
+Proceedings of the 2023 Conference on Empirical Methods in Natural Language Processing
+,  
+H. Bouamor, J. Pino, and K. Bali (Eds.)
+,
+
+Singapore
+, 
+pp. 13764–13775
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+Appendix A
+,
+
+§1
+.
+
+Zhou 
+et al.
+ (2025)
+
+H. Zhou, K. Lee, Z. Zhan, Y. Chen, Z. Li, Z. Wang, H. Haddadi, and E. Yilmaz
+
+Trustrag: enhancing robustness and trustworthiness in retrieval-augmented generation
+.
+
+arXiv preprint arXiv:2501.00879
+.
+
+Cited by: 
+Appendix A
+,
+
+§1
+,
+
+§3
+.
+
+Zou 
+et al.
+ (2025)
+
+W. Zou, R. Geng, B. Wang, and J. Jia
+
+PoisonedRAG: knowledge corruption attacks to Retrieval-Augmented generation of large language models
+.
+
+In 
+34th USENIX Security Symposium (USENIX Security 25)
+,
+
+Seattle, WA
+, 
+pp. 3827–3844
+.
+
+External Links: 
+ISBN 978-1-939133-52-6
+,
+
+Link
+
+Cited by: 
+Appendix A
+,
+
+§1
+,
+
+§1
+,
+
+§3
+.
+
+Appendix A 
+Related Works
+
+Corpus poisoning attacks on RAG.
+
+Retrieval-augmented generation makes the retrieval corpus part of the model input, so an attacker who can add documents to the corpus can influence downstream answers.
+Early corpus-poisoning work showed that a small number of adversarial passages can be retrieved for many queries 
+Zhong et al. (2023)
+.
+PoisonedRAG made this threat targeted.
+Each injected passage is crafted for a specific query and asserts an attacker-chosen answer 
+Zou et al. (2025)
+.
+Later work studies related variants, including blocker documents that disrupt retrieval 
+Shafran et al. (2025)
+, single-document attacks 
+Chang et al. (2025)
+, and poisoning in graph-structured retrieval 
+Liang et al. (2026)
+.
+Indirect prompt injection is a neighboring threat where retrieved content contains instructions rather than false evidence 
+Perez and Ribeiro (2022)
+; 
+Greshake et al. (2023)
+.
+These papers define the attacks and threat models we evaluate.
+But we ask what standard success metrics actually measure once a defense is applied.
+Our split-knowledge probe also differs from prior poisoning attacks because the injected passage is designed to be insufficient by itself and to work only when combined with legitimate evidence.
+
+Defenses.
+
+RAG defenses try to identify, isolate, or reduce the influence of untrusted retrieved passages.
+RobustRAG answers from isolated passages or passage groups and aggregates the resulting answers and our KeywordAgg adapter follows its keyword-based variant 
+Xiang et al. (2026)
+.
+TrustRAG filters suspicious retrieved content and then uses model self-assessment to resolve inconsistencies between retrieved and parametric knowledge 
+Zhou et al. (2025)
+.
+InstructRAG and related prompting methods ask the model to reason explicitly about which passages to trust 
+Wei et al. (2025)
+; our prompt-only control is a minimal version of this idea.
+Layered systems such as RAGuard combine retriever-side hardening with generation-time counterfactual filtering 
+Kumar et al. (2026)
+.
+These defenses are usually evaluated by counting how many known attacks they stop.
+We evaluate the same kind of question, but also ask what the defense introduces, how it changes clean answers, and whether target strings are actually endorsed.
+
+Benchmarks and evaluation protocols.
+
+Recent benchmarks evaluate RAG poisoning attacks and defenses across datasets, retrievers, and models 
+Zhang et al. (2025)
+.
+AgentDojo similarly evaluates security and utility together for prompt-injection defenses in agentic settings 
+Debenedetti et al. (2024)
+.
+These benchmarks report attack success and utility as aggregate rates.
+Aligned RAG Evaluation is complementary as it saves the four matched answers for each query, so prevention, introduction, clean-side effects, and passage dependence can be inspected and rescored after generation.
+This aligns with dynamic evaluation, where the goal is to examine the full results rather than just look at a single score 
+Kiela et al. (2021)
+.
+
+Attribution and passage dependence.
+
+ContextCite attributes generations to context spans and includes poisoning detection as an application 
+Cohen-Wang et al. (2024)
+.
+RAGOrigin assigns responsibility to database texts for misleading generations 
+Zhang et al. (2026)
+, and TRACE detects poisoning through token-influence attribution 
+Chen et al. (2026)
+.
+Our removal, poison-only, and individual-poison controls use the same broad ablation idea, but for a different purpose.
+We use simple controls to label outcomes such as whether a target depends on injected passages, whether one injected passage is sufficient, and whether a split-knowledge case truly requires combining poisoned and legitimate evidence.
+
+Appendix B 
+Mistral-7B Victim Check
+
+We repeat the PoisonedRAG attack with Mistral-7B-Instruct-v0.3, keeping the retriever, corpora, injected passages, calibration sets, and nominal 1% FPR thresholds fixed.
+The attack transfers as target-positive rates rise from 19% clean to 80% and 100% on HotpotQA, and from 5% clean to 72% and 98% on NQ, for one and five poisons.
+As with Llama-3, nearly all poisoned positives are single-poison sufficient.
+
+Figure 
+5
+ shows that the detector pattern also transfers.
+Gap and dispersion have useful signal at one poison, but collapse at five poisons.
+Every detector intercepts at most one target-positive output in the five-poison cells.
+We did not rerun pipeline defenses for Mistral, so this check supports the attack-mechanism and detector results, not the pipeline-defense ranking.
+
+Figure 5: 
+
+Mistral-7B detector-only check at the nominal 1% calibration point.
+
+Appendix C 
+Preliminary Clean-Utility Diagnostics
+
+Table 
+7
+ reports independent-judge diagnostics on 200 held-out clean queries per dataset.
+We keep this result in the appendix because human agreement is weaker for reference correctness than for target endorsement or abstention.
+The table is useful for spotting possible utility costs, but we do not use it as a headline defense ranking.
+
+Dataset
+
+Method
+
+Ref. yes / resolved
+
+Uncertain
+
+Correct lost
+
+Correct retained
+
+HotpotQA
+
+No defense
+
+87/120
+
+80
+
+0
+
+87
+
+HotpotQA
+
+KeywordAgg
+
+75/96
+
+104
+
+5
+
+59
+
+HotpotQA
+
+Prompt control
+
+74/104
+
+96
+
+5
+
+65
+
+HotpotQA
+
+TrustRAG
+
+29/53
+
+147
+
+5
+
+20
+
+NQ
+
+No defense
+
+92/134
+
+66
+
+0
+
+92
+
+NQ
+
+KeywordAgg
+
+71/123
+
+77
+
+17
+
+56
+
+NQ
+
+Prompt control
+
+83/144
+
+56
+
+13
+
+70
+
+NQ
+
+TrustRAG
+
+45/61
+
+139
+
+4
+
+23
+
+Table 7: 
+Independent-judge clean utility diagnostics on 200 held-out clean queries per dataset.
+
+Appendix D 
+Implementation and Annotation Details
+
+Retrieval and budgets.
+
+PoisonedRAG queries are grouped in tens; a budget 
+ gives each group 
+ injected passages.
+The main setting uses top-5 retrieval with Contriever, corpus passages encoded at 128 tokens, and queries/poisons at 512 tokens with dot-product scores.
+We also run two encoding controls: all passages at 512 tokens with dot product, and all passages at 512 tokens with cosine similarity.
+
+Detectors.
+
+We evaluate six detector scores: spectral connectivity, conductance, modularity, minimum retrieval score, score gap, and score dispersion.
+Each detector is calibrated on 500 held-out clean queries to a nominal false-positive rate, then evaluated on 200 clean held-out queries and the attack cells.
+Flagged contexts are hard-abstained.
+Thresholds are recalibrated per dataset and encoding arm, but shared across poison budgets within the same arm.
+
+Pipelines.
+
+We adapt released components of RobustRAG and TrustRAG to a common saved-context interface.
+RobustRAG uses KeywordAgg and a prompt-only control; TrustRAG uses filtering plus conflict resolution.
+The source revisions are pinned: RobustRAG 
+9bc35b2
+, TrustRAG 
+11dcea0
+, and PoisonedRAG 
+f660d72
+.
+These are component adaptations under one victim interface, not exact reproductions of every original system detail.
+
+Independent judge and human audit.
+
+Each distinct saved answer is scored by 
+gpt-4o-mini-2024-07-18
+.
+The judge sees only the question, target, reference aliases with provenance, and answer; it does not see the method or condition.
+It labels target endorsement, reference correctness, and abstention, with 
+uncertain
+ allowed for each.
+The blinded human audit contains 100 outputs, oversampling label flips, TrustRAG cases, prompt-control worsening, and judge-uncertain examples.
+Annotators do not see the model, method, condition, or sampling reason.
+
+Uncertainty.
+
+Paired defense effects use 95% bootstrap intervals over shared injection groups.
+Endpoint rates use 95% Wilson intervals.
+
+Appendix E 
+Rates Behind the Four-Condition Contrasts
+
+Table 
+8
+ gives the absolute target-positive counts underlying Table 
+2
+; Table 
+9
+ gives the five-poison decomposition. Clean columns repeat across budgets because both budgets share the same clean inputs. The reversal discussed in Finding 1 is visible directly: TrustRAG’s defended-clean count on HotpotQA rises from 17 to 29, which is the entire source of its positive one-poison interaction.
+
+Compute.
+
+All experiments were run on a high-performance computing node with NVIDIA L40S GPUs, each with 48 GB of GDDR6 memory.
+
+Data
+
+Pipeline
+
+Clean
+
+Hotpot
+
+KeywordAgg
+
+17 
+ 7
+
+60 
+ 60
+
+96 
+ 91
+
+Prompt
+
+17 
+ 4
+
+60 
+ 72
+
+96 
+ 94
+
+TrustRAG
+
+17 
+ 29
+
+60 
+ 60
+
+96 
+ 32
+
+NQ
+
+KeywordAgg
+
+2 
+ 3
+
+64 
+ 42
+
+92 
+ 82
+
+Prompt
+
+2 
+ 1
+
+64 
+ 70
+
+92 
+ 92
+
+TrustRAG
+
+2 
+ 11
+
+64 
+ 46
+
+92 
+ 14
+
+Table 8: 
+Target-positive counts (out of 100) before 
+ after defense (automatic string label).
+
+Data
+
+Pipeline
+
+ [95% CI]
+
+Hotpot
+
+KeywordAgg
+
+5 [0, 11]
+
+Prompt
+
+2 [
+, 7]
+
+TrustRAG
+
+64 [55, 73]
+
+12
+
+76
+
+NQ
+
+KeywordAgg
+
+10
+
+1
+
+11
+
+Prompt
+
+0
+
+TrustRAG
+
+78
+
+9
+
+87
+
+Table 9: 
+Five-poison factorial decomposition in percentage points (
+) under the automatic target-string label.
+
+Appendix F 
+Judge Label Coverage and Human Agreement
+
+We report how often the judge returned positive and uncertain target-endorsement labels on the defended poisoned endpoint in Table  
+10
+. Table 
+11
+ reports agreement with blinded human audit.
+
+Data
+
+None
+
+Key.
+
+Prompt
+
+Trust
+
+HotpotQA
+
+1
+
+35/9
+
+34/13
+
+61/10
+
+11/10
+
+HotpotQA
+
+5
+
+77/10
+
+58/17
+
+76/19
+
+9/6
+
+NQ
+
+1
+
+42/11
+
+20/13
+
+55/13
+
+7/11
+
+NQ
+
+5
+
+59/25
+
+47/13
+
+65/29
+
+2/9
+
+Table 10: 
+Judge-positive/uncertain target-endorsement counts on poisoned retrieval. Each cell is yes/uncertain out of 100.
+
+Label
+
+Valid/Unc.
+
+Overall
+
+Decisive
+
+Target
+
+95+(5 N/A) / 26
+
+69/100, 
+
+64/69, 
+
+Reference
+
+98 / 30
+
+50/98, 
+
+50/68, 
+
+Abstention
+
+99 / 28
+
+67/99, 
+
+67/71, 
+
+Table 11: 
+Human-judge agreement in the 100 output blinded audit. Overall counts uncertain labels as disagreement while decisive only counts yes/no. 
+
+Appendix G 
+Mechanism Counts
+
+Table 
+12
+ reports the removal-control diagnostics for all completed PoisonedRAG cells.
+Across settings, most poisoned positives are reproduced by a single injected passage.
+This means the attack usually succeeds through single-passage dominance rather than composition with legitimate evidence.
+
+HotpotQA 
+
+NQ 
+
+Metric (of 100)
+
+(1,5)
+
+(5,5)
+
+(1,10)
+
+(5,10)
+
+(1,5)
+
+(5,5)
+
+Clean target
+
+17
+
+17
+
+15
+
+15
+
+2
+
+2
+
+Poisoned target
+
+60
+
+96
+
+59
+
+78
+
+64
+
+92
+
+Newly induced
+
+46
+
+79
+
+45
+
+64
+
+62
+
+90
+
+injection-dependent
+
+45
+
+74
+
+44
+
+62
+
+60
+
+87
+
+Strict newly induced
+
+1
+
+0
+
+1
+
+2
+
+0
+
+0
+
+Clean / poisoned ref. match
+
+16 / 9
+
+16 / 1
+
+19 / 9
+
+19 / 3
+
+9 / 7
+
+9 / 3
+
+Among poisoned positives
+
+Single-poison sufficient
+
+57/60
+
+96/96
+
+55/59
+
+77/78
+
+60/64
+
+91/92
+
+Table 12: 
+Removal-control diagnostics for all completed PoisonedRAG cells (Llama-3-8B victim; automatic target-string label).
+
+Split-knowledge.
+
+For the 311-candidate split-knowledge probe with Contriever and Llama-3-8B, 149 contexts retrieve both the mapped legitimate passage 
+ and injected passage 
+.
+Among 27 poisoned positives, 22 are injection-dependent newly induced cases, 17 are single-poison sufficient, and 7 are strict composition cases.
+Thus, strict composition exists, but it is rare.
+
+With BGE cosine retrieval, no detector intercepts any of the 18 poisoned positives at nominal 1% FPR, and 2 strict cases remain.
+Table 
+13
+ shows that pipeline defenses suppress most strict cases, but can still introduce new target-positive answers.
+TrustRAG, for example, suppresses 6 of 7 strict cases but ends with 37 target-positive answers, above the undefended 27.
+Introduced targets are therefore not unique to PoisonedRAG.
+
+Defense
+
+Hit /27
+
+Strict /7
+
+Added
+
+Final
+
+Graph scores (3)
+
+0
+
+0
+
+0
+
+27
+
+Score minimum
+
+0
+
+0
+
+0
+
+27
+
+Score gap
+
+10
+
+2
+
+0
+
+17
+
+Score dispersion
+
+8
+
+2
+
+0
+
+19
+
+KeywordAgg
+
+13
+
+6
+
+11
+
+25
+
+Prompt control
+
+12
+
+6
+
+6
+
+21
+
+TrustRAG
+
+10
+
+6
+
+20
+
+37
+
+Table 13: 
+Split-knowledge defenses (311 candidates; automatic target-string label).
+
+Appendix H 
+Detector Details
+
+Figure 
+6
+ reports all six detectors at nominal 1% FPR.
+Only the two contrast scores, gap and dispersion, intercept meaningful numbers of target-positive outputs, and only at one poison.
+Looser thresholds do not change the conclusion.
+On HotpotQA with one poison, even a nominal 20% FPR gives at most 9/60 interceptions for the graph scores and 7/60 for the minimum score, while gap reaches 60/60 at 5% and dispersion reaches 60/60 at 10%.
+At five poisons, no detector exceeds 4/96 interceptions even at nominal 20% FPR.
+
+AUROC against held-out clean contexts shows the same pattern.
+Gap and dispersion score 0.999 at one poison, but drop to 0.46 at five poisons.
+The minimum score reaches 0.000 at five poisons, meaning poisoned contexts are ordered in the opposite direction from the fixed anomaly rule.
+We do not reverse the direction after seeing the attack, because that would tune the detector on the attack itself.
+
+Table 
+14
+ reports the median score-gap value for HotpotQA at one and five poisons.
+The threshold is calibrated on held-out clean contexts and kept fixed across poison budgets.
+Fractions are rounded equivalents of the underlying detector scores.
+
+Dataset
+
+Threshold
+
+Intercepted
+
+HotpotQA
+
+1
+
+59/60
+
+HotpotQA
+
+5
+
+0/96
+
+NQ
+
+1
+
+32/64
+
+NQ
+
+5
+
+1/92
+
+Table 14: 
+Score-gap detector behavior on HotpotQA and NQ.
+The same clean-calibrated threshold is used for both poison budgets.
+
+Figure 6: 
+
+Detector interception across the main Llama-3-8B cells at the nominal 1% calibration point.
+
+Exposure strata.
+
+On HotpotQA with one poison, 21 contexts retain all annotated support, 57 retain some support, and 22 retain none.
+These strata contain 10, 31, and 19 of the 60 target-positive outputs.
+At five poisons, every top-5 context is fully injected.
+The detector collapse therefore comes with a real change in what the model and detector see, not with a change in the query set or corpus.
+
+Appendix I 
+Equal-Length and Normalized Retrieval Controls
+
+The main setting encodes corpus passages at 128 tokens and poisons at 512 tokens.
+This could make injected passages easier to detect by length or embedding norm.
+We therefore run two HotpotQA top-5 controls.
+Dot512 encodes all passages with the same 512-token limit.
+Cosine512 also normalizes embeddings before scoring.
+Detectors are recalibrated separately in each control arm.
+
+Encoding
+
+Gap hit (
+)
+
+FPR
+
+Dot128/512
+
+59/60 
+ 0/96
+
+1.0
+
+Dot512
+
+65/66 
+ 0/95
+
+1.0
+
+Cosine512
+
+61/63 
+ 0/97
+
+0.5
+
+Table 15: 
+Detector contrast across encoding arms (HotpotQA, automatic target-string label, 100 queries per cell).
+
+Table 
+15
+ shows that the one-poison/five-poison contrast, the high five-poison target rate, and single-passage sufficiency all survive both controls. Clean EM/F1 on attack queries is 17.0/30.3 (Dot512) and 14.0/24.2 (Cosine512), versus 16.0/29.6 in the main arm. Table 
+16
+ repeats the pipeline transitions in the control arms. The qualitative pattern from Finding 1 is stable: TrustRAG is the only pipeline with a large five-poison effect, the prompt control raises one-poison incidence in every arm, and introduced counts are never zero. Introduced counts do vary (KeywordAgg introduces 15, 9, and 21 across arms at one poison), which is why the main text bases defense claims on the paired tables with intervals and treats these arms as sensitivity checks.
+
+Arm (base)
+
+Pipeline
+
+P/I
+
+Final
+
+Dot128/512 (60)
+
+KeywordAgg
+
+15/15
+
+60
+
+Prompt
+
+7/19
+
+72
+
+TrustRAG
+
+20/20
+
+60
+
+Dot512 (66)
+
+KeywordAgg
+
+15/9
+
+60
+
+Prompt
+
+8/14
+
+72
+
+TrustRAG
+
+21/10
+
+55
+
+Cosine512 (63)
+
+KeywordAgg
+
+15/21
+
+69
+
+Prompt
+
+5/20
+
+78
+
+TrustRAG
+
+21/12
+
+54
+
+Table 16: 
+HotpotQA pipeline transitions at 
+ across encoding arms (of 100; automatic target-string label).
+P/I is prevented/introduced; base is the arm’s undefended count.
+
+Appendix J 
+Output Fidelity and Utility Diagnostics
+
+Recovered RobustRAG outputs.
+
+An early version of our common victim adapter saved only the first line of KeywordAgg’s final response.
+The raw traces still contained the full responses, so we recovered 290 complete final outputs across 500 query/context records without rerunning inference.
+This correction changes the HotpotQA KeywordAgg target counts from 23/100 and 26/100 to 60/100 and 91/100 at one and five poisons.
+The isolated-passage outputs were unchanged, so the aggregation inputs stayed the same.
+All KeywordAgg results in the paper use the recovered outputs.
+We do not use KeywordAgg’s whole-response EM on the held-out utility set.
+Among its 200 utility records, 86 abstain before aggregation and 90 of the remaining records stored only a colon-terminated preamble.
+This makes whole-response EM unreliable for that condition.
+
+Why we do not rank utility by EM.
+
+Whole-response exact match is too brittle for the pipeline outputs.
+TrustRAG often gives long explanatory answers (median 170.5 words on held-out utility queries), so exact match against short references can mark useful answers as wrong.
+We therefore report judged reference correctness with explicit uncertainty (Table 
+7
+) instead of treating zero EM as zero capability.
+
+Figure 7: 
+
+Four answer types separated by aligned evaluation.
+The reference is the expected correct answer for the query; the target is the attacker-chosen answer, which may differ from the reference.
+
+Appendix K 
+Provenance
+
+HotpotQA uses the full 5,233,329-passage BEIR corpus.
+For the split-knowledge probe, the support audit maps 307 of 311 intended 
+ passages to natural corpus passages and finds 149 contexts where 
+ is co-retrieved with the injected passage.
+NQ uses the downloaded BEIR corpus; its exact fingerprint still needs independent documentation, and NQ support alignment has not been separately validated.
+All counts come from saved run reports or deterministic recomputation from saved outputs.
+The RobustRAG recovery keeps both the source hash and the pre-repair answers.
+The 70B checks reuse saved Contriever contexts with Llama-3.1-70B-Instruct (4-bit AWQ, vLLM tensor parallelism); they are victim-scale checks, not full defense reruns.
+The 
+aligned_rag
+ release includes configuration manifests, pinned source revisions, scorer policies, and per-query records or reproducible identifiers, subject to source licenses.
+It stores raw outputs, automatic labels, independent judgments, and human adjudications in separate files.
+We do not redistribute the full upstream datasets, attack corpora, or defense repositories.
+Users must obtain HotpotQA, NQ/BEIR, PoisonedRAG, RobustRAG, and TrustRAG from their original sources and follow their respective licenses or terms.
+
+Appendix L 
+Qualitative Label Examples
+
+Figure 
+7
+ shows four outputs from the audit set.
+These examples illustrate why aligned evaluation separates target endorsement, reference correctness, and abstention.
+A wrong answer is not always a successful targeted attack, and a target mention is not always endorsement.
+

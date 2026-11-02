@@ -1,0 +1,2587 @@
+WeFair: Fidelity-Aware Alignment from Human Feedback for Personalized Query Rewriting in Short-Video Search
+https://arxiv.org/abs/2610.16927
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+WeFair: Fidelity-Aware Alignment from Human Feedback for Personalized Query Rewriting in Short-Video Search
+
+Conference: 
+; ; 
+CCS: 
+Information systems Query reformulation
+CCS: 
+Computing methodologies Natural language generation
+
+Yingtao Ren
+
+email: 
+yingtaoren@tencent.com
+
+Note: 
+These authors contributed equally to this work.
+
+Affiliation: 
+Weixin Group, Tencent
+, 
+China
+
+, 
+
+Aolin Li
+
+email: 
+churenli@tencent.com
+
+Affiliation: 
+Weixin Group, Tencent
+, 
+China
+
+, 
+
+Cheng Cheng
+
+email: 
+trcheng@tencent.com
+
+Affiliation: 
+Weixin Group, Tencent
+, 
+China
+
+, 
+
+Huiyun Hu
+
+email: 
+huiyunhu@tencent.com
+
+Affiliation: 
+Weixin Group, Tencent
+, 
+China
+
+, 
+
+Huasheng Liang
+
+email: 
+watsonliang@tencent.com
+
+Affiliation: 
+Weixin Group, Tencent
+, 
+China
+
+, 
+
+Baoxing Xie
+
+email: 
+baoxingxie@tencent.com
+
+Affiliation: 
+Weixin Group, Tencent
+, 
+China
+
+, 
+
+Jun Yuan
+
+email: 
+junjyuan@tencent.com
+
+Affiliation: 
+Weixin Group, Tencent
+, 
+China
+
+, 
+
+Haijun Wu
+
+email: 
+ethanhjwu@tencent.com
+
+Affiliation: 
+Weixin Group, Tencent
+, 
+China
+
+, 
+
+Yiwei Fu
+
+email: 
+ywfu@sfs.ecnu.edu.cn
+
+Affiliation: 
+East China Normal University
+, 
+China
+
+ and 
+
+Chenxing Wang
+
+email: 
+magnuswang@tencent.com
+
+Note: 
+Corresponding author.
+
+Affiliation: 
+Weixin Group, Tencent
+, 
+China
+
+© none
+
+Abstract.
+
+Short-video search needs compact query rewriters that recover users’ personalized intent from ambiguous queries under strict latency constraints. Existing LLM-based methods have improved rewriting by using synthetic reasoning and subsequent consumption-behavioral feedback. However, overemphasizing subsequent consumption can favor engaging content over the user’s immediate need, causing intent drift even when rewritten queries are grounded in behavioral history.
+We propose WeFair, 
+F
+idelity-
+A
+ware Al
+i
+gnment from Human Feedback for Pe
+r
+sonalized Query Rewriting in 
+We
+Chat short-video search. WeFair uses human feedback according to how directly it reflects personalized intent, assigning feedback fidelity to a progression from demonstration to preference to verification. We first mine actual queries and user reformulations from search sessions, and then screen them for contextual support. In the demonstration stage, a supervised fine-tuning curriculum progresses from large-scale context-to-query learning to reasoning and direct prediction on human reformulation and preservation. In the preference stage, direct preference optimization learns relative preferences from subsequent consumption feedback. In the verification stage, group relative policy optimization rewards exact agreement with reformulation or preservation targets to constrain intent drift. Further analysis shows that broad supervision benefits the full curriculum supervised training, while strict verification achieves better performance than the tested auxiliary rewards. In offline experiments, the compact WeFair-2B model outperforms strong rewriting baselines in overall accuracy and intent preservation. Furthermore, a 10-day online A/B test shows relative increases of 2.951% in click-through rate and 2.593% in effective video-view rate, alongside a 2.350% relative reduction in query reformulation rate. WeFair-2B has been deployed in the WeChat short-video search system, which serves over 100 million queries per day.
+
+Keywords: 
+Personalized query rewriting, Short-video search, Reinforcement learning, Intent drift mitigation
+
+1. 
+Introduction
+
+Figure 1. 
+
+Overview of intent drift in WeChat short-video search. The original query “crepe cake” is redirected toward recipes instead of the intended eating videos. WeFair uses fidelity-aware human feedback through demonstration, preference, and verification to mitigate intent drift.
+
+Overview of intent drift in WeChat short-video search. The original query ``crepe cake'' is redirected toward recipes instead of the intended eating videos. WeFair uses fidelity-aware human feedback through demonstration, preference, and verification to mitigate intent drift.
+
+Personalized query rewriting is essential when an ambiguous search query does not fully express the user’s immediate information need. In short-video search, the intended meaning may depend on recent searches, viewed content, or other context available when the query is issued. Rewriting can expose this information to retrieval by producing a more informative expression, but it must also satisfy strict latency constraints 
+(
+Gong et al., 2026
+; 
+Chu et al., 2026
+)
+. Therefore, the practical objective is training a compact rewrite model that can resolve ambiguity without replacing the user’s current intent and needs. Furthermore, the rewrite pipeline also needs to accurately decide when to rewrite or preserve the original query.
+
+Although general large-size large language models (LLMs) exhibit strong reasoning capabilities, they fail to accurately understand diverse user intents and incur excessive per-inference latency, which is unacceptable for real-time search.
+To address these limitations, some approaches use synthetic Chain-of-Thought(CoT) traces to distill reasoning capabilities from large teacher LLMs into smaller rewrite models, and then use large-scale subsequent consumption feedback to align them with platform-specific user preferences.
+
+Figure 2. 
+
+WeFair training and serving. (a) Search sessions yield screened reformulation and preservation targets. (b) Progressive training aligns the model through demonstration, preference, and verification stages. (c) Rewrites expand the candidate pool through cache lookup and search while also informing online ranking.
+
+WeFair training and serving. (a) Search sessions yield screened reformulation and preservation targets. (b) Curriculum SFT builds rewriting capabilities, DPO learns preferences from reformulations and consumption feedback, and GRPO applies strict target verification to constrain intent drift. (c) Rewrites expand retrieval through cache lookup and search, while the original query remains a retrieval and ranking anchor.
+
+However, consumption-oriented alignment does not necessarily reflect the user’s immediate information need. When insufficiently constrained by direct evidence of user intent, a rewriter may favor queries that retrieve engaging content while redirecting the original search intent, resulting in intent drift. Figure 
+1
+ shows an example of intent drift.
+To better capture personalized intent, recent methods incorporate actual user reformulations, which provide more direct evidence of how users clarify their information needs. PicQue
+(
+Chu et al., 2026
+)
+ uses historical reformulations as context for generating training examples that subsequently undergo manual verification, while WeWrite
+(
+Cheng et al., 2026
+)
+ directly uses mined reformulations for supervised fine-tuning and reward construction in GRPO. While these advances demonstrate the value of real user reformulations, the subsequent consumption feedback differs in how directly they reflect personalized intent, and its fine-grained use across training stages remains underexplored.
+To bridge the gap, we propose WeFair, a fidelity-aware alignment framework for training a compact personalized query rewriter model in WeChat short-video search. Its central idea is to match supervision fidelity to the requirements of each training stage, improving how human feedback guides a small model toward faithful and efficient rewriting. This progression can enable a compact model to acquire personalized query rewriting capabilities while mitigating intent drift.
+
+WeFair combines automated data construction with three complementary training stages. We mine actual reformulations from search sessions and apply LLM screening and contextual verification to retain demonstrations grounded in user intent. Training then proceeds through three stages, each with a distinct purpose. In the demonstration stage, a supervised fine-tuning (SFT) curriculum progresses from context-to-query prediction to context-conditioned reasoning and finally direct query rewriting, building solid intent understanding capability. The broad coverage of human demonstrations prepares the compact policy model to generate useful candidates for later optimization. In the preference stage, direct preference optimization (DPO) learns from candidate pairs distinguished by subsequent consumption outcomes, increasing the probability of rewrites associated with better personalized user intent. Finally, group relative policy optimization (GRPO) applies a strict verification reward based on exact match with actual human reformulations or preservation. This final stage anchors policy updates to observed human expressions without adding graded similarity, retrieval, or other judge rewards. At inference time, the rewrite model directly outputs a short rewrite or a preservation decision, avoiding additional CoT generation latency. Figure 
+2
+ shows the overview of the proposed WeFair.
+
+Our further analysis suggests that the three training stages differ in their tolerance for supervision with varying intent fidelity. SFT can tolerate lower-fidelity supervision to acquire broad rewriting capabilities, while DPO can incorporate preferences inferred from subsequent consumption to refine candidate selection. In contrast, final GRPO optimization requires strict fidelity to the intended target. Auxiliary rewards may involve more fine-grained supervision but reduce rewriting accuracy. Offline and online experiments demonstrate WeFair’s effectiveness in personalized rewriting. WeFair-2B rewrite model has been
+deployed in the online WeChat short-video search system, serving over 100 million queries per day.
+Our main contributions can be summarized as follows:
+
+(1)
+
+We examine the role of supervision fidelity in personalized rewriting post-training. Demonstrate that extensive broad lower-fidelity supervision benefits curriculum SFT, while strict verification better supports on-policy alignment.
+
+(2)
+
+We propose WeFair, a fidelity-aware framework that matches human feedback to demonstration, preference, and verification stages, enabling compact models to capture personalized needs while mitigating intent drift.
+
+(3)
+
+Offline and online experiments demonstrate that WeFair achieves strong rewriting performance with compact models and significant improvements in online WeChat short-video search.
+
+2. 
+Related Work
+
+2.1. 
+Personalized Query Rewriting
+
+LLM-based query rewriting improves retrieval by enriching query representations and adapting to search domains. Query2doc generates pseudo-documents, while CardRewriter incorporates platform knowledge through knowledge cards 
+(
+Wang et al., 2023
+; 
+Gong et al., 2026
+)
+. Domain adaptation further aligns query expressions with retrieval requirements. BEQUE combines supervised rewriting with retrieval feedback
+(
+Peng et al., 2024
+)
+, and negation-aware rewriting preserves explicit constraints 
+(
+Guo et al., 2025b
+)
+. MAAQR and QP-OneModel extend this direction through adaptive refinement and unified query understanding 
+(
+Zheng et al., 2025
+; 
+Huang et al., 2026
+)
+. Beyond representation enrichment, IterQR and Think-Then-Rewrite incorporate reasoning into retrieval-oriented training
+(
+Chen et al., 2025
+; 
+Li et al., 2026a
+)
+. MiniELM combines lightweight distillation with simulated feedback 
+(
+Nguyen et al., 2025
+)
+. For personalized search, user context and observed behavior provide evidence of the user’s current information need, helping resolve ambiguity and determine when to rewrite. PicQue combines hybrid reasoning supervision with GRPO to address over-rewriting 
+(
+Chu et al., 2026
+)
+, while Think-to-Personalize uses purchase history to support personalized retrieval 
+(
+Jiang et al., 2026
+)
+. WeWrite mines actual user reformulations and trains with SFT and GRPO using lexical similarity and conditional query-volume rewards 
+(
+Cheng et al., 2026
+)
+.
+
+Furthermore, OneBar emphasizes content-grounded recommendations, while short-video and conversational query suggestion address consumption utility and intent coverage 
+(
+Tang et al., 2026
+; 
+Tian et al., 2026
+; 
+Liu et al., 2026
+)
+. DVCQR aligns separate rewrites with sparse and dense retrieval 
+(
+Li et al., 2026b
+)
+. These studies demonstrate the value of contextual and behavioral signals for query rewriting, while highlighting distinct objectives such as retrieval relevance, consumption utility, and personalized intent.
+
+2.2. 
+LLM Post-Training and Feedback Alignment
+
+Post-training methods provide different mechanisms for learning from demonstrations, preference pairs, and verified rewards. SFT learns demonstrated responses, whereas DPO optimizes chosen–rejected preferences without separately training a reward model, and GRPO estimates advantages within sampled groups 
+(
+Guo et al., 2025a
+; 
+Ren et al., 2026
+; 
+Rafailov et al., 2023
+; 
+Ouyang et al., 2022
+)
+. Beyond algorithm selection, recent work examines which supervision is useful at different learning stages. Stage-specific data selection distinguishes capability acquisition from reinforcement 
+(
+He et al., 2026
+)
+. SmartSearch uses a process-reward-guided curriculum 
+(
+Wen et al., 2026a
+)
+. Hindsight self-distillation further derives corrections and preferences from follow-up user interactions 
+(
+Kleine Buening et al., 2026
+)
+. This work motivates matching supervision to both the policy’s capabilities and the evidence available from users.
+In search applications, AWHCP combines SFT, DPO, and GRPO with quality, format, and recall rewards 
+(
+Ou et al., 2026
+)
+, while CoRe uses deployed relevance feedback 
+(
+Wen et al., 2026b
+)
+. Such signals align generation with search outcomes, but provide different evidence about intended reformulations. Comparisons under compute constraints further show that on-policy rewriting need not outperform prompted alternatives 
+(
+Xu et al., 2026
+)
+, motivating examination of the optimization signals alongside the algorithms.
+
+On-policy optimization consequently requires considering the reliability of candidate-level feedback. TTRL shows that noisy pseudo-labels can still yield reliable rewards 
+(
+Zuo et al., 2025
+)
+. This motivates prioritizing reward purity in on-policy preference alignment.
+
+3. 
+Methodology
+
+Task Formulation.
+
+In the short-video search system, given a query 
+ and query-time user context 
+, a policy 
+, where 
+, outputs a rewritten query 
+ or a preservation marker 
+. The 
+ serves as an additional retrieval query, and the preservation marker ensures that only the original query is retained. We define intent drift as 
+ changing or adding information supported by the 
+ but differing from the user’s immediate needs. Define hallucination as 
+ introducing additional information unsupported by 
+. The objective is to generate context-supported 
+ while preserving the actual information needs. 
+
+Framework Overview.
+
+WeFair matches supervision fidelity to the requirements of each training stage. We utilize context-to-query records, user reformulations, and subsequent consumption feedback from search sessions. These signals capture a broad range of user preferences but differ in how directly they reflect personalization and immediate intent. Accordingly, curriculum SFT builds rewriting capabilities from broad demonstrations, DPO learns relative preferences from consumption-grounded pairs, and GRPO anchors final refinement through strict agreement with screened reformulation and preservation targets.
+
+3.1. 
+Human Feedback Construction
+
+We mine and screen search-session records to construct three supervision pools: a context-to-query pool 
+, a reformulation pool 
+, and a preservation pool 
+. All used data are de-identified and sanitized to protect privacy.
+
+Candidate mining.
+
+For context-to-query mining, we extract queries 
+ with their preceding context 
+ that have at least one effective video view. An effective video view means watching a retrieved video for more than ten seconds. We further screen all raw context-to-query records with DeepSeek-V4-Flash, retaining queries that are supported by the query-time context, yielding initial context-to-query pool 
+. For reformulation mining, we link eligible adjacent queries to construct initial reformulation 
+ within the same search session, requiring no video click following 
+ and an effective video view following 
+. Each pair uses the context available when 
+ is issued.
+Both records exclude suggestion-triggered queries and remove system-generated suggestions from the extracted context.
+Since adjacent queries still likely express different information needs, candidate reformulations undergo rule-based filtering followed by LLM screening for contextual support and intent continuity.
+Algorithm 
+1
+ summarizes the construction process. 
+
+Rule-based filtering.
+
+After getting the initial candidates, we then conduct rule-based filtering to 
+. Let 
+ denote a string’s character set, 
+, 
+, and 
+, where 
+ removes whitespace, non-word characters, and underscores. Thus, 
+ contains the characters introduced by the reformulation. We filter a candidate reformulation if any of the following conditions hold:
+
+(1)
+
+No character gain:
+ 
+.
+
+(2)
+
+Only gain function words:
+ the added characters belong to a fixed Chinese function-word lexicon.
+
+(3)
+
+Low character overlap:
+ the original and subsequent queries share too few characters, measured by character-set Jaccard similarity 
+.
+
+(4)
+
+Insufficient contextual support:
+ no contextual match satisfies the criteria for new character trigrams, bigrams, single-character additions, or the common-prefix fallback.
+
+These rule-based filters remove uninformative changes and reformulations with weak lexical or contextual support, reducing noise in the candidate reformulation pool and limiting the workload of subsequent LLM screening. In our practice, about half of the initial candidate reformulations are filtered out at this stage. 
+
+LLM screening.
+
+After rule-based filtering, we further use large-size reasoning LLMs to evaluate remaining candidate reformulations. Acceptance requires intent continuity 
+, information gain 
+, and contextual bridging 
+:
+
+(1)
+
+Here, 
+ indexes the three models used at each stage, and 
+ requires at least two accepting judgments.
+Intent continuity requires the reformulation to preserve the original subject, task, answer type, and essential constraints. Information gain requires useful retrieval information or meaningful entity recovery, excluding changes that merely alter formatting. We first use three LLMs to jointly check intent continuity and information gain, 
+, and aggregate their decisions by majority vote. Candidates passing this check proceed to a three-model majority vote on contextual bridging 
+. At each stage, the models judge independently using the same input and screening criteria. This check determines whether contextual evidence supports linking the added detail to the current query. An isolated mention of the target query or a broad historical interest alone is insufficient to justify the added detail.
+Each call returns acceptance or rejection decisions with a brief reason, and malformed decisions are discarded. Details are provided in Appendix 
+A
+. About one third of the candidates entering LLM screening pass both checks and form the final reformulation pool 
+.
+
+Refuse rewrite labels.
+
+We construct two types of preservation examples. Natural examples come from 
+ where the original query 
+ leads to at least one effective video view, providing behavioral evidence that the query retrieves useful content. Hard examples come from reformulation candidates that pass the first LLM screening stage but are rejected during contextual bridging, as the proposed additions lack support in the query-time context. These examples teach the model to avoid unsupported personalization.
+We further use a reasoning LLM to verify that the query is clear and that personalization cues are ambiguous. For verified examples of both types, we retain the original context and query and assign the preservation target, yielding the final preservation pool 
+. Finally, we remove the records selected for natural preservation from the initial context-to-query pool 
+, and the remaining records form the final context-to-query pool 
+.
+
+Table 1. 
+Offline performance on personalized query rewriting. WeFair achieves the highest Consistent Recall and decision accuracy. WeFair-2B also exhibits lower intent drift than the larger rewrite baselines. Bold text marks the best scores.
+
+Rewrite Quality
+
+Decision Quality
+
+Method
+
+Mode
+
+Consistent
+
+Recall
+
+Consistent
+
+Prec.
+
+EM
+
+Recall
+
+Hallucination
+
+Rate
+
+Intent Drift
+
+Rate
+
+RD
+
+Recall
+
+PD
+
+Recall
+
+Decision
+
+Acc.
+
+Overall
+
+Acc.
+
+DeepSeek-V4.1-Flash
+
+Full CoT
+
+72.92
+
+64.80
+
+26.06
+
+1.67
+
+4.28
+
+80.72
+
+44.42
+
+67.51
+
+62.55
+
+Gemini-3.1-Pro
+
+Full CoT
+
+70.37
+
+68.45
+
+28.17
+
+0.78
+
+4.16
+
+76.50
+
+54.02
+
+68.32
+
+64.42
+
+Qwen3.8-27B
+
+Full CoT
+
+71.03
+
+62.14
+
+26.53
+
+1.77
+
+5.09
+
+79.82
+
+39.73
+
+65.23
+
+59.64
+
+Qwen3.8-27B
+
+Direct
+
+50.32
+
+61.12
+
+17.72
+
+1.92
+
+6.13
+
+61.13
+
+62.95
+
+61.79
+
+54.91
+
+WeWrite-0.8B
+
+Direct
+
+66.79
+
+51.88
+
+17.84
+
+5.47
+
+13.34
+
+89.27
+
+31.03
+
+68.07
+
+53.77
+
+WeWrite-2B
+
+Direct
+
+68.58
+
+46.57
+
+18.54
+
+6.39
+
+16.45
+
+95.79
+
+10.04
+
+64.59
+
+47.28
+
+WeWrite-4B
+
+Direct
+
+70.37
+
+50.27
+
+21.83
+
+3.83
+
+15.88
+
+94.38
+
+20.31
+
+67.42
+
+52.15
+
+AWHCP-2B
+
+Fast CoT
+
+65.77
+
+43.28
+
+19.72
+
+7.28
+
+14.88
+
+97.32
+
+4.46
+
+63.53
+
+43.46
+
+AWHCP-8B
+
+Fast CoT
+
+71.58
+
+49.65
+
+21.71
+
+6.70
+
+13.34
+
+94.64
+
+13.39
+
+65.07
+
+50.41
+
+WeFair-CoT-2B
+
+Fast CoT
+
+81.12
+
+69.15
+
+26.77
+
+2.33
+
+7.25
+
+92.66
+
+56.89
+
+79.64
+
+72.30
+
+WeFair-CoT-4B
+
+Fast CoT
+
+81.25
+
+68.76
+
+27.14
+
+2.64
+
+6.91
+
+93.28
+
+56.52
+
+79.90
+
+72.25
+
+ 
+
+WeFair-0.8B
+
+Direct
+
+76.88
+
+64.01
+
+26.53
+
+1.79
+
+9.45
+
+91.19
+
+49.46
+
+76.00
+
+66.90
+
+WeFair-2B
+
+Direct
+
+83.95
+
+69.26
+
+26.29
+
+2.43
+
+5.36
+
+94.51
+
+53.35
+
+79.53
+
+72.81
+
+WeFair-4B
+
+Direct
+
+83.93
+
+70.08
+
+26.17
+
+2.17
+
+6.03
+
+94.13
+
+55.20
+
+79.97
+
+73.48
+
+ 
+
+3.2. 
+Fidelity-Aware Progressive Alignment
+
+Algorithm 1
+ 
+ Human feedback construction
+
+1:
+
+Search-session records 
+
+2:
+
+Context-to-query 
+, reformulation 
+,
+preservation 
+
+3:
+
+Mine context–query records 
+
+and adjacent-query pairs 
+
+4:
+
+Exclude suggestion-triggered queries; clean contexts
+
+5:
+
+Screen 
+ for contextual support;
+filter 
+ by rules
+
+6:
+
+ natural preservation records
+selected from 
+
+7:
+
+;
+
+;
+
+8:
+
+for
+ each 
+ 
+do
+
+9:
+
+  
+ majority vote of three 
+ judges
+
+10:
+
+  
+if
+ 
+ 
+then continue
+
+11:
+
+  
+ majority vote of three context judges
+
+12:
+
+  
+if
+ 
+ 
+then
+
+13:
+
+  
+if
+ 
+ 
+then
+
+14:
+
+end
+ 
+for
+
+15:
+
+16:
+
+return
+ 
+
+The training of WeFair follows demonstration, preference, and verification, with each stage initializing the next. 
+
+Demonstration: curriculum SFT.
+
+The curriculum consists of three phases. Phase 1 trains the model to predict the query 
+ from preceding context 
+. Phase 2 takes 
+ as input and learns to generate a
+teacher-provided rationale followed by the final target 
+.
+Phase 3 predicts 
+ directly from 
+. Phase 1 uses context-to-query pool 
+, while Phases 2 and 3 use a small part from reformulation pool 
+ and preservation pool 
+. 
+ provides broad behavioral coverage, while the smaller adaptation set teaches evidence-supported rewriting, preservation, and the serving format. The rationales are auxiliary explanations generated by Gemini-3.1-Pro-Preview. For each phase 
+, let
+
+ denote the corresponding
+training set of input–target pairs 
+.
+We optimize the standard objective:
+
+(2)
+
+Each phase continues from the preceding checkpoint. We obtain 
+ after the final direct-prediction phase.
+
+Preference: DPO with consumption pairs.
+
+Starting from 
+, we generate 64 candidate
+responses for each input 
+ and construct up to two DPO pairs. Using up to three subsequent relevant consumed videos as user preference, a chosen candidate 
+ must have at least one relevant consumed video appear in its top-10 retrieval results. A rejected candidate 
+ satisfies no relevant consumed video in its top-100 retrieval results. The first pair uses the human reformulation 
+ as the positive, yielding 
+. The second pair uses a consumption-supported chosen candidate, yielding 
+. If only one valid negative candidate is available, we set 
+ and share it across both pairs. For preservation-required examples, we pair the preservation marker 
+ with a generated rewrite 
+, yielding 
+. DPO increases the relative likelihood of human reformulations or consumption-supported candidates over observed low-engagement alternatives. Because engagement can differ from the immediate information need, the final verification stage returns to explicit reformulation and preservation markers.
+
+Verification: human-grounded GRPO.
+
+Verification is the final mechanism for constraining optimization to direct target evidence with GRPO. Starting from the DPO policy, we sample 32 responses for each 
+. After deterministic parsing, a valid response 
+ receives reward:
+
+(3)
+
+where 
+ weight exact matching with the retained human query 
+ or preservation marker 
+, and any other responses receive zero reward, ensuring the highest fidelity signal supervision. Our further analysis shows that the high-fidelity reward function outperforms other designs with graded similarity, retrieval, or learned-judge rewards.
+This conservative final stage anchors updates to human reformulations and preservation labels, mitigating consumption-driven intent drift. Notably, generating a preservation marker is easier than generating
+an accurate rewritten query, so the policy may engage in reward hacking by
+excessively favoring preservation. We therefore design a concise
+data ratio and reward assignment to mitigate this risk, with implementation details provided in Appendix 
+A
+.
+
+3.3. 
+Integration into Retrieval and Ranking
+
+We integrate rewritten queries 
+ into retrieval and ranking through two complementary paths. A lightweight fake-recall path obtains cached candidates associated with 
+, following WeWrite 
+(
+Cheng et al., 2026
+)
+, while an additional lightweight vector retrieval uses 
+ to further expand the candidate pool. The rank system uses video relevance to both the original query 
+ and 
+. We gate the computation of rewrite-based relevance using the probability of the preservation marker token 
+ at the first decoding step. When this probability exceeds the threshold, we compute relevance using only 
+. Otherwise, we compute relevance scores with respect to both 
+ and 
+ and use their weighted combination in the final video ranking. This design retains the original query as a ranking anchor while allowing contextual refinement. Appendix 
+A
+ provides further details.
+
+4. 
+Experiment
+
+4.1. 
+Experimental Setup
+
+Offline evaluation.
+
+We trained our method on four weeks of search logs and evaluated all methods on the test set from the following three days. Let 
+ and 
+ denote the numbers of rewrite-required and preservation-required examples in the test set. During the evaluation, all the evaluated rewriters use the original input query and query-time context. We use DeepSeek-V4.1-Flash as the LLM judge, which additionally considers preceding and subsequent user behavior to assess whether a generated query is consistent with the information need expressed by the user’s actual subsequent reformulation. To test the effectiveness of the judge, we randomly sampled 500 responses of Gemini-3.1-Pro rewriter from the test set and evaluated each response using both the LLM judge and human review
+(
+Chu et al., 2026
+)
+. The LLM judge showed 96.6% agreement with human judgments, with Cohen’s Kappa = 0.919.
+
+Baselines and implementation.
+ For general LLM baselines, we evaluate DeepSeek-V4.1-Flash, Gemini-3.1-Pro, and Qwen3.8-27B. Furthermore, we reproduce two other adaptive rewrite methods, WeWrite and AWHCP, using the same training set. We reproduced WeWrite following the complete procedure described in its original paper 
+(
+Cheng et al., 2026
+)
+, and adapted AWHCP 
+(
+Ou et al., 2026
+)
+ to the WeChat search system (Details in Appendix 
+A
+). For our method, WeFair was evaluated at Qwen3.5-0.8B, Qwen3.5-2B, and Qwen3-4B. WeFair-CoT introduces thinking at the GRPO training stage with up to 64 output tokens, and only assesses the resulting rewrite quality. 
+
+Evaluation Metrics.
+
+We mainly evaluate rewrite and decision-making quality of all baselines. Specifically, let 
+ be the count of judge-accepted rewrites on the rewrite-required set, 
+ be all triggered rewrites, 
+ be the correct triggered rewrites decision, and 
+ be the correct preservations. 
+Consistent Recall
+ and 
+Precision
+ metrics are 
+ and 
+, respectively. 
+Exact match (EM)
+ counts rewrites identical to the actual human subsequent reformulation, divided by 
+. On rewrite-required examples, 
+Hallucination Rate
+ counts triggered rewrites containing context-unsupported additions, whereas 
+Intent Drift Rate
+ counts context-supported rewrites that fail to match the user’s current information need. Both rates are divided by 
+. 
+Rewrite-decision (RD) recall
+ is 
+, and 
+preservation-decision (PD) recall
+ is 
+. 
+Decision accuracy
+ is 
+, whereas 
+overall accuracy
+ is 
+. All scores are percentages. More details about setting and implementation are shown in Appendix 
+A
+
+Table 2. 
+Ablation of our curriculum SFT at 2B. The full curriculum SFT achieves the highest consistency recall and overall accuracy. Bold text marks the best scores.
+
+Training
+
+Consistent
+
+Rec.
+
+Consistent
+
+Prec.
+
+RD
+
+Rec.
+
+PD
+
+Rec.
+
+Dec.
+
+Acc.
+
+Overall
+
+Acc.
+
+C2Q
+HR
+
+69.45
+
+46.40
+
+97.28
+
+8.38
+
+64.93
+
+47.23
+
+CoT
+HR
+
+66.76
+
+48.62
+
+93.93
+
+24.18
+
+68.55
+
+51.26
+
+HR Only
+
+66.70
+
+47.29
+
+91.26
+
+13.02
+
+62.78
+
+47.16
+
+Full Curriculum
+
+72.67
+
+53.08
+
+94.25
+
+25.45
+
+69.21
+
+55.48
+
+ 
+
+Table 3. 
+Ablation of progressive alignment stages at 2B with equal total training data. The full WeFair sequence achieves the highest consistent recall and overall accuracy. Bold text marks the best scores.
+
+Training
+
+Consistent
+
+Rec.
+
+Consistent
+
+Prec.
+
+RD
+
+Rec.
+
+PD
+
+Rec.
+
+Dec.
+
+Acc.
+
+Overall
+
+Acc.
+
+SFT Only
+
+72.67
+
+53.08
+
+94.25
+
+25.45
+
+69.21
+
+55.48
+
+SFT
+DPO
+
+75.86
+
+54.25
+
+95.65
+
+22.78
+
+69.13
+
+56.54
+
+SFT
+GRPO
+
+78.93
+
+66.43
+
+93.28
+
+55.37
+
+79.48
+
+70.35
+
+WeFair
+
+83.95
+
+69.26
+
+94.51
+
+53.35
+
+79.53
+
+72.81
+
+ 
+
+Table 4. 
+Rewriting performance and advantage purity under different GRPO rewards. All variants start from SFT without DPO and use equal total training data. Bold text marks the best scores.
+
+Rewrite quality
+
+Advantage purity
+
+Decision quality
+
+Reward variant
+
+Consistent
+
+Recall
+
+EM
+
+Recall
+
+RD
+
+Recall
+
+PD
+
+Recall
+
+Decision
+
+Acc.
+
+Overall
+
+Acc.
+
+Similarity-Augmented Verification
+
+65.39
+
+18.11
+
+82.98
+
+61.64
+
+72.13
+
+94.89
+
+13.81
+
+65.38
+
+46.62
+
+Consumption-Augmented Verification
+
+63.47
+
+18.52
+
+70.29
+
+65.57
+
+67.60
+
+91.06
+
+15.85
+
+63.69
+
+46.14
+
+RM-Augmented Verification
+
+68.20
+
+16.86
+
+72.30
+
+76.32
+
+74.05
+
+98.47
+
+14.24
+
+67.82
+
+48.56
+
+RM-Augmented Verification(4 Vote)
+
+69.99
+
+19.54
+
+64.46
+
+76.27
+
+70.55
+
+95.53
+
+17.37
+
+67.08
+
+50.84
+
+ 
+
+Strict Verification
+
+78.93
+
+23.00
+
+100.00
+
+71.50
+
+83.75
+
+93.28
+
+55.37
+
+79.48
+
+70.35
+
+ 
+
+4.2. 
+Overall Offline Performance
+
+We present the offline performances in Table 
+1
+. WeFair achieves the best overall performance. The WeFair-4B model reaches 73.48% overall accuracy, exceeding the strongest large-size baselines Gemini3.1 and DeepSeek4.1. WeFair-2B achieves 72.81% and the highest consistent Recall of 83.95%. Its EM also exceeded the other two adaptive rewrite baselines. Gemini 3.1 retained the highest EM and the lowest Hallucination and Intent Drift Rates, while achieving much lower rewrite recall. This suggests that large-size models with CoT can substantially reduce hallucination and intent drift, but yield more incorrect preservation. WeFair’s advantage lies in the balance of successful rewriting and preservation. Notably, our small-size WeFair-2B achieves significantly lower hallucination and intent drift rates than other comparable rewriting methods (with its intent drift rate reduced to about one-third), validating the effectiveness of our fidelity-aware training approach. 
+
+Intent fidelity.
+
+WeFair achieves lower hallucination and intent drift rates than WeWrite and AWHCP, while more reliably preserving queries that did not require rewriting. Both baselines tended to favor rewriting, particularly AWHCP. Even the smallest WeFair-0.8B surpasses AWHCP-8B in preservation. The large-size LLMs generally had lower intent drift rates than WeFair but also lower successful-rewrite recall. These trends support the value of fidelity-aware alignment with human feedback in mitigating intent drift while maintaining effective personalized rewriting.
+
+Gains from model scaling.
+
+WeFair’s overall accuracy increased by 5.91 percentage points from 0.8B to 2B, but only 0.67 points from 2B to 4B, while consistent recall remained nearly unchanged. These results indicate diminishing gains over the backbone sizes, with most of the observed gain already attained at 2B. 
+
+Inference mode.
+
+Direct WeFair exceeds WeFair-CoT in overall accuracy at both 2B and 4B, and also achieves lower intent drift. CoT variants yield higher EM and PD Recall, but these gains did not translate into better overall performance, indicating explicit reasoning is unnecessary for the strongest results in these comparisons. For general large-size LLMs, we observe that Qwen3.8-27B with CoT achieves much better performance than direct prediction. These results suggest that our fidelity-aware training enables the rewriter to perform more effective implicit reasoning than explicit CoT. We further analyze the corresponding decode tokens and inference latency in Section 
+4.5
+.
+
+4.3. 
+Ablation Study
+
+4.3.1. 
+Ablation Study of Curriculum SFT
+
+To examine the role of curriculum learning in the SFT stage, we ablate the C2Q and CoT phases before direct human-target adaptation (HR). All four variants use the same number of human reformulation examples, but C2Q adds context-to-query samples in 
+. The results in Table 
+3
+ show that this broader, lower-fidelity demonstration supervision is most beneficial when combined with the subsequent human-target learning phases. Specifically, C2Q
+HR improves consistent recall over HR Only but reduces preservation recall, producing little overall gain. CoT
+HR achieves higher preservation recall and decision accuracy than both variants, supporting the contribution of reasoning supervision to rewrite-or-preserve decisions. Full Curriculum further improves rewrite consistency and decision accuracy, achieving the highest overall accuracy. These findings suggest that the broad and lower-fidelity C2Q and CoT supervision can aid capability acquisition in our curriculum SFT.
+
+4.3.2. 
+Ablation Study of Progressive Alignment.
+
+To assess the contribution of each stage in our progressive alignment framework, we compared four training configurations on the 2B model: SFT Only, SFT
+DPO, SFT
+GRPO, and the full training sequence (WeFair). All configurations use the same total amount of training data. Results are shown in Table 
+3
+.
+
+Demonstration builds the rewriting foundation.
+
+Our curriculum SFT already surpasses all evaluated adaptive baseline variants in consistent recall. This supports the effectiveness of demonstration-based learning in establishing rewriting capabilities in compact models. However, its low PD recall reveals a strong tendency to rewrite queries even when preservation is appropriate. Demonstration learning provides a capable starting point but remains insufficient for reliable rewrite-or-preserve decisions.
+
+Consumption preference alignment further improves rewriting.
+
+The subsequent consumption-guided DPO yields modest improvements in consistent recall and precision, further strengthening successful rewriting. However, PD Recall decreases slightly, also indicating an increased tendency to rewrite preservation-required queries. This imbalance limits the improvement in overall accuracy, suggesting that consumption-based preference alignment refines rewriting capabilities but cannot reduce over-writing.
+
+Verification delivers the largest benefits.
+
+Adding strict-verification GRPO produces the largest improvement in overall accuracy, substantially improving preservation while maintaining high rewrite-decision recall. Importantly, the full sequence achieves higher consistent recall and precision than SFT
+GRPO. These gaps even exceed the corresponding gains from adding DPO to SFT alone, suggesting that the value of preference alignment extends beyond its immediate improvements. Although SFT
+GRPO achieves slightly higher PD recall, the full sequence delivers the best overall performance by combining successful rewriting with effective preservation.
+All these ablation results support the complementary roles of demonstration, preference, and verification. Their progressive combination achieves the strongest overall performance.
+
+Table 5. 
+Inference efficiency across baselines and our methods. Token counts and latencies are per-sample means, including reasoning tokens. Bold text marks the best scores.
+
+  
+Method
+
+  Mode
+
+  
+
+Decoded tokens
+
+  
+
+Mean time(s)
+
+  
+DeepSeek-V4.1-Flash
+
+  CoT
+
+  1340.36
+
+  —
+
+  
+Gemini-3.1-Pro
+
+  CoT
+
+  474.97
+
+  —
+
+  
+Qwen3.8-27B
+
+  CoT
+
+  1023.38
+
+  
+61.380
+
+  
+Qwen3.8-27B
+
+  Direct
+
+  8.49
+
+  
+1.094
+
+  
+WeWrite-0.8B
+
+  Direct
+
+  8.46
+
+  
+0.327
+
+  
+WeWrite-2B
+
+  Direct
+
+  8.77
+
+  
+0.331
+
+  
+WeWrite-4B
+
+  Direct
+
+  8.92
+
+  
+0.426
+
+  
+AWHCP-2B
+
+  Fast CoT
+
+  45.60
+
+  
+1.172
+
+  
+AWHCP-8B
+
+  Fast CoT
+
+  47.06
+
+  
+1.687
+
+  
+WeFair-CoT-2B
+
+  Fast CoT
+
+  26.65
+
+  
+0.795
+
+  
+WeFair-CoT-4B
+
+  Fast CoT
+
+  27.98
+
+  
+0.965
+
+ 
+
+  WeFair-0.8B
+
+  Direct
+
+  
+7.48
+
+  
+0.314
+
+  WeFair-2B
+
+  Direct
+
+  7.60
+
+  0.316
+
+  WeFair-4B
+
+  Direct
+
+  7.65
+
+  0.416
+
+ 
+
+Table 6. 
+Selected online cases of personalized rewriting and retrieval. Control denotes the comparison system for each case. Better and Degrade markers indicate improved and degraded alignment with the inferred intent.
+
+Original
+
+query
+
+Rewritten
+
+query
+
+Query-time context
+
+and inferred intent
+
+Control retrieval strategy
+
+returned results
+
+WeFair retrieval strategy
+
+returned results
+
+anggwe
+
+angew
+
+Consumption history included “Angew. Chem. Int. Ed.” and materials-science articles. Inferred need: Angew-related research.
+
+Engwe e-bike brand videos at VP1–3.
+
+X-MOL research sharing at VP1 and Angew research videos at VP2; an Engwe result remains at VP3. 
+<Better>
+
+推动高质量发展
+
+(Promoting high-quality development)
+
+推动高质量发展 意义
+
+(Significance of promoting high-quality development)
+
+Prior search: “how to answer significance questions in civics”. Inferred need: an educational explanation.
+
+Reform news at VP1, industry and regional development videos at VP2–3.
+
+Significance explainers at VP1–2, and civics textbook analysis at VP3. 
+<Better>
+
+杭州外国语学校
+
+(Hangzhou Foreign Languages School)
+
+杭州外国语学校招聘
+
+(Hangzhou Foreign Languages School recruitment)
+
+Recent watch included “Meitu recruitment” and other employers’ hiring notices. Inferred need: school recruitment.
+
+School video at VP1, an encyclopedia video at VP2, and exam results and enrollment advice at VP3.
+
+School video at VP1, teacher recruitment notice at VP2, and proposed-appointment notice at VP3. 
+<Better>
+
+教育号
+
+(Education account)
+
+教育局视频号
+
+(Education Bureau video account)
+
+Prior searches: XX City Education Bureau account; a recorded click reached XX City Education. Inferred need: revisit that account.
+
+Videos from the target account at VP1–2, unrelated education content at VP3.
+
+Provincial/Guangzhou education content at VP1–3. Target XX City account absent from VP1–6. 
+<Degrade>
+
+Table 7. 
+Online A/B test results over 10 days. CTR, VV>10s, and QRR are relative changes versus the control and are statistically significant (P<0.01).
+
+Strategy
+
+CTR
+
+VV>10s
+
+QRR
+
+Cache Retrieval
+
++1.954%
+
++2.281%
+
+-1.628%
+
+Cache + Vector Retrieval
+
++2.951%
+
++2.593%
+
+-2.350%
+
+4.4. 
+On-policy Reward Purity Analysis
+
+To examine whether auxiliary rewards improve on-policy alignment beyond the strict target verification, we compare five GRPO reward configurations initialized from the same startpoint. 
+. All configurations use the same total amount of training data. Strict Verification(SV) uses only the reward in Eq. (
+3
+), rewarding exact agreement with a screened human reformulation or the preservation target. The augmented variants retain this reward while adding semantic similarity (Similarity-Augmented Verification), posterior consumption feedback (Consumption-Augmented Verification), or reward-model feedback (RM-Augmented Verification). The consumption signal follows the criteria used for DPO preference construction. We further evaluate vote-aggregated RM feedback (RM-Augmented Verification 4 Vote), where four independent decisions are obtained from four rollouts of the same RM, and a response is accepted only if all four decisions accept it. Given the computational and data construction cost of LLM-based judging, we estimate advantage purity on 500 sampled queries using the same judging procedure as in the offline benchmark. Let 
+ indicate the judged correctness of candidate 
+ in group 
+, and let 
+ denote its GRPO advantage. Define 
+ and 
+. Positive purity measures the fraction of favored candidates judged correct, while negative purity measures the fraction of discouraged candidates judged incorrect:
+
+(4)
+
+Overall purity aggregates both sets, excluding zero-advantage candidates. All the results are reported in Table 
+4
+.
+
+Strict verification provides more reliable positive reinforcement.
+
+SV reward pattern achieves the highest positive and overall advantage purity, together with the strongest overall accuracy among the evaluated configurations. Adding RM feedback reduces positive purity and substantially weakens preservation, suggesting that auxiliary reward models provide less reliable positive reinforcement than strict target agreement. SV has lower negative purity than RM-Augmented Verification, consistent with exact matching discouraging some acceptable alternative reformulations. However, according to the SV setting, whenever certain responses are assigned negative advantage, there always is a perfectly matching response that provides a positive reward. Consequently, the impact of incorrect negative advantage on the SV model is likely to be weakened. These results support prioritizing high-fidelity verification in final on-policy alignment without implying perfect semantic supervision. The RM-Augmented Verification 4 Vote variant improves overall accuracy over RM-Augmented Verification but lowers both positive and overall advantage purity. Four Vote setting over repeated judgments from the same RM therefore does not automatically make the induced advantage signals more reliable. This discrepancy also shows that advantage purity is a diagnostic of training-signal reliability.
+
+4.5. 
+Offline Efficiency Analysis
+
+To examine the effects of model size and inference mode, we measure the mean number of decoded tokens and per-sample inference latency with the same computing resource. The DeepSeek and Gemini baselines use the API call and only report the mean number of decoded tokens. The other methods are deployed on an Nvidia H20 GPU with the same settings. Decoded tokens include reasoning when CoT is enabled. All the results are reported in Table 
+5
+. The details of the implementation are described in Appendix 
+A
+.
+
+General-purpose LLMs achieve competitive rewriting performance without task-specific fine-tuning, but their full-CoT configurations incur substantial decoding overhead. The CoT–Direct comparison for Qwen3.8-27B illustrates this trade-off. Explicit reasoning improves rewriting quality but sharply increases inference time, making full-CoT inference impractical in real-time search systems.
+In contrast, WeFair achieves low latency while retaining strong rewrite quality. WeFair-2B required only 7.60 decoded tokens and 0.316 s per sample, compared with 26.65 tokens and 0.795 s for WeFair-CoT-2B. At 4B size, direct WeFair used 72.66% fewer tokens and achieved a 
+ speedup over its CoT variant. Notably, both direct variants also attained higher offline overall accuracy than CoT variants(See Table 
+1
+). Relative to WeWrite at matched sizes, WeFair delivered higher overall accuracy and slightly lower mean latency.
+For the three direct WeFair variants, WeFair-2B retained nearly the latency of WeFair-0.8B while improving overall accuracy. Increasing the size to 4B significantly raises inference time with only a slight accuracy gain. Accordingly, we select WeFair-2B for both online A/B testing and production deployment.
+
+4.6. 
+Online Evaluation
+
+To evaluate WeFair’s online performance, we conducted a 10-day online A/B test in WeChat short-video search, deploying WeFair-2B on 16 NVIDIA L20 GPUs. The production control method is WeWrite
+(
+Cheng et al., 2026
+)
+. In production, WeFair generates rewrites for 42.26% of processed queries and outputs preservation markers for 57.74%. We measured click-through rate (CTR), effective video-view rate (VV>10s), and query reformulation rate (QRR). We also measured P95 model inference latency (81 ms) and the end-to-end search latency increase (+16 ms).
+As shown in Table 
+7
+, WeFair with cache + vector retrieval strategy increases CTR and VV>10s by 2.951% and 2.593%, respectively, while reducing QRR by 2.350%. WeFair with only cache retrieval also achieves improvement against the control method. Additional lightweight vector retrieval further reduces the query reformulation rate. All improvements were statistically significant (P<0.01).
+Higher engagement and fewer reformulations validate the practical value of WeFair for meeting users’ immediate information needs. 
+
+Online cases analysis.
+
+Table 
+6
+ presents four cases from our online search system. The first illustrates context-guided spelling correction and the next two illustrate intent-aware expansion: adding explanatory and recruitment details brings retrieval results closer to the users’ current needs. In the degraded case, adding “Education Bureau” provides relevant information, but the rewrite omits “XX City”, which is needed to identify the intended account. The rewrite query therefore remains incomplete despite being topically relevant. Together with the online gains, these examples support WeFair’s effectiveness in translating contextual clues into rewrites that better serve personalized information needs.
+
+5. 
+Conclusion
+
+We presented WeFair, a fidelity-aware alignment framework for training compact personalized query rewriters that mitigate intent drift. The framework matches human feedback to three complementary roles: demonstration through curriculum SFT, preference learning through DPO, and verification through GRPO. Offline experiments showed that WeFair achieves the best overall accuracy and reduced intent drift while maintaining low inference latency. A 10-day online A/B test further showed significant gains in engagement and fewer query reformulations. Furthermore, our analyses revealed that broad, lower-fidelity context-to-query supervision benefited the complete SFT curriculum, while consumption-based preference learning complemented subsequent verification. In GRPO, strict agreement with human targets yielded higher overall accuracy than the tested auxiliary rewards. These findings support matching supervision fidelity to the role of each training stage. Our method has been deployed in WeChat short-video search, demonstrating the practical value of proposed fidelity-aware alignment for effective personalization under production latency constraints.
+
+References
+
+Chen 
+et al.
+ (2025)
+
+S. Chen, X. Jia, Y. Zhang, S. Zhang, X. Li, and W. Lin
+
+IterQR: An Iterative Framework for LLM-based Query Rewrite in e-Commercial Search System
+.
+
+arXiv preprint arXiv:2504.05309
+.
+
+External Links: 
+2504.05309
+,
+
+Link
+
+Cited by: 
+§2.1
+.
+
+Cheng 
+et al.
+ (2026)
+
+C. Cheng, C. Wang, A. Li, H. Wu, H. Hu, J. Wang, and D. Liao
+
+When & How to Write for Personalized Demand-aware Query Rewriting in Video Search
+.
+
+In 
+Proceedings of the 49th International ACM SIGIR Conference on Research and Development in Information Retrieval
+,
+
+pp. 4528–4533
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§1
+,
+
+§2.1
+,
+
+§3.3
+,
+
+§4.1
+,
+
+§4.6
+.
+
+Chu 
+et al.
+ (2026)
+
+X. Chu, A. Li, J. Zhang, W. Li, Z. Tan, D. Yin, S. Wang, and D. Shi
+
+Accurate and Efficient Personalized Query Rewriting in Baidu Search
+.
+
+In 
+Proceedings of the ACM Web Conference 2026
+,
+
+pp. 7902–7913
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§1
+,
+
+§1
+,
+
+§2.1
+,
+
+§4.1
+.
+
+Gong 
+et al.
+ (2026)
+
+P. Gong, F. Zhu, Y. Yin, C. Dai, C. Zhang, K. Zheng, W. Bao, J. Mao, and Y. Zhang
+
+CardRewriter: Leveraging Knowledge Cards for Long-Tail Query Rewriting on Short-Video Platforms
+.
+
+In 
+Proceedings of the ACM Web Conference 2026
+,
+
+pp. 8029–8040
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§1
+,
+
+§2.1
+.
+
+Guo 
+et al.
+ (2025a)
+
+D. Guo, D. Yang, H. Zhang, J. Song, P. Wang, Q. Zhu, R. Xu, R. Zhang, S. Ma, X. Bi, 
+et al.
+
+DeepSeek-r1 incentivizes reasoning in llms through reinforcement learning
+.
+
+Nature
+ 
+645
+ (
+8081
+), 
+pp. 633–638
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2.2
+.
+
+Guo 
+et al.
+ (2025b)
+
+M. Guo, M. Al-Darabsah, C. H. Teo, J. May, T. Agarwal, and R. Bhagat
+
+Learning to Rewrite Negation Queries in Product Search
+.
+
+In 
+Proceedings of the 31st International Conference on Computational Linguistics: Industry Track
+,
+
+Abu Dhabi, UAE
+, 
+pp. 575–582
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2.1
+.
+
+He 
+et al.
+ (2026)
+
+C. He, R. Zhang, Z. Wang, and X. Li
+
+Learning What to Learn: Stage-Specific Data Sets for SFT-then-RL in Small Language Model Reasoning
+.
+
+arXiv preprint arXiv:2606.04466
+.
+
+External Links: 
+2606.04466
+,
+
+Link
+
+Cited by: 
+§2.2
+.
+
+Huang 
+et al.
+ (2026)
+
+J. Huang, X. Huang, F. Zhao, Y. Liu, H. Zhang, F. Shi, C. Li, Z. Sun, Y. Wu, Y. Hu, Y. Bai, and S. Cao
+
+QP-OneModel: A Unified Generative LLM for Multi-Task Query Understanding in Xiaohongshu Search
+.
+
+arXiv preprint arXiv:2602.09901
+.
+
+External Links: 
+2602.09901
+,
+
+Link
+
+Cited by: 
+§2.1
+.
+
+Jiang 
+et al.
+ (2026)
+
+A. Jiang, G. Zhang, J. Song, K. Qi, D. Chen, W. Lin, and D. Lian
+
+Think-to-Personalize: Unifying Reasoning and Retrieval for User-Centric Personalized Dense Retrieval
+.
+
+arXiv preprint arXiv:2608.18855
+.
+
+Note: 
+Accepted at CIKM 2026
+
+External Links: 
+2608.18855
+,
+
+Link
+
+Cited by: 
+§2.1
+.
+
+Kleine Buening 
+et al.
+ (2026)
+
+T. Kleine Buening, J. Hübotter, B. Pásztor, I. Shenfeld, G. Ramponi, and A. Krause
+
+Aligning Language Models from User Interactions
+.
+
+In 
+Conference on Language Modeling
+,
+
+External Links: 
+Link
+
+Cited by: 
+§2.2
+.
+
+Li 
+et al.
+ (2026a)
+
+A. Li, Y. Shi, Y. Si, Y. Wu, M. Cai, X. Tan, Y. Wang, C. Sun, X. Liu, and K. Kuang
+
+Think Then Rewrite: Reasoning Enhanced Query Rewriting for Domain Specific Retrieval
+.
+
+Proceedings of the AAAI Conference on Artificial Intelligence
+ 
+40
+ (
+18
+), 
+pp. 15045–15053
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2.1
+.
+
+Li 
+et al.
+ (2026b)
+
+C. Li, X. Tu, and Z. Wang
+
+DVCQR: Dual-View Conversational Query Rewriting with Stage-wise Reinforcement Learning
+.
+
+In 
+Proceedings of the 64th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)
+,
+
+pp. 22993–23014
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2.1
+.
+
+Liu 
+et al.
+ (2026)
+
+X. Liu, L. Ma, J. Qiao, M. Zhou, L. Li, X. Bian, H. Chen, X. Jiang, and G. Jiang
+
+Generative Query Suggestion via Intent Coverage and Query-Level Credit Assignment
+.
+
+arXiv preprint arXiv:2609.19209
+.
+
+External Links: 
+2609.19209
+,
+
+Link
+
+Cited by: 
+§2.1
+.
+
+Nguyen 
+et al.
+ (2025)
+
+D. A. Nguyen, R. K. Mohan, S. Yang, P. S. Akash, and K. C. Chang
+
+MiniELM: A Lightweight and Adaptive Query Rewriting Framework for E-Commerce Search Optimization
+.
+
+In 
+Findings of the Association for Computational Linguistics: ACL 2025
+,
+
+pp. 6952–6964
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2.1
+.
+
+Ou 
+et al.
+ (2026)
+
+R. Ou, K. Wang, J. Shao, T. Zhang, and C. Huo
+
+Aligning Query Rewriting with Human Cognition and Preference in E-Commerce Search
+.
+
+In 
+Proceedings of the ACM Web Conference 2026
+,
+
+pp. 7933–7942
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§A.1
+,
+
+§2.2
+,
+
+§4.1
+.
+
+Ouyang 
+et al.
+ (2022)
+
+L. Ouyang, J. Wu, X. Jiang, D. Almeida, C. Wainwright, P. Mishkin, C. Zhang, S. Agarwal, K. Slama, A. Ray, J. Schulman, J. Hilton, F. Kelton, L. Miller, M. Simens, A. Askell, P. Welinder, P. F. Christiano, J. Leike, and R. Lowe
+
+Training language models to follow instructions with human feedback
+.
+
+In 
+Advances in Neural Information Processing Systems
+,  
+S. Koyejo, S. Mohamed, A. Agarwal, D. Belgrave, K. Cho, and A. Oh (Eds.)
+,
+
+Vol. 
+35
+, 
+pp. 27730–27744
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2.2
+.
+
+Peng 
+et al.
+ (2024)
+
+W. Peng, G. Li, Y. Jiang, Z. Wang, D. Ou, X. Zeng, D. Xu, T. Xu, and E. Chen
+
+Large Language Model based Long-tail Query Rewriting in Taobao Search
+.
+
+In 
+Companion Proceedings of the ACM Web Conference 2024
+,
+
+pp. 20–28
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2.1
+.
+
+Rafailov 
+et al.
+ (2023)
+
+R. Rafailov, A. Sharma, E. Mitchell, C. D. Manning, S. Ermon, and C. Finn
+
+Direct Preference Optimization: Your Language Model is Secretly a Reward Model
+.
+
+In 
+Advances in Neural Information Processing Systems
+,  
+A. Oh, T. Naumann, A. Globerson, K. Saenko, M. Hardt, and S. Levine (Eds.)
+,
+
+Vol. 
+36
+, 
+pp. 53728–53741
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2.2
+.
+
+Ren 
+et al.
+ (2026)
+
+Y. Ren, X. Luo, Y. Chang, and C. Lin
+
+Context-attended adversarial reinforcement learning for robust multi-step retrieval augmented generation
+.
+
+In 
+Findings of the Association for Computational Linguistics: ACL 2026
+,
+
+San Diego, California, United States
+, 
+pp. 17305–17319
+.
+
+External Links: 
+Link
+,
+
+Document
+,
+
+ISBN 979-8-89176-395-1
+
+Cited by: 
+§2.2
+.
+
+Tang 
+et al.
+ (2026)
+
+Y. Tang, Y. Yang, B. Chen, Y. Ma, Z. Liang, C. Lei, W. Ou, and J. Liu
+
+OneBar: An End-to-End Content-Grounded Generative Query Recommendation Framework for E-Commerce Video Feeds
+.
+
+arXiv preprint arXiv:2606.15330
+.
+
+External Links: 
+2606.15330
+,
+
+Link
+
+Cited by: 
+§2.1
+.
+
+Tian 
+et al.
+ (2026)
+
+M. Tian, Xuye, L. Meng, L. Chen, Z. Qin, and Y. Wang
+
+From Short Video to Clickable Search: RLVR-Enabled Listwise Query Suggestion with Retrieval-Augmented Context
+.
+
+In 
+Proceedings of the 64th Annual Meeting of the Association for Computational Linguistics (Volume 6: Industry Track)
+,
+
+pp. 552–562
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2.1
+.
+
+Wang 
+et al.
+ (2023)
+
+L. Wang, N. Yang, and F. Wei
+
+Query2doc: Query Expansion with Large Language Models
+.
+
+In 
+Proceedings of the 2023 Conference on Empirical Methods in Natural Language Processing
+,
+
+pp. 9414–9423
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2.1
+.
+
+Wen 
+et al.
+ (2026a)
+
+T. Wen, G. Dong, and Z. Dou
+
+SmartSearch: Process Reward-Guided Query Refinement for Search Agents
+.
+
+In 
+Proceedings of the 49th International ACM SIGIR Conference on Research and Development in Information Retrieval
+,
+
+pp. 1971–1982
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2.2
+.
+
+Wen 
+et al.
+ (2026b)
+
+Y. Wen, R. Yang, X. Chang, H. Sun, G. Tang, C. Liu, J. Chen, Z. Ma, L. Qiu, X. Fan, C. Yu, Q. Zhou, Y. Chen, and Z. Wang
+
+CoRe: A Continuously Reward-Finetuned LLM Query Rewriter for Multi-Stage Context-Aware Relevance in Web-Scale Video Search
+.
+
+arXiv preprint arXiv:2606.14127
+.
+
+External Links: 
+2606.14127
+,
+
+Link
+
+Cited by: 
+§2.2
+.
+
+Xu 
+et al.
+ (2026)
+
+Z. Xu, S. Zhuang, X. Ma, B. Chen, Y. Tian, F. Mo, T. Li, J. Cao, and V. Srikumar
+
+Rethinking On-policy Optimization for Query Augmentation
+.
+
+Transactions on Machine Learning Research
+.
+
+External Links: 
+ISSN 2835-8856
+,
+
+Link
+
+Cited by: 
+§2.2
+.
+
+Zheng 
+et al.
+ (2025)
+
+Q. Zheng, M. Zhong, S. Gong, H. Jiang, K. Wu, H. Liu, J. Xu, and L. Mo
+
+MAAQR: An LLM-based Multi-Agent Framework for Adaptive Query Rewriting in Alipay Search
+.
+
+In 
+Proceedings of the 48th International ACM SIGIR Conference on Research and Development in Information Retrieval
+,
+
+pp. 4289–4293
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2.1
+.
+
+Zuo 
+et al.
+ (2025)
+
+Y. Zuo, K. Zhang, L. Sheng, S. Qu, G. Cui, X. Zhu, H. Li, Y. Zhang, X. Long, E. Hua, B. Qi, Y. Sun, Z. Ma, L. Yuan, N. Ding, and B. Zhou
+
+TTRL: Test-Time Reinforcement Learning
+.
+
+In 
+Advances in Neural Information Processing Systems
+,  
+D. Belgrave, C. Zhang, H. Lin, R. Pascanu, P. Koniusz, M. Ghassemi, and N. Chen (Eds.)
+,
+
+Vol. 
+38
+, 
+pp. 131459–131483
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2.2
+.
+
+Appendix A 
+Further Implementation Details
+
+A.1. 
+Adaptation of AWHCP
+
+Our local adaptation retains AWHCP’s Problem–Intention–Fix–Rewrite (PIFR) structure and SFT–DPO–GRPO sequence 
+(
+Ou et al., 2026
+)
+, while replacing its e-commerce data and feedback services with resources available for WeChat short-video search. Forward examples attach PIFR explanations to existing human reformulation targets, and backward examples are synthesized from real content titles. SFT mixes fast and slow responses without revealing the mode in the input. For DPO, each actor generates fast and slow candidates after a shared problem description. The 2B experiment starts from Qwen3.5-2B, whereas the 8B experiment starts from Qwen3-8B.
+
+The main adaptations are feedback and optimization. A frozen BM25 index of training-visible titles replaces the original product-search service. Its relevance proxy combines lexical similarity to the query and preceding context, without access to the target reformulation. DPO preferences favor larger gains in newly retrieved relevant titles under this proxy. A local Qwen3.8-27B teacher supplies weak labels for the quality judge, replacing the original combination of LLM labeling and expert review. Our output protocol explicitly distinguishes rewriting from preservation, while retaining the original reward weights of 0.3, 0.1, and 0.6 for quality, format, and retrieval increment. The retained DPO configuration uses a learning rate of 
+, 
+, and one epoch. GRPO uses batches of 128 queries with eight responses per query, a learning rate of 
+, and a KL coefficient of 
+. It allows 7680 input and 512 response tokens to accommodate user histories. These archived implementations therefore represent a platform adaptation, with differences in supervision, retrieval feedback, and mode allocation.
+
+A.2. 
+Training Settings
+
+During SFT training, we use AdamW with a learning rate of 
+, weight decay of 
+, and an effective batch size of 32 examples.
+For the DPO training, we continue from the SFT policy using preference pairs constructed from user reformulations and subsequent consumption feedback. Each pair shares the same original query and query-time context. For rewrite-required examples, human reformulations or consumption-supported candidates serve as preferred responses. The candidates whose observed retrieval results contain none of the relevant consumed items serve as negative responses. Preservation examples favor the preservation marker over generated rewrites. Missing feedback is excluded, and the subsequent consumption-based behavior feedback is used only to construct supervision. DPO thus learns relative preferences before final GRPO refinement returns to strict human-target verification. Because preference construction relies on sensitive search and consumption histories, we describe its principles while withholding raw user-level records and privacy-sensitive details of the internal feedback-processing pipeline. DPO uses a learning rate of 
+, 
+, and an effective batch size of 32 preference pairs.
+In GRPO training, this configuration uses a DPO-trained model as its GRPO initial checkpoint. Table 
+8
+ provides the hyperparameter settings for the GRPO strict-verification training in WeFair. Advantages are centered within each response group without division by its standard deviation. The KL penalty enters the policy loss separately and does not alter the scalar verification reward.
+
+Table 8. 
+Training hyperparameter settings for our on-policy GRPO training.
+
+Setting
+
+Value
+
+Optimizer
+
+AdamW
+
+Learning rate / weight decay
+
+ / 
+
+AdamW coefficients
+
+Schedule / warm-up
+
+Constant / none
+
+Query batch / PPO mini-batch
+
+256 / 32
+
+Responses per query
+
+32
+
+Temperature / top-
+
+1.2 / 1.0; no top-
+ cap
+
+Input / response limits
+
+4,096 / 64 tokens
+
+PPO epochs / clipping
+
+1 / 0.2
+
+KL loss coefficient
+
+0.02; low-variance estimator
+
+Entropy coefficient
+
+0
+
+Exact / preservation reward
+
+, 
+
+Other verification outcomes
+
+0
+
+Table 9. 
+Training data statistics. K denotes one thousand examples.
+
+Training Data Type
+
+Number
+
+Context-to-query 
+)
+
+1500K
+
+Human reformulation 
+)
+
+138K
+
+Preservation (
+)
+
+461K
+
+Table 10. 
+Environment and decoding settings for the local H20 timing runs. Response limits include reasoning, answer-format markers, and the final answer. The setting can support the latest Qwen-3.8-27B model inference.
+
+Component
+
+Configuration
+
