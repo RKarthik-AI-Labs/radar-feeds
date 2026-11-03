@@ -1,7 +1,7 @@
 # Paper candidates — 2026-11-03 (IST)
 
-Generated 2026-11-03 07:11 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
-Totals: 35 new topic matches · 24 other new cs.IR · 61 seen in earlier runs.
+Generated 2026-11-03 07:18 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Totals: 35 new topic matches · 24 other new cs.IR · 60 seen in earlier runs.
 Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
 
 ## New papers matching your topics (35), highest score first
@@ -404,7 +404,7 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Diverse-Teacher On-Policy Distillation for Generative Recommendation — https://arxiv.org/abs/2611.03272
 - From FAIR to AI-FAIR Metadata-First Infrastructure for AI-Enabled Science — https://arxiv.org/abs/2611.03327
 
-## Already listed on an earlier day, still inside the look-back window (61)
+## Already listed on an earlier day, still inside the look-back window (60)
 - Who Owns Digital News, and Who Gets Cited: Measuring Media Concentration Across 77 Countries and Seven AI Systems — https://arxiv.org/abs/2610.40164 (score 13)
 - Search When Needed, Proceed When Reliable: Metacognitive Reliability Supervision for Efficient Agentic Search — https://arxiv.org/abs/2610.41738 (score 13)
 - KARMA: Training-Free Knowledge-Atomic Harness Evolution for Industrial Advertising Agents — https://arxiv.org/abs/2610.39884 (score 12)
