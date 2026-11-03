@@ -1,0 +1,3182 @@
+MemU-Bench: Benchmarking GUI Agents on Long-Horizon User Interactions
+https://arxiv.org/abs/2611.00191
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+MemU-Bench: Benchmarking GUI Agents on Long-Horizon User Interactions
+
+Yizhou Liu
+
+  
+
+Zhengxi Lu
+
+  
+
+Fei Tang
+
+  
+
+Yiwen Qiu
+
+  
+
+Yong Du
+
+  
+
+Tongbo Chen
+
+  
+
+Bofan Chen
+
+  
+
+Tao Jiang
+
+  
+
+Wenhao Xu
+
+  
+
+Yunfeng Shu
+
+  
+
+Wenqi Zhang
+
+  
+
+Weiming Lu
+
+  
+
+Jun Xiao
+
+  
+
+Yueting Zhuang
+
+  
+
+Yongliang Shen
+
+Abstract
+
+Existing Graphical User Interface (GUI) benchmarks predominantly rely on precise and stateless user instructions. In everyday usage, however, instructions are often 
+vague and history-dependent
+: users omit the exact details of their past operations because they no longer remember them, leaving the agent to recover the missing context from long and noisy interaction histories. To bridge this evaluation gap, we introduce 
+MemU-Bench
+, a mobile benchmark of 
+118 vague tasks
+ grounded in 29 long-horizon user trajectories, where agents must distill raw interaction streams into memory and retrieve the missing context on demand, with task outcomes verified against serialized application databases. Alongside Success Rate, we incorporate Interaction Efficiency (IE) and Success weighted by Path Length (SPL) to expose agents that succeed by exhaustively searching across different applications rather than by 
+genuinely recalling
+ the history. Evaluations show that without user history, state-of-the-art systems struggle under such ambiguity: the best-performing Gemini-3.1-Pro achieves an SPL of only 16.4%, and end-to-end GUI agents fall below 5%. To address this, we further propose 
+AppMem
+, a training-free framework that distills user history into a 
+structured, app-centric
+ memory bank, tracks interrupted intents across application switches, and selectively retrieves relevant memories via target-app inference. AppMem raises the SPL of GPT-5.5 from 15.7% to 66.9% (
++51.2%
+), outperforms a naive summary baseline by 9.3%, and delivers consistent gains across evaluated backbones.
+
+1
+Zhejiang University, 
+2
+Ant Group
+
+Figure 1: 
+Existing GUI benchmarks (top) evaluate agents on stateless tasks with precise instructions. MemU-Bench (bottom) instead issues vague instructions whose missing context must be recovered from the long user history.
+
+1 
+Introduction
+
+Benchmark / Dataset
+
+Vague
+
+Ins.
+
+User
+
+His.
+
+Online
+
+Missing Info.
+
+Acquisition
+
+User His.
+
+Modality
+
+Task Target
+
+AITW 
+(
+Rawles et al. 2023
+)
+
+✗
+
+✗
+
+✗
+
+✗
+
+✗
+
+GUI Execution
+
+Android Control 
+(
+Li et al. 2024
+)
+
+✗
+
+✗
+
+✗
+
+✗
+
+✗
+
+GUI Execution
+
+AndroidWorld 
+(
+Rawles et al. 2025
+)
+
+✗
+
+✗
+
+✓
+
+✗
+
+✗
+
+GUI Execution
+
+AndroidLab 
+(
+Xu et al. 2025b
+)
+
+✗
+
+✗
+
+✓
+
+✗
+
+✗
+
+GUI Execution
+
+MobileWorld 
+(
+Kong et al. 2025
+)
+
+✓
+
+✗
+
+✓
+
+Asking
+
+✗
+
+GUI Execution
+
+PIRA-Bench 
+(
+Chai et al. 2026
+)
+
+✗
+
+✓
+
+✗
+
+✗
+
+I
+
+Intent Recommendation
+
+AndroidIntent 
+(
+Lyu et al. 2026
+)
+
+✓
+
+✓
+
+✗
+
+Preference
+
+T
+
+Intent Alignment
+
+MemGUI-Bench 
+(
+Liu et al. 2026
+)
+
+✗
+
+✗
+
+✓
+
+✗
+
+✗
+
+GUI Execution
+
+MemU-Bench (Ours)
+
+✓
+
+✓
+
+✓
+
+History Details
+
+T+I
+
+History Memory & GUI Execution
+
+Table 1: 
+Comparison of different benchmarks and datasets. 
+✓
+incorporated; 
+✗
+not incorporated. T=Text, I=Image
+
+Graphical User Interface (GUI) agents built on Multimodal Large Language Models 
+(
+Wang et al. 2024b
+; 
+Bai et al. 2025b
+; 
+Bai et al. 2025a
+)
+ are rapidly evolving into general-purpose digital assistants that translate natural language instructions into executable action sequences on real devices 
+(
+Tang et al. 2025
+; 
+Hu et al. 2025a
+; 
+Cheng et al. 2024
+; 
+Lin et al. 2025
+; 
+Qin et al. 2025
+; 
+Lu et al. 2026a
+; 
+Lu et al. 2025
+; 
+Tang et al. 2026a
+)
+.
+
+Existing benchmarks almost exclusively evaluate GUI agents under precise, self-contained instructions 
+(
+Rawles et al. 2023
+; 
+Rawles et al. 2025
+; 
+Xie et al. 2024
+)
+. Everyday usage rarely looks like this. Since users seldom remember the exact details of their past interactions, they tend to issue 
+vague, history-dependent
+ commands such as “modify the meeting time”, which cannot be resolved unless the agent knows which meeting was created, when, and in which application (Figure 
+1
+). Unlike preference-driven personalization, the missing context here consists of 
+objective operational evidence
+: facts that were fully observable in past interactions but are now buried in hundreds of steps of routine phone usage. Completing such tasks therefore demands more than a capable executor. The agent must 
+continuously distill its user’s interaction stream into memory
+ and 
+retrieve the right piece of it on demand
+.
+
+Faithfully measuring this ability imposes three requirements on benchmark design. First, real interaction histories are 
+long and noisy
+: the few decisive state changes are scattered among hundreds of visually redundant screenshots, so the benchmark must 
+expose agents to raw histories
+ rather than pre-cleaned summaries. Second, real users 
+multitask
+: a single intent is often interrupted, resumed later, and interleaved with unrelated activities in other applications, so the trajectories must 
+preserve such fragmented intents
+. Third, task success alone is 
+not evidence of memory
+: an agent can complete a vague task by exhaustively searching through applications at execution time, so the evaluation must 
+distinguish genuine recall from brute-force exploration
+.
+
+We introduce MemU-Bench, a mobile benchmark that instantiates these requirements (Table 
+1
+). It comprises 
+118 vague tasks
+ grounded in 
+29 long-horizon user trajectories
+ that cover more than 30 applications, with 100 to 800 steps per trajectory. Tasks are stratified by history length into 71 Level-1 and 47 Level-2 tasks to assess memory scalability. Each task follows a three-phase protocol: the agent first builds a memory bank from the raw history, then retrieves key information for the vague instruction, and finally executes the task online. Outcomes are 
+verified programmatically against serialized application databases
+, complemented by an LLM judge for open-ended text. Besides Success Rate (SR), we incorporate Interaction Efficiency (IE) and Success weighted by Path Length (SPL) 
+(
+Anderson et al. 2018
+)
+, which penalize agents that reach the goal by 
+wandering across applications
+ instead of recalling the relevant context.
+
+Evaluations on MemU-Bench expose a consistent weakness of current systems. Without access to user history, the best-performing model, Gemini-3.1-Pro, attains an SPL of only 16.4%, and end-to-end GUI agents remain below 5%. Their trajectories degenerate into aimless exploration across applications, which inflates interaction cost even when the task eventually succeeds. 
+Long-term memory is thus not an optional extension but a prerequisite
+ for handling vague instructions in realistic settings.
+
+Guided by these observations, we propose AppMem, a training-free framework that equips GUI agents with long-term user memory. During daily usage, AppMem summarizes the interaction stream through a sliding window into 
+app-centric memory entries
+ and tracks the status of each intent, so that events interrupted by application switching are merged into coherent threads instead of fragmented records. Upon receiving a vague instruction, it infers the target applications, retrieves only their associated entries, and iterates until the collected information is sufficient for execution. On MemU-Bench, AppMem raises the SPL of GPT-5.5 from 15.7% to 66.9% (
++51.2%
+), outperforming the naive summary baseline by 9.3%, and generalizes across backbones (e.g., improving the SR of MAI-UI-8B by 16.9%).
+
+We summarize our main contributions below:
+
+•
+
+We present 
+MemU-Bench
+, a mobile benchmark of 118 vague tasks over 29 long-horizon trajectories that evaluates whether GUI agents can recover missing context from 
+long, noisy, and interleaved
+ user histories, with database-level verification and efficiency-aware metrics.
+
+•
+
+We systematically evaluate closed-source models, open-source models, and end-to-end GUI agents on MemU-Bench, showing that all of them fail under vague instructions without history and that naive summarization helps general models far more than GUI-specialized agents.
+
+•
+
+We develop 
+AppMem
+, a training-free memory framework combining 
+intent-continuation
+ memory generation with 
+app-guided retrieval
+, improving SPL by up to 51.2% and delivering consistent gains across evaluated models.
+
+Figure 2: 
+Overview of MemU-Bench. MemU-Bench covers more than 30 applications in user trajectories, encompassing 118 vague tasks, 29 user trajectories and corresponding databases. Prior to execution, GUI agents construct a memory bank from the user history. Upon receiving a vague instruction, it retrieves the key information from its memory and then execute the task.
+
+2 
+Related Work
+
+2.1 
+GUI Agents and Memory Mechanisms
+
+GUI agents have evolved from script-based automation 
+(
+Zhou et al. 2024
+; 
+Wang et al. 2024a
+)
+ to Multimodal Large Language Model agents that execute closed-loop actions directly from pixels 
+(
+Qin et al. 2025
+; 
+Wang et al. 2025
+)
+. These agents, however, assume 
+stateless and precise
+ instructions 
+(
+Zhou et al. 2025
+; 
+Xu et al. 2026
+; 
+Xu et al. 2025a
+; 
+Yan et al. 2025
+; 
+Gu et al. 2025
+; 
+Cao et al. 2026
+)
+: each task is an isolated episode, and prior user activity is discarded. Memory offers a natural remedy and has been studied extensively for LLM agents, which consolidate long dialogue or task histories into retrievable structures 
+(
+Chhikara et al. 2025
+; 
+Zhang et al. 2026b
+; 
+Hu et al. 2025b
+; 
+Zhang et al. 2025
+; 
+Tang et al. 2026b
+)
+. These systems, however, operate on 
+textual
+ interactions whose semantics are explicit, whereas GUI histories are streams of screenshots and low-level actions with intents fragmented across applications. Existing GUI memory modules sidestep this difficulty by memorizing only transient states within a single task execution 
+(
+Lu et al. 2026b
+; 
+Jin et al. 2026
+; 
+Zhang et al. 2026a
+; 
+Zeng et al. 2026
+; 
+Wang et al. 2026
+)
+. AppMem instead maintains a persistent, app-centric memory across user’s interaction stream.
+
+2.2 
+Mobile GUI Benchmarks
+
+Existing mobile GUI benchmarks follow a task-oriented paradigm: they measure execution success under precise instructions and treat each task as independent of the user’s prior history 
+(
+Rawles et al. 2023
+; 
+Li et al. 2024
+; 
+Xu et al. 2025b
+; 
+Rawles et al. 2025
+)
+. Benchmarks that move beyond this setting relax it only partially. MemGUI-Bench confines memory to a single task 
+(
+Liu et al. 2026
+)
+, and MobileWorld resolves ambiguity by querying the user in real time rather than by consulting long-term history 
+(
+Kong et al. 2025
+)
+. Personalization benchmarks do exploit history, but only to extract 
+static preferences
+ such as habits and tastes 
+(
+Lyu et al. 2026
+; 
+Chen et al. 2026
+; 
+Nie et al. 2026
+; 
+Chai et al. 2026
+)
+. None of them evaluates whether an agent can distill 
+objective, task-critical facts
+ from long, noisy, and unstructured daily usage streams. MemU-Bench fills this gap: its vague tasks can only be completed by recovering missing context from raw long-horizon histories, and outcomes are verified against serialized application databases (Table 
+1
+).
+
+3 
+MemU-Bench
+
+3.1 
+Task Definition
+
+Each task in MemU-Bench proceeds in three sequential phases, as illustrated in Figure 
+2
+(b).
+
+Memory Generation.
+
+The GUI agent is initially provided with a historical interaction trajectory 
+, formulated as:
+
+where 
+, 
+, and 
+ denote the 
+-th historical screenshot, atomic action (e.g., click coordinates), and absolute interaction time, respectively. Reflecting the intermittent nature of real phone usage, the interval 
+ ranges from under a second to a day.
+
+The GUI agent is then required to condense this long-horizon history into a memory bank 
+, formalized as:
+
+where 
+ represents the memory mechanism, and 
+ can manifest in various formats (e.g., natural language summaries, or structured databases).
+
+Key Information Retrieval.
+
+Given a vague instruction 
+, the GUI agent retrieves key information 
+ from 
+:
+
+where 
+ represents the retrieval mechanism.
+
+Online Execution.
+
+Conditioned on 
+ and 
+, the GUI agent executes a sequence of actions within a Markov Decision Process framework. Formally, at each discrete step 
+, it interacts with the mobile environment by sampling an action 
+ from its policy 
+:
+
+where 
+ denotes the current visual observation (screenshot) at step 
+, and 
+ represents the history of executing actions within the current task session.
+
+3.2 
+Dataset Construction
+
+Trajectory Sketches and Task Syntheses.
+
+We first manually design vague tasks together with intent-level trajectory sketches. Each sketch outlines a sequence of high-level user intents for a long-horizon session (e.g., ordering food, then casual gaming) without prescribing specific applications or operation paths. The information required to resolve the final vague task is embedded into the interaction process itself. Operators are therefore free to vary applications and execution paths, which increases trajectory diversity.
+
+Synchronous Trajectory Collection and Granular Logging.
+
+Guided by the sketches, operators interact with an Android Virtual Device emulator to simulate daily phone usage. Rather than following deterministic paths, they introduce realistic noise such as accidental touches and redundant app switching. Sessions are fragmented across multi-hour spans with long inactive gaps, mirroring how people actually use their phones. A background script concurrently captures screenshots and atomic actions at 0.3-second intervals, preserving the complete raw interaction log.
+
+Data Processing and State Serialization.
+
+Consecutive identical screenshots are filtered out, yielding clean, action-interleaved logs. Upon trajectory completion, the emulator state is frozen and serialized: we record the system time and pull the runtime databases (e.g., SQLite files) of all involved applications. Restoring these snapshots before testing reproduces the exact device state left by the operator, so every effect of the historical interaction (a sent message, a modified event) exists in the backend and can be verified against ground-truth records.
+
+The resulting benchmark contains 29 user trajectories and 118 tasks: 71 Level-1 (L1) tasks with shorter histories (fewer than 400 screenshots) and 47 Level-2 (L2) tasks embedded in longer flows (more than 700 screenshots). As shown in Figure 
+3
+, tasks span 5 major application categories, and trajectories cover more than 30 applications, with up to 179 application switches within a single trajectory. Further statistics are provided in the supplementary materials.
+
+Figure 3: 
+Statistics of MemU-Bench: Left: Task distribution of target applications; Right: Sorted application switch count in user historical trajectories.
+
+3.3 
+Evaluation Strategies
+
+Task success is verified by a cascade of checks, applied in order of decreasing determinism.
+
+Rule-based Verification.
+
+For tasks with deterministic objectives and no open-ended text, we extract the raw backend records from the application’s database and verify success conditions programmatically.
+
+LLM-as-Judge.
+
+For tasks involving open-ended text (e.g., messages), deterministic fields such as timestamps are rule-checked, and only the free-text fields are forwarded to an LLM judge for semantic comparison. For a minority of tasks where the database is inaccessible, a VLM evaluates the outcome from screenshots and actions. Restricting the judge to short text fields keeps context small and decisions consistent.
+
+3.4 
+Metrics
+
+Success Rate (SR).
+
+SR measures completed task rate:
+
+where 
+ represents the total number of tasks, 
+ denotes the set of successfully completed tasks.
+
+Interaction Efficiency (IE).
+
+IE evaluates the agent’s operational efficiency, calculated exclusively over successfully completed tasks. IE serves as a proxy to distinguish whether the agent successfully recalls historical context or relies on blind exploration for clues during task execution. Formally,
+
+where 
+ and 
+ represent the number of steps taken by the GUI agent and human for task 
+, respectively.
+
+Success weighted by Path Length (SPL).
+
+To jointly evaluate task success and interaction efficiency, we adapt Success weighted by Path Length (SPL) 
+(
+Anderson et al. 2018
+)
+:
+
+where 
+ is an indicator function that equals 
+ if task 
+ is successful and 
+ otherwise.
+
+4 
+AppMem
+
+Figure 4: 
+Overview of AppMem. During the memory generation phase, our method concatenates the user’s interrupted historical intents. In the retrieval phase, relevant information is retrieved on an app-centric basis to reduce Token consumption.
+
+Model
+
+L1
+
+L2
+
+Avg. IE
+
+Avg. SR
+
+Avg. SPL
+
+SR
+
+SPL
+
+SR
+
+SPL
+
+Closed-source Models
+
+Gemini-3.1-Pro 
+(
+DeepMind 2026
+)
+
+26.8
+
+18.1
+
+23.4
+
+14.0
+
+0.65
+
+25.4
+
+16.4
+
+   w/ Summary
+
+43.7
+
+34.7
+
+36.2
+
+27.2
+
+0.78(+0.13)
+
+40.7(+15.3)
+
+31.7(+15.3)
+
+   w/ 
+AppMem (Ours)
+
+64.8
+
+55.2
+
+63.8
+
+53.5
+
+0.85
+(+0.20)
+
+64.4
+(+39.0)
+
+54.5
+(+38.1)
+
+GPT-5.5 
+(
+OpenAI 2026
+)
+
+28.1
+
+18.1
+
+17.0
+
+11.9
+
+0.66
+
+23.7
+
+15.7
+
+   w/ Summary
+
+73.2
+
+63.7
+
+57.5
+
+48.2
+
+0.86(+0.20)
+
+67.0(+43.3)
+
+57.6(+41.9)
+
+   w/ 
+AppMem
+
+74.7
+
+68.1
+
+72.3
+
+64.9
+
+0.91
+(+0.25)
+
+73.7
+(+50.0)
+
+66.9
+(+51.2)
+
+Claude-Opus-4.8 
+(
+Anthropic 2026
+)
+
+16.9
+
+14.7
+
+19.2
+
+13.4
+
+0.80
+
+17.8
+
+14.2
+
+   w/ Summary
+
+57.8
+
+50.3
+
+44.7
+
+37.6
+
+0.86(+0.06)
+
+52.5(+34.7)
+
+45.3(+31.1)
+
+   w/ 
+AppMem
+
+56.3
+
+49.7
+
+53.2
+
+47.8
+
+0.89
+(+0.09)
+
+55.1
+(+37.3)
+
+49.0
+(+34.8)
+
+Open-source Models
+
+Qwen3.5-397B-A17B 
+(
+Alibaba 2026
+)
+
+18.3
+
+13.3
+
+6.4
+
+4.3
+
+0.72
+
+13.6
+
+9.7
+
+   w/ Summary
+
+40.9
+
+35.1
+
+27.7
+
+20.4
+
+0.82(+0.10)
+
+35.6(+22.0)
+
+29.3(+19.6)
+
+   w/ 
+AppMem
+
+56.3
+
+50.5
+
+46.8
+
+41.9
+
+0.90
+(+0.18)
+
+52.5
+(+38.9)
+
+47.1
+(+37.4)
+
+Qwen3-VL-32B 
+(
+Bai et al. 2025a
+)
+
+2.8
+
+1.5
+
+2.1
+
+0.6
+
+0.45
+
+2.5
+
+1.2
+
+   w/ Summary
+
+9.9
+
+7.6
+
+8.5
+
+5.8
+
+0.74(+0.29)
+
+9.3(+6.8)
+
+6.9(+5.7)
+
+   w/ 
+AppMem
+
+18.3
+
+15.5
+
+14.9
+
+12.7
+
+0.85
+(+0.40)
+
+17.0
+(+14.5)
+
+14.4
+(+13.2)
+
+Qwen3-VL-8B 
+(
+Bai et al. 2025a
+)
+
+4.2
+
+3.1
+
+4.3
+
+2.2
+
+0.64
+
+4.2
+
+2.7
+
+   w/ Summary
+
+15.5
+
+11.7
+
+2.1
+
+1.1
+
+0.73(+0.09)
+
+10.2(+6.0)
+
+7.5(+4.8)
+
+   w/ 
+AppMem
+
+18.3
+
+13.9
+
+8.5
+
+6.3
+
+0.76
+(+0.12)
+
+14.4
+(+10.2)
+
+10.9
+(+8.2)
+
+End-to-end GUI Agents
+
+UI-Venus-1.5-8B 
+(
+Gu et al. 2025
+)
+
+1.4
+
+1.4
+
+2.1
+
+0.7
+
+0.67
+
+1.7
+
+1.1
+
+   w/ Summary
+
+2.8
+
+0.9
+
+0.0
+
+0.0
+
+0.30
+
+1.7
+
+0.5
+
+   w/ 
+AppMem
+
+11.3
+
+8.6
+
+12.8
+
+8.7
+
+0.72
+(+0.05)
+
+11.9
+(+10.2)
+
+8.6
+(+7.5)
+
+MAI-UI-8B 
+(
+Zhou et al. 2025
+)
+
+5.6
+
+4.2
+
+4.3
+
+2.2
+
+0.67
+
+5.1
+
+3.4
+
+   w/ Summary
+
+7.0
+
+5.3
+
+6.4
+
+3.2
+
+0.65
+
+6.8(+1.7)
+
+4.4(+1.0)
+
+   w/ 
+AppMem
+
+21.1
+
+15.8
+
+23.4
+
+16.9
+
+0.74
+(+0.07)
+
+22.0
+(+16.9)
+
+16.2
+(+12.8)
+
+GUI-Owl-1.5-8B 
+(
+Xu et al. 2026
+)
+
+2.8
+
+2.5
+
+2.1
+
+0.5
+
+0.67
+
+2.5
+
+1.7
+
+   w/ Summary
+
+4.2
+
+1.4
+
+4.3
+
+1.0
+
+0.30
+
+4.2(+1.7)
+
+1.3
+
+   w/ 
+AppMem
+
+5.6
+
+3.8
+
+10.6
+
+5.0
+
+0.56
+
+7.6
+(+5.1)
+
+4.3
+(+2.6)
+
+Table 2: 
+Performance comparison on MemU-Bench. SR and SPL are percentages, IE lies in 
+, and higher is better. L1/L2 denote tasks with shorter/longer histories. Bold marks the best result within each backbone group.
+
+AppMem targets the two capabilities: consolidating fragmented intents scattered across applications, and retrieving precisely under vague instructions. As illustrated in Figure 
+4
+, it slides a fixed-size window over the historical log to build a persistent, 
+app-centric
+ memory bank, and answers vague instructions through 
+app-guided retrieval
+.
+
+4.1 
+Memory Generation
+
+To construct the memory bank, AppMem slides a fixed-size window 
+ through the raw historical logs. Let 
+ denote the current window containing consecutive screenshot-action pairs, where 
+ and 
+ is the total trajectory length. Within each window, a three-stage pipeline transforms the raw traces into structured memory.
+
+Current Event Summarization.
+
+Within each window, AppMem first analyzes screenshots and actions to perform event summarization, yielding a set of memory entries 
+ for distinct applications. Each entry 
+ is a 6-tuple:
+
+where 
+ is the application name, 
+ is the event description, 
+ denotes on-screen details (e.g., prices), 
+ and 
+ are timestamps, and 
+ indicates the status of the user’s intent.
+
+Latest Memory Fetching.
+
+After summarizing 
+ within the current window, AppMem retrieves historical context to maintain task continuity against application switching. For each new entry 
+, it queries the global memory bank 
+ for the most recent entry of the same application, i.e., 
+ with 
+, if such an entry exists.
+
+Ongoing Intent Continuation.
+
+Once historical entries are fetched, AppMem evaluates their operational status to update the global memory bank 
+. For each new entry 
+, if the matching entry 
+ is still ongoing, the two entries are merged via 
+, which synthesizes the past context with the new behaviors:
+
+If the historical event is finished or no matching entry exists, 
+ is appended as a new entry:
+
+Thus, each application’s ongoing activity is kept in a single coherent entry, and completed events are never overwritten.
+
+4.2 
+App-guided Retrieval
+
+Upon receiving a vague instruction 
+, the agent retrieves the missing context from the memory bank 
+ in four steps.
+
+Application Inference.
+
+Let 
+ denote the set of distinct applications appearing in 
+. Based on 
+, the agent infers a subset of relevant applications 
+.
+
+Memory Retrieval.
+
+Once the target applications 
+ are identified, AppMem filters the global memory bank to form an app-specific sub-bank 
+, narrowing the search space:
+
+Information Filtering.
+
+Given 
+ and 
+, the agent distills the retrieved entries into the key information 
+:
+
+where 
+ denotes the synthesis function executed by the GUI agent to extract the task-relevant information.
+
+Sufficiency Verification.
+
+Finally, the agent assesses whether 
+ suffices to execute 
+. If so, retrieval terminates, execution begins. Otherwise, the explored applications are removed from the candidate set (
+), and the process returns to Application Inference, for up to 
+ iterations.
+
+5 
+Experiments
+
+(a) Error analysis of Summary
+
+(b) Precise vs. vague instructions
+
+(c) Robustness to history length
+
+Figure 5: 
+Analysis of the Summary baseline and AppMem: (a) error breakdown by information sufficiency and execution success; (b) end-to-end agents under precise vs. vague instructions; (c) L1–L2 SPL gap across models.
+
+5.1 
+Experimental Setup
+
+We evaluate three categories of models on MemU-Bench: (1) 
+closed-source models
+ 
+(
+OpenAI 2026
+; 
+Anthropic 2026
+; 
+DeepMind 2026
+)
+; (2) 
+open-source models
+ 
+(
+Alibaba 2026
+; 
+Bai et al. 2025a
+)
+; and (3) 
+end-to-end GUI agents
+ 
+(
+Xu et al. 2026
+; 
+Gu et al. 2025
+; 
+Zhou et al. 2025
+)
+. Each model is tested under two baseline settings: 
+Vanilla
+, which receives no user history, and 
+Summary
+, which applies the same sliding window 
+ to iteratively summarize user behaviors and retrieves key information directly from the summary. All memory and summary operations are performed by the evaluated model itself, without assistance from external models. We set the sliding window size 
+ and the maximum retrieval iterations 
+. Given the cost of processing long-horizon trajectories, each model is evaluated in a single complete run with temperature 0. More implementation details are provided in the supplementary materials.
+
+5.2 
+Main Results
+
+Necessity of User History Memorization.
+
+Without user history, evaluated system fails under vague instructions (Table 
+2
+). GPT-5.5 attains an average SPL of only 15.7%, Qwen3.5-397B-A17B reaches 9.7%, and the strongest end-to-end agent falls to 3.4%. Vague instructions therefore cannot be treated as isolated inputs: resolving them requires long-term memory of the user’s history.
+
+Effectiveness and Generalizability of AppMem.
+
+AppMem improves evaluated backbones, whereas Summary only helps models with strong long-context ability (Table 
+2
+). With Summary, general models gain substantially (Qwen3.5-397B-A17B: 35.6% SR), but end-to-end GUI agents barely move (+1.7% SR): their GUI-specific tuning appears to compromise long-text processing as the history accumulates. AppMem sidesteps this bottleneck by structuring the history into a compact memory bank, raising Qwen3.5-397B-A17B to 52.5% SR and MAI-UI-8B by +16.9% SR.
+
+Efficiency.
+
+The efficiency metric reveals an even sharper contrast. Vanilla agents that do succeed still wander (e.g., IE of 0.65 for Gemini-3.1-Pro), and naive summarization can further lower efficiency on weaker backbones, as their limited long-context capability hinders extracting and retaining key information from lengthy historical trajectories (e.g., GUI-Owl-1.5-8B’s IE drops from 0.67 to 0.30). AppMem instead improves IE across models, up to 0.91 for GPT-5.5, showing that its compact, targeted memory lets agents act with near-human step economy rather than by brute-force exploration.
+
+SPL
+
+MS
+
+TE
+
+CT
+
+Full AppMem
+
+47.1
+
+8.8K
+
+6.1K
+
+0.10K
+
+  w/o OIC
+
+42.4
+
+15.3K
+
+10.7K
+
+0.11K
+
+  w/o AI
+
+48.5
+
+8.8K
+
+17.8K
+
+0.15K
+
+  w/o IF
+
+41.8
+
+8.8K
+
+9.7K
+
+2.89K
+
+  w/o SV
+
+45.3
+
+8.8K
+
+4.9K
+
+0.09K
+
+Table 3: 
+Component ablation of AppMem on Qwen3.5-397B-A17B, removing one component at a time. MS: final memory size; TE: retrieval token overhead over successful tasks; CT: context tokens of retrieved information appended at execution. Lower is better for MS, TE, and CT.
+
+5.3 
+Ablation Study
+
+We ablate the components of AppMem on Qwen3.5-397B-A17B (Table 
+3
+). Removing Ongoing Intent Continuation (OIC) lowers SPL by 4.7% and nearly doubles the memory size (from 8.8K to 15.3K tokens), confirming that stitching interrupted intents produces memory that is both more complete and more compact. For retrieval, without Information Filtering (IF), raw app entries inflate the agent context from 0.10K to 2.89K tokens and SPL drops to 41.8%. Application Inference (AI) mainly governs cost, cutting retrieval overhead by 66% (from 17.8K to 6.1K tokens) at nearly the same SPL, while Sufficiency Verification (SV) recovers context scattered across applications at only minor overhead.
+
+RAG.
+
+We replace app-guided retrieval with standard RAG, a bge-m3 retriever over the top-3 memory entries (Table 
+4
+). RAG consistently underperforms: on Qwen3.5-397B-A17B it lowers SR and SPL by 9.3% and 9.6%, as dense similarity captures neither the heavy lexical overlap nor the fine-grained intent tracking that tasks demand.
+
+Model
+
+Retrieval
+
+IE
+
+SR
+
+SPL
+
+GPT-5.5
+
+RAG
+
+0.89
+
+56.8
+
+50.5
+
+App-guided
+
+0.91
+
+73.7
+
+66.9
+
+Qwen3.5-397B-A17B
+
+RAG
+
+0.87
+
+43.2
+
+37.5
+
+App-guided
+
+0.90
+
+52.5
+
+47.1
+
+Table 4: 
+App-guided retrieval vs. standard dense RAG within AppMem, obtained by replacing our retrieval with RAG.
+
+5.4 
+In-depth Analysis
+
+Error analysis.
+
+Retrieval, not navigation, is the dominant bottleneck. We manually classify the Summary baseline’s outcomes along two axes: whether the retrieved information contains the missing context, and whether online execution succeeds (Figure 
+5
+a). Most tasks (57.6%) fail due to insufficient information, while only 6.8% fail despite having it. The remaining cases split into 24.6% that succeed with sufficient information and 11.0% that succeed despite insufficient information by exploiting on-screen clues at execution time. We provide a failure case in the supplementary materials.
+
+Performance of end-to-end GUI Agents under clear instructions.
+
+End-to-end agents execute well but cannot use history: their failure is a memory problem, not an execution problem. We additionally evaluate them under explicit instructions that require no history processing (Figure 
+5
+b). The same agents that fail under vague instructions perform far better here, with a gap of 55.1% for MAI-UI-8B. Their GUI training provides solid execution ability; what they lack is the capacity to summarize and exploit long user histories.
+
+Robustness to history length.
+
+AppMem degrades far less than summarization as histories grow longer (Figure 
+5
+c). Measuring the SPL gap between L1 and L2 tasks (
+; smaller is more robust), the summary baseline drops sharply (e.g., 
+ for GPT-5.5), whereas AppMem stays stable (
+), as its structured memory filters noise and sidesteps the long-context bottleneck.
+
+Token efficiency.
+
+AppMem is also cheaper at retrieval time (Table 
+5
+). Through app-guided retrieval, it cuts the retrieval token overhead per successful task by 50.6% (Gemini-3.1-Pro) relative to the summary baseline.
+
+Model
+
+Method
+
+TE
+ 
+
+Gemini-3.1-Pro
+
+w/ Summary
+
+8.5K
+
+w/ 
+AppMem
+
+4.2K
+(
+50.6%)
+
+Claude-Opus-4.8
+
+w/ Summary
+
+12.0K
+
+w/ 
+AppMem
+
+9.9K
+(
+17.5%)
+
+Table 5: 
+Retrieval token efficiency comparison. TE: retrieval token overhead over successful tasks.
+
+6 
+Conclusion
+
+We introduced MemU-Bench, a mobile GUI benchmark of vague, history-dependent instructions on which state-of-the-art GUI agents fail without user history. Our training-free framework AppMem consolidates histories into app-centric memory entries and retrieves them through app-guided inference, improving both success rate and efficiency across evaluated backbones. More broadly, our results position memory, not execution ability, as the primary bottleneck for long-horizon GUI agents and a key direction for future work.
+
+Appendix A 
+User Historical Trajectories
+
+Figure 
+6
+ visualizes partial user trajectories to illustrate cross-application switching behaviors over time. The results reveal frequent cross-application switches within the collected user interaction trajectories, which aligns with real-world mobile usage patterns where users frequently shift their intentions during device operation. In addition, significant discrepancies exist across individual users in terms of application usage duration and switching frequency, demonstrating the diversity of MemU-Bench.
+
+Figure 6: 
+Examples of app transitions across user historical interaction trajectory.
+
+Appendix B 
+Task Distribution
+
+Table 
+7
+ illustrates the task distribution of MemU-Bench. We define the target application as the platform where GUI agents ought to complete the target task. Taking setting an alarm as an example, the specific time constitutes missing information, yet the entire task must be fulfilled within the Clock application. Multiple sources of missing information are contained in MemU-Bench.
+
+Appendix C 
+Clue-based Inquiry
+
+We implement an inquiry-based experiment where the agent actively queries users for coarse-grained directional clues without access to user history. This constraint mimics realistic scenarios where users forget fine-grained task details. As shown in Table 
+6
+, active inquiry significantly boosts SR (+25.4%), outperforming the history-based summary baseline. However, it achieves an efficiency of only 0.62 due to the extra operational steps required for information retrieval. In contrast, AppMem outperforms this asking baseline in both SR (52.5% vs. 39.0%) and interaction efficiency (0.90 vs. 0.62), validating the effectiveness of our approach.
+
+Setting
+
+IE
+
+SR
+
+SPL
+
+Qwen3.5-397B-A17B
+
+0.72
+
+13.6
+
+9.7
+
+   w/ Inquiry
+
+0.62
+
+39.0
+
+24.1
+
+   w/ Summary
+
+0.82
+
+35.6
+
+29.3
+
+   w/ 
+AppMem
+
+0.90
+
+52.5
+
+47.1
+
+Table 6: 
+Performance of Qwen3.5-397B-A17B.
+
+Target App
+
+Number of Tasks
+
+Example Task
+
+Missing Information
+
+Broccoli
+
+9
+
+Please open the recipe I want to cook today in broccoli app.
+
+The user wants to cook quick fried rice.
+
+Chilemei
+
+4
+
+Please order a Classic Bolognese Pasta from Handmade Italian Pasta Workshop on chilemei app for Barbara Jones, phone number 13344556677, deliver to her place.
+
+Deliver to Lijin Land Center, Weigongcun Road, Haidian District, Beijing.
+
+Clock
+
+6
+
+I’m cooking according to the recipe I opened earlier, but I forgot how long it takes. Please set an alarm for that many minutes from now in clock app.
+
+It takes 10 minutes to make a Spicy Tuna Wrap.
+
+Contacts
+
+6
+
+Update the phone number for Jennifer Smith in contacts app.
+
+New phone number is 5553300678.
+
+Files
+
+1
+
+Delete the paper I read today, it’s too deep for me, in the files app.
+
+The paper the user can’t understand is Attention Is All You Need.
+
+Jingdian
+
+3
+
+The cola I ordered before is not enough, please order two more boxes of that cola on jingdian app.
+
+Coke is canned Coke.
+
+Joplin
+
+6
+
+Create a note in joplin app with title ’Reading’ and content about the papers I read today.
+
+The user read the Android World paper and Deep Residual Learning for Image Recognition paper.
+
+Phone
+
+5
+
+Call the repairman my friend told me about via phone app.
+
+The phone number is 5552596770.
+
+Pro Expense
+
+11
+
+Record yesterday’s dinner expense in pro expense app, name it ’dinner’, category is ’social’.
+
+Dinner cost 50 yuan.
+
+Retro Music
+
+4
+
+Please play the song my friend recommended for me in retro music app.
+
+The song is ’Moments’.
+
+Simple Calendar
+
+11
+
+Modify the group meeting time in simple calendar app.
+
+The meeting on May 7th needs to be rescheduled to 4:00 p.m. on May 6th.
+
+Simple Gallery
+
+7
+
+Rename the last receipt I viewed to ’technology’ in simple gallery app.
+
+The receipt name is ’receipt_005.jpg’.
+
+Simple SMS Messenger
+
+22
+
+Share my recorded shopping list with Mary Brown via simple sms messenger app.
+
+The shopping list is recorded in Joplin.
+
+Solitairecg
+
+1
+
+Open the card game I’ve been playing a lot today.
+
+The game is solitairecg.
+
+Taodian
+
+6
+
+Buy one Women’s Lace Floral Cocktail Dress on taodian app for Zhao Si. Payment password is 123456.
+
+Phone number is 15551234567, and address is Building 1, Yard 56, Chaoyang North Road.
+
+Tasks
+
+14
+
+Add a todo in tasks app for buying ingredients, with notes about the ingredients I need for Braised spare ribs. Due date is today.
+
+Main ingredient: 500g pork ribs, choose lean pork ribs with less bones and more meat for better taste. Seasoning: rock sugar, light soy sauce, dark soy sauce, cooking wine, scallions, ginger, garlic, star anise, cinnamon, fragrant leaves.
+
+Tuantuanwaimai
+
+2
+
+Order the burger I recorded before on tuantuanwaimai app and add the remarks.
+
+Remark is: ’Make the Spicy Chicken Leg Burger mildly spicy; for the Double Beef Burger, add extra cheese and omit lettuce’.
+
+Total
+
+118
+
+Table 7: 
+Task distribution across different target applications on MemU-Bench.
+
+Appendix D 
+Token Cost of Memory Generation
+
+We calculate the per-round text token overhead incurred during user history processing, and the statistical results are presented in Figure 
+7
+. Summary method generates an updated summary by integrating historical summaries with new user actions at each round, leading to linearly increasing token overhead. In contrast, AppMem constructs a structured memory bank to maintain stable token consumption.
+
+Figure 7: 
+Token cost during user history processing.
+
+Figure 8: 
+Failure case of the Summary baseline. The summary omits the details required by the vague instruction; the agent then searches multiple applications speculatively and fails.
+
+Appendix E 
+Failure Case
+
+When the summary omits task-critical details, the agent degenerates into speculative exploration (Figure 
+8
+). Since the agent cannot know the future instruction while summarizing, lengthy trajectories are compressed lossily; facing the vague instruction, it then searches across applications for the missing content, fails to locate it, and the task fails.
+
+Appendix F 
+Error Analysis of AppMem
+
+We manually evaluate Qwen3.5-397B-A17B with AppMem on MemU-Bench (Figure 
+9
+) across four categories based on retrieval accuracy and task success. Results show that in 14.4% tasks, the model retrieved accurate information but failed due to its inherent navigation limitations. Conversely, among the 52.5% successful tasks, only 2.5% involved inaccurate retrieval, where the model succeeded by autonomously searching for supplementary data, demonstrating highly effective critical memory retention. Nevertheless, missing information in 33.1% of tasks highlights remaining limitations.
+
+Figure 9: 
+Error analysis of AppMem.
+
+Figure 10: 
+Case study. Left: Information missing and coverage. Right: Coarse-grained and fine-grained information.
+
+Appendix G 
+Case Analysis of AppMem
+
+Coverage of Memorized Information.
+
+Figure 
+10
+ (left) presents a case where the Summary method fails while our approach succeeds. The summary method fails due to information missing; its summary omits critical details like the exact order and arrival times, forcing the GUI agent into an error-prone search within the app where it retrieves an incorrect time. In contrast, our method meticulously records these temporal details. By directly retrieving the correct schedule from its history without risky on-screen searches, our agent accurately infers the target time and successfully completes the task, demonstrating the vital role of structured memory in resolving real-world ambiguities.
+
+Granularity of Memorized Information.
+
+Figure 
+10
+ (right) illustrates the efficiency gap between the two methods. The Summary baseline manages to complete the task but exhibits low efficiency due to its coarse-grained information retention; while it registers the person’s name, it fails to record the specific phone number. Consequently, the GUI agent is forced to execute redundant steps to relocate the business card on the phone to get the number before placing the call. In contrast, our method maintains fine-grained information, directly storing the exact phone number in memory. This allows the GUI agent to bypass the time-consuming searching steps and make the call immediately, demonstrating that fine-grained memory retention significantly enhances task execution efficiency.
+
+Appendix H 
+Evaluation Reliability
+
+Our evaluation protocol consists of two stages: rule-based verification and LLM-as-Judge. Specifically, 44.9% of the tasks are evaluated solely through rule-based verification, while the remaining 55.1% require the LLM-as-Judge to assess open-ended textual outputs. For all LLM-based evaluations, the temperature is set to 0 to ensure deterministic inference and reproducible decisions.
+
+To validate the accuracy of the evaluation protocol, we manually verify the success status of all tasks that require the LLM-as-Judge for Qwen3.5-397B-A17B, and compare the results with those produced by our evaluation protocol. Compared with manual evaluation, our evaluation protocol achieves an accuracy of over 95%, demonstrating that it provides an accurate and reliable assessment of task success.
+
+Appendix I 
+Implementation Details
+
+We set the sliding window size to 
+ (images resized to 
+) and the maximum retrieval rounds 
+. End-to-end GUI agents and Qwen3-VL-8B are evaluated in an end-to-end manner. For other models, We employ the SeeAct-V 
+(
+Gou et al. 2025
+)
+ framework, where they act as planners to generate textual actions that are grounded into coordinates by Qwen3-VL-32B-Instruct. Finally, Qwen3.5-35B-A3B serves as the LLM-judge for evaluation. The local evaluation pipeline and agent framework are executed on a workstation equipped with an Apple M4 Pro chip and 24GB of unified memory, running macOS. GUI environments are managed via ADB within Android Studio. Models are invoked through standard OpenAI-compatible API interfaces. The temperature is set to 0 to ensure deterministic inference and reproducibility. To validate the stability of this evaluation protocol, we repeat the evaluation of Qwen3.5-397B-A17B three times under identical settings and observe negligible performance variation across runs (the SR of each run deviates by less than 1.7% from the mean SR), confirming the low empirical variance of the evaluation protocol. Therefore, a single deterministic run provides a reliable estimate of model performance for benchmarking purposes while substantially reducing API evaluation cost.
+
+Appendix J 
+AppMem Algorithm
+
+The implementation of AppMem algorithm is detailed in Algorithm 
+1
+ and Algorithm 
+2
+.
+
+Algorithm 1
+ 
+ Memory Generation
+
+1:
+
+            
+          User historical trajectory 
+, sliding window size 
+, model 
+, prompt for generating events 
+, prompt for updating memory items 
+
+2:
+
+            
+          User memory bank 
+
+3:
+
+for
+ 
+ 
+do
+
+4:
+
+            
+            
+
+5:
+
+            
+            
+ 
+ Extract the current window
+
+6:
+
+            
+            
+ 
+ Generate the current event
+
+7:
+
+            
+            
+for
+ 
+each
+ 
+ 
+do
+
+8:
+
+            
+             
+
+9:
+
+            
+             
+if
+ 
+ 
+then
+
+10:
+
+            
+               
+ 
+ Fetch the latest memory item
+
+11:
+
+            
+               
+if
+ 
+ 
+then
+
+12:
+
+            
+                
+ 
+ Update
+
+13:
+
+            
+               
+else
+
+14:
+
+            
+                
+ 
+ Add
+
+15:
+
+            
+               
+end
+ 
+if
+
+16:
+
+            
+             
+else
+
+17:
+
+            
+               
+ 
+ Add
+
+18:
+
+            
+             
+end
+ 
+if
+
+19:
+
+            
+            
+end
+ 
+for
+
+20:
+
+end
+ 
+for
+
+21:
+
+return
+ 
+
+Algorithm 2
+ 
+ App-guided Retrieval
+
+1:
+
+            
+          Vague instruction 
+, set of applications 
+, user memory bank 
+, model 
+, prompt for inferring relevant applications 
+, prompt for filtering key information 
+, retrieval rounds 
+
+2:
+
+            
+          Key information 
+
+3:
+
+for
+ 
+ 
+do
+
+4:
+
+            
+            
+if
+ 
+ 
+then
+
+5:
+
+            
+             
+ 
+ Infer applications
+
+6:
+
+            
+            
+else
+
+7:
+
+            
+             
+ 
+ Infer applications based on the remaining missing information
+
+8:
+
+            
+            
+end
+ 
+if
+
+9:
+
+            
+            
+ 
+ Fetch relevant memory items
+
+10:
+
+            
+            
+ 
+ Filter to obtain key information
+
+11:
+
+            
+            
+ 
+ Accumulate the newly retrieved information
+
+12:
+
+            
+            
+ 
+ Identify remaining missing information
+
+13:
+
+            
+            
+if
+ 
+ 
+then
+
+14:
+
+            
+             
+break
+ 
+ Stop if no missing information remains
+
+15:
+
+            
+            
+else
+
+16:
+
+            
+             
+ 
+ Remove inferred applications from the set
+
+17:
+
+            
+            
+end
+ 
+if
+
+18:
+
+end
+ 
+for
+
+19:
+
+return
+ 
+
+Appendix K 
+Prompt Templates
+
+We provide prompt templates of AppMem, including Current Event Summarization, Ongoing Intent Continuation, Application Inference, Information Filtering, and Sufficiency Verification.
+
+Prompt Template for Current Event Summarization
+
+You are analyzing a user’s operation log on an Android device.
+
+I will show you screenshots with the running app, and the actions the user performed before each screenshot. Please analyze the user’s activity and generate a ’Memory
+Event’ for each app.
+
+For each app, output in the following format:
+
+App: <app name>
+
+Event: <A descriptive summary of the user’s journey and key interactions. DO NOT use over-generalized summaries like ’User browsed the app’. Preserve the sequence of key
+items/categories interacted with (e.g., Browsed T-shirts, compared a yellow one, then switched to sneakers). Capture transitions: If the user changed their mind or compared items, reflect that in the event description.>
+
+Details: <Extract all specific data points as a plain text list. Focus on ’Hard Data’: 1) Numeric values (verification codes, prices, quantities, durations); 2) Proper nouns (brand names, restaurant names, item titles); 3) Specific attributes (color, size, specifications). If no specific details are found, use None.>
+
+State: <finished or ongoing>
+
+Start Time: <start time in format ’Apr 22 14:30’ or None if unknown>
+
+End Time: <end time in format ’Apr 22 14:45’ or None if unknown>
+
+State Definition:
+
+- **finished**: The task within this app reached a terminal point (e.g., payment confirmed, message sent, ’=’ pressed in calculator, final search result selected).
+
+- **ongoing**: The task is incomplete or the user exited prematurely (e.g., form partially filled, still browsing, expression left hanging). If the last operation does
+not represent a definitive ’Commit’ or ’Result’ action, mark as ’ongoing’.
+
+{Example}
+
+Guidelines:
+
+1. The current system time is in the upper left corner.
+
+2. In the ’Details’ field, prioritize recording ’hard information’ (numbers, specific names) as this will serve as long-term memory for future retrieval.
+
+3. The name of the running app is provided along with the screenshot. Please do not modify the app name on your own. If no app is identified, use None as the app name.
+
+Screenshot 1 (app: {app_name1}):
+
+{Screenshot1}
+
+Actions performed:
+
+{Actions1}
+
+Screenshot 2 (app: {app_name2}):
+
+{Screenshot2}
+
+…
+
+Prompt Template for Ongoing Intent Continuation
+
+You are analyzing a user’s operation log on an Android device. 
+
+Your goal is to integrate a NEW Memory Event into an EXISTING Memory Event. You must merge them into a single, cohesive narrative that reflects the entire journey within
+this app session.
+
+1. Integration Rules (Seamless Narrative):
+
+- **Identify Continuity**: If the new event continues the previous task (e.g., previously searched for shoes, now filtering by size), merge them into a single flow.
+
+- **Capture Pivots**: If the user abandoned the previous task for something new (e.g., stopped looking at shoes and started searching for electronics), reflect this
+transition (e.g., ’After looking at shoes, the user shifted focus to…’).
+
+- **Deduplication**: If the new event repeats information from the existing event, do not list it twice; prioritize the most recent state or progress.
+
+2. Details Merging Rule:
+
+- Combine the ’Existing Details’ with ’New Details’ into one comprehensive list.
+
+- **Conflict Resolution**: If a value has changed (e.g., quantity updated from 1 to 2), keep the most recent data point.
+
+- Ensure all hard data (prices, codes, specs) from both sets are preserved unless they are outdated.
+
+3. State Re-evaluation:
+
+- **finished**: The combined journey has now reached a terminal point (e.g., payment completed, final result obtained).
+
+- **ongoing**: The task remains incomplete, or the user is still in the middle of a new workflow.
+
+- **Note**: Even if the previous state was ’ongoing’, it can now become ’finished’ if the new event completes the task.
+
+Output Format:
+
+Event: <A single integrated summary combining existing and new events>
+
+Details: <Merged list of all specific data points (Numeric values, Proper nouns, Specific attributes).>
+
+State: <finished or ongoing>
+
+Example: {Example}
+
+Input Data to Merge:
+
+App: {app_name}
+
+**[Existing Context]**
+
+Existing Event: {existing_event}
+
+Existing Details: {existing_details}
+
+**[New Information]**
+
+New Event: {new_event}
+
+New Details: {new_details}
+
+Prompt Template for Application Inference
+
+You are an agent skilled at analyzing user goals and identifying missing information.
+Given the user’s goal: {goal}
+
+{app_desc}
+
+{missing_info}
+
+Which apps might contain useful information for completing this goal? Only return apps from the list above.
+"Return the app names in the following format:
+
+app 1: <app_name1>
+
+app 2: <app_name2>
+
+…
+
+You MUST return at least one app that you think might contain useful information.
+
+Prompt Template for Information Filtering
+
+You are a precise context filter for an Android GUI Agent.
+Given the user’s goal:
+
+{goal}
+
+{missing_info}
+
+And the following potentially useful memory items (in JSON format):
+
+{memory_json}
+
+Extract the information that is useful for completing this goal.
+
+Return a concise description of the relevant information.
+This subsequent information will serve as supplementary content to accomplish this
+goal. If the history contains no information that directly aids the Goal, return an empty
+string.
+
+Prompt Template for Sufficiency Verification
+
+You are evaluating whether the retrieved information is sufficient for an Android
+phone agent to complete a user’s goal. The agent can interact with the phone’s UI (tap
+, swipe, type, search within apps, etc.).
+
+**What the agent can do on its own (does NOT need from memory):**
+
+- Open apps by name
+
+- Search for contacts or items by name within apps
+
+- Navigate UI elements and select items by visible text
+
+- Perform standard app operations
+
+**What the agent DOES need from memory (information it cannot directly discover
+through UI):**
+
+- Specific data values that must be recalled exactly (codes, passwords, amounts, etc.)
+
+- Content the user previously saw or entered that is no longer on screen
+
+- Cross-app facts that the agent cannot infer without prior context
+
+Given the user’s goal: goal
+
+And the following retrieved information:
+
+{retrieved_info}
+
+Determine if the retrieved information provides the data the agent needs, or if critical information is still missing. Be conservative: if the goal only requires actions the agent can perform through UI interaction, and no specific data values are needed from memory, mark as sufficient. Return your answer in the following format:
+
+sufficient: yes/no
+
+missing information: <describe what specific data is still missing, if any. Only list information the agent truly cannot obtain through UI interaction.>
+
+References
+
+Alibaba (2026)
+
+Alibaba
+
+Qwen3.5
+.
+
+Note: 
+Available at: https://qwen.ai/blog?id=qwen3.5Accessed 2 July 2026
+
+Cited by: 
+Table 2
+,
+
+§5.1
+.
+
+Anderson 
+et al.
+ (2018)
+
+P. Anderson, A. Chang, D. S. Chaplot, A. Dosovitskiy, S. Gupta, V. Koltun, J. Kosecka, J. Malik, R. Mottaghi, M. Savva, 
+et al.
+
+On evaluation of embodied navigation agents
+.
+
+arXiv preprint arXiv:1807.06757
+.
+
+Cited by: 
+§1
+,
+
+§3.4
+.
+
+Anthropic (2026)
+
+Anthropic
+
+Introducing claude opus 4.8
+.
+
+Note: 
+Available at: https://www.anthropic.com/news/claude-opus-4-8Accessed 2 July 2026
+
+Cited by: 
+Table 2
+,
+
+§5.1
+.
+
+Bai 
+et al.
+ (2025a)
+
+S. Bai, Y. Cai, R. Chen, K. Chen, X. Chen, Z. Cheng, L. Deng, W. Ding, C. Gao, C. Ge, W. Ge, Z. Guo, Q. Huang, J. Huang, F. Huang, B. Hui, S. Jiang, Z. Li, M. Li, M. Li, K. Li, Z. Lin, J. Lin, X. Liu, J. Liu, C. Liu, Y. Liu, D. Liu, S. Liu, D. Lu, R. Luo, C. Lv, R. Men, L. Meng, X. Ren, X. Ren, S. Song, Y. Sun, J. Tang, J. Tu, J. Wan, P. Wang, P. Wang, Q. Wang, Y. Wang, T. Xie, Y. Xu, H. Xu, J. Xu, Z. Yang, M. Yang, J. Yang, A. Yang, B. Yu, F. Zhang, H. Zhang, X. Zhang, B. Zheng, H. Zhong, J. Zhou, F. Zhou, J. Zhou, Y. Zhu, and K. Zhu
+
+Qwen3-vl technical report
+.
+
+arXiv preprint arXiv:2511.21631
+.
+
+Cited by: 
+§1
+,
+
+Table 2
+,
+
+Table 2
+,
+
+§5.1
+.
+
+Bai 
+et al.
+ (2025b)
+
+S. Bai, K. Chen, X. Liu, J. Wang, W. Ge, S. Song, K. Dang, P. Wang, S. Wang, J. Tang, H. Zhong, Y. Zhu, M. Yang, Z. Li, J. Wan, P. Wang, W. Ding, Z. Fu, Y. Xu, J. Ye, X. Zhang, T. Xie, Z. Cheng, H. Zhang, Z. Yang, H. Xu, and J. Lin
+
+Qwen2.5-vl technical report
+.
+
+arXiv preprint arXiv:2502.13923
+.
+
+Cited by: 
+§1
+.
+
+Cao 
+et al.
+ (2026)
+
+W. Cao, C. Duan, P. Fu, P. Gao, N. Lian, F. Liu, H. Liu, H. Qu, Q. Wu, Z. Yu, T. Chen, S. Cui, A. Du, S. Jia, Y. Li, W. Liu, Y. Liu, W. Lu, Z. Luo, H. Sun, J. Sun, C. Tan, Y. Wang, C. Wu, T. Xiong, J. Yang, Y. Yuan, R. Zhang, S. Zhang, J. Zhu, J. Luan, and C. Zou
+
+Xiaomi-gui-0 technical report
+.
+
+External Links: 
+2606.31410
+,
+
+Link
+
+Cited by: 
+§2.1
+.
+
+Chai 
+et al.
+ (2026)
+
+Y. Chai, S. Tang, H. Xiao, R. Liu, and H. Li
+
+Pira-bench: a transition from reactive gui agents to gui-based proactive intent recommendation agents
+.
+
+arXiv preprint arXiv:2603.08013
+.
+
+Cited by: 
+Table 1
+,
+
+§2.2
+.
+
+Chen 
+et al.
+ (2026)
+
+T. Chen, Z. Lu, Z. Xu, G. Shao, S. Zhao, F. Tang, Y. Du, K. Song, Y. Liu, Y. Yan, 
+et al.
+
+Knowu-bench: towards interactive, proactive, and personalized mobile agent evaluation
+.
+
+arXiv preprint arXiv:2604.08455
+.
+
+Cited by: 
+§2.2
+.
+
+Cheng 
+et al.
+ (2024)
+
+K. Cheng, Q. Sun, Y. Chu, F. Xu, L. YanTao, J. Zhang, and Z. Wu
+
+Seeclick: harnessing gui grounding for advanced visual gui agents
+.
+
+In 
+Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)
+,
+
+pp. 9313–9332
+.
+
+Cited by: 
+§1
+.
+
+Chhikara 
+et al.
+ (2025)
+
+P. Chhikara, D. Khant, S. Aryan, T. Singh, and D. Yadav
+
+Mem0: building production-ready ai agents with scalable long-term memory
+.
+
+arXiv preprint arXiv:2504.19413
+.
+
+Cited by: 
+§2.1
+.
+
+DeepMind (2026)
+
+G. DeepMind
+
+Gemini 3.1 pro
+.
+
+Note: 
+Available at: https://deepmind.google/models/gemini/pro/Accessed 2 July 2026
+
+Cited by: 
+Table 2
+,
+
+§5.1
+.
+
+Gou 
+et al.
+ (2025)
+
+B. Gou, R. Wang, B. Zheng, Y. Xie, C. Chang, Y. Shu, H. Sun, and Y. Su
+
+Navigating the digital world as humans do: universal visual grounding for GUI agents
+.
+
+In 
+The Thirteenth International Conference on Learning Representations
+,
+
+External Links: 
+Link
+
+Cited by: 
+Appendix I
+.
+
+Gu 
+et al.
+ (2025)
+
+Z. Gu, Z. Zeng, Z. Xu, X. Zhou, S. Shen, Y. Liu, B. Zhou, C. Meng, T. Xia, W. Chen, 
+et al.
+
+Ui-venus technical report: building high-performance ui agents with rft
+.
+
+arXiv preprint arXiv:2508.10833
+.
+
+Cited by: 
+§2.1
+,
+
+Table 2
+,
+
+§5.1
+.
+
+Hu 
+et al.
+ (2025a)
+
+X. Hu, T. Xiong, B. Yi, Z. Wei, R. Xiao, Y. Chen, J. Ye, M. Tao, X. Zhou, Z. Zhao, 
+et al.
+
+Os agents: a survey on mllm-based agents for general computing devices use
+.
+
+arXiv preprint arXiv:2508.04482
+.
+
+Cited by: 
+§1
+.
+
+Hu 
+et al.
+ (2025b)
+
+Y. Hu, S. Liu, Y. Yue, G. Zhang, B. Liu, F. Zhu, J. Lin, H. Guo, S. Dou, Z. Xi, 
+et al.
+
+Memory in the age of ai agents
+.
+
+arXiv preprint arXiv:2512.13564
+.
+
+Cited by: 
+§2.1
+.
+
+Jin 
+et al.
+ (2026)
+
+S. Jin, L. Wang, and Z. Zhang
+
+SE-ga: memory-augmented self-evolution for gui agents
+.
+
+arXiv preprint arXiv:2605.16883
+.
+
+Cited by: 
+§2.1
+.
+
+Kong 
+et al.
+ (2025)
+
+Q. Kong, X. Zhang, Z. Yang, N. Gao, C. Liu, P. Tong, C. Cai, H. Zhou, J. Zhang, L. Chen, 
+et al.
+
+MobileWorld: benchmarking autonomous mobile agents in agent-user interactive and mcp-augmented environments
+.
+
+arXiv preprint arXiv:2512.19432
+.
+
+Cited by: 
+Table 1
+,
+
+§2.2
+.
+
+Li 
+et al.
+ (2024)
+
+W. Li, W. Bishop, A. Li, C. Rawles, F. Campbell-Ajala, D. Tyamagundlu, and O. Riva
+
+On the effects of data scale on ui control agents
+.
+
+Advances in Neural Information Processing Systems
+ 
+37
+, 
+pp. 92130–92154
+.
+
+Cited by: 
+Table 1
+,
+
+§2.2
+.
+
+Lin 
+et al.
+ (2025)
+
+K. Q. Lin, L. Li, D. Gao, Z. Yang, S. Wu, Z. Bai, S. W. Lei, L. Wang, and M. Z. Shou
+
+Showui: one vision-language-action model for gui visual agent
+.
+
+In 
+Proceedings of the Computer Vision and Pattern Recognition Conference
+,
+
+pp. 19498–19508
+.
+
+Cited by: 
+§1
+.
+
+Liu 
+et al.
+ (2026)
+
+G. Liu, P. Zhao, Y. Liang, Q. Luo, S. Tang, Y. Chai, W. Lin, H. Xiao, W. Wang, S. Chen, 
+et al.
+
+MemGUI-bench: benchmarking memory of mobile gui agents in dynamic environments
+.
+
+arXiv preprint arXiv:2602.06075
+.
+
+Cited by: 
+Table 1
+,
+
+§2.2
+.
+
+Lu 
+et al.
+ (2026a)
+
+Z. Lu, Y. Chai, Y. Guo, X. Yin, L. Liu, H. Wang, H. Xiao, S. Ren, P. Zhao, G. Liu, 
+et al.
+
+Ui-r1: enhancing efficient action prediction of gui agents by reinforcement learning
+.
+
+In 
+Proceedings of the AAAI Conference on Artificial Intelligence
+,
+
+Vol. 
+40
+, 
+pp. 17608–17616
+.
+
+Cited by: 
+§1
+.
+
+Lu 
+et al.
+ (2026b)
+
+Z. Lu, F. Tang, G. Liu, K. Song, X. Tan, J. Ma, W. Zhang, W. Lu, J. Xiao, Y. Zhuang, 
+et al.
+
+UI-copilot: advancing long-horizon gui automation via tool-integrated policy optimization
+.
+
+arXiv preprint arXiv:2604.13822
+.
+
+Cited by: 
+§2.1
+.
+
+Lu 
+et al.
+ (2025)
+
+Z. Lu, J. Ye, F. Tang, Y. Shen, H. Xu, Z. Zheng, W. Lu, M. Yan, F. Huang, J. Xiao, 
+et al.
+
+Ui-s1: advancing gui automation via semi-online reinforcement learning
+.
+
+arXiv preprint arXiv:2509.11543
+.
+
+Cited by: 
+§1
+.
+
+Lyu 
+et al.
+ (2026)
+
+Y. Lyu, G. Chen, R. Shao, W. Guan, and L. Nie
+
+PersonalAlign: hierarchical implicit intent alignment for personalized gui agent with long-term user-centric records
+.
+
+arXiv preprint arXiv:2601.09636
+.
+
+Cited by: 
+Table 1
+,
+
+§2.2
+.
+
+Nie 
+et al.
+ (2026)
+
+H. Nie, X. Liu, Y. Bai, Y. Wang, Y. Liu, Q. Yao, and Z. Wang
+
+Pspa-bench: a personalized benchmark for smartphone gui agent
+.
+
+arXiv preprint arXiv:2603.29318
+.
+
+Cited by: 
+§2.2
+.
+
+OpenAI (2026)
+
+OpenAI
+
+Introducing gpt 5.5
+.
+
+Note: 
+Available at: https://openai.com/index/introducing-gpt-5-5/Accessed 2 July 2026
+
+Cited by: 
+Table 2
+,
+
+§5.1
+.
+
+Qin 
+et al.
+ (2025)
+
+Y. Qin, Y. Ye, J. Fang, H. Wang, S. Liang, S. Tian, J. Zhang, J. Li, Y. Li, S. Huang, 
+et al.
+
+Ui-tars: pioneering automated gui interaction with native agents
+.
+
+arXiv preprint arXiv:2501.12326
+.
+
+Cited by: 
+§1
+,
+
+§2.1
+.
+
+Rawles 
+et al.
+ (2025)
+
+C. Rawles, S. Clinckemaillie, Y. Chang, J. Waltz, G. Lau, M. Fair, A. Li, W. Bishop, W. Li, F. Campbell-Ajala, 
+et al.
+
+Androidworld: a dynamic benchmarking environment for autonomous agents
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Vol. 
+2025
+, 
+pp. 406–441
+.
+
+Cited by: 
+Table 1
+,
+
+§1
+,
+
+§2.2
+.
+
+Rawles 
+et al.
+ (2023)
+
+C. Rawles, A. Li, D. Rodriguez, O. Riva, and T. Lillicrap
+
+Androidinthewild: a large-scale dataset for android device control
+.
+
+Advances in Neural Information Processing Systems
+ 
+36
+, 
+pp. 59708–59728
+.
+
+Cited by: 
+Table 1
+,
+
+§1
+,
+
+§2.2
+.
+
+Tang 
+et al.
+ (2026a)
+
+F. Tang, Z. Gu, Z. Lu, X. Liu, S. Shen, C. Meng, W. Wang, W. Zhang, Y. Shen, W. Lu, 
+et al.
+
+GUI-g
+: gaussian reward modeling for gui grounding
+.
+
+In 
+Proceedings of the AAAI Conference on Artificial Intelligence
+,
+
+Vol. 
+40
+, 
+pp. 33214–33222
+.
+
+Cited by: 
+§1
+.
+
+Tang 
+et al.
+ (2025)
+
+F. Tang, H. Xu, H. Zhang, S. Chen, X. Wu, Y. Shen, W. Zhang, G. Hou, Z. Tan, Y. Yan, 
+et al.
+
+A survey on (m) llm-based gui agents
+.
+
+arXiv preprint arXiv:2504.13865
+.
+
+Cited by: 
+§1
+.
+
+Tang 
+et al.
+ (2026b)
+
+Z. Tang, X. He, T. Zhao, F. Wei, X. Liu, P. Dong, Q. Wang, Q. Li, H. Wang, R. Chen, 
+et al.
+
+Llm agent memory: a survey from a unified representation–management perspective
+.
+
+Cited by: 
+§2.1
+.
+
+Wang 
+et al.
+ (2025)
+
+H. Wang, H. Zou, H. Song, J. Feng, J. Fang, J. Lu, L. Liu, Q. Luo, S. Liang, S. Huang, 
+et al.
+
+Ui-tars-2 technical report: advancing gui agent with multi-turn reinforcement learning
+.
+
+arXiv preprint arXiv:2509.02544
+.
+
+Cited by: 
+§2.1
+.
+
+Wang 
+et al.
+ (2024a)
+
+J. Wang, H. Xu, J. Ye, M. Yan, W. Shen, J. Zhang, F. Huang, and J. Sang
+
+Mobile-agent: autonomous multi-modal mobile device agent with visual perception
+.
+
+arXiv preprint arXiv:2401.16158
+.
+
+Cited by: 
+§2.1
+.
+
+Wang 
+et al.
+ (2026)
+
+J. Wang, H. Xu, X. Zhang, Z. Zhu, M. Yan, J. Ye, and J. Sang
+
+STAMP: training explicit memory for mobile gui agents in controllable and scalable virtual environments
+.
+
+arXiv preprint arXiv:2605.29324
+.
+
+Cited by: 
+§2.1
+.
+
+Wang 
+et al.
+ (2024b)
+
+P. Wang, S. Bai, S. Tan, S. Wang, Z. Fan, J. Bai, K. Chen, X. Liu, J. Wang, W. Ge, Y. Fan, K. Dang, M. Du, X. Ren, R. Men, D. Liu, C. Zhou, J. Zhou, and J. Lin
+
+Qwen2-vl: enhancing vision-language model’s perception of the world at any resolution
+.
+
+arXiv preprint arXiv:2409.12191
+.
+
+Cited by: 
+§1
+.
+
+Xie 
+et al.
+ (2024)
+
+T. Xie, D. Zhang, J. Chen, X. Li, S. Zhao, R. Cao, T. J. Hua, Z. Cheng, D. Shin, F. Lei, 
+et al.
+
+Osworld: benchmarking multimodal agents for open-ended tasks in real computer environments
+.
+
+Advances in Neural Information Processing Systems
+ 
+37
+, 
+pp. 52040–52094
+.
+
+Cited by: 
+§1
+.
+
+Xu 
+et al.
+ (2026)
+
+H. Xu, X. Zhang, H. Liu, J. Wang, Z. Zhu, S. Zhou, X. Hu, F. Gao, J. Cao, Z. Wang, 
+et al.
+
+Mobile-agent-v3. 5: multi-platform fundamental gui agents
+.
+
+arXiv preprint arXiv:2602.16855
+.
+
+Cited by: 
+§2.1
+,
+
+Table 2
+,
+
+§5.1
+.
+
+Xu 
+et al.
+ (2025a)
+
+Y. Xu, X. Liu, X. Liu, J. Fu, H. Zhang, B. Jing, S. Zhang, Y. Wang, W. Zhao, and Y. Dong
+
+Mobilerl: online agentic reinforcement learning for mobile gui agents
+.
+
+arXiv preprint arXiv:2509.18119
+.
+
+Cited by: 
+§2.1
+.
+
+Xu 
+et al.
+ (2025b)
+
+Y. Xu, X. Liu, X. Sun, S. Cheng, H. Yu, H. Lai, S. Zhang, D. Zhang, J. Tang, and Y. Dong
+
+Androidlab: training and systematic benchmarking of android autonomous agents
+.
+
+In 
+Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)
+,
+
+pp. 2144–2166
+.
+
+Cited by: 
+Table 1
+,
+
+§2.2
+.
+
+Yan 
+et al.
+ (2025)
+
+H. Yan, J. Wang, X. Huang, Y. Shen, Z. Meng, Z. Fan, K. Tan, J. Gao, L. Shi, M. Yang, 
+et al.
+
+Step-gui technical report
+.
+
+arXiv preprint arXiv:2512.15431
+.
+
+Cited by: 
+§2.1
+.
+
+Zeng 
+et al.
+ (2026)
+
+Z. Zeng, H. Hua, B. Zou, M. Cai, R. Feris, and J. Luo
+
+MementoGUI: learning agentic multimodal memory control for long-horizon gui agents
+.
+
+arXiv preprint arXiv:2605.18652
+.
+
+Cited by: 
+§2.1
+.
+
+Zhang 
+et al.
+ (2025)
+
+D. Zhang, W. Li, K. Song, J. Lu, G. Li, L. Yang, and S. Li
+
+Memory in large language models: mechanisms, evaluation and evolution
+.
+
+arXiv preprint arXiv:2509.18868
+.
+
+Cited by: 
+§2.1
+.
+
+Zhang 
+et al.
+ (2026a)
+
+G. Zhang, Y. Ling, F. Meng, K. Wang, and S. Yan
+
+Mem-w: latent memory-native gui agents
+.
+
+arXiv preprint arXiv:2605.09317
+.
+
+Cited by: 
+§2.1
+.
+
+Zhang 
+et al.
+ (2026b)
+
+S. Zhang, J. Wang, R. Zhou, J. Liao, Y. Feng, Z. Li, Y. Zheng, W. Zhang, Y. Wen, Z. Li, 
+et al.
+
+Memrl: self-evolving agents via runtime reinforcement learning on episodic memory
+.
+
+arXiv preprint arXiv:2601.03192
+.
+
+Cited by: 
+§2.1
+.
+
+Zhou 
+et al.
+ (2025)
+
+H. Zhou, X. Zhang, P. Tong, J. Zhang, L. Chen, Q. Kong, C. Cai, C. Liu, Y. Wang, J. Zhou, 
+et al.
+
+MAI-ui technical report: real-world centric foundation gui agents
+.
+
+arXiv preprint arXiv:2512.22047
+.
+
+Cited by: 
+§2.1
+,
+
+Table 2
+,
+
+§5.1
+.
+
+Zhou 
+et al.
+ (2024)
+
+S. Zhou, F. F. Xu, H. Zhu, X. Zhou, R. Lo, A. Sridhar, X. Cheng, T. Ou, Y. Bisk, D. Fried, 
+et al.
+
+Webarena: a realistic web environment for building autonomous agents
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Vol. 
+2024
+, 
+pp. 15585–15606
+.
+
+Cited by: 
+§2.1
+.
+

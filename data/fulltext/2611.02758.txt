@@ -1,0 +1,2865 @@
+Learning to Adjudicate: Verifier-Guided Multi-Agent Reasoning for E-Commerce Relevance
+https://arxiv.org/abs/2611.02758
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+Learning to Adjudicate: Verifier-Guided Multi-Agent Reasoning for E-Commerce Relevance
+
+Conference: 
+; ; 
+Woodstock ’18: ACM Symposium on Neural Gaze Detection, June 03–05, 2018, Woodstock, NY
+DOI: 
+XXXXXXX.XXXXXXX
+ISBN: 
+978-1-4503-XXXX-X/2018/06
+CCS: 
+Information systems Relevance assessment
+CCS: 
+Information systems Similarity measures
+CCS: 
+Information systems Language models
+CCS: 
+Computing methodologies Natural language processing
+CCS: 
+Information systems Sponsored search advertising
+
+Shi Shu
+
+Note: 
+Both authors contributed equally to this research.
+
+Note: 
+Work done during internship at Alibaba International Digital Commerce Group.
+
+email: 
+shus25@mails.tsinghua.edu.cn
+
+Affiliation: 
+Tsinghua Shenzhen International Graduate School, Tsinghua University
+, 
+Shenzhen
+, 
+China
+
+, 
+
+Hao Chen
+
+email: 
+ryan.ch@alibaba-inc.com
+
+Affiliation: 
+Alibaba International Digital Commerce Group
+, 
+Hangzhou
+, 
+China
+
+, 
+
+Baopu Qiu
+
+email: 
+qiubaopu.qbp@alibaba-inc.com
+
+Affiliation: 
+Alibaba International Digital Commerce Group
+, 
+Hangzhou
+, 
+China
+
+, 
+
+Chao Wei
+
+Note: 
+Corresponding author.
+
+email: 
+weichao.wc@alibaba-inc.com
+
+Affiliation: 
+Alibaba International Digital Commerce Group
+, 
+Hangzhou
+, 
+China
+
+, 
+
+Weiru Zhang
+
+email: 
+weiru.zwr@alibaba-inc.com
+
+Affiliation: 
+Alibaba International Digital Commerce Group
+, 
+Hangzhou
+, 
+China
+
+, 
+
+Xiu li
+
+email: 
+li.xiu@sz.tsinghua.edu.cn
+
+Affiliation: 
+Tsinghua Shenzhen International Graduate School, Tsinghua University
+, 
+Shenzhen
+, 
+China
+
+ and 
+
+Xiaoyi Zeng
+
+email: 
+yuanhan@taobao.com
+
+Affiliation: 
+Alibaba International Digital Commerce Group
+, 
+Hangzhou
+, 
+China
+
+2018
+
+Abstract.
+
+Relevance modeling is fundamental to e-commerce search, determining how well retrieved products satisfy the needs expressed in a user’s query. Accurate judgments often require interpreting user intent, comparing product attributes, and applying business-specific matching criteria. Current methods based on large language models (LLMs) leverage their contextual understanding and reasoning capabilities, with research primarily focusing on incorporating domain-specific context and enhancing reasoning performance. Despite these advances, difficult query-product pairs remain challenging when evidence from different perspectives supports conflicting conclusions. In such cases, a single reasoning pass may fail to reconcile these conflicts and ensure that decisive evidence guides the final judgment.
+
+To address this challenge, we propose Collaborative
+Adjudication with Debate and Replay Experience (CADRE),
+a framework for evidence-based adjudication in
+e-commerce relevance assessment. CADRE organizes three expert agents sharing a frozen backbone to analyze
+product attributes, user intent, and business rules in
+separate contexts, while a trainable Verifier assesses
+their supporting evidence against the applicable matching
+criteria to determine relevance. Under expert disagreement, a Verifier-guided debate elicits
+targeted clarification and revision of disputed
+interpretations before final adjudication. We optimize
+the Verifier through multi-turn group relative policy
+optimization and adapt successful-experience replay
+so that trajectories yielding correct terminal labels
+can be reused alongside fresh rollouts in subsequent
+updates. For efficient online serving, we further use
+CADRE as an offline teacher to distill its relevance
+judgments into a lightweight student model. Offline evaluations and online A/B tests on an e-commerce search advertising platform demonstrate that CADRE improves relevance classification and key business and relevance satisfaction metrics.
+
+Keywords: 
+Relevance Modeling, Large Language Model, Multi-Agent Debate, Reinforcement Learning, Experience Replay, E-Commerce Search
+
+1. 
+Introduction
+
+Relevance modeling is a cornerstone of e-commerce search,
+as accurate query–product matching is essential to
+effective product discovery and a satisfying user experience. Earlier approaches predominantly rely on BERT-style encoders to learn semantic interactions between queries and products from annotated data 
+(
+Devlin et al., 2019
+; 
+Yao et al., 2022
+)
+. More recently, large language models (LLMs) have been adopted to bring broader knowledge and stronger contextual reasoning to relevance judgments through prompting and fine-tuning 
+(
+Mehrdad et al., 2024
+)
+. Chain-of-Thought (CoT) approaches further express these judgments as explicit reasoning steps that connect query understanding, product analysis, and the application of matching criteria 
+(
+Tang et al., 2025
+; 
+Zhao et al., 2025
+; 
+Dong et al., 2026
+)
+.
+
+However, difficult query–product pairs often involve conflicting evidence from user intent, product attributes, and business rules, requiring the model to determine which evidence is decisive under the applicable matching criteria. Preference optimization methods such as DPO 
+(
+Rafailov et al., 2023
+)
+ and KTO 
+(
+Fang et al., 2025
+)
+, together with RL methods such as GRPO 
+(
+Dong et al., 2026
+)
+, refine relevance reasoning through feedback on generated judgments, but resolving these conflicts remains challenging. As illustrated in Figure 
+1
+, an intent-based interpretation may override a correctly identified attribute mismatch within the same reasoning context. Even when different views are generated separately, their initial reports may leave unresolved why a particular attribute should be decisive or whether a matching rule applies, requiring further examination before a final judgment can be justified. Learning from difficult cases also poses a training challenge, since trajectories yielding correct relevance labels may be scarce within a limited rollout budget and, once discovered, may not be effectively reused in subsequent updates.
+
+Figure 1. 
+An illustrative case of conflict within a single CoT, where an intent-based interpretation overrides an identified attribute mismatch and yields an incorrect relevance judgment.
+For a square-table query and a rectangular product, an initial Attribute Issue judgment is overridden by an intent view favoring Strongly Relevant.
+
+Figure 2. 
+Overview of CADRE.
+(A) Frozen expert agents analyze query–product pairs with
+complementary context, while the Verifier integrates their
+reports and selectively initiates debate when their initial
+labels disagree.
+(B) Verifier training combines SFT initialization, multi-turn
+GRPO, successful-experience collection, and Replay-GRPO to
+reuse scarce successful trajectories and reduce repeated
+exploration.
+A two-panel architecture diagram. The upper panel
+shows expert reports, Verifier adjudication, and selective
+debate. The lower panel shows Verifier training and the
+collection and reuse of successful trajectories, with the
+expert agents remaining frozen.
+
+To address these challenges, we propose Collaborative
+Adjudication with Debate and Replay Experience (CADRE),
+a framework for evidence-based adjudication in
+e-commerce relevance assessment. The framework comprises
+three complementary components.
+
+(1)
+
+Multi-agent analysis with a dedicated Verifier
+
+assigns product analysis, user intent understanding,
+and business-rule interpretation to agents with
+separate contexts over a shared frozen backbone.
+A trainable Verifier compares their analyses and
+relevance judgments to assess the supporting evidence
+and determine which matching criteria apply to
+the query–product pair.
+
+(2)
+
+Verifier-guided debate
+ selectively extends
+adjudication based on disagreement among the experts’
+initial labels. For selected inputs, the Verifier asks
+focused questions to clarify disputed evidence and
+matching criteria, then integrates the revised expert
+reports into a final judgment.
+
+(3)
+
+Successful-experience replay
+ builds on
+Reinforcement Learning with Experience Replay
+(RLEP) 
+(
+Zhang et al., 2025
+)
+.
+We adapt this approach to multi-turn Verifier training
+by retaining trajectories with correct terminal labels
+and their original interaction contexts, and replaying
+them alongside fresh rollouts in subsequent updates.
+
+For efficient online deployment, we distill CADRE’s
+reasoning into a lightweight student that directly
+scores query–product pairs.
+On an in-house multilingual relevance dataset, CADRE
+improves accuracy and Macro-F1 by 3.73 and 13.64
+percentage points, respectively, over LLM-Replay-GRPO
+with additional context. In a 7-day online A/B test, the distilled student
+achieves relative gains of 1.69% in revenue per mille
+(RPM) and 0.76% in click-through rate (CTR), alongside
+an absolute increase of 0.3 percentage points in relevance
+satisfaction score (RS), over the existing production
+baseline.
+
+2. 
+Related Works
+
+Early relevance models rely on lexical matching, with TF-IDF 
+(
+Ramos and others, 2003
+)
+ and BM25 
+(
+Robertson et al., 2009
+)
+ scoring query–document pairs through term statistics. Although computationally efficient, these methods have limited ability to capture semantic associations beyond lexical overlap. Neural approaches such as DSSM 
+(
+Huang et al., 2013
+)
+ learn dense representations that bring semantically related queries and documents closer in a shared space. Pre-trained encoders such as BERT 
+(
+Devlin et al., 2019
+)
+ further introduce contextual representations for semantic matching, while ColBERT 
+(
+Khattab and Zaharia, 2020
+)
+ and Poly-encoders 
+(
+Humeau et al., 2020
+)
+ explore different trade-offs between interaction quality and computational cost. These advances improve semantic matching, but complex product requirements and implicit shopping intent motivate methods that can incorporate broader knowledge and reason about the basis of a relevance judgment.
+
+Recent studies therefore explore LLMs for relevance
+assessment, drawing on their broad knowledge and
+contextual reasoning capabilities 
+(
+Mehrdad et al., 2024
+; 
+Wang et al., 2024
+)
+.
+Subsequent work further grounds these capabilities
+in domain-specific knowledge and matching criteria
+to address the requirements of e-commerce relevance. An early effort in this direction, behavior-augmented prompting 
+(
+Chen et al., 2025
+)
+, supplies behavioral context for relevance prediction. More recent work further explores domain knowledge and matching criteria, with MPCoT 
+(
+Qiu et al., 2026
+)
+ incorporating business rules alongside intent and attribute analysis, while K-CARE 
+(
+Chen et al., 2026
+)
+ addresses missing domain context through behavioral anchors and expert-curated prototypes. Together, these works show the value of supplying domain context that may be absent from, or insufficiently elicited by, the model’s parametric knowledge.
+
+Another line of research seeks to enhance reasoning quality and alignment with matching rubrics through more informative supervision. LREF 
+(
+Tang et al., 2025
+)
+ and ADORE 
+(
+Fang et al., 2025
+)
+ use preference optimization to calibrate relevance judgments, while SHE 
+(
+Jiao et al., 2026
+)
+, TaoSR-AGRL 
+(
+Yang et al., 2026
+)
+, and LORE 
+(
+Lu et al., 2026
+)
+ develop stepwise rewards, rule-aware feedback, and progressive reasoning supervision, respectively. SHE organizes relevance assessment into five stages, and TaoSR-AGRL follows a predefined category–attribute–relevance pattern. Prior work also addresses the reliability of relevance reasoning and its alignment with final predictions. TaoSR1 
+(
+Dong et al., 2026
+)
+ combines preference optimization with RL to mitigate reasoning errors and inconsistencies between reasoning and final answers. More recently, Graph-GRPO 
+(
+Che et al., 2026
+)
+ models relevance reasoning as a dependency graph and propagates reward signals across dependent reasoning components, enabling fine-grained credit assignment beyond uniform sequence-level feedback. These methods strengthen the supervision of relevance
+reasoning, while leaving room to investigate how
+disagreements among complementary analyses can guide
+targeted re-examination of evidence and matching
+criteria before final adjudication.
+
+Effective RL training also depends on obtaining and reusing informative trajectories within a limited rollout budget. In relevance modeling, TaoSR1 and SHE use difficulty-based filtering to improve the informativeness of training groups 
+(
+Dong et al., 2026
+; 
+Jiao et al., 2026
+)
+, while TaoSR-AGRL introduces targeted ground-truth guidance to regenerate trajectories for low-reward cases 
+(
+Yang et al., 2026
+)
+. These strategies improve the utility of newly sampled trajectories, while reusing previously discovered successes offers a complementary direction. In the broader context of LLM reasoning, RLEP 
+(
+Zhang et al., 2025
+)
+ collects successful trajectories from an RL-trained policy and combines them with fresh rollouts during a subsequent training run. These studies highlight the complementary roles of discovering useful trajectories and retaining successful experiences, providing a basis for investigating experience reuse in multi-turn relevance assessment.
+
+Knowledge distillation provides a practical route for deploying LLM-based relevance models under online latency constraints. Recent work transfers supervision from reasoning
+LLMs to lightweight BERT models 
+(
+Agrawal et al., 2025
+; 
+Zhao et al., 2025
+; 
+Xia et al., 2026
+)
+, while MPCoT 
+(
+Qiu et al., 2026
+)
+ introduces latent reasoning distillation and Graph-GRPO 
+(
+Che et al., 2026
+)
+ uses graph-node-based multi-head distillation to supervise compact students with structured reasoning signals. These studies establish knowledge distillation as a practical connection between reasoning-intensive offline teachers and
+efficient online relevance models.
+
+3. 
+Methods
+
+3.1. 
+Relevance Task Definition
+
+As shown in Figure 
+2
+, we propose Collaborative Adjudication with Debate and Replay Experience (CADRE), a framework that combines evidence adjudication with the reuse of successful reasoning attempts. We first define the e-commerce relevance task with a multi-agent setting, then introduce the multi-agent analysis generation protocol and detail how we optimize the Verifier via multi-turn agentic GRPO and experience replay.
+Finally, we distill CADRE’s reasoning into a lightweight student for efficient online serving.
+
+In e-commerce search, relevance modeling assesses how well
+a product satisfies the need expressed in a user’s query
+under the applicable matching criteria. Given a query 
+
+and a product title 
+, we denote the input pair by
+
+ and formulate relevance prediction as multi-class
+classification over a fine-grained label space 
+
+containing seven relevance categories, detailed in
+Section 
+4.1
+. We write 
+
+for the gold label and 
+ for a prediction.
+
+We extend the standard single-model formulation to three
+expert agents indexed by
+
+(1)
+
+Each expert receives the query–product pair and a
+role-specific input context 
+, and produces an analysis
+
+ and a predicted label 
+:
+
+(2)
+
+We refer to the analysis and predicted label
+
+ collectively as an expert report. Here, 
+ denotes the context supplied to an expert
+before analysis, while 
+ contains its reasoning
+and intermediate findings derived from 
+.
+The contexts provide role-specific criteria or
+historical interaction evidence, allowing the experts
+to examine complementary aspects of the same
+query–product pair within a shared label space.
+The context construction and analysis procedure
+for each role are detailed in
+Section 
+3.2.1
+.
+
+All experts share a frozen backbone model 
+,
+with specialization induced by their role prompts and input
+contexts. The Verifier agent 
+, with trainable
+parameters 
+, receives the query–product pair and
+the expert reports to produce an adjudication rationale 
+
+and a relevance label 
+:
+
+(3)
+
+3.2. 
+Verifier-Guided Multi-Agent Reasoning
+
+Our framework organizes relevance assessment around independent
+expert analyses and a dedicated Verifier. The experts examine
+complementary evidence in separate contexts, while the Verifier
+evaluates their reports to determine the relevance judgment.
+For inputs selected by a predefined disagreement criterion,
+the Verifier initiates a focused debate to obtain clarification
+and revised analyses before making the final decision.
+
+3.2.1. 
+Multi-Agent Analysis and Adjudication
+
+Prior work has leveraged diverse sources of contextual
+information to support e-commerce relevance
+judgments 
+(
+Qiu et al., 2026
+; 
+Chen et al., 2026
+)
+.
+We build on this idea by assigning complementary analytical
+roles to three expert agents, each analyzing the query-product
+pair 
+ in a separate context over a shared frozen backbone.
+Role-specific prompts and inputs induce specialization while holding model capacity fixed. Each expert develops its analysis without observing
+the other experts’ reports, leaving cross-perspective
+comparison to the Verifier. We freeze the expert backbone
+to reduce optimization overhead and retain its general-purpose
+response policy, while concentrating task-specific learning
+on the Verifier’s evidence adjudication and targeted questioning.
+
+The 
+Analyst Agent
+ receives
+
+, comprising structured comparison
+criteria and an attribute schema adapted from
+
+Zhao et al. (2025)
+, covering fourteen dimensions including
+category, brand, and material.
+It first generates attribute-level matching results
+
+ and then reasons over them to
+determine relevance.
+Each attribute is assessed as a match, mismatch, or
+unspecified; a mismatch requires explicitly conflicting
+values on both sides, while an attribute specified on
+only one side is marked as unspecified and supports
+neither agreement nor conflict.
+These comparison states describe attribute-level
+evidence, while the final relevance judgment also
+depends on the applicable matching criteria.
+The 
+Ruler Agent
+ receives
+
+, containing the original text of
+the platform’s relevance guidelines concerning
+categories, brands, model designations, attributes,
+main-product versus accessory relations, and multi-SKU
+listings, including precedence rules for overlapping mismatch conditions.
+It first identifies the applicable clauses
+
+ and then derives its judgment
+by reasoning about the pair under those clauses.
+As the only expert receiving historical behavioral
+context, the 
+Intent Agent
+ receives
+
+, comprising the
+top-5 historical search terms associated with the
+candidate product and the top-5 product titles clicked
+in historical searches for the current query, to infer
+the shopping need expressed by the query and assess
+the candidate product’s functional substitutability.
+
+Each expert 
+ produces a first-round report
+containing its analysis 
+ and a predicted label
+
+. The trainable 
+Verifier Agent
+
+receives the query–product pair and all three reports,
+examines the evidence supporting each interpretation,
+and assesses the applicability of the matching criteria
+invoked by the experts. It then produces an initial
+adjudication rationale 
+ and a label
+
+. The Verifier retains independent decision
+authority, so its judgment may differ from the experts’
+shared label even when all three agree.
+The Verifier can thus retain useful observations from expert
+reports even when all three initial predictions are incorrect.
+
+3.2.2. 
+Selective Verifier-Guided Debate
+
+To control the additional cost of expert interaction, we
+initiate debate if and only if the three experts’
+first-round relevance labels are not unanimous, covering
+both a two-to-one label split and three distinct labels.
+When all three experts agree, the Verifier’s initial
+adjudication serves as the final prediction, even if it
+differs from their shared label. For inputs selected for
+debate, the Verifier examines the conflicting reports and
+generates one focused question for each expert to clarify
+the evidence or matching criteria underlying its judgment.
+
+Each expert receives its own question together with its first-round report and returns a revised analysis and label 
+. The questions direct attention to disputed interpretations, such as whether an attribute mismatch is decisive or whether a business rule applies to the current pair. Experts respond independently, without observing one another’s reports or communicating directly, while the Verifier coordinates the examination of disagreements across their analyses. After this single round of questions and responses, the Verifier integrates the initial reports and subsequent feedback to produce the final adjudication rationale 
+ and label 
+. This bounded protocol allows disputed evidence to be re-examined while concentrating additional interaction on cases with expert disagreement.
+
+3.3. 
+Verifier Training with Experience Replay
+
+We train the Verifier to perform the adjudication and
+questioning described in
+Section 
+3.2
+, while keeping
+the shared backbone Qwen3-14B of the three expert agents frozen.
+As illustrated in Figure 
+2
+, training
+proceeds through supervised initialization, on-policy
+optimization, experience collection, and optimization
+with replay. Supervised fine-tuning (SFT) on multi-turn
+interaction data produces an initial checkpoint
+
+, which is subsequently optimized
+with group relative policy optimization (GRPO).
+The resulting checkpoint 
+ is
+used to collect successful interaction trajectories.
+Replay-GRPO then restarts from 
+
+and combines fresh rollouts with the collected experiences.
+
+The original dataset provides relevance labels but
+does not contain annotated adjudications or questions
+for Verifier training. Using only the training split,
+we construct synthetic supervision by combining expert
+reports generated by the frozen Qwen3-14B backbone
+with Verifier outputs generated through the Qwen3.8-Max
+API. The expert models produce their initial reports
+and subsequent revisions, while Qwen3.8-Max generates
+the Verifier’s adjudications and expert-specific
+questions, with the annotated relevance label supplied
+as additional guidance in its prompt. During SFT,
+this label-bearing guidance is removed from the
+Verifier’s input, while the expert reports remain
+part of the interaction context and the generated
+Verifier responses serve as supervision targets.
+The resulting checkpoint 
+
+initializes subsequent multi-turn policy optimization.
+
+3.3.1. 
+Multi-Turn Policy Optimization
+
+We formulate Verifier training as a single-agent reinforcement learning problem in which the frozen experts and message templates constitute the interaction environment. The Verifier generates adjudications and focused questions, while the environment supplies instructions and expert responses. For an input that satisfies the predefined debate-triggering
+criterion, we represent the complete interaction as
+
+, where 
+ contains the query–product pair and the initial expert
+reports, 
+ provides the instruction for generating focused
+questions, and 
+ contains the revised expert reports. The
+Verifier outputs 
+, 
+, and 
+ correspond to the initial
+adjudication, the three expert-specific questions, and the final
+adjudication, respectively. When the input does not satisfy the
+debate-triggering criterion, the trajectory consists only of
+
+, and the Verifier’s initial adjudication serves as the
+final output. In either branch, the Verifier determines its judgment
+independently of whether the expert labels agree.
+
+We assign a policy-loss mask 
+ to Verifier-generated
+tokens and 
+ to environment messages and expert
+responses, which remain part of the conditioning context.
+Table 
+4
+ in
+Appendix 
+A
+ details the
+interaction steps and their masks.
+Starting from 
+, we sample a group
+of complete trajectories for each training input and
+assign each trajectory a scalar reward 
+,
+defined in Section 
+3.3.2
+.
+GRPO computes group-relative advantages from these
+rewards and applies the clipped policy objective to
+Verifier-generated tokens under their corresponding
+interaction histories.
+
+3.3.2. 
+Reward Design
+
+We assign each complete Verifier trajectory 
+
+a scalar reward combining adjudication quality
+and debate quality:
+
+(4)
+
+where 
+
+when the three experts’ first-round labels are
+not unanimous and is zero otherwise.
+
+Adjudication quality.
+
+The reward 
+ combines format
+validity 
+, hierarchical label
+accuracy 
+, and reasoning checks
+
+.
+The terminal prediction is the Verifier’s initial
+judgment without debate and its final judgment
+after debate.
+Outcome supervision assigns full credit to an
+exact label match and partial credit to a correct
+relevant/irrelevant superclass, while reasoning
+checks assess rationale–label consistency and
+adjudication completeness.
+Outcome and reasoning rewards are enabled only
+when the terminal label is valid.
+
+Debate quality.
+
+The reward 
+ evaluates the
+initial judgment, question quality, and expert
+revisions.
+It rewards a correct initial decision and uses
+question length and references to input tokens
+as heuristics for question specificity, while
+penalizing malformed questions and disclosure
+of the Verifier’s own judgment.
+Expert revisions receive greater credit for
+correcting an error than for preserving a correct
+prediction, with penalties for regressions.
+These revisions are evaluated against the gold
+label, allowing experts to disagree with the
+Verifier’s initial judgment.
+Detailed scoring rules and coefficients are
+provided in Appendix 
+C.1
+.
+
+3.3.3. 
+Successful-Experience Replay
+
+Although the reward provides supervision for adjudication
+and questioning, a limited rollout budget may yield no
+successful trajectory for a difficult input, while
+occasional successes are not automatically retained
+for subsequent updates.
+Following RLEP 
+(
+Zhang et al., 2025
+)
+,
+we adapt successful-experience replay to the Verifier’s
+interaction with frozen experts through a per-input
+experience pool 
+.
+The pool retains trajectories with correct terminal
+labels together with their original interaction contexts,
+allowing successful adjudication and questioning attempts
+to be reused alongside fresh rollouts during Verifier
+training.
+
+After on-policy GRPO, the checkpoint
+
+ generates 16 complete
+trajectories per input using the same Verifier–expert
+interaction protocol as in training.
+We define success by a parseable terminal prediction
+that exactly matches the gold label, so every retained
+trajectory satisfies
+
+(5)
+
+Among the trajectories satisfying these conditions,
+we retain at most eight per input, ranked by their
+total reward.
+The auxiliary reward terms therefore determine the
+ranking of successful candidates, while admission
+requires an exactly correct terminal label.
+Each stored trajectory preserves its original token
+IDs and policy-loss mask, maintaining the alignment
+between Verifier outputs and interleaved environment
+messages.
+
+Replay-GRPO restarts from 
+,
+the same initialization used for on-policy GRPO.
+For each input, we combine 
+ fresh rollouts with
+
+ trajectories sampled from 
+, with empty pools contributing none. Excess replay rows are randomly subsampled, while batch deficits are filled by resampling with replacement within the original input groups; if the budget cannot be met, the update uses fresh-only GRPO. All trajectories are scored through a unified reward pipeline, and group-relative advantages are computed over the actual group:
+
+(6)
+
+Here, 
+ denotes the actual number of trajectories
+for input 
+ in the update, and 
+ is the reward
+of the 
+-th trajectory.
+We set 
+ to prevent division by zero,
+yielding zero advantages for equal-reward groups.
+Fresh and replayed trajectories enter the same clipped
+GRPO objective, with the policy loss applied only to
+Verifier-generated tokens.
+Old log-probabilities are recomputed using the update-start
+actor, without importance correction for historical
+generating policies.
+Reusing scarce successful trajectories allows each
+discovered success to contribute to multiple updates,
+reducing reliance on repeated exploration to recover
+successful interactions.
+
+3.4. 
+Knowledge Distillation
+
+CADRE adjudicates each pair through multiple expert generations
+and a Verifier, which is too costly for low-latency online serving.
+We therefore train a lightweight 
+student
+ 
+:
+an mBERT encoder with a seven-way classification head that
+maps 
+ directly to 
+.
+Let 
+ denote the student’s predicted
+distribution over 
+.
+Gold relevance labels supervise classification, while CADRE
+serves as an offline 
+teacher
+ providing CoTs as
+auxiliary supervision.
+Following prior work on reasoning
+distillation 
+(
+Xia et al., 2026
+)
+, we transfer
+this reasoning signal into the student’s representation
+rather than generating it at inference time.
+
+Let 
+ denote the teacher’s CoT for input 
+.
+We use a frozen BGE-M3 encoder 
+(
+Chen et al., 2024
+)
+
+as 
+ to obtain a dense target representation
+
+.
+The student encodes 
+ with mBERT and takes
+its 
+ representation, which a
+projection layer maps to 
+.
+In addition to the standard classification loss
+
+,
+we align the student’s representation with the teacher’s
+reasoning through a cosine distance:
+
+(7)
+
+where 
+ balances reasoning distillation against
+gold-label supervision. The CoT branch and 
+
+are used only during training; at inference the student
+scores 
+ alone, with no multi-agent interaction and
+no reasoning generation.
+
+4. 
+Experiments
+
+Table 1. 
+Teacher and student performance on the in-house
+dataset, with the best results in each group shown in
+bold and the second-best results underlined.
+
+Method
+
+Seven-Class Classification
+
+Irrelevant Classification
+
+Accuracy
+
+Macro-F1
+
+Weighted-F1
+
+Precision
+
+Recall
+
+F1
+
+Teacher models (Qwen3-14B)
+
+Vanilla single model
+
+   LLM-Base
+
+0.5408
+
+0.4799
+
+0.6092
+
+0.7511
+
+0.7318
+
+0.7414
+
+   LLM-SFT
+
+0.7278
+
+0.6305
+
+0.7247
+
+0.8507
+
+0.7916
+
+0.8201
+
+   LLM-GRPO
+
+0.7749
+
+0.6173
+
+0.7720
+
+0.8562
+
+0.8924
+
+0.8739
+
+   LLM-Replay-GRPO
+
+0.7906
+
+0.6369
+
+0.7877
+
+0.8615
+
+0.9007
+
+0.8806
+
+Single model with additional context
+
+   LLM-Base
+
+0.6431
+
+0.4964
+
+0.6426
+
+0.7986
+
+0.7200
+
+0.7573
+
+   LLM-SFT
+
+0.7350
+
+0.6380
+
+0.7320
+
+0.8638
+
+0.7945
+
+0.8277
+
+   LLM-GRPO
+
+0.7823
+
+0.6268
+
+0.7805
+
+0.8593
+
+0.8951
+
+0.8768
+
+   LLM-Replay-GRPO
+
+0.7961
+
+0.6402
+
+0.7915
+
+0.8629
+
+0.8994
+
+0.8808
+
+Multi-agent with additional context; without debate
+
+   Verifier-Base
+
+0.6369
+
+0.5402
+
+0.6685
+
+0.7449
+
+0.8974
+
+0.8141
+
+   Expert Oracle
+
+0.8051
+
+–
+
+–
+
+–
+
+–
+
+–
+
+   Verifier-SFT
+
+0.8020
+
+0.7351
+
+0.8045
+
+0.8705
+
+0.8868
+
+0.8786
+
+   Verifier-GRPO
+
+0.8239
+
+0.7643
+
+0.8230
+
+0.8939
+
+0.8861
+
+0.8900
+
+   Verifier-Replay-GRPO
+
+0.8311
+
+0.7729
+
+0.8296
+
+0.9028
+
+0.8815
+
+0.8920
+
+Multi-agent with additional context; with debate
+
+   Verifier-SFT
+
+0.7956
+
+0.7136
+
+0.7961
+
+0.8712
+
+0.8791
+
+0.8751
+
+   Verifier-GRPO
+
+0.8275
+
+0.7649
+
+0.8254
+
+0.9050
+
+0.8729
+
+0.8887
+
+   
+CADRE (Ours)
+
+0.8334
+
+0.7766
+
+0.8321
+
+0.9035
+
+0.8840
+
+0.8936
+
+Student models (mBERT; CoT teacher: CADRE)
+
+   Student-Label-Only
+
+0.7456
+
+0.6726
+
+0.7292
+
+0.8679
+
+0.7387
+
+0.7981
+
+   Student-KD (Experts CoTs)
+
+0.7694
+
+0.7229
+
+0.7663
+
+0.8457
+
+0.8238
+
+0.8346
+
+   Student-KD (Verifier CoT)
+
+0.7795
+
+0.7306
+
+0.7725
+
+0.8609
+
+0.8137
+
+0.8366
+
+   Student-KD (Experts CoTs + Verifier CoT)
+
+0.7809
+
+0.7391
+
+0.7797
+
+0.8461
+
+0.8471
+
+0.8466
+
+4.1. 
+Dataset
+
+We evaluate CADRE on an in-house e-commerce dataset with
+78,997 training and 18,710 test query–product pairs.
+Each pair is labeled as 
+Strongly Relevant
+,
+
+Substitute
+, or one of five irrelevant categories:
+
+Brand Mismatch
+, 
+Category Mismatch
+,
+
+Model Mismatch
+, 
+Attribute Mismatch
+,
+and 
+Main Product vs. Accessory
+.
+When multiple mismatch conditions apply to the same query-product pair, annotators assign a single label, following the most severe applicable mismatch.
+To mitigate label imbalance, we use label-specific
+sampling quotas targeting an approximately 1:1 ratio
+between relevant and irrelevant pairs and roughly
+balanced representation of the five irrelevant categories.
+The training and test splits have similar label proportions.
+Detailed dataset statistics are provided in
+Appendix 
+B
+.
+
+4.2. 
+Baselines and Evaluation Metrics
+
+4.2.1. 
+Baselines
+
+All teacher-stage methods in
+Table 
+1
+ use Qwen3-14B
+as the backbone.
+Additional context
+
+comprises the attribute schema and comparison criteria,
+historical search and click context associated with
+the query and product, and the full text of the
+platform relevance guidelines, respectively.
+We evaluate single-model baselines with and without 
+.
+The context-augmented variants directly process the same
+source information distributed across the three experts.
+
+LLM-Base
+ denotes the off-the-shelf checkpoint
+without task-specific training.
+
+LLM-SFT
+ applies supervised fine-tuning using
+relevance reasoning and predictions generated by
+Qwen3.8-Max under gold-label guidance.
+This follows the same supervision-generation approach
+as Verifier-SFT, with the prompt format adapted to
+single-model relevance prediction.
+
+LLM-GRPO
+ and 
+LLM-Replay-GRPO
+
+apply GRPO and Replay-GRPO, respectively, starting
+from the corresponding LLM-SFT checkpoint.
+
+For multi-agent methods, 
+Verifier-Base
+ uses the
+off-the-shelf checkpoint to adjudicate expert reports.
+
+Verifier-SFT
+ applies supervised fine-tuning,
+while 
+Verifier-GRPO
+ and
+
+Verifier-Replay-GRPO
+ apply the corresponding
+RL methods after supervised initialization.
+We compare variants with and without selective debate,
+with 
+CADRE
+ denoting Verifier-Replay-GRPO
+with debate. Using the same initial expert reports as CADRE,
+
+Expert Oracle
+ measures the maximum Accuracy
+achievable by selecting among the three experts’
+initial labels, counting an input as correctly
+classified whenever at least one expert predicts
+its gold seven-class label.
+Only Accuracy is reported because the oracle leaves
+the selected label unspecified when all experts are
+incorrect, preventing the other metrics from being
+uniquely determined.
+
+For fair offline comparisons, all student variants use
+mBERT and the same 78,997-pair training split used for
+teacher training. Gold labels supervise classification,
+with CADRE providing CoTs for the distillation variants.
+
+Student-Label-Only
+ uses gold labels alone.
+
+Student-KD (Experts CoTs)
+ additionally uses
+concatenated CoTs from the three expert agents, while
+
+Student-KD (Verifier CoT)
+ uses the Verifier’s
+adjudication rationale.
+
+Student-KD (Experts CoTs + Verifier CoT)
+
+combines both sources of reasoning supervision.
+For inputs that do not trigger debate, only
+first-round CoTs are available.
+
+4.2.2. 
+Evaluation Metrics
+
+For offline evaluation, we assess both fine-grained relevance classification and irrelevant-product identification. For seven-class classification, we report Accuracy (ACC), Macro-F1, and Weighted-F1. Since irrelevant product exposure can degrade the search experience 
+(
+Che et al., 2026
+)
+, we additionally report Precision, Recall, and F1 for irrelevant classification. We map both predicted and gold labels to a binary label space, treating 
+Strongly Relevant
+ and 
+Substitute
+ as negative and the remaining five categories as positive (irrelevant). These metrics assess the model’s ability to identify
+irrelevant products while limiting erroneous rejection
+of relevant candidates.
+
+4.3. 
+Implementation Details
+
+We conduct experiments on a single node with 8
+NVIDIA H100 GPUs (80 GB each).
+All agents in CADRE use Qwen3-14B as their backbone.
+The experts share a frozen model instance with separate
+contexts, while only the Verifier is optimized.
+We implement this interaction and masking procedure
+through the agent loop in
+
+verl
+ 
+(
+Sheng et al., 2025
+)
+1
+1
+
+1
+
+https://github.com/verl-project/verl
+.
+Within each experimental setting, GRPO and Replay-GRPO
+start from the same SFT checkpoint and sample 
+
+fresh trajectories per input, with Replay-GRPO
+additionally incorporating 
+ stored successful
+trajectories.
+Detailed training and replay configurations are provided
+in Appendix 
+C
+.
+
+4.4. 
+Performance
+
+4.4.1. 
+Overall Performance.
+
+As shown in Table 
+1
+, CADRE
+achieves the highest reported seven-class classification
+scores, with 0.8334 ACC, 0.7766 Macro-F1, and 0.8321
+Weighted-F1. Compared with LLM-Replay-GRPO with additional
+context, these results represent improvements of 3.73,
+13.64, and 4.06 percentage points, respectively.
+CADRE also achieves the highest irrelevant-class F1
+of 0.8936, indicating stronger overall performance
+in identifying irrelevant query–product pairs.
+Together with its fine-grained mismatch predictions,
+this capability can support filtering decisions that
+prioritize severe mismatches, helping reduce irrelevant
+product exposure and improve the search experience.
+
+Expert Oracle achieves an accuracy of 0.8051. CADRE exceeds this coverage by 2.83 percentage points,
+indicating that the framework can correctly adjudicate
+some instances where all three initial expert labels
+are incorrect. This result supports CADRE’s robustness
+to imperfect initial expert predictions, as its final
+adjudication draws on supporting evidence and any debate
+feedback without requiring every expert to predict
+the correct label. Appendix 
+D
+ provides qualitative
+examples of independent adjudication and correction
+through Verifier-guided debate.
+
+4.4.2. 
+Effectiveness of CADRE
+
+With additional context, Verifier-SFT without debate
+outperforms LLM-SFT by 6.70, 9.71, and 7.25 percentage
+points in ACC, Macro-F1, and Weighted-F1, respectively.
+Without debate, Verifier-GRPO outperforms Verifier-SFT
+by 2.19, 2.92, and 1.85 percentage points in ACC, Macro-F1,
+and Weighted-F1, respectively, demonstrating the benefit
+of reinforcement learning for adjudicating expert reports. CADRE also outperforms Verifier-Replay-GRPO without
+debate across all six reported metrics, supporting
+the contribution of selective debate within the
+Replay-GRPO setting.
+By incorporating selective debate and successful-experience
+replay, CADRE further extends the gains over the same
+Verifier-SFT baseline to 3.14, 4.15, and 2.76 points,
+respectively.
+
+4.4.3. 
+Effectiveness of KD
+
+We compare mBERT students trained with different CoT components
+produced by CADRE. Compared with gold-label supervision alone,
+the best configuration, 
+Experts CoTs + Verifier CoT
+,
+improves ACC, Macro-F1, and Weighted-F1 by 3.53, 6.65,
+and 5.05 percentage points, respectively, and
+irrelevant-class F1 by 4.85 points.
+These results support the value of the teacher’s reasoning
+beyond label supervision.
+Among the CoT-based variants, 
+Verifier CoT
+
+outperforms the concatenated 
+Experts CoTs
+ across
+all seven-class metrics (e.g., Macro-F1 0.7306 vs. 0.7229).
+This suggests that the trained Verifier’s adjudicated reasoning
+provides more effective distillation supervision than simply
+concatenating expert analyses.
+
+4.5. 
+Ablation Studies
+
+We examine three components of CADRE, including the reward components, the
+debate protocol, and the successful-experience replay. We count the initial expert reports as the
+first expert-response round and each subsequent round of
+revisions as an additional round. Unless otherwise specified,
+the variants retain three expert inputs and use two
+expert-response rounds, consisting of the initial reports and
+one round of revisions following Verifier-guided questioning,
+without direct communication among experts.
+
+4.5.1. 
+Reward Components
+
+Table 2. 
+Ablation of the composite reward.
+
+Method
+
+ACC
+
+Macro-F1
+
+Weighted-F1
+
+Full CADRE
+
+0.8334
+
+0.7766
+
+0.8321
+
+   w/o reasoning reward
+
+0.8261
+
+0.7685
+
+0.8241
+
+   w/o shaping reward
+
+0.8267
+
+0.7695
+
+0.8254
+
+Table 
+2
+ shows that both auxiliary reward
+terms contribute to performance. Removing the reasoning reward
+decreases ACC, Macro-F1, and Weighted-F1 by 0.73, 0.81, and 0.80
+percentage points, respectively. Removing debate shaping produces
+corresponding decreases of 0.67, 0.71, and 0.67 points. These
+results support rewarding both a consistent adjudication process
+and productive expert revisions in addition to final-label
+correctness.
+
+Test-set accuracy curves over training steps
+for GRPO, GRPO-16, and CADRE trained
+with Replay-GRPO, initialized from the same SFT checkpoint.
+
+Figure 3. 
+Test-set accuracy of GRPO, GRPO-16, and
+CADRE (Replay-GRPO) in the debate-enabled setting.
+Test-set accuracy curves over training steps
+for GRPO, GRPO-16, and CADRE trained
+with Replay-GRPO, initialized from the same SFT checkpoint.
+
+4.5.2. 
+Debate Protocol
+
+Table 3. 
+Ablation of debate rounds and expert report sharing.
+M-F1 and W-F1 denote Macro-F1 and Weighted-F1.
+
+Method
+
+ACC
+
+M-F1
+
+W-F1
+
+CADRE (2 rounds, independent)
+
+0.8334
+
+0.7766
+
+0.8321
+
+3 rounds, independent
+
+0.8339
+
+0.7768
+
+0.8324
+
+2 rounds, initial-stage sharing
+
+0.8220
+
+0.7610
+
+0.8219
+
+2 rounds, debate-stage sharing
+
+0.8158
+
+0.7521
+
+0.8168
+
+Table 
+3
+ examines expert report
+sharing at different stages and the number of
+expert-response rounds.
+CADRE uses two rounds, keeping both initial analyses
+and subsequent expert revisions independent. With 
+initial-stage sharing
+, experts generate
+their first-round reports sequentially, and each expert
+can observe the reports produced by preceding experts;
+the subsequent debate retains the original
+Verifier-guided revision protocol.
+This variant reduces ACC, Macro-F1, and Weighted-F1
+by 1.14, 1.56, and 1.02 percentage points relative
+to CADRE, respectively.
+This degradation is consistent with the concern
+illustrated in Figure 
+1
+,
+where one perspective overrides decisive evidence
+identified from another. With 
+debate-stage sharing
+, initial analyses
+remain independent, but each expert can directly
+observe the other experts’ analyses and predicted
+labels when revising its own report.
+This variant reduces the same metrics by 1.76, 2.45,
+and 1.53 percentage points, respectively.
+Exposure to peer judgments may encourage premature
+convergence at either stage, reducing the complementary
+evidence available to the Verifier.
+These results support preserving independent expert
+analyses and revisions.
+
+With independent experts, extending the interaction
+from two to three response rounds yields only marginal
+gains of 0.05, 0.02, and 0.03 percentage points in ACC,
+Macro-F1, and Weighted-F1, respectively, while requiring
+an additional round of expert calls.
+
+4.5.3. 
+Successful-Experience Replay
+
+As shown in Table 
+1
+,
+successful-experience replay improves Verifier performance
+under both interaction settings.
+Without debate, Verifier-Replay-GRPO outperforms
+Verifier-GRPO by 0.72, 0.86, and 0.66 percentage points
+in ACC, Macro-F1, and Weighted-F1, respectively;
+with debate, the corresponding gains of CADRE over
+Verifier-GRPO are 0.59, 1.17, and 0.67 points.
+Figure 
+3
+ compares accuracy on the test set
+in the debate-enabled setting, with all methods
+initialized from the same SFT checkpoint. These test-set evaluations were conducted retrospectively
+and were not used for checkpoint selection, early stopping,
+or hyperparameter tuning. By replaying successful trajectories, CADRE consistently
+achieves higher accuracy than GRPO and GRPO-16, whereas
+increasing fresh rollouts from 8 to 16 yields only modest
+gains over standard GRPO in this setting.
+
+4.6. 
+Online Evaluation
+
+For deployment, we train the best student on 1.64 million
+human-labeled query–product pairs, using gold labels
+for classification and CADRE-generated CoTs for
+reasoning distillation.
+We conducted a 7-day online A/B test in an e-commerce
+search advertising system, allocating 10% of user
+traffic each to this student and the existing
+production baseline.
+During serving, predefined business rules and calibrated
+thresholds map query–item relevance predictions to
+discrete levels, filtering candidates below the
+relevance threshold before ranking. We assess business performance using Revenue Per Mille
+(RPM) and Click-Through Rate (CTR), and relevance using
+Relevance Satisfaction Score (RS), defined as the
+platform’s traffic-weighted strong-relevance metric.
+We sample results for the same queries from the two
+experimental buckets under the same conditions and
+submit them to human experts for relevance assessment.
+The query set covers approximately 90% of search
+traffic, and RS aggregates query-level strong-relevance
+rates weighted by each query’s search traffic.
+Compared with the existing production baseline, the
+CADRE-distilled student achieves relative gains of
+
+1.69
+% in RPM and 
+0.76
+% in CTR,
+alongside an absolute increase of
+
+0.3
+ percentage points in RS. These results demonstrate that the CADRE-distilled
+student improves commercial performance while also
+increasing the traffic-weighted strong-relevance rate.
+
+5. 
+Conclusion
+
+In this paper, we introduced CADRE to improve evidence integration in
+e-commerce relevance modeling. Its central design
+separates complementary expert analysis from learned
+adjudication, enabling a Verifier to weigh evidence
+across perspectives and seek clarification through
+selective debate. Multi-turn reinforcement learning
+optimizes this adjudication process, while experience
+replay preserves successful trajectories for reuse
+during training. We further transfer CADRE’s reasoning to a lightweight
+student for online deployment.
+Offline experiments demonstrate improved relevance
+prediction, while online A/B testing confirms that
+the distilled student improves business performance
+and relevance satisfaction over the existing
+production baseline. Given the current fixed-round debate protocol, future
+work will explore adaptive policies for expert selection,
+evidence clarification, and stopping to tailor the scope
+and duration of interaction to input difficulty while
+accounting for computational cost.
+
+References
+
+Agrawal 
+et al.
+ (2025)
+
+S. Agrawal, F. Ahemad, and V. V. Sembium
+
+Rationale-guided distillation for E-commerce relevance classification: bridging large language models and lightweight cross-encoders
+.
+
+In 
+Proceedings of the 31st International Conference on Computational Linguistics: Industry Track
+,  
+O. Rambow, L. Wanner, M. Apidianaki, H. Al-Khalifa, B. D. Eugenio, S. Schockaert, K. Darwish, and A. Agarwal (Eds.)
+,
+
+Abu Dhabi, UAE
+, 
+pp. 136–148
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+Che 
+et al.
+ (2026)
+
+J. Che, Y. Chen, Z. Tian, C. Wang, and Z. Cheng
+
+Graph-GRPO: dependency-aware credit assignment for generative e-commerce search relevance
+.
+
+External Links: 
+2605.31003
+,
+
+Link
+
+Cited by: 
+§2
+,
+
+§2
+,
+
+§4.2.2
+.
+
+Chen 
+et al.
+ (2024)
+
+J. Chen, S. Xiao, P. Zhang, K. Luo, D. Lian, and Z. Liu
+
+M3-embedding: multi-linguality, multi-functionality, multi-granularity text embeddings through self-knowledge distillation
+.
+
+In 
+Findings of the Association for Computational Linguistics: ACL 2024
+,  
+L. Ku, A. Martins, and V. Srikumar (Eds.)
+,
+
+Bangkok, Thailand
+, 
+pp. 2318–2335
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§3.4
+.
+
+Chen 
+et al.
+ (2026)
+
+Y. Chen, Z. Tian, C. Wang, and Z. Cheng
+
+K-CARE: knowledge-driven symmetrical contextual anchoring and analogical prototype reasoning for e-commerce relevance
+.
+
+External Links: 
+2604.25683
+,
+
+Link
+
+Cited by: 
+§2
+,
+
+§3.2.1
+.
+
+Chen 
+et al.
+ (2025)
+
+Z. Chen, H. Wu, K. Wu, W. Chen, M. Zhong, J. Xu, Z. Liu, and W. Zhang
+
+Towards boosting llms-driven relevance modeling with progressive retrieved behavior-augmented prompting
+.
+
+In 
+Proceedings of the 31st International Conference on Computational Linguistics: Industry Track
+,
+
+pp. 784–793
+.
+
+Cited by: 
+§2
+.
+
+Devlin 
+et al.
+ (2019)
+
+J. Devlin, M. Chang, K. Lee, and K. Toutanova
+
+BERT: pre-training of deep bidirectional transformers for language understanding
+.
+
+In 
+Proceedings of NAACL-HLT
+,
+
+pp. 4171–4186
+.
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+Dong 
+et al.
+ (2026)
+
+C. Dong, S. Yao, P. Jiao, J. Yang, Y. Jin, Z. Huang, X. Zhou, D. Ou, H. Tang, and B. Zheng
+
+TaoSR1: the thinking model for e-commerce relevance search
+.
+
+In 
+Proceedings of the 32nd ACM SIGKDD Conference on Knowledge Discovery and Data Mining V.2
+,
+
+KDD ’26
+, 
+New York, NY, USA
+, 
+pp. 7174–7184
+.
+
+External Links: 
+ISBN 9798400722592
+,
+
+Link
+,
+
+Document
+
+Cited by: 
+§1
+,
+
+§1
+,
+
+§2
+,
+
+§2
+.
+
+Fang 
+et al.
+ (2025)
+
+Z. Fang, D. Xie, M. Pang, C. Yuan, X. Jiang, C. Peng, Z. Lin, and Z. Luo
+
+ADORE: autonomous domain-oriented relevance engine for e-commerce
+.
+
+In 
+Proceedings of the 48th International ACM SIGIR Conference on Research and Development in Information Retrieval
+,
+
+SIGIR ’25
+, 
+New York, NY, USA
+, 
+pp. 4259–4263
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+Huang 
+et al.
+ (2013)
+
+P. Huang, X. He, J. Gao, L. Deng, A. Acero, and L. Heck
+
+Learning deep structured semantic models for web search using clickthrough data
+.
+
+In 
+Proceedings of the 22nd ACM International Conference on Information & Knowledge Management
+,
+
+CIKM ’13
+, 
+New York, NY, USA
+, 
+pp. 2333–2338
+.
+
+External Links: 
+ISBN 9781450322638
+,
+
+Link
+,
+
+Document
+
+Cited by: 
+§2
+.
+
+Humeau 
+et al.
+ (2020)
+
+S. Humeau, K. Shuster, M. Lachaux, and J. Weston
+
+Poly-encoders: architectures and pre-training strategies for fast and accurate multi-sentence scoring
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Cited by: 
+§2
+.
+
+Jiao 
+et al.
+ (2026)
+
+P. Jiao, Y. Jin, J. Yang, C. Dong, Z. Huang, S. Yao, X. Zhou, D. Ou, and H. Tang
+
+SHE: stepwise hybrid examination reinforcement learning framework for e-commerce search relevance
+.
+
+External Links: 
+2510.07972
+,
+
+Link
+
+Cited by: 
+§2
+,
+
+§2
+.
+
+Khattab and Zaharia (2020)
+
+O. Khattab and M. Zaharia
+
+Colbert: efficient and effective passage search via contextualized late interaction over bert
+.
+
+In 
+Proceedings of the 43rd International ACM SIGIR conference on research and development in Information Retrieval
+,
+
+pp. 39–48
+.
+
+Cited by: 
+§2
+.
+
+Lu 
+et al.
+ (2026)
+
+C. Lu, Z. Chen, H. Zhao, Z. Zeng, G. Zhao, J. Ren, R. Xu, H. Li, S. Liu, P. Wang, J. Xu, and B. Zheng
+
+LORE: a large generative model for search relevance
+.
+
+External Links: 
+2512.03025
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Mehrdad 
+et al.
+ (2024)
+
+N. Mehrdad, H. Mohapatra, M. Bagdouri, P. Chandran, A. Magnani, X. Cai, A. Puthenputhussery, S. Yadav, T. Lee, C. Zhai, 
+et al.
+
+Large language models for relevance judgment in product search
+.
+
+arXiv preprint arXiv:2406.00247
+.
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+Qiu 
+et al.
+ (2026)
+
+B. Qiu, H. Chen, Y. Wu, C. Zan, C. Wei, W. Zhang, and X. Zeng
+
+Thinking broad, acting fast: latent reasoning distillation from multi-perspective chain-of-thought for e-commerce relevance
+.
+
+In 
+Proceedings of the ACM Web Conference 2026
+,
+
+WWW ’26
+, 
+New York, NY, USA
+, 
+pp. 8171–8182
+.
+
+External Links: 
+ISBN 9798400723070
+,
+
+Link
+,
+
+Document
+
+Cited by: 
+§2
+,
+
+§2
+,
+
+§3.2.1
+.
+
+Rafailov 
+et al.
+ (2023)
+
+R. Rafailov, A. Sharma, E. Mitchell, S. Ermon, C. D. Manning, and C. Finn
+
+Direct preference optimization: your language model is secretly a reward model
+.
+
+In 
+Proceedings of the 37th International Conference on Neural Information Processing Systems
+,
+
+NIPS ’23
+, 
+Red Hook, NY, USA
+.
+
+Cited by: 
+§1
+.
+
+Ramos 
+et al.
+ (2003)
+
+J. Ramos 
+et al.
+
+Using tf-idf to determine word relevance in document queries
+.
+
+In 
+Proceedings of the first instructional conference on machine learning
+,
+
+Vol. 
+242
+, 
+pp. 29–48
+.
+
+Cited by: 
+§2
+.
+
+Robertson 
+et al.
+ (2009)
+
+S. Robertson H. Zaragoza 
+et al.
+
+The probabilistic relevance framework: bm25 and beyond
+.
+
+Foundations and Trends® in Information Retrieval
+ 
+3
+ (
+4
+), 
+pp. 333–389
+.
+
+Cited by: 
+§2
+.
+
+Sheng 
+et al.
+ (2025)
+
+G. Sheng, C. Zhang, Z. Ye, X. Wu, W. Zhang, R. Zhang, Y. Peng, H. Lin, and C. Wu
+
+HybridFlow: a flexible and efficient rlhf framework
+.
+
+In 
+Proceedings of the Twentieth European Conference on Computer Systems
+,
+
+EuroSys ’25
+, 
+New York, NY, USA
+, 
+pp. 1279–1297
+.
+
+External Links: 
+ISBN 9798400711961
+,
+
+Link
+,
+
+Document
+
+Cited by: 
+§4.3
+.
+
+Tang 
+et al.
+ (2025)
+
+T. Tang, Z. Tian, Z. Zhu, C. Wang, H. Hu, G. Tang, L. Liu, and S. Xu
+
+LREF: a novel llm-based relevance framework for e-commerce search
+.
+
+In 
+Companion Proceedings of the ACM on Web Conference 2025
+,
+
+WWW ’25
+, 
+pp. 468–475
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+Wang 
+et al.
+ (2024)
+
+H. Wang, M. N. Sundararaman, O. Gungor, Y. Xu, K. Kamath, R. Chalasani, K. S. Hazra, and J. Rao
+
+Improving pinterest search relevance using large language models
+.
+
+External Links: 
+2410.17152
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Xia 
+et al.
+ (2026)
+
+R. Xia, Y. Ji, Y. Zhou, H. Liu, T. Zhang, and P. Li
+
+From reasoning LLMs to BERT: a two-stage distillation framework for search relevance
+.
+
+In 
+Proceedings of the ACM Web Conference 2026
+,
+
+WWW ’26
+, 
+New York, NY, USA
+, 
+pp. 8222–8231
+.
+
+External Links: 
+ISBN 9798400723070
+,
+
+Link
+,
+
+Document
+
+Cited by: 
+§2
+,
+
+§3.4
+.
+
+Yang 
+et al.
+ (2026)
+
+J. Yang, Y. Jin, P. Jiao, C. Dong, Z. Huang, S. Yao, X. Zhou, D. Ou, and H. Tang
+
+TaoSR-agrl: adaptive guided reinforcement learning framework for e-commerce search relevance
+.
+
+In 
+Proceedings of the ACM Web Conference 2026
+,
+
+WWW ’26
+, 
+New York, NY, USA
+, 
+pp. 7955–7966
+.
+
+External Links: 
+ISBN 9798400723070
+,
+
+Link
+,
+
+Document
+
+Cited by: 
+§2
+,
+
+§2
+.
+
+Yao 
+et al.
+ (2022)
+
+S. Yao, J. Tan, X. Chen, J. Zhang, X. Zeng, and K. Yang
+
+ReprBERT: distilling BERT to an efficient representation-based relevance model for e-commerce
+.
+
+In 
+Proceedings of the 28th ACM SIGKDD Conference on Knowledge Discovery and Data Mining
+,
+
+KDD ’22
+, 
+New York, NY, USA
+, 
+pp. 4363–4371
+.
+
+External Links: 
+ISBN 9781450393850
+,
+
+Link
+,
+
+Document
+
+Cited by: 
+§1
+.
+
+Zhang 
+et al.
+ (2025)
+
+H. Zhang, J. Fu, J. Zhang, K. Fu, Q. Wang, F. Zhang, and G. Zhou
+
+RLEP: reinforcement learning with experience replay for LLM reasoning
+.
+
+External Links: 
+2507.07451
+,
+
+Link
+
+Cited by: 
+item 3
+,
+
+§2
+,
+
+§3.3.3
+.
+
+Zhao 
+et al.
+ (2025)
+
+G. Zhao, X. Zhang, C. Lu, H. Zhao, T. Wu, P. Wang, J. Xu, and B. Zheng
+
+Explainable llm-driven multi-dimensional distillation for e-commerce relevance learning
+.
+
+In 
+Companion Proceedings of the ACM on Web Conference 2025
+,
+
+WWW ’25
+, 
+pp. 631–640
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§1
+,
+
+§2
+,
+
+§3.2.1
+.
+
+Figure 4. 
+Correcting unanimous expert errors without debate.
+All three experts predict Strongly Relevant.
+The Verifier identifies the GT7 Pro versus GT7 model
+mismatch and predicts Model Mismatch without debate.
+
+Appendix A 
+Interaction Protocol and Policy-Loss Masking
+
+Table 4. 
+Debate interactions and policy-loss masks.
+
+Step
+
+Interaction
+
+1
+
+Verifier:
+ Initial adjudication from
+the three expert reports.
+
+1
+
+2
+
+Environment:
+ Question instruction
+with the initial judgment and expert reports.
+
+0
+
+3
+
+Verifier:
+ One focused question
+per expert.
+
+1
+
+4
+
+Experts:
+ Each revises its report
+using its own question and initial report.
+
+0
+
+5
+
+Environment:
+ Append revised reports
+to the Verifier’s context.
+
+0
+
+6
+
+Verifier:
+ Final adjudication from
+the initial and revised reports.
+
+1
+
+Table 
+4
+ summarizes the debate
+interaction sequence. Only Verifier-generated tokens
+contribute to the policy loss (
+), while expert
+outputs and environment messages are masked (
+).
+For inputs not selected for debate, the initial
+adjudication serves as the final prediction.
+
+Appendix B 
+Dataset Statistics
+
+Table 5. 
+Seven-class label distribution of the full dataset.
+
+Label
+
+Count
+
+Share (%)
+
+Strongly Relevant
+
+49,955
+
+51.13
+
+Substitute
+
+1,114
+
+1.14
+
+Category Mismatch
+
+9,326
+
+9.54
+
+Brand Mismatch
+
+9,135
+
+9.35
+
+Model Mismatch
+
+9,145
+
+9.36
+
+Attribute Mismatch
+
+10,454
+
+10.70
+
+Main Product vs. Accessory
+
+8,578
+
+8.78
+
+Total
+
+97,707
+
+100.00
+
+Table 
+5
+ reports the final
+cleaned labels for 97,707 pairs, with 78,997 training and
+18,710 test pairs whose class proportions closely match.
+Relevant and irrelevant pairs account for 52.27% and
+47.73%, respectively. Macro-F1 complements Accuracy and
+Weighted-F1 by weighting classes equally despite their
+unequal frequencies. The five most represented languages
+are English, Spanish, Portuguese, Korean, and French.
+
+Appendix C 
+Implementation and Training Configuration
+
+The experts share a frozen Qwen3-14B instance at a dedicated
+vLLM endpoint, with separate prompts, contexts, and
+conversation histories, each incurring a generation cost.
+The Verifier is a separate model initialized through
+full-parameter SFT on multi-turn interactions using
+LLaMA-Factory
+2
+2
+
+2
+
+https://github.com/hiyouga/LlamaFactory
+.
+Training runs for 3 epochs with a learning rate of
+
+ and a batch size of 16, using BF16
+precision and ZeRO-2.
+
+Both GRPO and Replay-GRPO use 
+verl
+, starting from
+
+ and training for 3 epochs with a
+learning rate of 
+, a batch size of 256,
+and 
+ fresh trajectories per input.
+
+For replay, 
+ generates 16 trajectories
+per input at temperature 1.0 using the same Verifier–expert
+interaction protocol as in training.
+Following Section 
+3.3.3
+, we retain at most
+
+ trajectories with parseable, exactly correct terminal
+predictions, ranked by total reward. Replay-GRPO adds 
+
+stored trajectories per input to the fresh rollouts.
+
+The mBERT-base student is
+trained for 3 epochs with a learning rate of 
+,
+a batch size of 128, and 
+.
+For each training pair, we concatenate the CoTs generated across
+all available rounds by the Analyst, Intent, and Ruler Agents
+and the Verifier. Each variant includes only the CoTs from its
+corresponding agents. The concatenated
+text is encoded by a frozen BGE-M3 model into a single embedding
+
+. Since the concatenated CoTs fit within
+BGE-M3’s maximum length of 8,192 tokens, no truncation is applied. No correctness-based filtering is applied to the
+CoTs used for distillation.
+
+Figure 5. 
+Debate refines expert analysis while preserving
+a correct adjudication.
+A condensed and paraphrased interaction for
+``ita bag accessories'' and a replacement bag strap.
+The Analyst, Intent, and Ruler initially predict
+Strongly Relevant, Brand Mismatch, and Category Mismatch,
+respectively, triggering debate.
+After focused questioning, the Analyst and Intent
+identify the difference between decorative and carrying
+uses and revise their labels to Attribute Mismatch.
+The Ruler retains Category Mismatch by applying
+a finer functional category boundary.
+The Verifier maintains Attribute Mismatch.
+
+Figure 6. 
+Debate corrects an initial Verifier error
+without expert consensus.
+A condensed and paraphrased interaction for
+a short-hair query and human-hair extensions
+listed as 24 inches long.
+The Analyst predicts Substitute based on possible
+trimming, the Intent predicts Strongly Relevant,
+and the Ruler predicts Attribute Mismatch.
+These distinct labels trigger debate.
+The Analyst retains Substitute, while the Intent
+and Verifier revise to Attribute Mismatch.
+The Ruler maintains its judgment that the item
+should be assessed at its listed length.
+
+C.1. 
+Reward Implementation
+
+This section specifies the scoring rules and
+coefficients used in
+Section 
+3.3.2
+.
+
+Adjudication quality.
+
+We compute
+
+(8)
+
+where
+
+indicates whether the terminal prediction is
+parseable as a valid relevance label. Let 
+ denote the terminal prediction,
+which is 
+ without debate and
+
+ otherwise, and let 
+
+denote the gold label.
+For a valid prediction, the outcome reward is
+
+(9)
+
+where 
+ maps each fine-grained label to
+its relevant or irrelevant superclass.
+Invalid terminal labels also receive
+
+. The reasoning reward is
+
+,
+where 
+ is computed by a deterministic rule that checks whether the label extracted from the rationale’s concluding step matches the terminal prediction, while 
+ checks
+completion of the adjudication steps, coverage
+of all three expert verdicts, and inclusion
+of a concluding statement.
+
+Debate quality.
+
+When the three experts’ first-round labels are
+not unanimous, the debate reward is
+
+(10)
+
+The first-round bonus 
+ is
+
+ when the initial Verifier judgment
+matches the gold label and zero otherwise. Question quality is assessed through format
+and leakage penalties together with a heuristic
+specificity bonus.
+A missing question or one whose length falls outside the permitted range incurs
+
+, while a focused question that matches a predefined regular-expression pattern for explicit disclosure of the Verifier’s own judgment incurs
+
+.
+Each penalty is zero when its corresponding
+violation is absent.
+The specificity bonus is
+
+, where 
+
+is the fraction of questions that exceed
+60 characters and cite a query or product-title
+token containing at least four characters.
+
+For expert revisions, we compare each expert’s predictions
+before and after debate using
+
+,
+which indicates whether expert 
+ predicts the gold label
+in round 
+.
+The four cases are an incorrect prediction becoming correct,
+a correct prediction remaining correct, an incorrect
+prediction remaining incorrect, and a correct prediction
+becoming incorrect.
+
+The expert-revision reward is
+
+(11)
+
+Appendix D 
+Case Studies
+
+Figures 
+4
+–
+6
+ present
+condensed and paraphrased representations of actual
+model outputs on three test-set cases, illustrating
+independent adjudication, expert refinement, and
+Verifier correction.
+The figures summarize the key evidence, judgments,
+and interactions for readability, rather than
+reproduce complete transcripts; full role-specific
+input contexts are omitted for brevity.
+
+D.1. 
+Correcting Unanimous Expert Errors
+
+Figure 
+4
+ pairs “realme gt7 pro case”
+with a case advertised for the GT7.
+All three experts predict 
+Strongly Relevant
+, with
+the Analyst overlooking “Pro” and the Intent and Ruler
+Agents inferring compatibility from shopping intent and
+a shared product line.
+The Verifier checks these interpretations against the query
+and title and rejects the unsupported compatibility assumption,
+yielding 
+Model Mismatch
+.
+Expert unanimity prevents debate but does not restrict the
+Verifier’s decision, illustrating independent adjudication
+when all initial expert labels are incorrect.
+
+D.2. 
+Refining Expert Analysis through Debate
+
+Figure 
+5
+ pairs “ita bag accessories”
+with a replacement strap for a Longchamp Mini Bag.
+The Analyst predicts 
+Strongly Relevant
+ from the
+shared accessory category, the Intent Agent interprets
+Longchamp as a brand conflict and predicts
+
+Brand Mismatch
+, and the Ruler assigns
+
+Category Mismatch
+ based on accessory function.
+The Verifier uses the Intent report’s click evidence,
+including charms and badge kits, to identify a
+decorative need that the strap’s carrying function does
+not satisfy, yielding 
+Attribute Mismatch
+.
+During debate, it relays this evidence to the Analyst
+and asks the Intent Agent to distinguish a target-bag
+reference from a brand requirement. Both revise to
+
+Attribute Mismatch
+, while the Ruler retains
+
+Category Mismatch
+ under a finer functional boundary.
+The Verifier maintains its correct judgment, illustrating
+how the expert refinement rewarded by 
+
+in Eq. (
+11
+) can improve supporting
+analyses without changing the final label.
+
+D.3. 
+Correcting Verifier Errors through Debate
+
+Figure 
+6
+ pairs “short human hair for black women”
+with 24-inch hair extensions.
+The Analyst predicts 
+Substitute
+ based on possible
+trimming, the Intent Agent prioritizes click-supported
+interest in extensions and predicts 
+Strongly Relevant
+,
+and the Ruler predicts 
+Attribute Mismatch
+ from
+the explicit length conflict.
+The Verifier initially accepts trimming and predicts
+
+Strongly Relevant
+.
+During debate, its questions examine whether substitution
+depends on modifying the item, whether behavioral evidence
+justifies relaxing the length requirement, and how the
+matching rubric treats hypothetical trimming.
+The Analyst retains 
+Substitute
+, while the Intent
+Agent revises to 
+Attribute Mismatch
+ and the Ruler
+reinforces assessment at the listed length.
+The Verifier then recognizes that possible trimming does
+not resolve the mismatch in the product as offered and
+corrects its prediction to 
+Attribute Mismatch
+,
+despite persistent expert disagreement.
+

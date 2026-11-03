@@ -1,0 +1,3863 @@
+Don't Guess, Ask Wisely: Benchmarking and Training Proactive Elicitation in Open-Domain LLM Conversations
+https://arxiv.org/abs/2611.01878
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+Don’t Guess, Ask Wisely: Benchmarking and Training Proactive Elicitation in Open-Domain LLM Conversations
+
+Rongyu Zhang
+
+  
+
+Mutian Bao
+
+  
+
+Jinjian Zhang
+
+  
+
+Yuetian Du
+
+Affiliation: 
+Zhejiang University
+
+  
+
+He Xu
+
+Affiliation: 
+Zhejiang University
+
+  
+
+Wei Zhou
+
+Affiliation: 
+Ant Group
+
+  
+
+Xiaojun Zhu
+
+Affiliation: 
+Zhejiang University
+
+  
+
+Ming Kong
+
+Affiliation: 
+Zhejiang University
+
+  
+
+Jie Liu
+
+  
+
+Linjian Mo
+
+  
+
+Qiang Zhu
+
+Email: 
+{rongyu.zhang, zhuq}@zju.edu.cn
+ 
+Code
+
+  
+ 
+Data
+
+Affiliation: 
+City University of Hong Kong
+
+Abstract
+
+When user queries are incomplete, large language models should ask targeted questions before committing to an answer, a capability we call proactive elicitation, yet evaluation on real user-assistant queries across seven LLMs (8B to frontier) shows that fewer than 11% of underspecified queries trigger a follow-up question. To benchmark and train this capability, we introduce VagueBench, where each seed query is annotated with structured intent and detail units then degraded into intent-vague and fully-vague variants via controlled removal of linguistic cues, yielding known hidden information sets for evaluating both when and what to ask. We propose DialogGRPO, an offline reinforcement learning method that organizes multi-turn elicitation as a dialogue-state directed acyclic graph, where candidate questions at each node receive dense turn-level rewards combining immediate information gain with lookahead value through group-relative comparison, enabling fine-grained credit assignment without runtime simulation. DialogGRPO elicits missing information on over 88% of vague queries with substantial gains in both recovery efficiency and answer coverage, without over-asking on complete queries, outperforms prompting and test-time-scaling baselines, and generalizes zero-shot to MultiWOZ 2.4 and AmbigQA.
+
+†
+†
+footnotetext: 
+
+∗
+Equal contribution.
+
+†
+Corresponding authors.
+
+Figure 1: 
+
+Top:
+ The same underlying need expressed as a complete query and a fully-vague query.
+
+Bottom:
+ A direct-answer LLM fabricates all missing information, while proactive elicitation recovers it in 3 targeted turns.
+
+1 
+Introduction
+
+Today’s large language models (LLMs) default to 
+answering
+, not 
+asking
+. When user queries are incomplete or underspecified, models silently infer unstated intent and constraints instead of asking targeted questions to resolve the gap (Figure 
+1
+). Yet real-world user queries are rarely self-contained: information gaps are pervasive in natural human communication 
+(
+Taylor, 1968
+)
+, and users routinely issue underspecified queries, overestimating the model’s ability to infer unstated needs: task accuracy drops by 39% when instructions are fragmented 
+(
+Laban et al., 2025
+)
+, and medical diagnostic accuracy plummets from 94.9% to 34.5% when symptoms are underspecified
+(
+Bean et al., 2026
+)
+.
+
+Our analysis of 5,000 real-world queries from a commercial AI assistant further quantifies this gap: 
+over half of user queries lack critical information, yet models from 8B to over 120B ask clarification in fewer than 11% of such cases
+, with no clear improvement from scaling.
+These findings motivate 
+proactive elicitation
+: identifying missing information and asking targeted questions 
+before
+ committing to an answer.
+
+This capability is challenging because the information gap arises from both sides of the conversation. On the 
+user side
+, users often leave critical constraints implicit, assuming the model shares context it does not have, a cognitive bias known as the 
+curse of knowledge
+ 
+(
+Camerer et al., 1989
+)
+.
+On the 
+model side
+, post-training pipelines dominated by single-turn supervision and rewards for direct answers implicitly penalize pausing to ask. We formalize this gap at two levels: 
+(1) Intent ambiguity
+, where the user’s overarching goal is unclear—e.g., whether “help me work on this text” means translation or summarization; and 
+(2) Detail absence
+, where the goal is clear but critical parameters are missing—e.g., budget or use case in “recommend a laptop”. These two levels require different elicitation strategies and evaluation criteria.
+
+Recent work has explored LLM clarification behavior 
+(
+Shaikh et al., 2025
+; 
+Zhang et al., 2025
+; 
+Wu et al., 2025
+; 
+Andukuri et al., 2024
+)
+, but remains limited along three axes. 
+Scope:
+ prior work mostly targets 
+disambiguation
+, resolving queries with multiple valid interpretations 
+(
+Min et al., 2020
+; 
+Zhang et al., 2024
+)
+, rather than the broader case where essential information was 
+never expressed
+ at all. 
+Data:
+ benchmarks are confined to narrow domains 
+(
+Gan et al., 2024
+)
+ or synthetic ambiguity 
+(
+Luo et al., 2025
+)
+, with no training-ready resource grounded in real conversations. 
+Training:
+ methods rely on online user simulators or trajectory-level feedback 
+(
+Wu et al., 2025
+; 
+Huang et al., 2025
+; 
+Andukuri et al., 2024
+; 
+Zhang et al., 2025
+)
+, limiting fine-grained, per-step credit assignment.
+
+To address these gaps, we propose a unified framework for evaluating and training proactive elicitation, grounded in real user–model conversations.
+On the evaluation side, we introduce 
+VagueBench
+, a benchmark built from real open-domain queries through 
+controlled degradation
+: intent-bearing linguistic cues are systematically weakened and task details removed, yielding vague variants whose hidden information set is precisely known. A simulated user holds the complete query and reveals a hidden information unit only when the model asks a semantically matching question, providing a controlled, reproducible testbed for multi-turn elicitation. We measure three complementary aspects: 
+decision appropriateness
+, whether the model asks rather than prematurely answers; 
+elicitation efficiency
+, the number of hidden information units recovered per turn; and 
+answer coverage
+, the F1 between the final response and the gold information set.
+On the training side, we propose 
+DialogGRPO
+, an offline reinforcement learning framework that models multi-turn elicitation as a dialogue-state directed acyclic graph (DAG). Each node groups alternative elicitation actions for local GRPO 
+(
+Shao et al., 2024
+)
+ comparison, and each edge receives a dense reward combining immediate information gain with long-term lookahead value, enabling the model to learn 
+when
+ and 
+what
+ to ask without the prohibitive cost of runtime user simulation.
+
+Our contributions are threefold:
+
+•
+
+Benchmark.
+ We introduce VagueBench, a benchmark built
+from real open-domain queries with controlled vagueness and known
+hidden information for evaluating proactive elicitation capabilities
+of LLMs.
+
+•
+
+Method.
+ We propose DialogGRPO, which models multi-turn elicitation as a dialogue-state DAG and applies group-relative advantage estimation at each state for dense offline credit assignment.
+
+•
+
+Findings.
+ Evaluation on VagueBench across open-source and
+closed-source LLMs (8B to frontier) reveals systematic elicitation
+suppression at all scales. DialogGRPO outperforms prompt-engineering and test-time-scaling baselines on all metrics, and zero-shot transfers to MultiWOZ 2.4 and AmbigQA.
+
+2 
+Related Work
+
+2.1 
+Proactive Elicitation
+
+Clarification and mixed-initiative interaction are well studied in conversational search and task-oriented dialogue
+(
+Budzianowski et al., 2018
+; 
+Ye et al., 2022
+; 
+Gan et al., 2024
+)
+, where systems ask follow-up questions to resolve facets, slots, or preferences 
+(
+Aliannejadi et al., 2019
+; 
+Aliannejadi et al., 2020
+)
+. For LLM assistants, the challenge is broader: open-ended requests often omit intent or constraints, yet instruction-tuned models tend to answer directly and fill gaps by assumption 
+(
+Yang et al., 2025
+; 
+Laban et al., 2025
+)
+. Recent LLM work explores clarification via prompting, grounding analysis, and collaborative agents 
+(
+Shaikh et al., 2025
+; 
+Wu et al., 2025
+)
+, but mainly targets multiple valid interpretations. We instead study open-domain elicitation of unspoken intent and task details.
+
+2.2 
+Vagueness Benchmarks
+
+Existing benchmarks capture different forms of underspecification. Qulac and ClariQ evaluate clarification in conversational search 
+(
+Aliannejadi et al., 2019
+; 
+Aliannejadi et al., 2020
+)
+; AmbigQA and related datasets target questions with multiple valid interpretations 
+(
+Min et al., 2020
+; 
+Zhang et al., 2024
+)
+; recent LLM benchmarks further test clarification in task-oriented dialogue, tool use, or synthetic ambiguity settings 
+(
+Zhang et al., 2024
+; 
+Gan et al., 2024
+; 
+Luo et al., 2025
+)
+. However, they assume a predefined domain, a fixed slot schema, or
+a small set of alternative interpretations, providing limited coverage
+of real open-domain vagueness where intent and task details may have
+never been stated. VagueBench fills this gap with real assistant queries, unrestricted intents, and a multi-turn evaluation protocol.
+
+2.3 
+Training Elicitation Policies
+
+Prior methods improve clarification behavior through prompting, supervised fine-tuning, preference learning, simulated users, or downstream task rewards 
+(
+Chen et al., 2025
+; 
+Andukuri et al., 2024
+; 
+Zhang et al., 2025
+; 
+Huang et al., 2025
+)
+. Table 
+1
+ compares these methods by whether they target open-domain interactions, use real user queries, avoid online user simulation, and provide turn-level rewards
+(
+Wu et al., 2025
+; 
+Shani et al., 2024
+)
+. While effective, existing approaches often depend on synthetic interactions, domain-specific settings, or coarse dialogue-level feedback. DialogGRPO instead precomputes a dialogue-state DAG and rewards each asking turn using both acquired information and downstream answer value.
+
+Method
+
+ 
+
+No Runtime
+
+Sim.
+
+ 
+
+Open
+
+Domain
+
+ 
+
+Turn
+
+Reward
+
+ 
+
+Real
+
+Queries
+
+ClarifyGPT
+
+✓
+
+✗
+
+✗
+
+✗
+
+ACT
+
+✗
+
+✗
+
+✗
+
+✗
+
+STaR-GATE
+
+✓
+
+✓
+
+✗
+
+✗
+
+CollabLLM
+
+✗
+
+✓
+
+✓
+
+✗
+
+Ours
+
+✓
+
+✓
+
+✓
+
+✓
+
+Table 1: 
+Comparison of proactive elicitation methods. No Runtime Sim.: the parameter-update phase does not invoke an LLM-based user simulator at runtime. Turn Reward: per-turn rather than trajectory-level credit assignment.
+
+Figure 2: 
+VagueBench construction pipeline.
+Real user queries are filtered for self-containedness and information completeness, annotated with intent and detail units via four clarity anchor types, and then systematically degraded into intent-vague and fully-vague variants with known gold information for evaluation.
+
+3 
+VagueBench
+
+A user submits a query 
+ that may express only part of a complete need 
+.
+We decompose 
+ into an 
+intent set
+ 
+ of task-level goals and a 
+detail set
+ 
+ of key–value constraints for executing those goals; the gap between 
+ and 
+ may involve
+
+intent ambiguity
+, 
+detail absence
+, or both,
+as defined in §
+1
+.
+Each benchmark instance begins with an information-complete seed whose 
+ is fully annotated, from which we derive an 
+intent-vague
+ and a 
+fully-vague
+ variant by progressively removing information units, so every gap is precisely quantifiable (Figure 
+2
+).
+
+3.1 
+Data Collection
+
+We source over 100,000 open-domain queries from a commercial AI assistant.
+1
+1
+
+1
+
+              
+              
+              
+            From users who opted into data collection policy, with PII removed. See the Ethics Considerations.
+
+A rule-based pass enforces length bounds and removes unsafe content; two LLM passes then discard greetings, test strings, context-dependent utterances, and queries too detail-sparse for meaningful degradation.
+The surviving 4,930 seeds (
+5 %) span five task families: 
+Information Query
+, 
+Recommendation & Decision
+, 
+Task Execution
+, 
+Creation & Generation
+, and 
+Consultation & Analysis
+, with the distribution shown in Figure 
+6
+.
+Each seed carries on average 
+ 1.36 intents and 
+ 4.63 details.
+Filtering rules and full statistics are in Appendix 
+A
+.
+
+3.2 
+Data Construction
+
+The annotation scheme and variant construction share a single backbone: 
+clarity anchors
+, recurring linguistic cues that make a query’s information explicit.
+
+Clarity anchors.
+
+Drawing on argument-structure theory 
+(
+Levin and Hovav, 2005
+)
+
+and speech-act theory 
+(
+Searle, 1969
+)
+, we identify four
+anchor types in two layers.
+Consider the query
+“
+Help me
+ 
+summarize
+ this article into
+
+five bullet points
+ 
+focusing on the economic
+implications
+” as a running example, where 
+solid
+ and
+
+dashed
+ underlines mark intent-layer and detail-layer
+anchors, respectively.
+The 
+intent layer
+ signals what the user wants done:
+
+predicate anchors
+ are action verbs that pin the task type
+(
+summarize
+); 
+speech-act anchors
+ are directive
+frames (
+Help me …
+).
+The 
+detail layer
+ specifies how the task should be executed:
+
+output-type anchors
+ mark the expected answer form
+(
+five bullet points
+); 
+scope anchors
+ bound
+response dimensions
+(
+focusing on economic implications
+).
+This partition determines both what to annotate and what to remove.
+
+Annotation.
+
+The anchor taxonomy makes annotation straightforward: intent-layer
+anchors are grouped into task-level goals 
+, while
+detail-layer anchors and remaining surface constraints become
+key–value pairs in 
+, each linked to the intent it
+serves.
+In the running example, the predicate anchor
+
+summarize
+ and the speech-act anchor
+
+Help me …
+ together identify a single
+summarization intent.
+On the detail side, the output-type anchor
+
+five bullet points
+ yields a key–value pair
+
+, and
+the scope anchor 
+focusing on the economic
+implications
+ yields
+
+;
+both are linked to that summarization intent.
+Two frontier LLMs (GLM-5) annotate each seed independently; disagreements
+are resolved by a third LLM (GPT-5.4) acting as adjudicator, and a human
+validation study (Appendix 
+B.2
+) confirms strong
+agreement between LLM and human annotations (
+).
+
+Controlled degradation.
+
+Because anchors are partitioned into two layers, variant
+construction is a principled removal procedure.
+An 
+intent-vague
+ variant weakens or removes only intent-layer
+anchors while preserving every detail unit in 
+.
+A 
+fully-vague
+ variant further strips detail-layer anchors
+and a subset of detail units, retaining a core-topic phrase of
+typically 5–10 tokens. For example, the complete query
+“
+Help me
+ 
+summarize
+ this article into
+
+five bullet points
+ 
+focusing on the economic
+implications
+” reduces to
+“
+Work on this article, 
+five bullet points
+,
+
+focusing on the economic implications
+” at the
+intent-vague level, and to
+“
+Help me work on this article
+” at the fully-vague level.
+Both variants undergo an LLM fluency rewrite; hidden-unit labels
+are verified by set difference against the gold annotation, and
+non-conforming cases are regenerated
+(Appendix 
+B.3
+).
+
+3.3 
+Evaluation
+
+Interaction.
+
+A conversation begins with query 
+.
+At each turn the model either asks a question or commits to a final
+answer; the dialogue ends when the model answers, all hidden units
+are recovered, or a budget of 
+ turns is reached.
+A simulated user 
+, holding 
+ and the hidden
+units, reveals a unit only when the model’s question semantically
+matches it, releases no more than the matched units per turn, and
+responds with a non-informative deflection to irrelevant or repeated questions. Details of simulated user is provided in Appedix 
+C
+.
+
+Metrics.
+
+Decision appropriateness
+ (Ask%): the first LLM output is classified as 
+ask
+ or 
+answer
+; the gold label is 
+ask
+ for vague variants and 
+answer
+ for complete queries.
+
+Elicitation efficiency
+ (IAR): the information acquisition rate measures hidden units recovered per elicitation turn, computed only when the model chose to ask:
+
+(1)
+
+Answer coverage
+ (Cov. F1): the final answer is compared against the gold information set via F1 score. It is formulated as:
+
+(2)
+
+where precision 
+ penalizes unsupported assumptions, and recall 
+ penalizes omissions.
+
+Figure 3: 
+
+DialogGRPO pipeline.
+
+Left:
+ A dialogue-state DAG is built by expanding candidate
+questions at each turn and merging nodes with identical acquired
+sets.
+
+Right:
+ Recovered units ground the final answer (top);
+turn-level rewards and group-relative advantages guide training
+(bottom).
+
+4 
+DialogGRPO
+
+Training proactive elicitation faces two coupled challenges.
+First, 
+sparse credit assignment
+: multi-turn rewards arrive only at the trajectory’s end, leaving each intermediate question without direct feedback on whether it was worth asking.
+Second, 
+simulation cost
+: on-policy rollouts require invoking an LLM-based user simulator at every gradient step, which is prohibitively expensive when each dialogue spans multiple turns.
+
+DialogGRPO addresses both through a unified offline pipeline organized in three stages (Figure 
+3
+).
+We first construct a 
+dialogue state DAG
+ (§
+4.1
+) that maps out candidate elicitation questions and their consequences using an external LLM, so that the outgoing edges of any node form a natural GRPO comparison group.
+We then assign each edge a 
+turn-level reward
+ (§
+4.2
+) that combines immediate information gain with lookahead value estimated from the pre-built graph, converting the single end-of-trajectory signal into dense per-action feedback.
+Finally, we train the policy via 
+advantage-weighted learning
+
+(§
+4.3
+) over (prompt, candidate, advantage) tuples
+extracted from the DAG, requiring no runtime simulation.
+
+4.1 
+Dialogue State DAG
+
+Nodes and termination.
+
+For a training query with information units 
+, each node 
+ represents the acquired set 
+, initialized at the root with units already present in 
+. A node is terminal when all units are acquired, an LLM answerability classifier deems 
+ sufficient for a satisfactory response, or the depth reaches 
+. The classifier is a prompted LLM conditioned on 
+, 
+, and the dialogue history (Appendix 
+J
+).
+
+Oracle-guided expansion.
+
+At each non-terminal node 
+, an external strong LLM (GLM-5.1), distinct from the policy model 
+, proposes 
+ candidate questions conditioned on 
+, the dialogue history reaching 
+, and the remaining gold units 
+.
+The policy model never observes these gold units; the external LLM serves solely as an 
+exploration engine
+ that populates diverse candidates. The policy learns to distinguish high-value questions through the group-relative advantage signal (§
+4.3
+), rather than through behavioral cloning or distillation of the external model.
+
+For each candidate question 
+, the simulated user 
+ produces a reply 
+, and an extraction function 
+ maps the reply to a set of information units.
+The 
+information gain
+ of edge 
+ is:
+
+(3)
+
+If 
+, the edge leads to a child node 
+ with 
+, and expansion continues from 
+.
+Candidates that acquire no new unit are recorded as 
+null-progress
+ actions: they enter the comparison group at 
+ as negative examples but are not expanded further.
+
+State merging.
+
+Different elicitation orders can reach the same acquired set.
+We merge nodes sharing identical 
+, converting the expansion
+tree into a compact DAG.
+Merging avoids redundant expansion of duplicate states and allows
+reward computations to be shared across paths that converge on the
+same node.
+When multiple dialogue histories converge at a merged node, we
+retain the shortest-path history as the 
+canonical prompt
+
+for that state; §
+4.3
+ describes how this
+interacts with training-tuple extraction.
+
+4.2 
+Turn-Level Reward
+
+A root-to-terminal path 
+ has a natural trajectory-level reward:
+
+(4)
+
+where 
+ is the answer-coverage F1 at the terminal node and 
+ penalizes interaction length.
+However, this signal is available only at trajectory endpoints and cannot distinguish a good intermediate question from a bad one.
+We therefore design two complementary per-edge signals.
+
+Immediate information gain.
+
+Each edge 
+ receives:
+
+(5)
+
+rewarding questions that elicit more units per turn.
+The cap 
+ prevents a single high-gain question from dominating the advantage distribution, keeping the reward discriminative across candidates of varying quality.
+Null-progress edges receive 
+.
+
+Lookahead value.
+
+The immediate reward is a 
+single-step
+ signal that ignores
+downstream consequences.
+We complement it with a lookahead value estimated via Monte Carlo
+rollouts in the pre-built DAG: for each edge 
+, we sample 
+
+paths from its child state 
+ and average their trajectory
+returns:
+
+(6)
+
+where 
+ is the child state reached by 
+.
+For terminal 
+ we set 
+ directly.
+
+Combined reward.
+
+The turn-level reward combines both signals:
+
+(7)
+
+For null-progress edges, we set 
+, where 
+ is the mean lookahead at the parent node, reflecting that a null-progress question wastes one turn without narrowing the information gap between user and assistant.
+
+4.3 
+Advantage-Weighted Training
+
+Comparison groups and advantage estimation.
+
+For each non-terminal node 
+, the candidate set 
+ forms a GRPO comparison group. A group contain different productive questions. Following the group-relative principle of GRPO 
+(
+Shao et al., 2024
+)
+, we compute a normalized advantage:
+
+(8)
+
+where 
+ and 
+ are the within-group mean and standard deviation of 
+.
+
+Training objective.
+
+Each training instance is a tuple 
+, where 
+ is the canonical prompt at node 
+ (§
+4.1
+) and 
+ is the candidate response associated with edge 
+.
+We optimize:
+
+(9)
+
+where 
+ controls the strength of the KL penalty toward the
+reference policy 
+.
+Because all candidates are pre-generated and fixed in our offline
+setting, there are no importance-sampling ratios or clipping
+(
+Schulman et al., 2017
+)
+, and the
+objective reduces to 
+advantage-weighted
+regression
+ 
+(
+Peng et al., 2019
+)
+.
+A full derivation from the KL-regularized policy optimization
+objective to Eq. 
+9
+ is provided in
+Appendix 
+H
+.
+
+5 
+Experiments
+
+5.1 
+Setup
+
+The VagueBench test set comprises 250 complete queries and their
+
+intent-vague
+ and 
+fully-vague
+ variants (750 instances); the
+remaining 4,680 seeds and their DAG expansions form the
+training set.
+For cross-dataset generalization we report on
+MultiWOZ 2.4 
+(
+Ye et al., 2022
+)
+ and
+AmbigQA 
+(
+Min et al., 2020
+)
+, neither seen during training.
+We evaluate seven LLMs spanning open-source
+(Qwen3-8B, Llama-3.1-8B-Instruct, Qwen3.5-27B, GPT-oss-120B) and closed-source
+(GPT-5.4, Claude Sonnet 4.6, Gemini 3.1 Pro) families.
+Using Qwen3.5-27B as the backbone, we compare four methods:
+
+Prompt
+, an elicitation-encouraging system prompt;
+
+UoT
+ 
+(
+Hu et al., 2024
+)
+, a test-time-scaling approach;
+
+SFT
+, trained on highest-reward DAG trajectories; and our
+
+DialogGRPO
+.
+All dialogues are capped at 
+ turns.
+Implementation details are in Appendix 
+D
+.
+
+Model
+
+Intent-Vague
+
+Fully-Vague
+
+Ask% (
+)
+
+Cov. F1 (
+)
+
+IAR (
+)
+
+Ask% (
+)
+
+Cov. F1 (
+)
+
+IAR (
+)
+
+Closed-source Models
+
+GPT-5.4
+
+1.6
+
+0.58
+
+0.06
+
+10.8
+
+0.53
+
+0.65
+
+Claude Sonnet 4.6
+
+8.8
+
+0.60
+
+0.08
+
+8.4
+
+0.52
+
+0.56
+
+Gemini 3.1 Pro
+
+2.4
+
+0.57
+
+0.00
+
+3.6
+
+0.54
+
+0.80
+
+Open-source Models
+
+Qwen3-8B
+
+1.2
+
+0.47
+
+0.00
+
+1.6
+
+0.36
+
+0.21
+
+Llama-3.1-8B-Instruct
+
+0.8
+
+0.50
+
+0.00
+
+1.2
+
+0.35
+
+0.23
+
+Qwen3.5-27B
+
+1.6
+
+0.49
+
+0.08
+
+2.0
+
+0.38
+
+0.37
+
+GPT-oss-120B
+
+2.0
+
+0.46
+
+0.02
+
+3.6
+
+0.36
+
+0.35
+
+Methods (built on Qwen3.5-27B)
+
+  + Prompt
+
+38.4
+
+0.52
+
+0.22
+
+47.2
+
+0.50
+
+0.38
+
+  + UoT
+
+58.8
+
+0.50
+
+0.45
+
+62.4
+
+0.49
+
+0.41
+
+  + SFT (Ours)
+
+82.0
+
+0.60
+
+0.64
+
+85.6
+
+0.63
+
+0.80
+
+  
++ DialogGRPO (Ours)
+
+88.4
+
+0.64
+
+0.76
+
+91.2
+
+0.67
+
+0.87
+
+Table 2: 
+
+Main results on VagueBench.
+
+Ask%
+: proportion of samples on which the model chose to ask.
+
+Cov. F1
+: coverage F1 of the final answer against the gold information set.
+
+IAR
+: information acquisition rate (Eq. 
+1
+), computed only on samples where the model asked.
+Best in 
+bold
+; second best 
+underlined
+.
+
+5.2 
+Main Results
+
+Elicitation suppression persists across scales.
+
+As shown in Table 
+2
+, across all evaluated models, Ask% on 
+intent-vague
+ queries stays at or below 
+ and on 
+fully-vague
+ queries never exceeds 
+.
+This suppression holds regardless of model family or size: the four open-source models achieve Ask% of only 
+–
+ on intent-vague, while the three closed-source frontier models range from 
+ to 
+, with larger models showing no consistent advantage.
+The shortfall suggests a post-training tendency to answer directly, rather than a capability limit that further scaling would fix.
+
+Prompting reveals latent elicitation ability but quickly plateaus.
+
+A single elicitation-encouraging prompt lifts Qwen3.5-27B Ask% from 
+ to 
+ on 
+intent-vague
+ and from 
+ to 
+ on 
+fully-vague
+, confirming that the ability resides in the pretrained weights, suppressed rather than absent.
+However, the prompted model asks more often without asking more efficiently: IAR stays at 
+/
+, far below the levels that training-based methods reach.
+Prompting can shift the ask-versus-answer decision boundary but provides no signal for improving per-turn elicitation efficiency, motivating an approach that optimizes both 
+when
+ and 
+what
+ to ask.
+
+DialogGRPO asks better, not just more often.
+
+Compared with SFT trained on the highest-reward trajectories, DialogGRPO further improves Ask% by up to 
+ points and IAR by 
+–
+, confirming that group-relative advantage estimation provides a finer learning signal than trajectory-level imitation.
+The Cov. F1 improvement over Qwen3.5-27B (
+/
+ vs. 
+/
+) directly reflects the value of elicitation: the model answers on 
+recovered
+ information rather than 
+assumed
+ defaults.
+UoT presents a different bottleneck: per-turn recovery is reasonable when it does ask (IAR 
+/
+), but its uncertainty heuristic triggers elicitation on only 
+60% of vague queries, leaving substantial information unrecovered.
+
+Model
+
+Ask% (
+)
+
+Cov. F1 (
+)
+
+Qwen3.5-27B
+
+1.6
+
+0.58
+
+   + Prompt
+
+42.8
+
+0.59
+
+   + UoT
+
+56.4
+
+0.48
+
+   + SFT (Ours)
+
+6.4
+
+0.71
+
+   
++ DialogGRPO (Ours)
+
+5.2
+
+0.74
+
+Table 3: 
+
+Behavior on information-complete seed queries. Ask% is lower-the-better.
+Best in 
+bold
+; second best 
+underlined
+.
+
+High elicitation on vague queries does not cause over-asking on complete ones.
+
+On information-complete queries (Table 
+3
+), DialogGRPO asks on only 
+ of samples, close to Qwen3.5-27B’s 
+, while lifting Cov. F1 from 
+ to 
+.
+Prompt and UoT, by contrast, push Ask% to 
+ and 
+, unnecessarily interrupting roughly half of already well-specified queries.
+This calibration arises naturally from the group-relative advantage: when all candidate questions at a state yield uniformly low information gain, the advantage signal 
+suppresses
+ asking without requiring an explicit threshold.
+
+General capability is preserved.
+
+Beyond elicitation metrics, we verify that DialogGRPO introduces no catastrophic forgetting relative to the untrained Qwen3.5-27B: on six benchmarks spanning coding, math, commonsense reasoning, and general knowledge, it matches or slightly exceeds the original model (Appendix 
+E
+), indicating that offline advantage-weighted RL stays close enough to the reference policy to avoid capability regression.
+
+Variant
+
+Intent-Vague
+
+Fully-Vague
+
+Cov. F1
+
+IAR
+
+Cov. F1
+
+IAR
+
+Full
+ (Ours)
+
+0.64
+
+0.76
+
+0.67
+
+0.87
+
+w/o lookahead reward
+
+0.58
+
+0.74
+
+0.60
+
+0.84
+
+w/o immediate reward
+
+0.60
+
+0.68
+
+0.66
+
+0.85
+
+Table 4: 
+
+Reward ablation on VagueBench. The lookahead term primarily affects Cov. F1; the immediate term primarily affects IAR.
+Best in 
+bold
+; second best 
+underlined
+.
+
+5.3 
+Ablation Study
+
+Table 
+4
+ ablates the two reward signals defined in §
+4.2
+.
+Without the lookahead term, Cov. F1 drops by 
+–
+ while IAR remains nearly intact, suggesting that the policy becomes myopic and favors locally greedy questions over those that lead to higher final answer coverage.
+Conversely, removing the immediate term leaves Cov. F1 largely unchanged but reduces IAR by up to 
+, as the model loses the per-turn incentive to pack multiple information units into a single question.
+Neither ablated variant matches the full method, confirming that the two reward signals are complementary.
+
+Model
+
+MultiWOZ 2.4
+
+AmbigQA
+
+Success%
+
+Ask%
+
+Ask F1%
+
+GPT-5.4
+
+39.9
+
+5.1
+
+9.6
+
+GLM-5
+
+23.8
+
+0.9
+
+1.9
+
+Qwen3.5-27B
+
+11.4
+
+1.1
+
+2.1
+
+  
++ DialogGRPO (Ours)
+
+24.7
+
+16.3
+
+26.3
+
+Gemma3-27B
+
+15.1
+
+1.1
+
+2.2
+
+  
++ DialogGRPO (Ours)
+
+17.8
+
+34.4
+
+44.7
+
+Table 5: 
+
+Zero-shot transfer. 
+Success%
+: MultiWOZ task-completion rate. 
+Ask%
+: fraction of queries on which the model asks in the AmbigQA 
+multipleQAs
+ subset. 
+Ask F1%
+: ask-versus-answer F1 on the full AmbigQA development set.
+Best in 
+bold
+; second best 
+underlined
+.
+
+5.4 
+Generalization
+
+Across datasets.
+
+To test whether the learned elicitation ability overfits to VagueBench, we evaluate zero-shot on two out-of-distribution benchmarks: MultiWOZ 2.4, a task-oriented slot-filling dialogue dataset, and AmbigQA, an ambiguous question-answering dataset. We train DialogGRPO on Qwen3.5-27B and Gemma3-27B and compare their performance against two frontier models (GPT-5.4 and GLM-5). For MultiWOZ, we follow the zero-shot end-to-end simulated interaction protocol of 
+Acikgoz et al. (2026)
+. For AmbigQA, Ask% is the fraction of queries on which the model asks in the ambiguous 
+multipleQAs
+ subset. Ask F1% is computed on the full development set with 
+Ask
+ as the positive class, assigning gold 
+Ask
+ to ambiguous queries and gold 
+Answer
+ to unambiguous queries.
+
+On AmbigQA, the benchmark most aligned with the elicitation capability we train, both models exhibit substantial gains (Table 
+5
+). Notably, Gemma3-27B is an instruction-tuned model while Qwen3.5-27B is a reasoning model, the elicitation behavior therefore transfers consistently across two distinct model types. On MultiWOZ, Success% is a task-completion metric bounded by the base model’s downstream execution rather than elicitation alone, yet both models still achieve clear improvements.
+The consistent gains across slot-filling dialogue and ambiguous QA suggest that proactive elicitation is a transferable capability: one that is suppressed by default but recoverable through targeted training with dense credit assignment.
+
+Figure 4: 
+Generalization across base models on VagueBench. Darker/lighter segments denote base model scores and DialogGRPO lifts, respectively. Both 27B models show comparable gains, confirming transferability across model families.
+
+Across base models.
+
+To verify that the gains stem from the training recipe rather than from a particular base model, we re-ran the full DialogGRPO pipeline on Gemma3-27B with identical hyperparameters (Appendix 
+F
+).
+Before training, both Qwen and Gemma 27B models exhibit the same suppression pattern (Ask% below 
+ on both splits).
+After training, both converge to comparable Ask%, Cov. F1, and IAR, with similarly sized lifts on every metric (Figure 
+4
+), confirming that DialogGRPO generalizes across model families.
+
+6 
+Conclusion
+
+We introduce VagueBench, a benchmark exposing that elicitation suppression in LLMs persists across model families and scales, and DialogGRPO, an offline RL method that recovers this latent ability via dialogue-state DAG construction and dense turn-level credit assignment. DialogGRPO teaches models to ask better questions, not merely more, reaching 88–91% Ask% on vague queries while preserving calibration on complete ones, and generalizes zero-shot to MultiWOZ 2.4 and AmbigQA.
+
+Limitations
+
+VagueBench is built from a single commercial assistant’s traffic, which limits its coverage of conversational scenarios, languages, and modalities.
+Our evaluation relies on a simulated user that cooperatively releases information on matching questions, abstracting away real human behaviors such as partial answers, sudden topic switches, noise, or refusal to elaborate, so the reported gains likely represent an upper bound on what can be achieved with cooperative interlocutors.
+Open domain dialogue spaces are unbounded, so the DAG covers only a sparse set of trajectories. Local contrastive coverage and state merging reduce this gap, but interactions outside the training distribution remain a limitation.
+Large preference spaces also make exhaustive questioning impractical. In shopping, a few targeted questions can narrow the options, but preferences may emerge or change during the interaction. VagueBench fixes the hidden preference set for reproducibility and does not capture this dynamic. Asking frequency is controlled by reward hyperparameters and should be calibrated to application needs.
+
+Ethical Considerations
+
+We have conducted this work with a strong commitment to ethical and responsible research practices. The raw queries used to construct VagueBench originate from a commercial AI assistant that offers tiered data-sharing preferences, only interactions from users who explicitly opted into research use were included. All queries were stripped of personally identifiable information prior to our access, and a dedicated unsafe-content filter removed harmful or sensitive material during the rule-based filtering stage (§
+3.1
+). The released benchmark contains only post-filtering, annotation-enriched seeds with no metadata linking back to individual sessions. For the human validation study, two graduate student annotators were recruited and compensated at $7.50 USD per hour; given the flexibility of the remote task and the economic context of the participants’ residential region, this rate exceeds the local average hourly wage, ensuring fair remuneration. Participation was voluntary, and annotators provided informed consent for the use of their labels. Proactive elicitation is inherently dual-use: it reduces unfounded assumptions and prevents costly errors in high-stakes domains, but could also be steered into over-soliciting personal information unnecessary for the task. Our reward formulation mitigates this by crediting only information units causally required for the final answer; nevertheless, we recommend that production deployments constrain what the model may solicit, audit questions touching sensitive attributes, and give users a clear option to decline. We also note that VagueBench covers English-only queries from a single platform, limiting its linguistic and cultural generalizability. All data released are for research purposes and recommend that any production use be paired with appropriate guardrails.
+
+Acknowledgments
+
+This work was supported by the National Natural Science Foundation of China under Grants 42394060 and 42394064, and the Ant Group Research Fund.
+
+References
+
+Acikgoz 
+et al.
+ (2026)
+
+E. C. Acikgoz, J. Oh, J. Hao, J. H. Jeon, H. Ji, D. Hakkani-Tur, G. Tur, X. Li, C. Ma, and X. Fan
+
+Speakrl: synergizing reasoning, speaking, and acting in language models with reinforcement learning
+.
+
+In 
+Proceedings of the 16th International Workshop on Spoken Dialogue System Technology
+,
+
+pp. 312–325
+.
+
+Cited by: 
+§5.4
+.
+
+Aliannejadi 
+et al.
+ (2020)
+
+M. Aliannejadi, J. Kiseleva, A. Chuklin, J. Dalton, and M. Burtsev
+
+ConvAI3: generating clarifying questions for open-domain dialogue systems (clariq)
+.
+
+arXiv preprint arXiv:2009.11352
+.
+
+Cited by: 
+§2.1
+,
+
+§2.2
+.
+
+Aliannejadi 
+et al.
+ (2019)
+
+M. Aliannejadi, H. Zamani, F. Crestani, and W. B. Croft
+
+Asking clarifying questions in open-domain information-seeking conversations
+.
+
+In 
+Proceedings of the 42nd international acm sigir conference on research and development in information retrieval
+,
+
+pp. 475–484
+.
+
+Cited by: 
+§2.1
+,
+
+§2.2
+.
+
+Amini 
+et al.
+ (2019)
+
+A. Amini, S. Gabriel, S. Lin, R. Koncel-Kedziorski, Y. Choi, and H. Hajishirzi
+
+Mathqa: towards interpretable math word problem solving with operation-based formalisms
+.
+
+In 
+Proceedings of the 2019 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies, Volume 1 (Long and Short Papers)
+,
+
+pp. 2357–2367
+.
+
+Cited by: 
+Appendix E
+.
+
+Andukuri 
+et al.
+ (2024)
+
+C. Andukuri, J. Fränken, T. Gerstenberg, and N. D. Goodman
+
+Star-gate: teaching language models to ask clarifying questions
+.
+
+arXiv preprint arXiv:2403.19154
+.
+
+Cited by: 
+§1
+,
+
+§2.3
+.
+
+Bean 
+et al.
+ (2026)
+
+A. M. Bean, R. E. Payne, G. Parsons, H. R. Kirk, J. Ciro, R. Mosquera-Gómez, S. Hincapié M, A. S. Ekanayaka, L. Tarassenko, L. Rocher, 
+et al.
+
+Reliability of llms as medical assistants for the general public: a randomized preregistered study
+.
+
+Nature Medicine
+, 
+pp. 1–7
+.
+
+Cited by: 
+§1
+.
+
+Budzianowski 
+et al.
+ (2018)
+
+P. Budzianowski, T. Wen, B. Tseng, I. Casanueva, S. Ultes, O. Ramadan, and M. Gasic
+
+Multiwoz-a large-scale multi-domain wizard-of-oz dataset for task-oriented dialogue modelling
+.
+
+In 
+Proceedings of the 2018 conference on empirical methods in natural language processing
+,
+
+pp. 5016–5026
+.
+
+Cited by: 
+§2.1
+.
+
+Camerer 
+et al.
+ (1989)
+
+C. Camerer, G. Loewenstein, and M. Weber
+
+The curse of knowledge in economic settings: an experimental analysis
+.
+
+Journal of political Economy
+ 
+97
+ (
+5
+), 
+pp. 1232–1254
+.
+
+Cited by: 
+§1
+.
+
+Chen 
+et al.
+ (2025)
+
+M. Chen, R. Sun, T. Pfister, and S. Arik
+
+Learning to clarify: multi-turn conversations with action-based contrastive self-training
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Vol. 
+2025
+, 
+pp. 32244–32279
+.
+
+Cited by: 
+§2.3
+.
+
+Cobbe 
+et al.
+ (2021)
+
+K. Cobbe, V. Kosaraju, M. Bavarian, M. Chen, H. Jun, L. Kaiser, M. Plappert, J. Tworek, J. Hilton, R. Nakano, 
+et al.
+
+Training verifiers to solve math word problems
+.
+
+arXiv preprint arXiv:2110.14168
+.
+
+Cited by: 
+Appendix E
+.
+
+Faltings 
+et al.
+ (2023)
+
+F. Faltings, M. Galley, K. Brantley, B. Peng, W. Cai, Y. Zhang, J. Gao, and W. B. Dolan
+
+Interactive text generation
+.
+
+In 
+Proceedings of the 2023 Conference on Empirical Methods in Natural Language Processing
+,
+
+pp. 4450–4468
+.
+
+Cited by: 
+Appendix C
+.
+
+Gan 
+et al.
+ (2024)
+
+Y. Gan, C. Li, J. Xie, L. Wen, M. Purver, and M. Poesio
+
+ClarQ-llm: a benchmark for models clarifying and requesting information in task-oriented dialog
+.
+
+External Links: 
+2409.06097
+,
+
+Link
+
+Cited by: 
+§1
+,
+
+§2.1
+,
+
+§2.2
+.
+
+Hendrycks 
+et al.
+ (2020)
+
+D. Hendrycks, C. Burns, S. Basart, A. Zou, M. Mazeika, D. Song, and J. Steinhardt
+
+Measuring massive multitask language understanding
+.
+
+arXiv preprint arXiv:2009.03300
+.
+
+Cited by: 
+Appendix E
+.
+
+Hong 
+et al.
+ (2023)
+
+J. Hong, S. Levine, and A. Dragan
+
+Zero-shot goal-directed dialogue via rl on imagined conversations
+.
+
+arXiv preprint arXiv:2311.05584
+.
+
+Cited by: 
+Appendix C
+.
+
+Hu 
+et al.
+ (2023)
+
+Z. Hu, Y. Feng, A. T. Luu, B. Hooi, and A. Lipani
+
+Unlocking the potential of user feedback: leveraging large language model as user simulators to enhance dialogue system
+.
+
+In 
+Proceedings of the 32nd ACM International Conference on Information and Knowledge Management
+,
+
+pp. 3953–3957
+.
+
+Cited by: 
+Appendix C
+.
+
+Hu 
+et al.
+ (2024)
+
+Z. Hu, C. Liu, X. Feng, Y. Zhao, S. Ng, A. T. Luu, J. He, P. W. Koh, and B. Hooi
+
+Uncertainty of thoughts: uncertainty-aware planning enhances information seeking in llms
+.
+
+Advances in Neural Information Processing Systems
+ 
+37
+, 
+pp. 24181–24215
+.
+
+Cited by: 
+§5.1
+.
+
+Huang 
+et al.
+ (2025)
+
+T. Huang, S. Chen, M. Chen, J. May, L. Yang, M. Wan, and P. Zhou
+
+Teaching language models to gather information proactively
+.
+
+Findings of the Association for Computational Linguistics: EMNLP 2025
+, 
+pp. 15588–15599
+.
+
+Cited by: 
+§1
+,
+
+§2.3
+.
+
+Jain 
+et al.
+ (2025)
+
+N. Jain, A. Gu, W. Li, F. Yan, T. Zhang, S. Wang, A. Solar-Lezama, K. Sen, and I. Stoica
+
+Livecodebench: holistic and contamination free evaluation of large language models for code
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Vol. 
+2025
+, 
+pp. 58791–58831
+.
+
+Cited by: 
+Appendix E
+.
+
+Laban 
+et al.
+ (2025)
+
+P. Laban, H. Hayashi, Y. Zhou, and J. Neville
+
+Llms get lost in multi-turn conversation
+.
+
+arXiv preprint arXiv:2505.06120
+.
+
+Cited by: 
+§1
+,
+
+§2.1
+.
+
+Levin and Hovav (2005)
+
+B. Levin and M. R. Hovav
+
+Argument realization
+.
+
+Vol. 
+10
+,  
+Cambridge university press Cambridge
+.
+
+Cited by: 
+§3.2
+.
+
+Lightman 
+et al.
+ (2024)
+
+H. Lightman, V. Kosaraju, Y. Burda, H. Edwards, B. Baker, T. Lee, J. Leike, J. Schulman, I. Sutskever, and K. Cobbe
+
+Let’s verify step by step
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Vol. 
+2024
+, 
+pp. 39578–39601
+.
+
+Cited by: 
+Appendix E
+.
+
+Luo 
+et al.
+ (2025)
+
+S. Luo, Y. Huang, M. Li, S. Meng, F. Liu, Z. Hu, J. Feng, and Q. Liu
+
+ClarifyMT-bench: benchmarking and improving multi-turn clarification for conversational large language models
+.
+
+arXiv preprint arXiv:2512.21120
+.
+
+Cited by: 
+§1
+,
+
+§2.2
+.
+
+Min 
+et al.
+ (2020)
+
+S. Min, J. Michael, H. Hajishirzi, and L. Zettlemoyer
+
+AmbigQA: answering ambiguous open-domain questions
+.
+
+In 
+Proceedings of the 2020 conference on empirical methods in natural language processing (EMNLP)
+,
+
+pp. 5783–5797
+.
+
+Cited by: 
+§1
+,
+
+§2.2
+,
+
+§5.1
+.
+
+Peng 
+et al.
+ (2019)
+
+X. B. Peng, A. Kumar, G. Zhang, and S. Levine
+
+Advantage-weighted regression: simple and scalable off-policy reinforcement learning
+.
+
+arXiv preprint arXiv:1910.00177
+.
+
+Cited by: 
+Appendix H
+,
+
+§4.3
+.
+
+Peters and Schaal (2007)
+
+J. Peters and S. Schaal
+
+Reinforcement learning by reward-weighted regression for operational space control
+.
+
+In 
+Proceedings of the 24th international conference on Machine learning
+,
+
+pp. 745–750
+.
+
+Cited by: 
+Appendix H
+,
+
+Appendix H
+.
+
+Rafailov 
+et al.
+ (2023)
+
+R. Rafailov, A. Sharma, E. Mitchell, C. D. Manning, S. Ermon, and C. Finn
+
+Direct preference optimization: your language model is secretly a reward model
+.
+
+Advances in neural information processing systems
+ 
+36
+, 
+pp. 53728–53741
+.
+
+Cited by: 
+Appendix H
+.
+
+Schulman 
+et al.
+ (2017)
+
+J. Schulman, F. Wolski, P. Dhariwal, A. Radford, and O. Klimov
+
+Proximal policy optimization algorithms
+.
+
+arXiv preprint arXiv:1707.06347
+.
+
+Cited by: 
+§4.3
+.
+
+Searle (1969)
+
+J. R. Searle
+
+Speech acts: an essay in the philosophy of language
+.
+
+Cambridge University
+.
+
+Cited by: 
+§3.2
+.
+
+Shaikh 
+et al.
+ (2025)
+
+O. Shaikh, H. Mozannar, G. Bansal, A. Fourney, and E. Horvitz
+
+Navigating rifts in human-llm grounding: study and benchmark
+.
+
+In 
+Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)
+,
+
+pp. 20832–20847
+.
+
+Cited by: 
+§1
+,
+
+§2.1
+.
+
+Shani 
+et al.
+ (2024)
+
+L. Shani, A. Rosenberg, A. Cassel, O. Lang, D. Calandriello, A. Zipori, H. Noga, O. Keller, B. Piot, I. Szpektor, 
+et al.
+
+Multi-turn reinforcement learning with preference human feedback
+.
+
+Advances in Neural Information Processing Systems
+ 
+37
+, 
+pp. 118953–118993
+.
+
+Cited by: 
+§2.3
+.
+
+Shao 
+et al.
+ (2024)
+
+Z. Shao, P. Wang, Q. Zhu, R. Xu, J. Song, X. Bi, H. Zhang, M. Zhang, Y. Li, Y. Wu, 
+et al.
+
+Deepseekmath: pushing the limits of mathematical reasoning in open language models
+.
+
+arXiv preprint arXiv:2402.03300
+.
+
+Cited by: 
+§1
+,
+
+§4.3
+.
+
+Shi 
+et al.
+ (2019)
+
+W. Shi, K. Qian, X. Wang, and Z. Yu
+
+How to build user simulators to train rl-based dialog systems
+.
+
+In 
+Proceedings of the 2019 conference on empirical methods in natural language processing and the 9th international joint conference on natural language processing (EMNLP-IJCNLP)
+,
+
+pp. 1990–2000
+.
+
+Cited by: 
+Appendix C
+.
+
+Talmor 
+et al.
+ (2019)
+
+A. Talmor, J. Herzig, N. Lourie, and J. Berant
+
+Commonsenseqa: a question answering challenge targeting commonsense knowledge
+.
+
+In 
+Proceedings of the 2019 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies, Volume 1 (Long and Short Papers)
+,
+
+pp. 4149–4158
+.
+
+Cited by: 
+Appendix E
+.
+
+Taylor (1968)
+
+R. S. Taylor
+
+Question-negotiation and information seeking in libraries
+.
+
+Cited by: 
+§1
+.
+
+Wu 
+et al.
+ (2025)
+
+S. Wu, M. Galley, B. Peng, H. Cheng, G. Li, Y. Dou, W. Cai, J. Zou, J. Leskovec, and J. Gao
+
+Collabllm: from passive responders to active collaborators
+.
+
+arXiv preprint arXiv:2502.00640
+.
+
+Cited by: 
+Appendix G
+,
+
+§1
+,
+
+§2.1
+,
+
+§2.3
+.
+
+Yang 
+et al.
+ (2025)
+
+C. Yang, Y. Shi, Q. Ma, M. X. Liu, C. Kästner, and T. Wu
+
+What prompts don’t say: understanding and managing underspecification in llm prompts
+.
+
+arXiv preprint arXiv:2505.13360
+.
+
+Cited by: 
+§2.1
+.
+
+Ye 
+et al.
+ (2022)
+
+F. Ye, J. Manotumruksa, and E. Yilmaz
+
+Multiwoz 2.4: a multi-domain task-oriented dialogue dataset with essential annotation corrections to improve state tracking evaluation
+.
+
+In 
+Proceedings of the 23rd Annual Meeting of the Special Interest Group on Discourse and Dialogue
+,
+
+pp. 351–360
+.
+
+Cited by: 
+§2.1
+,
+
+§5.1
+.
+
+Zhang 
+et al.
+ (2025)
+
+M. Zhang, W. B. Knox, and E. Choi
+
+Modeling future conversation turns to teach llms to ask clarifying questions
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Vol. 
+2025
+, 
+pp. 60722–60742
+.
+
+Cited by: 
+§1
+,
+
+§2.3
+.
+
+Zhang 
+et al.
+ (2024)
+
+T. Zhang, P. Qin, Y. Deng, C. Huang, W. Lei, J. Liu, D. Jin, H. Liang, and T. Chua
+
+CLAMBER: a benchmark of identifying and clarifying ambiguous information needs in large language models
+.
+
+In 
+Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)
+,
+
+pp. 10746–10766
+.
+
+Cited by: 
+§1
+,
+
+§2.2
+.
+
+Appendix A 
+Data Construction and Statistics
+
+This appendix expands on §
+3.2
+ with the
+filtering pipeline that produces the 4,930-seed pool and four
+statistical views of that pool: its task-family composition, the
+per-seed counts of annotated intents and details, and the initial
+information coverage of the two vague variants. Together they
+characterise the bench used throughout the main text.
+
+Filtering pipeline.
+
+Figure 
+5
+ traces the flow of queries through
+the four-stage filtering pipeline described in
+§
+3.1
+. 
+Rule-based Filtering
+ on length and
+unsafe content removes 
+ of raw queries. Two subsequent stages
+of 
+LLM-based Filtering
+ strip greetings, test strings, and
+context-dependent utterances (
+), then queries that are too
+detail-sparse to degrade meaningfully (
+). A final
+
+Intent & Detail Annotation
+ stage rejects another 
+ for
+annotation failure, leaving 
+ of the original 
+100K queries
+as the information-complete seed pool used throughout the paper.
+
+Task-family distribution.
+
+Figure 
+6
+ reports the composition of the
+
+-seed pool by task family. 
+Consultation & Analysis
+ and
+
+Information Query
+ dominate at 
+ and 
+ respectively,
+with 
+Recommendation & Decision
+ queries forming a further 
+.
+
+Creation & Generation
+ and 
+Task Execution
+ form the long
+tail at 
+ and 
+. The distribution inherits the empirical mix
+observed in the source assistant traffic.
+
+Information density of seeds.
+
+Figure 
+7
+ shows the per-seed distribution
+of annotated intents and details. VagueBench is anchored in single-intent
+queries, with 
+ of seeds carrying exactly one intent and a mean of
+
+ intents per seed. Detail counts form a roughly bell-shaped
+distribution peaking at four details per seed (
+) with a mean of
+
+. This information density is what makes the bench non-trivial:
+every seed carries multiple removable units, so the degraded variants
+expose real hidden information rather than vacuous gaps.
+
+Initial information coverage of the variants.
+
+Figure 
+8
+ measures the initial information coverage of each
+query variant, that is, the fraction of gold information units already
+expressed in the initial query. Intent-Vague preserves 
+ of units on
+average by construction, since it weakens only intent anchors; Fully-Vague
+drops coverage to 
+, removing intent anchors together with a sample
+of detail anchors. The two distributions barely overlap, confirming that
+the controlled degradation produces two cleanly separated evaluation
+regimes that correspond exactly to the two splits used in
+§
+5
+.
+
+Figure 5: 
+
+Flow of queries through the four-stage VagueBench filtering pipeline.
+
+Rule-based Filtering
+ removes 
+ of the 
+100K raw
+queries on length or unsafe-content grounds. 
+LLM-based
+Filtering
+ then discards greetings, test strings, and context-dependent
+utterances (
+), followed by detail-sparse queries that lack the
+structure required for degradation (
+). A final 
+Intent &
+Detail Annotation
+ stage yields 
+ information-complete seeds,
+
+ of the input. The lighter peach tones on the left mark earlier
+stages and the deepest tone on the right marks the final seed pool;
+grey side-flows are the discarded branches at each stage.
+
+Figure 6: 
+
+Task-family composition of the 
+ VagueBench seed queries.
+
+Consultation & Analysis
+ and 
+Information Query
+ together
+account for over 
+ of the pool, while 
+Task Execution
+ forms
+the rarest 
+. The bench inherits a long-tailed mix that mirrors
+real-world assistant traffic.
+
+Figure 7: 
+
+Per-seed counts of annotated intents (left) and details (right) in the
+
+-seed pool. Seeds carry on average 
+ intents and 
+
+details; 
+ have exactly one intent, and detail counts cluster in
+the 3 to 6 range.
+
+Figure 8: 
+
+Initial information coverage of each query variant. Coverage is the
+fraction of gold information units, intents and details combined, that
+are already expressed in the initial query. Intent-Vague (peach)
+preserves 
+ of units on average since only intent anchors are
+weakened, while Fully-Vague (coral) drops to 
+ as both intent and
+a sample of detail anchors are removed. KDE smoothed; box-and-whisker
+overlays show median, interquartile range, and 5/95 percentiles.
+
+Appendix B 
+Human Study
+
+To validate three components of our pipeline, we conducted a small human
+study with two annotators who were graduate students familiar with
+dialogue research and blind to each other’s labels. The three experiments
+verify, in order, whether the vague queries in VagueBench genuinely
+warrant clarification, whether the synthesized intent and detail
+annotations align with human judgement, and whether the LLM extractor used
+in our evaluation protocol recovers the same information units that a
+human reader would. All agreement scores are reported as Cohen’s 
+
+at the unit level.
+
+B.1 
+Experiment 1: Do Vague Queries Genuinely Warrant Clarification?
+
+Setup.
+
+We sampled 
+ queries uniformly at random from the Intent-Vague split
+and 
+ from the Fully-Vague split, for a total of 
+ queries. To verify if the omitted details were genuinely necessary, the two annotators were shown the vague query alongside the complete gold query 
+. Each annotator independently judged whether the information gap objectively warrants at least one clarifying question before attempting an answer, recording a binary Ask or Answer decision.
+
+Results.
+
+Table 
+6
+ reports the two annotators’ Ask rates on each
+split. On Intent-Vague queries both annotators chose to ask on at least
+
+ of samples, and on Fully-Vague queries both chose to ask on
+
+. The results indicate that the controlled degradation in
+VagueBench produces vague queries that human readers consistently
+recognise as information-deficient, and that the gap between this human
+Ask rate and the 
+ and 
+ Ask rate of un-prompted Qwen3.5-27B
+in Table 
+2
+ reflects a behavioural suppression in the model
+rather than ambiguity in the data.
+
+Split
+
+Human 1 Ask%
+
+Human 2 Ask%
+
+Intent-Vague
+
+98.0
+
+96.0
+
+Fully-Vague
+
+100.0
+
+100.0
+
+Table 6: 
+
+Human Ask rates on vague queries. Both annotators were given the vague
+query 
+ together with its complete gold query 
+ and judged
+whether the information gap warranted a clarifying question before
+answering. High Ask rates confirm that the vague queries genuinely
+warrant clarification.
+
+B.2 
+Experiment 2: Are the LLM-Annotated Intent and Detail Units Accurate?
+
+Setup.
+
+We sampled 
+ complete queries 
+ from the test pool. For each
+query, the two human annotators and the LLM annotator (GLM-5) each independently
+extracted the intent and detail units 
+ directly
+from the query, with no access to one another’s outputs. After this independent extraction, the human judges manually aligned the three annotation sets while viewing the complete query. They treated two units as identical when they denoted the same intent or the same detail key–value pair, regardless of surface wording. The union of all aligned units forms the per-query decision pool, on which each unit receives
+a binary label from every annotator indicating whether that annotator
+extracted it. Cohen’s 
+ is computed pairwise at the unit level, pooled
+over all 
+ queries. Because the pool is the union of all three sources
+rather than a pre-given candidate list, this protocol reflects both spurious
+units and missing units, so the agreement scores capture annotation
+completeness as well as precision.
+
+Results.
+
+Table 
+7
+ reports the three pairwise Cohen’s 
+
+values between the two annotators and the LLM annotation. Human 1 and
+Human 2 reached 
+, indicating that the unit-level Present
+or Absent criterion is well-defined. The agreement between each
+annotator and the LLM annotation was 
+ and 
+,
+about 
+ below the inter-annotator ceiling, supporting the use of
+LLM-extracted annotations as gold labels in VagueBench.
+
+Pair
+
+Cohen’s 
+
+Human 1 vs Human 2
+
+0.87
+
+Human 1 vs LLM
+
+0.83
+
+Human 2 vs LLM
+
+0.81
+
+Table 7: 
+
+Unit-level agreement on whether each candidate intent or
+detail unit is present in the query. Computed on a candidate-set pool drawn from 50 queries.
+
+B.3 
+Experiment 3: Does the LLM Extractor Recover the Same Information Units as Humans?
+
+Setup.
+
+The LLM extractor in our evaluation pipeline maps a simulated-user reply
+to the set of information units the reply discloses. To check that this
+extractor agrees with human judgement, we sampled 
+ dialogue turns from
+completed VagueBench evaluations, each consisting of the assistant’s
+clarifying question, the simulated user’s reply, and the set of candidate
+units that could plausibly be disclosed at that turn. For every candidate
+unit, each annotator independently judged Disclosed or Not Disclosed by
+the reply, and the LLM extractor contributed its own Disclosed or Not
+Disclosed label on the same candidate set. Agreement is again computed at
+the unit level, pooled over all 
+ turns.
+
+Results.
+
+Table 
+8
+ reports the three pairwise Cohen’s 
+
+values. Inter-annotator 
+ was 
+, comparable to Experiment 2.
+The LLM extractor agreed with Human 1 at 
+ and with
+Human 2 at 
+. The closeness of these three numbers
+indicates that the extractor is interchangeable with a human annotator
+for the purpose of unit-level recovery, and therefore that Cov. F1 and
+IAR as measured against the extractor’s output are reliable proxies for
+what a human would have scored.
+
+Pair
+
+Cohen’s 
+
+Human 1 vs Human 2
+
+0.84
+
+Human 1 vs LLM
+
+0.80
+
+Human 2 vs LLM
+
+0.79
+
+Table 8: 
+
+Unit-level agreement on whether each candidate unit was
+disclosed by a simulated-user reply. Computed on a candidate-set pool
+drawn from 50 dialogue turns.
+
+Appendix C 
+Simulated User
+
+This appendix specifies the simulated user 
+ 
+(
+Shi et al., 2019
+; 
+Hong et al., 2023
+; 
+Faltings et al., 2023
+; 
+Hu et al., 2023
+)
+introduced in §
+3.3
+. 
+ is the core component of the VagueBench evaluation protocol: it plays the role of a real user who holds the hidden information and decides, on each turn, which units to release in response to the model’s question. Two properties anchor its design: 
+consistency
+—identical questions elicit responses of the same kind—and 
+minimal disclosure
+—only precisely-matched units are released, with no volunteered extras.
+
+C.1 
+Behaviour Rules
+
+The behaviour of 
+ is governed by five rules over the hidden intent set 
+ and detail set 
+.
+
+R1. Information release.
+
+When the model’s question semantically matches the trigger keywords of some hidden intent 
+ or detail 
+, 
+ releases that unit in short, natural language. For example, the question 
+“Which area would you like to dine in?”
+ matches the trigger of 
+ and 
+ replies 
+“near University Avenue in downtown Palo Alto”
+; an intent-side match is symmetric, e.g. 
+“Are you looking for restaurant recommendations or something else?”
+ matches the 
+recommend_restaurant
+ intent and 
+ replies 
+“yes, recommend a few restaurants”
+. Matching is judged at the semantic level by a strong LLM rather than by exact keyword overlap, so phrasings such as 
+“roughly how much do you want to spend?”
+ still match a budget trigger listing 
+budget / price / spending
+.
+
+R2. Deflection.
+
+If the question matches no hidden unit, 
+ returns a deflective reply drawn at random from a predefined pool: 
+“I haven’t decided yet”
+, 
+“I’m not sure about that”
+, 
+“you decide for me”
+, 
+“no particular preference”
+, and similar. Deflections are short, natural, and carry no cues that the model could use to infer the hidden set.
+
+R3. No proactive disclosure.
+
+ never volunteers a unit that was not asked about. Questions that approach several units but precisely match only one—for example 
+“any requirements for your meal?”
+ matching only 
+scenario
+—release only the matched unit, regardless of how close the others appear.
+
+R4. Release once.
+
+Once released, a unit is removed from 
+ or 
+. Subsequent questions that re-hit the same unit are answered with 
+“I mentioned that earlier”
+ or by repeating the previous value; no new credit is granted at evaluation.
+
+R5. Multi-unit matches.
+
+When a single question matches multiple hidden units—for example 
+“which city and what occasion?”
+ hitting both 
+city
+ and 
+scenario
+—
+ releases all matched units in one reply. This rule ensures that elicitation efficiency is not artificially deflated by simulator-side fragmentation.
+
+C.2 
+Direct-Answer Behaviour
+
+If the model commits to a final answer at the initial turn without asking, the dialogue terminates immediately and the evaluation proceeds without further simulator input. On information-complete queries this is the expected behaviour and requires no simulator participation. On Intent-Vague and Fully-Vague queries, the absence of a question means the model answered under missing information, and the resulting answer is naturally penalised by Cov. F1, which compares the response against the gold information set. Whether a model turn counts as 
+ask
+ or 
+answer
+ is judged by the LLM-based behaviour judge (Prompt 3 in Appendix 
+J
+).
+
+C.3 
+System-Prompt Template
+
+Each Intent-Vague and Fully-Vague sample carries a system prompt that instantiates 
+ for that sample. The template has four components:
+
+•
+
+Role description.
+ The complete underlying need together with the meta query actually shown to the model.
+
+•
+
+Expressed information.
+ The content already present in the meta query, which 
+ does not need to release.
+
+•
+
+Hidden-information table.
+ A structured listing of every hidden intent and detail, each annotated with its trigger keywords and the natural-language reply to use on release.
+
+•
+
+Deflection pool.
+ The set of non-informative replies drawn upon when no unit is matched.
+
+A representative Fully-Vague system prompt is shown in Figure 
+9
+.
+
+Role.
+ You are a user asking an AI assistant for help. Your actual need is: a recommendation for a Japanese restaurant near University Avenue in downtown Palo Alto suitable for business dining, around $120 per person, ideally with a private room. You only said: 
+“Palo Alto Japanese food”
+.
+
+Hidden intents.
+
+recommend_restaurant
+ — if the AI asks what you want / what kind of help / your goal 
+ reply 
+“recommend a few restaurants”
+.
+
+Hidden details.
+
+area
+ = near University Avenue — if the AI asks about location / district / where 
+ reply 
+“near University Avenue in downtown Palo Alto”
+.
+
+scenario
+ = business dining — if the AI asks about occasion / company / purpose 
+ reply 
+“business dining”
+.
+
+budget
+ = around $120 per person — if the AI asks about budget / price / spending 
+ reply 
+“around $120 per person”
+.
+
+private_room
+ = required — if the AI asks about ambience / seating / private rooms 
+ reply 
+“private room preferred”
+.
+
+Deflection.
+ For unmatched questions, randomly reply with one of 
+“I don’t have particular preferences”
+, 
+“you decide for me”
+, 
+“I haven’t thought about that”
+.
+
+Notes.
+ Reply briefly and naturally, like a real user. Do not volunteer information that was not asked about. Answer only what was asked.
+
+Figure 9: 
+System prompt example
+ for a Fully-Vague sample. The hidden-information table lists the four detail units and one intent unit that 
+ may release on a matching question.
+
+C.4 
+Implementation
+
+ is realised with GLM-5.1, which receives the per-sample system prompt and produces a reply to each model question. Semantic matching between the question and the hidden-unit triggers is performed inside the same inference call: the LLM judges, on the basis of the trigger keywords and the hidden-information table in the system prompt, whether the model’s question hits any unit, and emits a release reply or a deflection accordingly. To keep simulator behaviour consistent and auditable, we set the sampling temperature to 
+ to suppress drift and log every simulator turn for post-hoc inspection and spot-checking.
+
+Appendix D 
+Implementation Details
+
+This appendix lists the models evaluated in the experiments of §
+5
+, the hyperparameters used to train DialogGRPO, and the hardware on which training and inference were carried out.
+
+Evaluated models.
+
+Table 
+9
+ enumerates the closed and open-source models compared on VagueBench and the two transfer benchmarks. Closed-source models are accessed via their official APIs; open-source models are loaded from the Hugging Face checkpoints linked in the table.
+
+Provider
+
+Model
+
+Model Link
+
+OpenAI
+
+GPT-5.4
+
+OpenAI Docs
+
+GPT-oss-120B
+
+Hugging Face
+
+Anthropic
+
+Claude Sonnet 4.6
+
+Anthropic
+
+Google
+
+Gemini 3.1 Pro
+
+Google DeepMind
+
+Gemma3-27B
+
+Hugging Face
+
+Meta
+
+Llama-3.1-8B-Instruct
+
+Hugging Face
+
+Qwen
+
+Qwen3-8B
+
+Hugging Face
+
+Qwen3.5-27B
+
+Hugging Face
+
+Zhipu
+
+GLM-5
+
+Hugging Face
+
+GLM-5.1
+
+Hugging Face
+
+Table 9: 
+Models evaluated in this work. The same Qwen3.5-27B checkpoint serves as a base-model baseline (Table 
+2
+); the cross-base experiment in §
+5.4
+ additionally trains Gemma3-27B with identical hyperparameters. GLM-5.1 plays the simulated user 
+ (Appendix 
+C
+).
+
+Training hyperparameters.
+
+DialogGRPO is trained with LoRA adapters on top of the Qwen3.5-27B base; the Gemma3-27B run in §
+5.4
+ uses the same configuration with only the base weights swapped. Table 
+10
+ reports the full set of training hyperparameters.
+
+Hyperparameter
+
+Value
+
+Learning rate
+
+Warm-up ratio
+
+LR scheduler
+
+cosine
+
+Batch size
+
+Epochs
+
+LoRA rank
+
+LoRA alpha
+
+Table 10: 
+Training hyperparameters for DialogGRPO. The same configuration is used in the cross-base-model experiment of §
+5.4
+.
+
+Hardware.
+
+All training and inference runs are carried out on a single node equipped with eight NVIDIA H200 GPUs. DialogGRPO training of Qwen3.5-27B and the cross-base Gemma3-27B run in §
+5.4
+ both use the same eight-GPU node; open-source baseline inference and the simulated-user rollouts used for evaluation are also run on this hardware.
+
+Appendix E 
+General Capability Preservation
+
+A natural concern about any offline reinforcement learning recipe is that
+the trained model may have drifted away from the base distribution and
+lost general task ability. To address this, we evaluated our DialogGRPO
+model on six general-capability benchmarks alongside the un-modified
+Qwen3.5-27B base, covering coding, mathematics, commonsense, and broad
+knowledge: LiveCodeBench 
+(
+Jain et al., 2025
+)
+, MathQA 
+(
+Amini et al., 2019
+)
+,
+CommonsenseQA 
+(
+Talmor et al., 2019
+)
+, MATH-500 
+(
+Lightman et al., 2024
+)
+, MMLU 
+(
+Hendrycks et al., 2020
+)
+, and
+GSM8K 
+(
+Cobbe et al., 2021
+)
+. No clarification-related training data overlap with
+any of these benchmarks.
+
+Figure 10: 
+
+General-capability check on six external benchmarks: LiveCodeBench,
+MathQA, CommonsenseQA, MATH-500, MMLU, and GSM8K. The two envelopes trace
+nearly identical shapes, with the trained DialogGRPO model staying at or
+above the Qwen3.5-27B base on every benchmark and slightly improving on
+LiveCodeBench and MATH-500. The result indicates that the proactive
+elicitation behaviour reported in the main text is acquired without
+sacrificing general task ability.
+
+Figure 
+10
+ shows the comparison as a radar chart. The
+two envelopes are nearly identical, with our model matching the base
+within measurement noise on four of the six benchmarks and slightly
+exceeding it on LiveCodeBench and MATH-500. The result mitigates a
+potential reviewer concern: the proactive elicitation behaviour reported
+in the main text is acquired without sacrificing general task accuracy.
+We attribute this to the nature of what DialogGRPO trains. The objective
+optimises 
+when
+ and 
+what
+ to ask, a decision-making behaviour
+over the dialogue state, rather than injecting domain knowledge into the
+model; it reshapes how the model acts on missing information without
+overwriting the factual, mathematical, or coding competence already
+present in the base weights. This behaviour-level target is reinforced by
+the diversity of our training data, which spans five task families and a
+broad range of open-domain topics rather than any single narrow domain.
+Because no benchmark-specific knowledge is added and no narrow
+distribution is over-fit, the elicitation policy is learned on top of the
+base model’s general ability rather than at its expense.
+
+Appendix F 
+Generalization to a Different Base Model
+
+This appendix expands on the cross-base-model generalization experiment summarised in §
+5.4
+ and Figure 
+4
+.
+
+Setup.
+
+To check that our method generalises beyond a single base model, we re-ran the full training pipeline on Gemma3-27B, keeping every hyperparameter identical to the Qwen3.5-27B run reported in the main text. The DAG construction, reward design were unchanged; only the base-model weights differed.
+
+The gains carry over.
+
+Gemma3-27B shows the same suppression pattern as Qwen3.5-27B before training, with the base Ask% below 
+ on both splits, confirming that clarification suppression is shared across base-model families rather than being a property of one model. After training the Gemma version reaches Ask%, Cov. F1, and IAR levels that closely track those observed on Qwen3.5-27B, and the lift bars in Figure 
+4
+ are of similar height on every metric. The consistency across two unrelated base models indicates that the training recipe transfers, and that the improvements in the main paper are attributable to the DialogGRPO design rather than to a peculiarity of any single base model.
+
+Appendix G 
+Additional Experiments
+
+We additionally compare DialogGRPO with CollabLLM 
+(
+Wu et al., 2025
+)
+ and test transfer to a sub-10B backbone. Because the released CollabLLM checkpoint uses Llama-3.1-8B-Instruct, we re-ran the full DialogGRPO pipeline on the same backbone for a controlled same-backbone comparison.
+
+Method (Llama-3.1-8B-Instruct)
+
+Intent-Vague
+
+Fully-Vague
+
+Ask%
+
+Cov. F1
+
+IAR
+
+Ask%
+
+Cov. F1
+
+IAR
+
+Base
+
+0.8
+
+0.50
+
+0.00
+
+1.2
+
+0.35
+
+0.23
+
+CollabLLM
+
+3.2
+
+0.59
+
+0.00
+
+4.4
+
+0.37
+
+0.27
+
+DialogGRPO
+
+76.6
+
+0.61
+
+0.37
+
+82.0
+
+0.49
+
+0.43
+
+Table 11: 
+Same-backbone comparison with CollabLLM and transfer of DialogGRPO to a sub-10B model on VagueBench.
+
+CollabLLM produces only modest gains over the base model on VagueBench, increasing Ask% to 
+/
+. This is consistent with its focus on vertical tasks such as document editing, code, and mathematics, using task-specific rewards and online user simulation rather than open-domain recovery of never-stated information. On the same Llama backbone, DialogGRPO reaches 
+/
+ Ask% while improving both Cov. F1 and IAR. The suppression-then-recovery pattern therefore also holds at the 8B scale, providing evidence that the training recipe transfers beyond the two 27B backbones reported in §
+5.4
+.
+
+Appendix H 
+Derivation of the Advantage-Weighted Objective
+
+This appendix derives the training objective in
+Eq. 
+9
+ from a KL-regularized policy optimization
+problem. The derivation follows the classical reward-weighted
+regression line 
+(
+Peters and Schaal, 2007
+; 
+Peng et al., 2019
+)
+; the same closed-form
+step underlies the optimal policy in DPO 
+(
+Rafailov et al., 2023
+)
+.
+We make explicit how the KL constraint is absorbed into an exponential
+advantage weight, which is why Eq. 
+9
+ carries no
+separate KL term.
+
+KL-regularized objective.
+
+For a state 
+ (a canonical prompt 
+) with candidate actions 
+
+(responses 
+), we seek a policy 
+ that maximizes the advantage
+
+ while staying close to the reference policy
+
+:
+
+(10)
+
+subject to the normalization constraint
+
+ for every 
+.
+
+Closed-form optimum.
+
+Introducing a Lagrange multiplier 
+ for the normalization
+constraint at each state and setting the derivative of the Lagrangian
+with respect to 
+ to zero gives
+
+(11)
+
+Solving for 
+ and folding all 
+-independent terms into a
+per-state normalizer 
+ yields the optimal policy
+
+(12)
+
+where 
+
+ensures 
+.
+The KL constraint in Eq. 
+10
+ is thus not discarded: it is
+absorbed analytically into the exponential factor 
+ and
+the reference term 
+.
+
+Projection onto a parametric policy.
+
+ requires summing over all actions and is intractable, so
+
+ cannot be used directly. We instead fit a parametric
+policy 
+ to 
+ by minimizing the forward KL
+divergence 
+, which, after
+dropping 
+-independent terms, is equivalent to
+
+(13)
+
+Substituting Eq. 
+12
+ gives
+
+(14)
+
+Empirical objective.
+
+In our offline setting the candidate set 
+ at each node is
+pre-generated by the external strong LLM, so it does not coincide with
+samples from 
+. We therefore treat the candidates as
+an empirical sampling distribution and approximate the expectation over
+
+ by an average over 
+; this is
+a stated approximation rather than an exact identity, and is made
+practical by the advantage weighting, which down-weights candidates far
+from high-advantage regions. Since 
+ is independent of 
+ and
+acts only as a per-state scaling, it can be dropped during optimization.
+This yields the per-node objective in Eq. 
+9
+.
+Unlike trajectory-level reward-weighted regression
+
+(
+Peters and Schaal, 2007
+)
+, the advantage 
+ here is computed per
+edge within a dialogue-state DAG (§
+4.2
+), giving dense
+turn-level credit assignment rather than a single trajectory return.
+
+Appendix I 
+Case Studies
+
+This appendix shows three trajectories produced by DialogGRPO on
+representative test queries, rendered as chat transcripts. Each turn
+shows a clarifying question asked by the model on the left and the
+simulated user’s reply on the right; the green panel at the bottom
+summarises the final answer with its key points highlighted.
+
+Proactive Elicitation
+
+Ibuprofen and acetaminophen.
+
+Turn 1
+
+<think>
+ … Two drugs named, but the user gave no 
+intent
+ and no 
+symptom
+; cannot assume the use case 
+ 
+ask
+ 
+</think>
+
+What would you like to know — their differences, or whether they can be taken together?
+
+The difference, which is better, whether to alternate, and how long to wait between doses.
+
+Turn 2
+
+<think>
+ … Intent clear; the 
+symptom
+ and the 
+target user
+ are still missing, both change the recommendation 
+ 
+ask
+ 
+</think>
+
+What symptom are you trying to relieve — fever, headache, menstrual pain — and who is taking it?
+
+Just a cold with fever; I’m taking it myself.
+
+<think>
+ … All key units acquired 
+ 
+answer
+ 
+</think>
+
+✓
+ 
+Acetaminophen
+: gentler, safer; weaker anti-inflammatory.
+
+✓
+ 
+Ibuprofen
+: stronger fever and pain relief; harder on the stomach.
+
+✓
+ 
+Alternating: not recommended
+ for self-medication.
+
+✓
+ Intervals: ibuprofen 
+6–8 h
+, acetaminophen 
+4–6 h
+; max 4 doses per day.
+
+Figure 11: 
+Case 1.
+ Drug comparison — the model elicits the user’s intent, then the symptom and the target user, before delivering a focused recommendation.
+
+Proactive Elicitation
+
+Short-term stocks for next Monday.
+
+Turn 1
+
+<think>
+ … Time, strategy, and asset type are stated; the 
+specific intent
+, recommendation versus analysis, is missing 
+ 
+ask
+ 
+</think>
+
+Are you asking for short-term recommendations for next Monday, or technical analysis of a particular sector or stock?
+
+Short-term recommendations — hot sectors or direct tickers.
+
+Turn 2
+
+<think>
+ … Hot short-term plays swing widely; the user’s 
+risk preference
+ is not stated 
+ 
+ask
+ 
+</think>
+
+Hot short-term plays swing widely. Aggressive moves such as chasing limit-up stocks, or something more conservative?
+
+Aggressive is fine; short-term is about chasing returns. Higher risk is OK.
+
+Turn 3
+
+<think>
+ … Risk profile clear; the 
+investor identity
+, retail vs. institutional, still affects liquidity matching 
+ 
+ask
+ 
+</think>
+
+Are you an individual retail investor? Liquidity needs differ between retail and institutional accounts.
+
+Yes, retail.
+
+<think>
+ … All key units acquired 
+ 
+answer
+ 
+</think>
+
+✓
+ Focus on 
+leading names in currently hot sectors
+, e.g. technology or new energy.
+
+✓
+ Track 
+capital flow at Monday’s open
+; enter the strongest names on confirmation.
+
+✓
+ Always preset a 
+stop-loss
+ given the volatility.
+
+✓
+ Compliance limits prevent listing tickers; pair sector analysis with a licensed advisor.
+
+Figure 12: 
+Case 2.
+ Short-term stock query — the model successively elicits intent, risk preference, and investor identity before delivering a strategy sketch.
+
+Proactive Elicitation
+
+RPG bounty-quest reward design.
+
+Turn 1
+
+<think>
+ … Game type and target system stated; the 
+specific intent
+ — new ideas, code, or balancing — is missing 
+ 
+ask
+ 
+</think>
+
+What specifically are you after — innovative design directions, or help with a concrete issue in your current setup?
+
+Innovative design ideas.
+
+Turn 2
+
+<think>
+ … Intent is innovation; the 
+current mechanism
+ and the 
+pain point
+ are unknown, otherwise advice will be generic 
+ 
+ask
+ 
+</think>
+
+Could you describe the current reward mechanism, or what feels most lacking in the existing design?
+
+Stale: kill the target, get gold, XP, maybe a random drop. No surprise, no incentive to chase hard bounties.
+
+<think>
+ … Current state and pain point clear 
+ 
+answer
+ 
+</think>
+
+✓
+ 
+Dynamic bounty pool
+: reward scales with evasion time and failed attempts.
+
+✓
+ 
+Bounty tokens and self-chosen rewards
+: random drops become a goal-directed grind.
+
+✓
+ 
+Non-numerical rewards and identity
+: exclusive titles, statues, special shops, leaderboard.
+
+✓
+ 
+Random affixes and mystery chests
+: roguelike modifiers and rare-jackpot chests.
+
+Figure 13: 
+Case 3.
+ RPG reward design — the model elicits intent, then the current mechanism and pain point, before delivering targeted design ideas.
+
+Appendix J 
+Prompt Templates
+
+This section collects the four prompt templates that drive VagueBench’s
+construction and evaluation pipelines. Variables enclosed in
+
+{ }
+ are filled with run-time values. The four prompts map to
+the paper as follows: Prompt 1 is the seed filter referenced in
+§
+3.1
+; Prompt 2 is the variant-synthesis prompt
+described in §
+3.2
+; Prompt 3 is the behavior
+judge that produces the Ask% metric in §
+3.3
+; Prompt 4
+is the information extractor that produces Cov. F1 and supports IAR in
+the same section.
+
+For the model evaluation, we additionally use two system prompts. In the
+naive setting, the system prompt is “
+You are a helpful
+assistant.
+” In the question-guided setting, we use “
+You are a
+helpful assistant. When you think it is necessary, you may ask the user a
+question. Ask at most one question at a time.
+”
+
+[System Prompt]
+
+Determine whether the given query qualifies as an information-complete
+
+seed query
+ for VagueBench.
+
+A seed query must simultaneously satisfy all of the following conditions:
+
+1.
+
+Clear intent.
+ The query contains explicit intent
+anchors: precise action verbs, explicit speech-act framing,
+or clear output expectations, so that the user’s task can
+be identified directly.
+
+2.
+
+Sufficient details.
+ The query carries the key
+parameters and constraints needed to execute that task, so
+that a competent assistant could produce a high-quality answer
+without asking any clarifying question.
+
+3.
+
+Independent and self-contained.
+ The query does not
+depend on images, attached files, or prior dialogue turns; it
+can be understood out of context.
+
+4.
+
+Compliant content.
+ The query is not pure chit-chat,
+a test string such as “hello” or “test”, policy-violating
+content, or a code-debugging snippet pasted with no
+accompanying question.
+
+Reject the query
+ if any of the following holds:
+
+•
+
+Vague intent.
+ Only entities or keywords without an
+action intent, for example “Tesla” or “Shanghai
+restaurants”.
+
+•
+
+Missing details.
+ The intent is clear but key
+parameters are absent, for example “Help me write an email”
+without recipient, subject, or content.
+
+•
+
+Context-dependent.
+ The query uses pronouns or
+references such as “what I just said”, “the one above”,
+or “help me modify”.
+
+•
+
+Privacy.
+ The query exposes the user’s personal
+private information.
+
+Output JSON: 
+{"is_seed": true|false, "reason": "One-sentence reason"}
+
+Figure 14: 
+Prompt 1: Seed Query Filter.
+
+[System Prompt]
+
+You are a dialogue-data annotation expert. Given an
+information-complete seed query, annotate it into the information set
+
+ and synthesise the
+
+Intent-Vague
+ and 
+Fully-Vague
+ variants following the
+controlled-degradation procedure.
+
+## Step 1: Query-type classification.
+
+Choose exactly one type from: Information Query / Recommendation &
+Decision / Task Execution / Creation & Generation / Consultation &
+Analysis.
+
+## Step 2: Annotate
+
+.
+
+Intent set 
+.
+ All task-level goals the user expects
+to complete, each represented as 
+. Examples of intent
+labels: “recommend restaurant”, “translate text”, “compare plans”.
+A seed may have a single intent or multiple parallel intents.
+
+Detail set 
+.
+ Specific parameters and constraints
+required to execute the intents, each represented as
+
+. Examples of detail keys: city, budget,
+scenario, cuisine. Each detail records the list of intents it serves.
+
+## Step 3: Synthesise the Intent-Vague variant.
+
+Goal.
+ Weaken or remove 
+only
+ the intent-layer anchors
+while preserving every detail-layer anchor and every detail unit in
+
+. After rewriting it should
+be impossible to identify the user’s intended task, yet every
+parameter, constraint, output-type cue, and scope cue must remain.
+
+Operations.
+
+•
+
+Predicate anchors
+ (precise action verbs)
+
+ 
+Generalise
+.
+For example: “summarize” 
+ “work on”,
+“translate” 
+ “process”, or drop the verb
+entirely.
+
+•
+
+Speech-act anchors
+ (sentence frames such as
+“Help me X”, “I need X”) 
+ 
+Weaken or
+remove
+. For example: “Help me X” 
+ “About X”;
+“I need X” 
+ “How is X”.
+
+•
+
+Output-type anchors
+ and 
+scope anchors
+
+(detail layer) 
+ 
+Keep verbatim
+.
+
+Rewriting rules.
+
+•
+
+Every detail-layer expression and every detail unit in
+
+ must be retained.
+
+•
+
+The rewritten text must be natural and fluent, resembling a
+real underspecified user message.
+
+•
+
+iv_blurred_intent_ids
+: list the intent IDs whose
+anchors were weakened or removed (typically all of
+
+).
+
+## Step 4: Synthesise the Fully-Vague variant.
+
+Goal.
+ Hide all intent-layer anchors, remove the detail-layer
+anchors, and additionally strip a subset of detail units, retaining only
+a core-topic phrase of typically 5 to 10 tokens.
+
+Operations.
+
+•
+
+Predicate anchors
+ 
+ 
+Generalise or
+delete
+.
+
+•
+
+Speech-act anchors
+ 
+ 
+Weaken or
+remove
+.
+
+•
+
+Output-type anchors
+ 
+ 
+Delete
+.
+For example: “five bullet points” 
+ 
+;
+“give me a report” 
+ drop “report”.
+
+•
+
+Scope anchors
+ 
+ 
+Hedge or delete
+.
+For example: “analyse from a nutritional perspective”
+
+ “about nutrition”.
+
+Rewriting rules.
+
+•
+
+Identify the most core entity or keyword of the seed and
+express it in a minimalist way, such as
+“[Core Entity]” or “[Core Entity] + short vague modifier”.
+
+•
+
+Retaining one to two core detail words is allowed, but the
+intent must remain hidden.
+
+•
+
+The result should read like a casual, partially-typed user
+input.
+
+•
+
+fv_retained_detail_ids
+: list the detail IDs that
+remain visible in the Fully-Vague variant; the list may be
+empty.
+
+## Output constraints.
+
+•
+
+All id fields, including 
+intent_ids
+,
+
+iv_blurred_intent_ids
+, and
+
+fv_retained_detail_ids
+, must reference only the
+ids defined in this same output.
+
+•
+
+Do not describe any set operations in prose; only emit the
+structured fields.
+
+•
+
+Do not reason about what was hidden; only record what was
+retained.
+
+## Output format (strict JSON).
+
+{ 
+
+  "query_type": "Type", 
+
+  "intents": [ 
+
+   { 
+
+    "id": "I1", 
+
+    "label": "Description of task intent", 
+
+    "triggers": ["trigger phrase 1", "trigger phrase 2"], 
+
+    "response": "Colloquial short answer" 
+
+   } 
+
+  ], 
+
+  "details": [ 
+
+   { 
+
+    "id": "d1", 
+
+    "key": "Field name", 
+
+    "value": "Field value", 
+
+    "intent_ids": ["I1"], 
+
+    "triggers": ["trigger word 1", "trigger word 2"], 
+
+    "response": "Colloquial short answer" 
+
+   } 
+
+  ], 
+
+  "iv_query": "Intent-Vague variant (intent blurred, all details kept)", 
+
+  "i

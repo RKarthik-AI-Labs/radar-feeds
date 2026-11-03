@@ -1,0 +1,4155 @@
+DR Pixel: Page-Native Deep Research with Vision-Language Models
+https://arxiv.org/abs/2611.03097
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+DR Pixel
+: Page-Native Deep Research with Vision-Language Models
+
+Tiansheng Hu
+
+  
+
+Yichuan Wang
+
+  
+
+James V. Talwar
+
+Affiliation: 
+Nicholas Tomlin
+   Chen Zhao
+   Sewon Min
+
+Affiliation: 
+NYU Shanghai
+
+  
+
+University of California
+
+  
+
+Berkeley
+
+  
+
+Rational Dynamics
+
+Affiliation: 
+Toyota Technological Institute at Chicago
+
+  
+
+New York University
+
+Affiliation: 
+      
+Code:
+StarTrail-org/DRPixel
+  
+      
+Data:
+HughieHu/DRPixel-Bench
+
+Abstract
+
+Complex documents such as scientific papers contain rich information in tables, figures, and equations; however, existing deep research (DR) agents typically reduce papers to OCR-extracted text. We instead ask whether vision-language models (VLMs) can enable 
+page-native deep research
+: directly retrieving and reasoning over rendered document page images. We introduce 
+DR Pixel
+, the first open-source end-to-end multimodal DR agent that uses rendered page images as its sole retrieval and reasoning unit, operating over a corpus of 1.06M pages. To evaluate this setting, we construct 
+DRPixelBench
+, a benchmark on scientific papers requiring reasoning over text, figures, tables, and equations.
+Surprisingly, page-native DR already works well without training, outperforming OCR-based baselines across state-of-the-art models like GPT-5.4, Gemini-3.5-Flash, and Qwen3.6-27B, while requiring fewer tool calls.
+
+We next turn to DR training.
+A key challenge is that teacher trajectories for agentic supervised finetuning are noisy, mixing critical reasoning and action steps with redundant or failed attempts.
+To address this, we introduce 
+counterfactual credit reweighting
+, a fine-grained credit assignment method that weights individual reasoning and action steps by their counterfactual contribution to the final answer.
+Our training improves retrieval recall by about 15 points and final accuracy by over 10 points on 
+DRPixelBench
+, and likewise outperforms the untrained baseline on four existing benchmarks. On out-of-distribution ViDoRe-V3, 
+DR Pixel
+ comes within 
+ points of an oracle that is given the gold pages directly. Our results suggest that the conventional 
+OCR-then-retrieve
+ pipeline is not only unnecessary but suboptimal: directly retrieving and reasoning over visual document pages makes complex DR both more effective and more efficient.
+
+1 
+Introduction
+
+Deep research (DR) agents answer complex information-seeking questions by iteratively searching, reading, and reasoning over large collections of evidence 
+(
+OpenAI, 2025
+; 
+Gemini, 2025
+; 
+Li et al., 2025d
+; 
+Li et al., 2025a
+)
+. As DR expands beyond the open web into domains such as law, finance, and science, it increasingly operates over specialized document collections 
+(
+Li et al., 2025b
+; 
+Choi et al., 2026
+; 
+Xie et al., 2024
+; 
+Chen et al., 2025a
+; 
+Chen et al., 2025b
+)
+. These documents are inherently multimodal: critical evidence often lies not only in text, but also in tables, figures, charts, and equations.
+
+Yet, such documents are typically reduced to plain text: PDFs are linearized into text, and retrieval and reasoning operate entirely in text space. This introduces two key limitations. First, linearization discards or distorts visual structure, making information in figures, tables, or charts difficult or impossible to recover 
+(
+Poznanski et al., 2025
+; 
+Lo et al., 2023
+)
+. Second, extraction and OCR errors propagate into downstream retrieval and reasoning 
+(
+Zhang et al., 2025a
+; 
+Wang et al., 2026
+)
+.
+
+This raises a natural question: 
+Can deep research instead be page-native, retrieving and reasoning directly over rendered document pages?
+ In such an approach, each page remains an image: a visual retriever searches over rendered pages, and a vision-language model (VLM) reasons directly over the retrieved images.
+Prior work has shown that such page-native retrieval can match or outperform text-based document retrieval 
+(
+Faysse et al., 2025
+; 
+de Souza P. Moreira et al., 2026
+)
+, and has extended this approach to retrieval-augmented generation (RAG) tasks.
+We study this approach in the deep research regime, where answering a query requires many rounds of retrieval and reasoning. To this end, we introduce 
+DR Pixel
+, the first open-source 
+page-native
+ multimodal DR agent that iteratively searches and reasons directly over 1.06M rendered pages from scientific papers.
+
+Figure 1: 
+Overview of 
+DR Pixel
+.
+DR agents alternate between search, retrieval, and reasoning. Prior work operates in text space over OCR-extracted papers; 
+DR Pixel
+ operates natively in visual space, with both retrieval and reasoning performed directly over rendered page images.
+
+The first challenge is evaluation:
+existing DR benchmarks are either predominantly text-based 
+(
+Chen et al., 2026
+; 
+Xiong et al., 2026
+; 
+Asai et al., 2024
+)
+ or require relatively simple retrieval where a single search already achieves high recall 
+(
+Wang et al., 2025a
+; 
+Tanaka et al., 2023
+)
+.
+To bridge this gap, we introduce 
+DRPixelBench
+, comprising 
+ questions over 
+M pages of scientific papers. It combines complex deep research queries that require long chains of retrieval and reasoning with the visual reasoning demands of scientific papers, such as interpreting experimental results in figures and tables.
+Each question is grounded in a gold page and paired with a directly verifiable answer.
+
+We then instantiate page-native deep research as an end-to-end VLM agent. 
+DR Pixel
+ indexes rendered pages directly with a VLM embedding model 
+(
+Li et al., 2026a
+)
+, feeds retrieved images to the VLM agent, and maintains them as visual evidence throughout the trajectory, without ever being converted into plain text. The agent iteratively formulates queries, retrieves images, and reasons over evidence accumulated across turns to generate the final answer.
+Our evaluation on 
+DRPixelBench
+ reveals a consistent advantage of page-native DR over OCR-based pipelines, even without targeted training: page-native DR improves accuracy by 
+–
+ points across GPT-5.4 
+(
+OpenAI, 2026
+)
+, Gemini-3.5-Flash 
+(
+Google, 2026
+)
+, and Qwen3.6-27B 
+(
+Qwen, 2026
+)
+, while using 
+–
+ fewer retrieval calls than OCR-based pipelines.
+
+Still, the open-weight Qwen3.6-27B lags behind closed models (40.1 vs. 51.9), motivating us to train 
+DR Pixel
+.
+A key challenge is that demonstration traces for supervised fine-tuning (SFT) are often noisy, and are a mix of useful and unhelpful steps: some are critical to reaching the correct answers, while others are
+redundant or failed attempts.
+To account for this, we introduce 
+counterfactual credit reweighting
+: a general recipe for DR training that weights each reasoning and action step by its contribution to the final answer.
+For each step, we estimate its contribution by removing it from the trajectory and assigning higher training weight when its removal degrades answer quality.
+
+Our training method significantly improves the performance: with Qwen3.6-27B, it improves accuracy by 
+ points (
+% relative) over the untrained model, and closes the gap to GPT-5.4. The gains also transfer beyond 
+DRPixelBench
+: across three additional multimodal scientific literature benchmarks, our trained 
+DR Pixel
+ remains competitive and surpasses GPT-5.4 in retrieval on two of them. Notably, on the out-of-distribution ViDoRe-V3 benchmark 
+(
+Loison et al., 2026
+)
+, the trained 
+DR Pixel
+ comes within 
+ points of an oracle that is given the gold pages directly.
+
+We summarize our key contributions as follows:
+
+1.
+
+We introduce 
+DR Pixel
+, a page-native deep research agent that treats papers as collections of rendered page images and iteratively retrieves and reasons over them. Across GPT-5.4, Gemini-3.5, and Qwen3.6, 
+DR Pixel
+ consistently outperforms OCR-based models that convert papers to text.
+
+2.
+
+We introduce a new DR training method, 
+counterfactual credit reweighting
+, which weights each reasoning and search step in the training data by its contribution to the gold answer. It improves over the untrained model on all five benchmarks, and outperforms standard SFT.
+
+3.
+
+We release 
+DRPixelBench
+, consisting of complex questions that require both visual document understanding (e.g., analyzing results from tables and figures) and long chains of retrieval and reasoning, providing a challenging testbed for future work on deep research.
+
+2 
+Related Work
+
+Deep research (DR) agents.
+
+DR agents tackle complex, multi-step information-seeking tasks through iterative search and synthesis 
+(
+Yao et al., 2023
+; 
+Li et al., 2025d
+; 
+Li et al., 2025c
+; 
+Shao et al., 2026
+)
+. Recent work extends the pipeline to multimodal deep research by adding tools such as image search, reverse image search or cross-modality retrieval 
+(
+Geng et al., 2026
+; 
+Yao et al., 2026
+)
+. Most of them focus on open web, where text and images are retrieved separately through two different search tools 
+(
+Tao et al., 2026
+; 
+Li et al., 2026b
+; 
+Jiang et al., 2024
+)
+. We instead target a collection of documents (e.g., scientific papers), where answering complex questions often requires jointly interpreting text, tables, and figures on the same page, making separate text and image retrieval interfaces suboptimal.
+
+Page-native document retrieval.
+
+With rapid progress with vision-language models (VLMs), bypassing OCR pipelines and directly processing rendered document images has emerged as a promising direction 
+(
+Kim et al., 2022
+; 
+Lee et al., 2023
+; 
+Blecher et al., 2024
+; 
+Wei et al., 2026
+)
+.
+Building on this, visual document retrieval retrieves rendered pages directly, established by ColPali and followed by increasingly capable visual retrievers 
+(
+Faysse et al., 2025
+; 
+Günther et al., 2025
+; 
+Li et al., 2026a
+)
+.
+More recent work extends this approach to further generate answers 
+(
+Yu et al., 2025
+; 
+Wang et al., 2025a
+; 
+Wang et al., 2026
+)
+ and add iterative retrieval 
+(
+Wang et al., 2025b
+; 
+Shen et al., 2026
+)
+. However, these settings require relatively shallow search, e.g., on ViDoSeek 
+(
+Wang et al., 2025a
+)
+ and SlideVQA 
+(
+Tanaka et al., 2023
+)
+, a single retrieval step already recalls the gold page in the top five for 
+ of questions 
+(
+Wang et al., 2025a
+; 
+Giouroukis et al., 2025
+)
+. We instead study page-native deep research where complex queries require sustained search and reasoning over 
+–
+ steps.
+
+Agent training.
+
+Broadly, agents that generate long action trajectories are commonly trained with outcome-based reinforcement learning (RL) 
+(
+Jin et al., 2025
+; 
+Zheng et al., 2025
+; 
+Wang et al., 2025b
+; 
+Shen et al., 2026
+)
+, sometimes with rubrics 
+(
+Shao et al., 2026
+)
+, or through supervised fine-tuning (SFT) on teacher-generated trajectories 
+(
+Chen et al., 2023
+; 
+Li et al., 2025a
+)
+. Both provide limited credit assignment across a trajectory: outcome-based RL assigns a single reward to the rollout, and SFT imitates every teacher step regardless of its utility. Prior work has explored finer-grained supervision through process reward models that score each intermediate step 
+(
+Lightman et al., 2023
+)
+ or by leveraging token- or step-level supervision coming from a teacher model conditioned on privileged context  
+(
+Meng and Chen, 2026
+; 
+Wu et al., 2026
+)
+, both during RL.
+In this paper, we propose an alternative approach that retains the simplicity of SFT: we reweight each agentic step by its counterfactual contribution to the final answer, estimated by removing the step and measuring the resulting change in answer quality.
+
+3 
+DRPixelBench
+
+Existing benchmarks for complex information-seeking document collections largely fall into two categories: text-based DR benchmarks and multimodal document QA benchmarks (
+Table
+ 
+1
+).
+Text-based deep research benchmarks evaluate iterative search and synthesis over large corpora, but often rely on templated questions 
+(
+Chen et al., 2026
+)
+ or long-form answers that require nondeterministic, rubric-based evaluation 
+(
+Du et al., 2026
+; 
+Asai et al., 2024
+)
+; crucially, they are text-only.
+Multimodal QA benchmarks instead require visual understanding from reports or scientific papers 
+(
+Ma et al., 2024
+; 
+Tanaka et al., 2023
+; 
+Wang et al., 2025a
+; 
+Huang et al., 2026
+; 
+Li et al., 2024
+; 
+Shorten et al., 2026
+; 
+Loison et al., 2026
+)
+. However, their questions are often templated and require relatively shallow retrieval, with only one or a few steps needed to locate the relevant evidence.
+
+Benchmark
+
+Agentic
+
+MM
+
+Non-templ.
+
+Verif.
+
+Deep research
+
+BrowseComp-Plus
+
+✓
+
+✗
+
+✗
+
+✓
+
+DeepResearch Bench
+
+✓
+
+✗
+
+✓
+
+✗
+
+ScholarQABench
+
+✓
+
+✗
+
+✓
+
+✗
+
+Multimodal QA
+
+AirQA (comp.)
+
+✓
+
+✓
+
+✗
+
+✓
+
+M3SciQA
+
+✓
+
+✓
+
+✗
+
+✓
+
+IRPAPERS
+
+✗
+
+✓
+
+✓
+
+✓
+
+ViDoSeek
+
+✗
+
+✓
+
+✗
+
+✓
+
+SlideVQA
+
+✗
+
+✓
+
+✗
+
+✓
+
+ViDoRe V3
+
+✗
+
+✓
+
+✗
+
+✓
+
+DRPixelBench
+
+✓
+
+✓
+
+✓
+
+✓
+
+Table 1: 
+DRPixelBench
+ is the only benchmark combining iterative search over a large corpus (
+Agentic
+), multimodal evidence (
+MM
+), non-templated questions (
+Non-templ.
+), and verifiable short answers (
+Verif.
+).
+
+We evaluate on four existing benchmarks (IRPAPERS, M3SciQA, AirQA, ViDoRe-V3) but argue that page-native DR requires a new benchmark, meeting four key properties: (1) 
+agentic search
+, where relevant evidence typically requires multiple rounds of retrieval and reasoning; (2) 
+multimodal evidence
+, where answers depend on text together with figures, tables, or equations; (3) 
+non-templated questions
+, avoiding fixed schemas; and (4) 
+short, verifiable answers
+, allowing direct evaluation against gold answers without relying on imperfect rubrics.
+
+DRPixelBench
+.
+
+To this end, we build 
+DRPixelBench
+ over scientific literature. Scientific papers are naturally multimodal, with important information distributed across text, tables, figures, and equations.
+
+We collect papers from arXiv and the open-access proceedings of major conferences, and merge in the papers of AirQA 
+(
+Huang et al., 2026
+)
+, M3SciQA 
+(
+Li et al., 2024
+)
+ and IRPAPERS 
+(
+Shorten et al., 2026
+)
+ so that 
+DRPixelBench
+ and these three benchmarks share one corpus of 
+ papers.
+
+Inspired by 
+Dasigi et al. (2021)
+, we generate each question from a paper’s abstract rather than from its full text to keep it tied to the paper’s main contribution. As an abstract reports its findings with few supporting details, we first enrich it. Using Gemini-3.5-Flash 
+(
+Google, 2026
+)
+, we extract atomic facts from the full paper, such as a comparison in a table or a trend in a figure, and add them to the abstract. We then prompt the model to write a question from the enriched abstract alone, so that the question is driven by curiosity rather than by evidence already in view. We further ask the model to locate the supporting evidence in the full paper and produce a short-form answer. Depending on the form of this evidence, each question is labeled 
+Text
+ or 
+Visual
+: a Text question is answered from the running text, while a Visual question requires a table, figure, or equation.
+Each QA pair then undergoes four automatic checks to ensure that the question is plausible, the gold evidence is sufficient, non-textual evidence is necessary, and the answer cannot be recovered from parametric knowledge alone.
+Finally, human experts review the question and rewrite it for naturalness.
+The resulting 
+DRPixelBench
+ contains 
+ QA pairs.
+More details, including the data sources, parsing details, filter criteria, annotation details, and data statistics, are reported in 
+Appendix
+ 
+A
+.
+
+4 
+DR Pixel Inference
+
+We introduce 
+DR Pixel
+: a deep research agent that uses rendered page images as both the retrieval unit and the model input. We describe our method (
+Section
+ 
+4.1
+) and present results showing that 
+DR Pixel
+ consistently outperforms OCR-based pipelines (
+Table
+ 
+2
+).
+
+4.1 
+Inference Method
+
+Following 
+Li et al. (2025a)
+, we formulate a DR agent as a ReAct loop 
+(
+Yao et al., 2023
+)
+. At each turn 
+, the agent produces a thought and an action,
+
+ where 
+ denotes the history of previous thoughts, actions, and search results.
+An action 
+ is either a search query or a final answer.
+For a search action, a search tool 
+ returns search results 
+ where 
+ is a fixed corpus that a search tool interacts with. A final answer action terminates the trajectory. Thus, the complete trajectory that generates a final answer after 
+ tool calls is 
+ where
+
+(1)
+
+Prior work.
+
+Prior work commonly parses documents into plain text, using document parsers or OCR, then operates the DR agent entirely in text space 
+(
+Chen et al., 2026
+; 
+Asai et al., 2024
+)
+. Formally, 
+ is a collection of parsed text documents, 
+ is a text retrieval model (e.g., a dense retrieval model 
+(
+Karpukhin et al., 2020
+)
+ that indexes documents or text chunks into fixed-size vectors), and 
+ returns text chunks most relevant to query 
+ The agent 
+ can be a text-only model.
+
+However, a key limitation of this design is the lossy conversion from documents to text 
+(
+Niu et al., 2026
+)
+.
+Tables and equations may be parsed incorrectly; figures are often reduced to captions or omitted entirely; and OCR or parsing errors can corrupt even text content. Once discarded during parsing, this information cannot be recovered by downstream retrieval or reasoning.
+
+Some prior work mitigates this limitation by adding a second, image-retrieval tool and allowing the agent to choose between text and image search 
+(
+Suri et al., 2025
+)
+. However, this is still limited because text and visual content are treated as separate spaces without preserving relationships between them, e.g., a figure and the surrounding text that explains it. Moreover, information loss or corruption during text parsing still remains.
+
+DR Pixel
+.
+
+Our DR agent, 
+DR Pixel
+, is an alternative instantiation of the DR agent in 
+Equation 1
+: it preserves the ReAct loop but replaces the search tool 
+ and its corpus 
+ to be image-based, as illustrated in 
+Figure 1
+.
+Offline, each paper is rendered page by page, so 
+ becomes a collection of page images. Each image is encoded into a fixed-size vector using a VLM-based embedding model, e.g., Qwen3-VL-Embedding-8B. At inference time, 
+ maps a text query 
+ into the same embedding space and returns the top-
+ page images.
+These images are passed directly to the agent 
+ which is itself a VLM. The agent reasons over those images and generates the next thought 
+ and action 
+ repeating this process until it produces a final answer.
+
+4.2 
+Results
+
+Retrieval Setup
+
+GPT-5.4
+
+Gemini-3.5-Flash
+
+Qwen3.6-27B
+
+Acc (
+)
+
+# Calls (
+)
+
+Acc (
+)
+
+# Calls (
+)
+
+Acc (
+)
+
+# Calls (
+)
+
+OCR-based pipelines
+
+Text
+
+43.5
+
+12.4
+
+40.0
+
+17.5
+
+33.2
+
+11.0
+
++ Figure (
+txt
++
+fig
+)
+
+46.3
+
+10.8
++
+3.0
+
+41.3
+
+16.7
++
+1.0
+
+34.9
+
+10.9
++
+0.6
+
+DR Pixel
+
+51.9
+
+9.2
+
+46.4
+
+13.7
+
+40.1
+
+8.8
+
+Table 2: 
+DR Pixel
+ versus OCR-based retrieval pipelines, all with no training. OCR-based pipelines retrieve OCR text chunks (
+Text
+), optionally with a separate search on the figure corpus (
++ Figure
+).
+
+DR Pixel
+ retrieves and reads whole pages as images. 
+Acc
+ is answer accuracy. 
+# Calls
+ is the number of tool calls per question, split into 
+text
+ and 
+figure
+ calls in the text-and-figure setting.
+
+We now compare 
+DR Pixel
+ against two OCR-based baselines—text-only and text+figure from 
+Section
+ 
+4.1
+—on 
+DRPixelBench
+.
+
+Setup.
+
+We evaluate GPT-5.4 
+(
+OpenAI, 2026
+)
+, Gemini-3.5-Flash 
+(
+Google, 2026
+)
+, and Qwen3.6-27B 
+(
+Qwen, 2026
+)
+ with 
+reasoning_effort=high
+ for the first two and 
+enable_thinking=True
+ for Qwen3.6-27B. All models run in the same ReAct loop with at most 
+ searches, and all observations remain in context. We report accuracy judged by GPT-5.4-mini 
+(
+OpenAI, 2026
+)
+ under a strict prompt, taking a majority vote over three independent judgments.
+
+From the same 
+ papers, we build three corpora, one for each setting.
+The text-only baseline parses each PDF into text, preserving tables as HTML and equations as 
+L
+a
+T
+e
+X
+, and retrieves 
+ chunks of 256 words, with Qwen3-Embedding-8B 
+(
+Zhang et al., 2025b
+)
+.
+The text+figure baseline additionally retrieves 
+ extracted figures when the image-search tool is invoked, using Qwen3-VL-Embedding-8B 
+(
+Li et al., 2026a
+)
+.
+
+DR Pixel
+, instead, searches 
+ page images rendered directly from the PDFs, returning 
+ pages, also using Qwen3-VL-Embedding-8B.
+We choose 
+ for each setting to approximately match the agent’s retrieved token budget (
+Table 13
+ for details).
+
+Figure 2: 
+GPT-5.4 accuracy by evidence source under the two OCR-based settings and 
+DR Pixel
+. 
+DR Pixel
+ consistently outperforms OCR-based pipelines on questions that require tabular and figure evidence.
+
+GPT-5.4
+
+Qwen3.6-27B
+
+Accuracy
+
+51.9
+
+40.1
+
+Retrieval
+
+Page Hit
+
+45.7
+
+36.3
+
+Repeated Queries
+
+0.0
+
+5.3
+
+Reading
+
+Acc 
+ Page Hit
+
+71.2
+
+63.9
+
+Hit on Last Search
+
+74.4
+
+69.3
+
+Hit on Earlier Search
+
+69.7
+
+57.4
+
+Table 3: 
+Decomposing gap between GPT-5.4 and Qwen3.6-27B. Qwen3.6-27B retrieves the gold page less often and uses it less well once found.
+
+Page-native deep research outperforms OCR-based pipelines.
+
+As shown in 
+Table 2
+, 
+DR Pixel
+ consistently outperforms both OCR-based settings across all three models, improving accuracy over the text-and-figure pipeline by 
+, 
+, and 
+ points for GPT-5.4, Gemini-3.5-Flash, and Qwen3.6-27B respectively. Adding a figure-search tool yields only marginal gains, as agents rarely invoke it despite explicit instructions in the prompt. 
+DR Pixel
+ is also more efficient, reducing retrieval calls by 
+ to 
+. We further break down GPT-5.4’s accuracy by evidence source in 
+Figure 2
+. 
+DR Pixel
+ achieves the highest accuracy on questions requiring tabular and figure evidences, and remains on par on those grounded in text or equations.
+
+Open-weight models lag in both retrieval and reasoning.
+
+Although Qwen3.6-27B issues a similar number of retrieval calls to GPT-5.4, it trails by 
+ points in accuracy under 
+DR Pixel
+ setting. As shown in 
+Table 3
+, we decompose this gap into retrieval and reasoning. In retrieval, Qwen3.6-27B retrieves the gold page 
+ points less often, and its searches are less productive with 
+ of its queries duplicate an earlier one and 
+ of its trajectories contain at least one duplicate. In reasoning, Qwen3.6-27B struggles to use pages retrieved earlier in the trajectory. When the gold page comes from the latest search, it trails GPT-5.4 by only 
+ points, but the gap widens to 
+ when the page was retrieved in an earlier search.
+This motivates training an open-weight model, as described in 
+Section
+ 
+5
+.
+
+5 
+DR Pixel Training
+
+Having shown that page-native DR improves performance even without training, we next train 
+DR Pixel
+ to further improve its capabilities. We denote the untrained model as 
+DR Pixel
+ and the trained model as 
+DR Pixel
+. We first describe the training method (
+Section
+ 
+5.1
+), then present the main results (
+Section
+ 
+5.2
+) and ablations (
+Section
+ 
+5.3
+).
+
+5.1 
+Training Method
+
+We train 
+DR Pixel
+ with supervised fine-tuning (SFT). We sample trajectories from GPT-5.4 on training questions generated using the same pipeline as §
+3
+, but without human rewriting or verification; and use them as training data.
+
+However, we find standard SFT has a problem because the trajectories in the training data often contain repeated or low-value searches that do not contribute to the final answer.
+Naively imitating these unhelpful steps encourages excessive searching and inefficient use of the retrieval budget. Inspired by process rewards, which assign credit to individual intermediate steps 
+(
+Lightman et al., 2024
+; 
+Setlur et al., 2025
+; 
+Zhou et al., 2024
+; 
+Zhou et al., 2025
+)
+, we instead weight each step by its contribution to the final answer. Specifically, our 
+counterfactual credit reweighting
+ removes each step from a fixed teacher trajectory and measures the resulting drop in the gold-answer likelihood under the frozen base model, assigning higher weight to steps that are more consequential.
+
+Figure 3: 
+
+An illustration of 
+counterfactual credit reweighting
+ (§
+5.1
+).
+The first search returns three off-topic pages and lowers the gold score, so the step has a negative score and weight 
+. The second retrieves the gold paper, though not the exact gold page. This increases the gold score and receives positive weight. The third retrieves the exact evidence pages and likewise receives positive weight.
+
+Counterfactual credit.
+
+Formally, let 
+ denote the gold answer, 
+ the history after 
+ search calls as defined in 
+Equation 1
+, and 
+ the frozen base policy. For any history 
+, we measure how strongly it supports the gold answer by the log-likelihood that 
+ assigns to 
+:
+
+(2)
+
+We assign credit separately to reasoning and search steps. For a reasoning step 
+, we measure how much removing it from 
+ decreases support for the gold answer. For a search step 
+, we measure how much the search results 
+ increase this support relative to the history before the search:
+
+(3)
+
+Thus, 
+ captures the contribution of a reasoning step to organizing the accumulated evidence, while 
+ captures the value of the new evidence returned by a search.
+
+Weight assignment and normalization.
+
+Because raw step credits are unbounded, we convert them into rank-based weights for each step type 
+. Specifically, steps with non-positive credit receive weight 
+. For every positive credit, if 
+ is the 
+-th smallest among 
+ surviving steps of type 
+, we define 
+. We then multiply by 
+ so the average positive weight remains near 
+, matching the scale of standard SFT. The resulting weight 
+ is:
+
+(4)
+
+As each reasoning step directly produces its following search query, we further couple their weights. For each reasoning step, we define its likelihood gain as the increase in log-likelihood of its corresponding action relative to an empty reasoning block. We mask a reasoning step if its corresponding action was previously masked or its likelihood gain is lower than the median over all reasoning steps in the training data. A reasoning step that passes both checks keeps its weight 
+. If such a reasoning step was previously masked due to negative counterfactual credit
+with 
+, it is unmasked and assigned 
+, the median positive reasoning weight. We denote the resulting weight by 
+.
+
+The final training objective is a token-level weighted loss, with a constant weight 
+ on the final-answer tokens:
+
+(5)
+
+Training details.
+
+We fine-tune Qwen3.6-27B with LoRA on about 
+ teacher trajectories from GPT-5.4 for one epoch, using a learning rate of 
+, an effective batch size of 
+, and answer weight 
+, on four H200 GPUs.
+More details are provided in 
+Appendix
+ 
+C
+.
+
+5.2 
+Results
+
+Setup.
+
+We evaluate on 
+DRPixelBench
+ and three external multimodal scientific literature benchmarks: IRPAPERS 
+(
+Shorten et al., 2026
+)
+, M3SciQA 
+(
+Li et al., 2024
+)
+, and AirQA 
+(
+Huang et al., 2026
+)
+. All four share a unified corpus, as we form the corpus as a union of corpora from each benchmark (
+Section
+ 
+3
+).
+To test out-of-distribution generalization, we further evaluate on ViDoRe-V3 
+(
+Loison et al., 2026
+)
+ over its own document corpus, with two search tools: page retrieval as in 
+DR Pixel
+, and text retrieval as in the text-only setting of 
+Table
+ 
+2
+, where each page is parsed into text and retrieved with Qwen3-Embedding-8B. We compare 
+DR Pixel
+ with GPT-5.4, Gemini-3.5-Flash, the untrained 
+DR Pixel
+, and vanilla SFT, which is trained on the same teacher trajectories with every token weighted equally. All agents follow the configuration in 
+Table
+ 
+2
+.
+
+Model
+
+Tool/q
+
+PgHit
+
+Acc
+Pg
+
+Acc
+
+Open-weight (Qwen3.6-27B)
+
+DR Pixel
+
+8.8
+
+36.3
+
+63.9
+
+40.1
+
++ vanilla SFT
+
+14.0
+
+53.6
+
+67.2
+
+49.0
+
+DR Pixel
+
+8.9
+
+52.0
+
+67.7
+
+52.1
+
+Proprietary
+
+GPT-5.4
+
+9.2
+
+45.7
+
+71.2
+
+51.9
+
+Gemini-3.5-Flash
+
+13.7
+
+35.0
+
+75.7
+
+46.4
+
+Table 4: 
+Results on 
+DRPixelBench
+. 
+Tool/q
+ is searches per question. 
+PgHit
+ is the percentage of questions that retrieves the gold page, and 
+Acc
+Pg
+ is accuracy restricted to those questions. Results are averaged over three runs.
+
+DR Pixel
+ matches GPT-5.4 in accuracy, retrieving the gold pages more often while using fewer searches.
+
+DR Pixel
+ matches proprietary models.
+
+As shown in 
+Table 4
+, training 
+DR Pixel
+ significantly improves performance on 
+DRPixelBench
+, increasing accuracy from 
+ to 
+ and even slightly surpassing GPT-5.4. Our trajectory analysis shows that the gains are concentrated in retrieval: 
+DR Pixel
+ retrieves the gold page 
+ points more often than GPT-5.4. This suggests that post-training better aligns query generation with the retriever’s embedding space, therefore producing queries that are more effective for visual retrieval.
+
+Counterfactual credit reweighting makes search more efficient.
+
+Table 4
+ shows that our counterfactual credit reweighting consistently outperforms vanilla SFT, primarily by suppressing the ineffective searches from teacher trajectories. The vanilla SFT achieves a slightly higher page-hit rate than 
+DR Pixel
+, but requires 
+ more searches. The key difference is search efficiency: vanilla SFT exhausts the 
+-call budget on 
+ of questions, compared with only 
+ for 
+DR Pixel
+. This is even lower than GPT-5.4 (
+) and the untrained backbone (
+).
+
+IRPAPERS
+
+M3SciQA
+
+AirQA
+
+Model
+
+T/q
+
+DocHit
+
+Acc
+Doc
+
+Acc
+
+T/q
+
+DocHit
+
+Acc
+Doc
+
+Acc
+
+T/q
+
+DocHit
+
+Acc
+Doc
+
+Acc
+
+Open-weight (Qwen3.6-27B)
+
+DR Pixel
+
+5.6
+
+89.4
+
+68.8
+
+65.4
+
+7.8
+
+75.3
+
+63.4
+
+49.8
+
+7.9
+
+84.3
+
+46.0
+
+42.7
+
+DR Pixel
+
+5.0
+
+95.6
+
+82.0
+
+79.4
+
+9.4
+
+90.3
+
+69.6
+
+64.2
+
+7.0
+
+89.7
+
+55.6
+
+52.3
+
+Proprietary
+
+GPT-5.4
+
+5.4
+
+92.2
+
+80.1
+
+77.8
+
+7.7
+
+90.3
+
+73.3
+
+67.5
+
+6.2
+
+87.9
+
+59.5
+
+56.6
+
+Gemini-3.5-Flash
+
+8.4
+
+93.3
+
+70.1
+
+67.6
+
+12.4
+
+87.2
+
+68.3
+
+60.8
+
+11.1
+
+87.5
+
+50.0
+
+47.0
+
+Table 5: 
+Results on external multimodal scientific-QA benchmarks. 
+T/q
+ is searches per question. 
+DocHit
+ is the percentage of questions for which the gold document is retrieved, and 
+Acc
+Doc
+ is accuracy restricted to those questions. 
+DR Pixel
+ improves over 
+DR Pixel
+ on all three benchmarks and adapts search effort dynamically.
+
+DR Pixel
+ generalizes to external multimodal QA benchmarks.
+
+As shown in 
+Table 5
+, the behavior learned on 
+DRPixelBench
+ transfers to IRPAPERS, M3SciQA, and AirQA. 
+DR Pixel
+ improves over the untrained backbone on all three, with accuracy gains ranging from 
+ to 
+ points. It also adapts its search effort to retrieval difficulty variations: compared with the backbone, 
+DR Pixel
+ searches less on IRPAPERS and AirQA but more on M3SciQA, where the backbone has the largest document-retrieval gap relative to GPT-5.4 (15.0 points).
+
+English
+
+French
+
+Retriever
+
+Mod.
+
+Generator
+
+C.S.
+
+Fin.
+
+Phar.
+
+H.R.
+
+Ind.
+
+Phys.
+
+Ener.
+
+Fin.
+
+Global
+
+Oracle
+∗
+
+Text
+
+Gemini 3 Pro
+
+80.9
+
+70.2
+
+71.4
+
+72.3
+
+66.4
+
+71.2
+
+69.2
+
+62.8
+
+70.6
+
+Page
+
+86.5
+
+70.6
+
+76.1
+
+71.1
+
+68.2
+
+74.5
+
+69.8
+
+64.1
+
+72.6
+
+Qwen3-Emb-8B
+
+Text
+
+DR Pixel
+
+86.5
+
+64.7
+
+60.7
+
+63.8
+
+53.7
+
+77.4
+
+66.6
+
+51.9
+
+65.7
+
+DR Pixel
+
+88.8
+
+71.2
+
+67.3
+
+65.4
+
+66.1
+
+77.5
+
+69.5
+
+52.8
+
+69.8
+
+Qwen3-VL-Emb-8B
+
+Page
+
+DR Pixel
+
+87.9
+
+64.4
+
+67.9
+
+64.2
+
+59.7
+
+76.2
+
+62.7
+
+50.9
+
+66.7
+
+DR Pixel
+
+89.3
+
+67.0
+
+73.1
+
+67.0
+
+65.4
+
+79.1
+
+70.1
+
+55.3
+
+70.8
+
+Table 6: 
+End-to-end accuracy on ViDoRe V3. Oracle
+∗
+ is ViDoRe V3’s published upper bound. 
+DR Pixel
+ improves over 
+DR Pixel
+ with both page and text retrieval on documents outside its training domain, so the training generalizes well.
+
+DR Pixel
+ further generalizes across domains and retrieval modalities.
+
+ViDoRe-V3 provides a strong out-of-distribution test, covering non-scientific documents from domains such as finance and human resources. As shown in 
+Table 6
+, post-training improves both page-based and text-based retrieval by 
+ points, despite using only page-native teacher trajectories, suggesting that the learned search behavior transfers across retrieval modalities. The two settings stay close because only 
+ of ViDoRe-V3 questions genuinely require visual content to answer. We further compare against oracle retrieval settings, where the relevant document or page is provided directly. With page retrieval, 
+DR Pixel
+ matches the Text Oracle and remains competitive with the Page Oracle.
+
+5.3 
+Ablation
+
+We next ablate on a couple of key factors: corpus size, training data modalities and page resolutions.
+
+Figure 4: 
+Effect of corpus size on retrieval and final answer accuracy. Each panel varies the number of indexed documents from 
+ to 
+. 
+DR Pixel
+ is the most robust to corpus growth, with the slowest degradation in retrieval performance.
+
+Figure 5: 
+Accuracy against total tokens as page resolution varies. Lowering resolution cuts tokens by 24% to 45% for a 1 to 4 point drop, and page retrieval stays ahead of OCR text.
+
+Setup
+
+Tool/q
+
+PgHit
+
+Acc
+Pg
+
+Acc
+
+DR Pixel
+
+8.8
+
+36.3
+
+63.9
+
+40.1
+
++ Text
+
+5.0
+
+47.4
+
+60.3
+
+46.0
+
++ Visual, 2,000
+
+10.1
+
+52.2
+
+65.5
+
+50.2
+
+Table 7: 
+Effect of trajectory type on the distilled policy. Training only on Text trajectories makes the model search less, so it explores less and reaches a lower end-to-end accuracy.
+
+Figure 6: 
+Each training mixture improves the question type it matches, with Text trajectories helping text questions and visual trajectories helping multimodal ones.
+
+DR Pixel
+ is robust to corpus size.
+
+We scale the corpus from 
+ to 
+ papers while keeping the questions and gold documents fixed. As shown in 
+Figure 5
+, page-hit rate declines for all models as the corpus grows, but 
+DR Pixel
+ degrades more slowly, dropping by only 
+ points compared with 
+ for GPT-5.4. As a result, its retrieval advantage over GPT-5.4 widens from 
+ points at 
+ papers to 
+ points at 
+, leading to final answer accuracy improvement.
+
+Downgrading page resolution buys efficiency at a modest cost.
+
+In page-native deep research, page resolution determines the trade-off between visual fidelity and inference cost. Since processing high-resolution page images is expensive, we cap each rendered page at 
+ megapixels, roughly 
+ of its native resolution. As shown in 
+Figure 5
+, this reduces input tokens by 
+ to 
+ across models, while accuracy drops by only 
+ to 
+ points. Output tokens rise slightly at lower resolution, but as they account for less than 
+ of all tokens, the overall savings largely remain. 
+1
+1
+
+1
+
+                
+                
+                
+                
+                
+                
+                
+              We count each token once, as in the final context. Since every turn re-reads the full context in the ReAct loop, cumulative input is much larger, so output falls below 
+ of all tokens.
+ Even at this lower resolution, page retrieval outperforms OCR-based text retrieval by 
+ to 
+ points for every model evaluated while using 
+ to 
+ fewer input tokens. The breakdown into input and output tokens is shown in 
+Figure 9
+ in the appendix.
+
+Fine-tuning on 
+Visual
+ questions is more effective.
+
+The 
+ trajectories used to fine-tune 
+DR Pixel
+ contain only 
+Visual
+ questions, as defined in 
+Section
+ 
+3
+. To justify this choice, we generate 
+Text
+ questions with the same pipeline, collect their trajectories as described in 
+Appendix
+ 
+C
+, and fine-tune the same base model on either 
+ 
+Text
+ or 
+ 
+Visual
+ trajectories, keeping all other settings fixed. As shown in 
+Table
+ 
+7
+, fine-tuning on Text questions causes the agent to stop earlier and retrieve the gold page less often, yielding 
+ accuracy versus 
+ with Visual fine-tuning. Our further analysis indicates that visual fine-tuning also transfers better: it remains within 
+ points of Text fine-tuning on 
+Text
+ questions, while Text fine-tuning trails by 
+–
+ points on 
+Visual
+ questions.
+
+6 
+Conclusion
+
+Deep research over complex documents typically begins with OCR. 
+DR Pixel
+ instead performs retrieval and reasoning directly over rendered pages. We study this setting with 
+DRPixelBench
+, containing 
+ verifiable questions over 
+M pages of scientific literature, and show that page-native deep research consistently outperforms OCR-based pipelines across all tested models while using fewer tool calls, even without task-specific training. To close the remaining gap for open-weight models, we introduce 
+counterfactual credit reweighting
+, which weights teacher steps by their contribution to the gold answer and brings a 
+B model to GPT-5.4-level accuracy with lower search cost. These gains transfer to external benchmarks and non-scientific documents. More broadly, page-native deep research requires only document rendering rather than format-specific parsing, making it particularly attractive for private, layout-rich corpora such as financial or law documents where maintaining OCR and parsing pipelines is costly and brittle.
+
+Acknowledgement
+
+We would like to thank Prasann Singhal, Ryan Wang, Rulin Shao, Zijian Chen and the SM group members for valuable discussions and feedback.
+
+This work was supported in part by the Gemini Academic Program and by gifts from Rational Dynamics and Coefficient Giving. This work was also supported in part through the NYU IT High Performance Computing resources, services, and staff expertise.
+
+AI Usage Statement
+
+LLMs are part of our pipeline: Gemini-3.5-Flash generates and filters questions (
+Section
+ 
+3
+), with every benchmark question reviewed by human. GPT-5.4 produces training trajectories, and GPT-5.4-mini judges answers. We also used LLM assistants for literature search, writing polish, and coding. All research ideas, experimental design, and analysis are the authors’ own.
+
+References
+
+Asai 
+et al.
+ (2024)
+
+A. Asai, J. He, R. Shao, W. Shi, A. Singh, J. C. Chang, K. Lo, L. Soldaini, S. Feldman, M. D’arcy, D. Wadden, M. Latzke, M. Tian, P. Ji, S. Liu, H. Tong, B. Wu, Y. Xiong, L. Zettlemoyer, G. Neubig, D. Weld, D. Downey, W. Yih, P. W. Koh, and H. Hajishirzi
+
+OpenScholar: synthesizing scientific literature with retrieval-augmented lms
+.
+
+arXiv preprint arXiv:2411.14199
+.
+
+External Links: 
+2411.14199
+,
+
+Link
+
+Cited by: 
+§1
+,
+
+§3
+,
+
+§4.1
+.
+
+Blecher 
+et al.
+ (2024)
+
+L. Blecher, G. Cucurull, T. Scialom, and R. Stojnic
+
+Nougat: neural optical understanding for academic documents
+.
+
+In 
+The Twelfth International Conference on Learning Representations
+,
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+Chen 
+et al.
+ (2023)
+
+B. Chen, C. Shu, E. Shareghi, N. Collier, K. Narasimhan, and S. Yao
+
+FireAct: toward language agent fine-tuning
+.
+
+arXiv preprint arXiv:2310.05915
+.
+
+External Links: 
+2310.05915
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Chen 
+et al.
+ (2025a)
+
+S. Chen, P. J. F. Moreira, Y. Xiao, S. Schmidgall, J. L. Warner, H. Aerts, T. Hartvigsen, J. Gallifant, and D. Bitterman
+
+MedBrowseComp: benchmarking medical deep research and computer use
+.
+
+In 
+The Second Workshop on GenAI for Health: Potential, Trust, and Policy Compliance
+,
+
+External Links: 
+Link
+
+Cited by: 
+§1
+.
+
+Chen 
+et al.
+ (2026)
+
+Z. Chen, X. Ma, S. Zhuang, P. Nie, K. Zou, S. Sharifymoghaddam, A. Liu, J. Green, K. Patel, R. Meng, M. Su, Y. Li, H. Hong, X. Shi, X. Liu, H. Oyarhoseini, N. Thakur, C. Zhang, L. Gao, W. Chen, and J. Lin
+
+BrowseComp-plus: a fair and disentangled evaluation benchmark for deep search agents
+.
+
+In 
+Proceedings of the 64th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)
+,
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§1
+,
+
+§3
+,
+
+§4.1
+.
+
+Chen 
+et al.
+ (2025b)
+
+Z. Chen, S. Chen, Y. Ning, Q. Zhang, B. Wang, B. Yu, Y. Li, Z. Liao, C. Wei, Z. Lu, V. Dey, M. Xue, F. N. Baker, B. Burns, D. Adu-Ampratwum, X. Huang, X. Ning, S. Gao, Y. Su, and H. Sun
+
+ScienceAgentBench: toward rigorous assessment of language agents for data-driven scientific discovery
+.
+
+In 
+The Thirteenth International Conference on Learning Representations
+,
+
+External Links: 
+Link
+
+Cited by: 
+§1
+.
+
+Choi 
+et al.
+ (2026)
+
+C. Choi, J. Kwon, A. Lopez-Lira, C. Kim, M. Kim, J. Hwang, J. Ha, H. Choi, S. Yun, Y. Kim, and Y. Lee
+
+FinAgentBench: a benchmark dataset for agentic retrieval in financial question answering
+.
+
+In 
+NeurIPS 2025 Workshop: Generative AI in Finance
+,
+
+External Links: 
+Link
+
+Cited by: 
+§1
+.
+
+Dasigi 
+et al.
+ (2021)
+
+P. Dasigi, K. Lo, I. Beltagy, A. Cohan, N. A. Smith, and M. Gardner
+
+A dataset of information-seeking questions and answers anchored in research papers
+.
+
+In 
+Proceedings of the 2021 Conference of the North American Chapter of the Association for Computational Linguistics
+,
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§3
+.
+
+de Souza P. Moreira 
+et al.
+ (2026)
+
+G. de Souza P. Moreira, R. Ak, M. Xu, O. Holworthy, B. Schifferer, Z. Yu, Y. Babakhin, R. Osmulski, J. Cai, R. Chesler, B. Liu, and E. Oldridge
+
+Nemotron colembed v2: top-performing late interaction embedding models for visual document retrieval
+.
+
+arXiv preprint arXiv:2602.03992
+.
+
+External Links: 
+Link
+
+Cited by: 
+§1
+.
+
+Du 
+et al.
+ (2026)
+
+M. Du, B. Xu, C. Zhu, L. Zhang, X. Wang, and Z. Mao
+
+DeepResearch bench: a comprehensive benchmark for deep research agents
+.
+
+In 
+The Fourteenth International Conference on Learning Representations
+,
+
+External Links: 
+Link
+
+Cited by: 
+§3
+.
+
+Faysse 
+et al.
+ (2025)
+
+M. Faysse, H. Sibille, T. Wu, B. Omrani, G. Viaud, C. HUDELOT, and P. Colombo
+
+ColPali: efficient document retrieval with vision language models
+.
+
+In 
+The Thirteenth International Conference on Learning Representations
+,
+
+External Links: 
+Link
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+Gemini (2025)
+
+Gemini
+
+Gemini deep research
+.
+
+Note: 
+Official blog post introducing Gemini Deep Research.
+
+External Links: 
+Link
+
+Cited by: 
+§1
+.
+
+Geng 
+et al.
+ (2026)
+
+X. Geng, P. Xia, Z. Zhang, X. Wang, Q. Wang, R. Ding, C. Wang, J. Wu, K. Li, Y. Zhao, H. Yin, Y. Jiang, P. Xie, F. Huang, H. Yao, Y. R. Fung, and J. Zhou
+
+WebWatcher: breaking new frontiers of vision-language deep research agent
+.
+
+In 
+The Fourteenth International Conference on Learning Representations
+,
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+Giouroukis 
+et al.
+ (2025)
+
+P. S. Giouroukis, D. Dimitriadis, D. Papadopoulos, Z. Shao, and G. Tsoumakas
+
+What’s the best way to retrieve slides? a comparative study of multimodal, caption-based, and hybrid retrieval techniques
+.
+
+arXiv preprint arXiv:2509.15211
+.
+
+External Links: 
+2509.15211
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Google (2026)
+
+Google
+
+Gemini 3.5: frontier intelligence with action
+.
+
+Note: 
+Official blog post introducing Gemini 3.5 models.
+
+External Links: 
+Link
+
+Cited by: 
+§1
+,
+
+§3
+,
+
+§4.2
+.
+
+Günther 
+et al.
+ (2025)
+
+M. Günther, S. Sturua, M. K. Akram, I. Mohr, A. Ungureanu, B. Wang, S. Eslami, S. Martens, M. Werk, N. Wang, and H. Xiao
+
+Jina-embeddings-v4: universal embeddings for multimodal multilingual retrieval
+.
+
+In 
+Proceedings of the 5th Workshop on Multilingual Representation Learning (MRL 2025)
+,
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§2
+.
+
+Huang 
+et al.
+ (2026)
+
+T. Huang, R. Cao, Y. Zhang, Z. Kang, Z. Wang, C. Wang, Y. LUO, H. Zheng, L. Qian, L. Chen, and K. Yu
+
+AirQA: a comprehensive QA dataset for AI research with instance-level evaluation
+.
+
+In 
+The Fourteenth International Conference on Learning Representations
+,
+
+External Links: 
+Link
+
+Cited by: 
+§3
+,
+
+§3
+,
+
+§5.2
+.
+
+Jiang 
+et al.
+ (2024)
+
+D. Jiang, R. Zhang, Z. Guo, Y. Wu, J. Lei, P. Qiu, P. Lu, Z. Chen, C. Fu, G. Song, P. Gao, Y. Liu, C. Li, and H. Li
+
+MMSearch: benchmarking the potential of large models as multi-modal search engines
+.
+
+arXiv preprint arXiv:2409.12959
+.
+
+External Links: 
+2409.12959
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Jin 
+et al.
+ (2025)
+
+B. Jin, H. Zeng, Z. Yue, J. Yoon, S. O. Arik, D. Wang, H. Zamani, and J. Han
+
+Search-r1: training LLMs to reason and leverage search engines with reinforcement learning
+.
+
+In 
+Second Conference on Language Modeling
+,
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+Karpukhin 
+et al.
+ (2020)
+
+V. Karpukhin, B. Oguz, S. Min, P. Lewis, L. Wu, S. Edunov, D. Chen, and W. Yih
+
+Dense passage retrieval for open-domain question answering
+.
+
+In 
+Proceedings of the 2020 conference on empirical methods in natural language processing (EMNLP)
+,
+
+pp. 6769–6781
+.
+
+Cited by: 
+§4.1
+.
+
+Kim 
+et al.
+ (2022)
+
+G. Kim, T. Hong, M. Yim, J. Nam, J. Park, J. Yim, W. Hwang, S. Yun, D. Han, and S. Park
+
+OCR-free document understanding transformer
+.
+
+arXiv preprint arXiv:2111.15664
+.
+
+External Links: 
+2111.15664
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Lee 
+et al.
+ (2023)
+
+K. Lee, M. Joshi, I. Turc, H. Hu, F. Liu, J. Eisenschlos, U. Khandelwal, P. Shaw, M. Chang, and K. Toutanova
+
+Pix2Struct: screenshot parsing as pretraining for visual language understanding
+.
+
+arXiv preprint arXiv:2210.03347
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+Li 
+et al.
+ (2025a)
+
+B. Li, B. Zhang, D. Zhang, F. Huang, G. Li, G. Chen, H. Yin, J. Wu, J. Zhou, K. Li, L. Su, L. Ou, L. Zhang, P. Xie, R. Ye, W. Yin, X. Yu, X. Wang, X. Wu, X. Chen, Y. Zhao, Z. Zhang, Z. Tao, Z. Zhang, Z. Qiao, C. Wang, D. Yu, G. Fu, H. Shen, J. Yang, J. Lin, J. Zhang, K. Zeng, L. Yang, H. Yin, M. Song, M. Yan, M. Liao, P. Xia, Q. Xiao, R. Min, R. Ding, R. Fang, S. Chen, S. Huang, S. Wang, S. Cai, W. Shen, X. Wang, X. Guan, X. Geng, Y. Shi, Y. Wu, Z. Chen, Z. Li, and Y. Jiang
+
+Tongyi deepresearch technical report
+.
+
+arXiv preprint arXiv:2510.24701
+.
+
+External Links: 
+Link
+
+Cited by: 
+§1
+,
+
+§2
+,
+
+§4.1
+.
+
+Li 
+et al.
+ (2024)
+
+C. Li, Z. Shangguan, Y. Zhao, D. Li, Y. Liu, and A. Cohan
+
+M3SciQA: a multi-modal multi-document scientific QA benchmark for evaluating foundation models
+.
+
+In 
+Findings of the Association for Computational Linguistics: EMNLP 2024
+,
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§3
+,
+
+§3
+,
+
+§5.2
+.
+
+Li 
+et al.
+ (2025b)
+
+H. Li, J. Chen, J. Yang, Q. Ai, W. Jia, Y. Liu, K. Lin, Y. Wu, G. Yuan, Y. Hu, W. Wang, Y. Liu, and M. Huang
+
+LegalAgentBench: evaluating LLM agents in legal domain
+.
+
+In 
+Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics
+,
+
+External Links: 
+Link
+
+Cited by: 
+§1
+.
+
+Li 
+et al.
+ (2026a)
+
+M. Li, Y. Zhang, D. Long, K. Chen, S. Song, S. Bai, Z. Yang, P. Xie, A. Yang, D. Liu, J. Zhou, and J. Lin
+
+Qwen3-vl-embedding and qwen3-vl-reranker: a unified framework for state-of-the-art multimodal retrieval and ranking
+.
+
+arXiv preprint arXiv:2601.04720
+.
+
+External Links: 
+Link
+
+Cited by: 
+§1
+,
+
+§2
+,
+
+§4.2
+.
+
+Li 
+et al.
+ (2026b)
+
+S. Li, X. Bu, W. Wang, J. Liu, J. Dong, H. He, H. Lu, H. Zhang, C. Jing, Z. Li, C. Li, J. Tian, C. Zhang, T. Peng, Y. He, J. Gu, H. Huang, D. Zhou, Y. Zhang, J. Yang, G. Zhang, W. Huang, Z. Zhang, Q. Yang, and S. Wen
+
+MM-browsecomp: a comprehensive benchmark for multimodal browsing agents
+.
+
+arXiv preprint arXiv:2508.13186
+.
+
+External Links: 
+2508.13186
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Li 
+et al.
+ (2025c)
+
+X. Li, G. Dong, J. Jin, Y. Zhang, Y. Zhou, Y. Zhu, P. Zhang, and Z. Dou
+
+Search-o1: agentic search-enhanced large reasoning models
+.
+
+In 
+Proceedings of the 2025 Conference on Empirical Methods in Natural Language Processing
+,
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§2
+.
+
+Li 
+et al.
+ (2025d)
+
+X. Li, J. Jin, G. Dong, H. Qian, Y. Wu, J. Wen, Y. Zhu, and Z. Dou
+
+WebThinker: empowering large reasoning models with deep research capability
+.
+
+In 
+The Thirty-ninth Annual Conference on Neural Information Processing Systems
+,
+
+External Links: 
+Link
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+Lightman 
+et al.
+ (2023)
+
+H. Lightman, V. Kosaraju, Y. Burda, H. Edwards, B. Baker, T. Lee, J. Leike, J. Schulman, I. Sutskever, and K. Cobbe
+
+Let’s verify step by step
+.
+
+arXiv preprint arXiv:2305.20050
+.
+
+External Links: 
+2305.20050
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Lightman 
+et al.
+ (2024)
+
+H. Lightman, V. Kosaraju, Y. Burda, H. Edwards, B. Baker, T. Lee, J. Leike, J. Schulman, I. Sutskever, and K. Cobbe
+
+Let’s verify step by step
+.
+
+In 
+The Twelfth International Conference on Learning Representations
+,
+
+External Links: 
+Link
+
+Cited by: 
+§5.1
+.
+
+Lo 
+et al.
+ (2023)
+
+K. Lo, J. C. Chang, A. Head, J. Bragg, A. X. Zhang, C. Trier, C. Anastasiades, T. August, R. Authur, D. Bragg, E. Bransom, I. Cachola, S. Candra, Y. Chandrasekhar, Y. Chen, E. Y. Cheng, Y. Chou, D. Downey, R. Evans, R. Fok, F. Hu, R. Huff, D. Kang, T. S. Kim, R. Kinney, A. Kittur, H. Kang, E. Klevak, B. Kuehl, M. Langan, M. Latzke, J. Lochner, K. MacMillan, E. Marsh, T. Murray, A. Naik, N. Nguyen, S. Palani, S. Park, C. Paulic, N. Rachatasumrit, S. Rao, P. Sayre, Z. Shen, P. Siangliulue, L. Soldaini, H. Tran, M. van Zuylen, L. L. Wang, C. Wilhelm, C. Wu, J. Yang, A. Zamarron, M. A. Hearst, and D. S. Weld
+
+The semantic reader project: augmenting scholarly documents through ai-powered interactive reading interfaces
+.
+
+arXiv preprint arXiv:2303.14334
+.
+
+External Links: 
+Link
+
+Cited by: 
+§1
+.
+
+Loison 
+et al.
+ (2026)
+
+A. Loison, Q. Macé, A. Edy, V. Xing, T. Balough, G. d. S. P. Moreira, B. Liu, M. Faysse, C. Hudelot, and G. Viaud
+
+ViDoRe v3: a comprehensive evaluation of retrieval augmented generation in complex real-world scenarios
+.
+
+In 
+Proceedings of the 64th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)
+,
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§1
+,
+
+§3
+,
+
+§5.2
+.
+
+Ma 
+et al.
+ (2024)
+
+Y. Ma, Y. Zang, L. Chen, M. Chen, Y. Jiao, X. Li, X. Lu, Z. Liu, Y. Ma, X. Dong, P. Zhang, L. Pan, Y. Jiang, J. Wang, Y. Cao, and A. Sun
+
+MMLONGBENCH-DOC: benchmarking long-context document understanding with visualizations
+.
+
+In 
+The Thirty-eight Conference on Neural Information Processing Systems Datasets and Benchmarks Track
+,
+
+External Links: 
+Link
+
+Cited by: 
+§3
+.
+
+Meng and Chen (2026)
+
+Z. Meng and K. Chen
+
+CRAFT: counterfactual credit assignment from free sibling rollouts for self-distilled agentic reinforcement learning
+.
+
+arXiv preprint arXiv:2606.29476
+.
+
+External Links: 
+2606.29476
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Niu 
+et al.
+ (2026)
+
+J. Niu, Z. Liu, Z. Gu, B. Wang, L. Ouyang, Z. Zhao, T. Chu, T. He, F. Wu, Q. Zhang, Z. Jin, G. Liang, R. Zhang, W. Zhang, Y. Qu, Z. Ren, Y. Sun, Z. Tang, B. Niu, Y. Zheng, D. Ma, Z. Miao, H. Dong, S. Qian, J. Zhang, F. Wang, J. Chen, X. Zhao, L. Wei, W. Li, S. Wang, R. Xu, Y. Cao, L. Chen, Q. Wu, H. Gu, L. Lu, D. Lin, Shenguanlin, X. Zhou, L. Zhang, Y. Zang, X. Dong, J. Wang, B. Zhang, L. BAI, P. Chu, W. Li, J. Wu, L. Wu, Z. Li, G. Wang, Z. Tu, C. Xu, K. Chen, B. Zhou, D. Lin, W. Zhang, and C. He
+
+MinerU2.5: a decoupled vision-language model for efficient high-resolution document parsing
+.
+
+In 
+The 64th Annual Meeting of the Association for Computational Linguistics – Industry Track
+,
+
+External Links: 
+Link
+
+Cited by: 
+§A.1
+,
+
+§4.1
+.
+
+OpenAI (2025)
+
+OpenAI
+
+Introducing deep research
+.
+
+Note: 
+Official blog post introducing OpenAI Deep Research.
+
+External Links: 
+Link
+
+Cited by: 
+§1
+.
+
+OpenAI (2026)
+
+OpenAI
+
+Introducing gpt-5.4
+.
+
+Note: 
+Official blog post introducing GPT-5.4 models.
+
+External Links: 
+Link
+
+Cited by: 
+§1
+,
+
+§4.2
+.
+
+Poznanski 
+et al.
+ (2025)
+
+J. Poznanski, A. Rangapur, J. Borchardt, J. Dunkelberger, C. Wilhelm, K. Lo, and L. Soldaini
+
+OlmOCR: unlocking trillions of tokens in PDFs with vision language models
+.
+
+In 
+Championing Open-source DEvelopment in ML Workshop @ ICML25
+,
+
+External Links: 
+Link
+
+Cited by: 
+§1
+.
+
+Qwen (2026)
+
+Qwen
+
+Qwen3.6-27b: flagship-level coding in a 27b dense model
+.
+
+Note: 
+Official blog post introducing Qwen3.6 family
+
+External Links: 
+Link
+
+Cited by: 
+§1
+,
+
+§4.2
+.
+
+Setlur 
+et al.
+ (2025)
+
+A. Setlur, C. Nagpal, A. Fisch, X. Geng, J. Eisenstein, R. Agarwal, A. Agarwal, J. Berant, and A. Kumar
+
+Rewarding progress: scaling automated process verifiers for LLM reasoning
+.
+
+In 
+The Thirteenth International Conference on Learning Representations
+,
+
+External Links: 
+Link
+
+Cited by: 
+§5.1
+.
+
+Shao 
+et al.
+ (2026)
+
+R. Shao, A. Asai, S. Z. Shen, H. Ivison, V. Kishore, J. Zhuo, X. Zhao, M. Park, S. G. Finlayson, D. Sontag, T. Murray, S. Min, P. Dasigi, L. Soldaini, F. Brahman, W. Yih, T. Wu, L. Zettlemoyer, Y. Kim, H. Hajishirzi, and P. W. Koh
+
+DR tulu: reinforcement learning with evolving rubrics for deep research
+.
+
+In 
+Forty-third International Conference on Machine Learning
+,
+
+External Links: 
+Link
+
+Cited by: 
+§2
+,
+
+§2
+.
+
+Shen 
+et al.
+ (2026)
+
+Y. Shen, J. Wu, J. Huang, D. Yin, L. Yan, and M. Cao
+
+VISOR: agentic visual retrieval-augmented generation via iterative search and over-horizon reasoning
+.
+
+arXiv preprint arXiv:2604.09508
+.
+
+External Links: 
+2604.09508
+,
+
+Link
+
+Cited by: 
+§2
+,
+
+§2
+.
+
+Shorten 
+et al.
+ (2026)
+
+C. Shorten, A. Skaburskas, D. M. Jones, C. Pierse, R. Esposito, J. Trengrove, E. Dilocker, and B. van Luijt
+
+IRPAPERS: a visual document benchmark for scientific retrieval and question answering
+.
+
+arXiv preprint arXiv:2602.17687
+.
+
+External Links: 
+Link
+
+Cited by: 
+§3
+,
+
+§3
+,
+
+§5.2
+.
+
+Suri 
+et al.
+ (2025)
+
+M. Suri, P. Mathur, F. Dernoncourt, K. Goswami, R. A. Rossi, and D. Manocha
+
+VisDoM: multi-document QA with visually rich elements using multimodal retrieval-augmented generation
+.
+
+In 
+Proceedings of the 2025 Conference of the Nations of the Americas Chapter of the Association for Computational Linguistics: Human Language Technologies (Volume 1: Long Papers)
+,
+
+Albuquerque, New Mexico
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§4.1
+.
+
+Tanaka 
+et al.
+ (2023)
+
+R. Tanaka, K. Nishida, K. Nishida, T. Hasegawa, I. Saito, and K. Saito
+
+SlideVQA: a dataset for document visual question answering on multiple images
+.
+
+arXiv preprint arXiv:2301.04883
+.
+
+External Links: 
+2301.04883
+,
+
+Link
+
+Cited by: 
+§1
+,
+
+§2
+,
+
+§3
+.
+
+Tao 
+et al.
+ (2026)
+
+X. Tao, T. Yihua, X. Su, X. Fu, J. Wu, C. Tao, Z. Liu, H. Bai, R. Liu, and L. Kong
+
+MMSearch-plus: benchmarking provenance-aware search for multimodal browsing agents
+.
+
+In 
+The Fourteenth International Conference on Learning Representations
+,
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+Wang 
+et al.
+ (2025a)
+
+Q. Wang, R. Ding, Z. Chen, W. Wu, S. Wang, P. Xie, and F. Zhao
+
+ViDoRAG: visual document retrieval-augmented generation via dynamic iterative reasoning agents
+.
+
+In 
+Proceedings of the 2025 Conference on Empirical Methods in Natural Language Processing
+,
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§1
+,
+
+§2
+,
+
+§3
+.
+
+Wang 
+et al.
+ (2025b)
+
+Q. Wang, R. Ding, Y. Zeng, Z. Chen, L. Chen, S. Wang, P. Xie, F. Huang, and F. Zhao
+
+VRAG-RL: empower vision-perception-based RAG for visually rich information understanding via iterative reasoning with reinforcement learning
+.
+
+In 
+The Thirty-ninth Annual Conference on Neural Information Processing Systems
+,
+
+External Links: 
+Link
+
+Cited by: 
+§2
+,
+
+§2
+.
+
+Wang 
+et al.
+ (2026)
+
+Y. Wang, Z. Li, Z. Wang, P. Teiletche, L. Jin, M. Zaharia, J. E. Gonzalez, and S. Min
+
+PIXELRAG: web screenshots beat text for retrieval-augmented generation
+.
+
+arXiv preprint arXiv:2606.28344
+.
+
+External Links: 
+Link
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+Wei 
+et al.
+ (2026)
+
+H. Wei, Y. Sun, and Y. Li
+
+DeepSeek-ocr 2: visual causal flow
+.
+
+arXiv preprint arXiv:2601.20552
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+Wu 
+et al.
+ (2026)
+
+H. Wu, C. Kuang, T. Zhuang, and X. Li
+
+Beyond outcome rewards: step-level self-distilled policy optimization for deep search agents
+.
+
+arXiv preprint arXiv:2608.12764
+.
+
+External Links: 
+2608.12764
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Xie 
+et al.
+ (2024)
+
+Q. Xie, W. Han, Z. Chen, R. Xiang, X. Zhang, Y. He, M. Xiao, D. Li, Y. Dai, D. Feng, Y. Xu, H. Kang, Z. Kuang, C. Yuan, K. Yang, Z. Luo, T. Zhang, Z. Liu, G. XIONG, Z. Deng, Y. Jiang, Z. Yao, H. Li, Y. Yu, G. Hu, H. Jiajia, X. Liu, A. Lopez-Lira, B. Wang, Y. Lai, H. Wang, M. Peng, S. Ananiadou, and J. Huang
+
+FinBen: an holistic financial benchmark for large language models
+.
+
+In 
+The Thirty-eight Conference on Neural Information Processing Systems Datasets and Benchmarks Track
+,
+
+External Links: 
+Link
+
+Cited by: 
+§1
+.
+
+Xiong 
+et al.
+ (2026)
+
+L. Xiong, K. Luo, Z. Xia, W. Zhang, J. Yao, Z. Liu, J. Shao, J. Chen, H. Qian, X. Yang, Q. Yu, H. Li, C. Yue, X. Du, Y. Wang, Y. Liu, H. Xu, and Z. Dou
+
+AutoResearchBench: benchmarking ai agents on complex scientific literature discovery
+.
+
+arXiv preprint arXiv:2604.25256
+.
+
+External Links: 
+2604.25256
+,
+
+Link
+
+Cited by: 
+§1
+.
+
+Yao 
+et al.
+ (2026)
+
+H. Yao, Q. Yin, M. Yang, Z. Zhao, Y. Wang, H. Luo, J. Zhang, and J. Huang
+
+MM-deepresearch: a simple and effective multimodal agentic search baseline
+.
+
+In 
+Forty-third International Conference on Machine Learning
+,
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+Yao 
+et al.
+ (2023)
+
+S. Yao, J. Zhao, D. Yu, N. Du, I. Shafran, K. R. Narasimhan, and Y. Cao
+
+ReAct: synergizing reasoning and acting in language models
+.
+
+In 
+The Eleventh International Conference on Learning Representations
+,
+
+External Links: 
+Link
+
+Cited by: 
+§2
+,
+
+§4.1
+.
+
+Yu 
+et al.
+ (2025)
+
+S. Yu, C. Tang, B. Xu, J. Cui, J. Ran, Y. Yan, Z. Liu, S. Wang, X. Han, Z. Liu, and M. Sun
+
+VisRAG: vision-based retrieval-augmented generation on multi-modality documents
+.
+
+In 
+The Thirteenth International Conference on Learning Representations
+,
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+Zhang 
+et al.
+ (2025a)
+
+J. Zhang, Q. Zhang, B. Wang, L. Ouyang, Z. Wen, Y. Li, K. Chow, C. He, and W. Zhang
+
+OCR hinders rag: evaluating the cascading impact of ocr on retrieval-augmented generation
+.
+
+arXiv preprint arXiv:2412.02592
+.
+
+External Links: 
+2412.02592
+,
+
+Link
+
+Cited by: 
+§1
+.
+
+Zhang 
+et al.
+ (2025b)
+
+Y. Zhang, M. Li, D. Long, X. Zhang, H. Lin, B. Yang, P. Xie, A. Yang, D. Liu, J. Lin, F. Huang, and J. Zhou
+
+Qwen3 embedding: advancing text embedding and reranking through foundation models
+.
+
+arXiv preprint arXiv:2506.05176
+.
+
+External Links: 
+Link
+
+Cited by: 
+§4.2
+.
+
+Zheng 
+et al.
+ (2025)
+
+Y. Zheng, D. Fu, X. Hu, X. Cai, L. Ye, P. Lu, and P. Liu
+
+DeepResearcher: scaling deep research via reinforcement learning in real-world environments
+.
+
+In 
+Proceedings of the 2025 Conference on Empirical Methods in Natural Language Processing
+,
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§2
+.
+
+Zhou 
+et al.
+ (2025)
+
+Y. Zhou, S. Jiang, Y. Tian, J. Weston, S. Levine, S. Sukhbaatar, and X. Li
+
+SWEET-rl: training multi-turn llm agents on collaborative reasoning tasks
+.
+
+arXiv preprint arXiv:2503.15478
+.
+
+External Links: 
+2503.15478
+,
+
+Link
+
+Cited by: 
+§5.1
+.
+
+Zhou 
+et al.
+ (2024)
+
+Y. Zhou, A. Zanette, J. Pan, S. Levine, and A. Kumar
+
+ArCHer: training language model agents via hierarchical multi-turn RL
+.
+
+In 
+Forty-first International Conference on Machine Learning
+,
+
+External Links: 
+Link
+
+Cited by: 
+§5.1
+.
+
+Appendix A 
+DRPixelBench
+ Detail
+
+A.1 
+OCR Parsing Detail
+
+All three corpora take the same PDFs as input and differ only in the retrieval unit they produce. We parse every PDF with MinerU-2.5-Pro 
+(
+Niu et al., 2026
+)
+ on A100 GPUs into typed blocks, from which both OCR-based corpora are built. The text corpus linearises the blocks in reading order, keeping equations as 
+L
+a
+T
+e
+X
+ and tables as HTML with their captions and representing a figure by its caption alone. Its unit is a 
+-word chunk prefixed with the paper title. The figure corpus takes the cropped figure and chart images as its unit. The page-native corpus skips parsing entirely and renders each page at 
+ dpi, so its unit is a full page image.
+
+A.2 
+DRPixelBench
+ Statistics Breakdown
+
+Property
+
+Text
+
+Table
+
+Figure
+
+Equation
+
+All
+
+Questions
+
+Query Num
+
+216
+
+135
+
+102
+
+47
+
+500
+
+Query Len.
+
+35.0
+
+34.4
+
+32.7
+
+37.3
+
+34.6
+
+Answer Len.
+
+39.8
+
+50.7
+
+44.4
+
+37.5
+
+43.5
+
+Gold Page
+
+1.00
+
+1.00
+
+1.00
+
+1.00
+
+1.00
+
+Corpus
+
+Papers
+
+99,055
+
+Pages
+
+1,062,153
+
+Table 8: 
+DRPixelBench
+ statistics. Questions are grouped by the modality of the evidence they are
+grounded in, and lengths are in tokens. Every question is grounded to exactly one page.
+
+A.3 
+DRPixelBench
+ Verification Detail
+
+In 
+section 3
+, we present the verification we take to filter out low quality questions. Here, we present the total number of filters we apply.
+
+Filter
+
+Criterion
+
+Remaining
+
+Drafted questions
+
+Coined-name removal
+
+The paper’s own product or benchmark name is replaced by a generic class; questions where it cannot be removed are discarded.
+
+Self-contained reference
+
+No dangling pointers such as “this method” or “the figure above”.
+
+No internal codes
+
+No enumeration of identifiers meaningful only inside the paper.
+
+Single focus
+
+Exactly one answer is required; choosing among listed options counts as one such as “How does it do on ImageNet, and on COCO?”.
+
+Answer shape
+
+The gold matches its declared type: a comparison names a winner, a trend a direction, a regime a condition, and none is a disguised yes/no.
+
+Abstract-anchored
+
+A solver shown only the paper’s 
+original
+ abstract judges that a curious reader would plausibly ask the question, rejecting those reverse-engineered from the evidence.
+
+Phrasing repair
+
+Questions whose wording cannot be made to read naturally are discarded.
+
+Evidence sufficiency
+
+A solver given the gold evidence answers correctly.
+
+On-concern
+
+Answering remains informative about the reader’s original concern.
+
+Not memorised
+
+A tool-free solver fails to produce the gold from parametric knowledge.
+
+Not prior-guessable
+
+Generic ML priors—more data or scale wins, the proposed method wins, ablating a component hurts—do not predict the gold.
+
+Not web-findable
+
+A search-and-visit agent fails after exhausting a four-call budget.
+
+Modality necessity
+
+On figure- and table-grounded questions, a text-only solver forced through four retrieval rounds over the body text fails.
+
+Modality sufficiency
+
+On text-grounded questions, the same solver succeeds, checking the modality label in the other direction.
+
+Table 9: 
+Filters applied to drafted questions, in the order they run. 
+Remaining
+ is the
+share of drafted questions still alive after each filter. The four filters described in
+
+section 3
+ are in bold.
+
+A.4 
+DRPixelBench
+ Corpus Detail
+
+We specify the venues of the papers that form 
+DRPixelBench
+ corpus.
+
+Papers
+
+Pages
+
+Venue
+
+Count
+
+Share
+
+Count
+
+Share
+
+NeurIPS
+
+21,448
+
+21.7%
+
+232,136
+
+21.9%
+
+ACL
+
+12,870
+
+13.0%
+
+114,720
+
+10.8%
+
+CVPR
+
+10,312
+
+10.4%
+
+96,869
+
+9.1%
+
+ICML
+
+8,654
+
+8.7%
+
+92,765
+
+8.7%
+
+ICLR
+
+8,561
+
+8.6%
+
+86,688
+
+8.2%
+
+EMNLP
+
+7,946
+
+8.0%
+
+71,194
+
+6.7%
+
+ICCV
+
+5,685
+
+5.7%
+
+53,913
+
+5.1%
+
+AAAI
+
+4,835
+
+4.9%
+
+42,178
+
+4.0%
+
+NAACL
+
+1,834
+
+1.9%
+
+16,317
+
+1.5%
+
+ECCV
+
+1,687
+
+1.7%
+
+26,515
+
+2.5%
+
+Other venues
+
+8,308
+
+8.4%
+
+122,281
+
+11.5%
+
+Preprint only (arXiv)
+
+6,915
+
+7.0%
+
+106,577
+
+10.0%
+
+Total
+
+99,055
+
+100.0%
+
+1,062,153
+
+100.0%
+
+Table 10: 
+Venue composition of the 99,055-document, 1,062,153-page corpus. 93.0% of the documents appeared at a peer-reviewed venue.
+
+A.5 
+DRPixelBench
+ Annotation
+
+Outcome
+
+Count
+
+Share
+
+Accepted as generated
+
+107
+
+10.3%
+
+Kept after editing
+
+393
+
+37.9%
+
+Entering 
+DRPixelBench
+
+500
+
+48.3%
+
+Rejected
+
+536
+
+51.7%
+
+Reviewed
+
+1,036
+
+100.0%
+
+Table 11: 
+Human annotation of the 
+DRPixelBench
+. Of 
+ generated questions reviewed, about one in ten survived untouched and over half were rejected.
+
+As described in 
+section 3
+, every question that passes all verification gates is reviewed manually before entering 
+DRPixelBench
+. We detail the annotation procedure here.
+
+For each question, the annotator sees the question, the answer, the gold page, and the specific grounded block, such as a text span, figure, table, or equation. The full gold paper is also available. The annotator checks three things: (1) the question is well-formed and valid; (2) the answer is concise enough for reliable LLM grading; (3) the gold page is correct and sufficient to answer the question. Annotators may edit a question to fix these issues or reject it.
+
+Only about one in ten questions passes annotation unchanged, and about half are rejected. The main reasons for rejection are that the gold answer contradicts the paper, that no single page suffices to answer the question, or that the answer is too open-ended to grade reliably. Annotation takes about 10 minutes per question.
+
+A.6 
+DRPixelBench
+ Retrieval Difficulty
+
+Target
+
+R@1
+
+R@5
+
+R@10
+
+R@30
+
+R@100
+
+MRR
+
+Page
+
+13.8
+
+26.8
+
+32.8
+
+41.0
+
+48.8
+
+0.200
+
+Table 12: 
+Retrieval difficulty on 
+DRPixelBench
+, using Qwen3-VL-Embedding-8B.
+
+Appendix B 
+DR Pixel
+ Inference Detail
+
+B.1 
+Deployment and Engineering Detail
+
+Serving.
+
+GPT-5.4 is accessed through the OpenAI Responses API and Gemini-3.5-Flash through Vertex AI. Qwen3.6-27B, both the base model and our trained variants, is served with SGLang on four H200 GPUs in tensor-parallel mode at a context length of 
+ tokens. Reasoning is set to 
+high
+ for GPT-5.4 and Gemini-3.5-Flash, and enabled for Qwen3.6-27B. Following the Qwen model card, which warns that greedy decoding in thinking mode induces endless repetition, the open model is sampled at temperature 
+, 
+, 
+ with a presence penalty of 
+; the proprietary models use provider defaults. All three run under an identical prompt, tool set and search budget.
+
+Halting at the tool call.
+
+The agent must stop generating the moment it emits a tool call, so that the real retrieval result re-enters the context. For Qwen3.6-27B and Gemini-3.5-Flash we pass 
+</call_tool>
+ and 
+</answer>
+ as stop sequences. For GPT-5.4 the tools are declared as native functions and the API halts at the 
+function_call
+ item, with retrieved pages returned as image content in 
+function_call_output
+.
+
+Carrying reasoning across turns.
+
+Qwen3.6-27B writes its 
+<think>
+ block in-band, so it is part of the conversation. For the proprietary models we echo the provider’s own representation verbatim, the 
+thought_signature
+ for Gemini-3.5-Flash and the encrypted reasoning item for GPT-5.4, carried in the request body with server-side retention disabled.
+
+Context growth and prefix reuse.
+
+Every observation stays in context, so the agent can re-read a page it retrieved ten steps earlier, and the append-only prefix is matched by the server’s radix cache at every turn, giving a 
+ multimodal cache hit rate.
+
+B.2 
+Comparison on Retrieval Budget
+
+In 
+Table
+ 
+2
+, each text search returns 
+ chunks of 
+ words, while each 
+DR Pixel
+ search returns 
+ pages. To check that this does not give 
+DR Pixel
+ more information, we run OCR on the retrieved pages and compare their text length with that of the retrieved chunks. On average, the text in three retrieved pages is 
+ that of five retrieved chunks (
+Table 13
+), so the two settings receive a comparable text budget per search, and 
+DR Pixel
+’s advantage cannot be attributed to seeing more text from pages.
+
+Setting
+
+Retrieved unit
+
+Words per search
+
+Text
+
+-word chunk
+
+5
+
+1,257
+
+Page-native
+
+page image
+
+3
+
+1,359
+
+Table 13: 
+Text returned per search. Word counts are measured over 
+ randomly sampled corpus documents including 
+ chunks of text, 
+ pages, with page text obtained by OCR. A chunk averages 
+ words and a page 
+.
+
+Appendix C 
+More on 
+DR Pixel
+
+C.1 
+DR Pixel
+ Training Detail
+
+Optimization.
+
+We fine-tune Qwen3.6-27B with LoRA of rank 
+ and scaling 
+, dropout 
+, on every linear projection of the language model; the vision encoder stays frozen. Training runs for one epoch at a constant learning rate of 
+ with an effective batch size of 
+, from four H200 GPUs at one sequence per device and four gradient-accumulation steps. We use 
+bfloat16
+, FlashAttention, Liger kernels and padding-free packing, and set the maximum sequence length to 
+ tokens.
+
+Applying the weights.
+
+Counterfactual credits are computed offline against the frozen base policy at two forward passes per step and written into the training file as a per-message weight. Each assistant message is split at the boundary between its reasoning and its action so the two channels can carry different weights, and the trainer multiplies each message’s token loss by its weight. The training step is therefore ordinary supervised fine-tuning at no extra cost, and the whole method sits in data preparation. Observation tokens are excluded from the loss in every arm.
+
+Training data.
+
+Training questions come from the same pipeline as the benchmark, taken before human annotation, over a disjoint pool of papers, and no paper supporting a training question supports an evaluation question. From 
+ 
+visual
+ seed questions whose gold evidence anchored on a table, figure, or equation, we sample six GPT-5.4 rollouts each under 
+DR Pixel
+, discard those with an incorrect final answer, and keep at most the three shortest trajectories per question, leaving 
+ trajectories. The teacher’s trajectories are short, 
+ searches per question, but heavy-tailed: under uniform token weighting the length seen by the gradient is 
+ rather than 
+, and trajectories with at least ten searches are 
+ of the data but 
+ of the steps. Filtering for correctness also means every retained trajectory ends with the answer in its context, which evaluation does not guarantee.
+
+C.2 
+DR Pixel
+ Behavior Comparison with GPT-5.4 and 
+DR Pixel
+
+GPT-5.4
+
+DR Pixel
+
+DR Pixel
+
+Score
+
+Score
+
+Score
+
+Retrieval
+
+   Page Hit
+
+45.7
+
+36.3
+
+52.0
+
+   Repeated Queries
+
+0.0
+
+5.3
+
+0.1
+
+Reading
+
+   Acc 
+ Page Hit
+
+71.2
+
+63.9
+
+67.7
+
+    from Last Search
+
+74.4
+
+69.3
+
+84.2
+
+    from Earlier Search
+
+69.7
+
+57.4
+
+66.9
+
+Table 14: 
+Decomposing the gap to GPT-5.4 on 
+DRPixelBench
+, with 
+ measured against GPT-5.4 in both blocks. 
+Page hit
+ is the share of questions whose gold page is retrieved, and 
+repeated queries
+ the share of search calls that re-issue a query already sent in the same trajectory. 
+Acc 
+ page hit
+ is accuracy given the gold page was retrieved, split by whether the page arrived from the last search or had to survive further searches. Training reverses the retrieval gap, and the reading deficit that remains is confined to pages carried from an earlier search.
+
+C.3 
+DR Pixel
+ Training Ablation
+
+Model
+
+Tool/q
+
+PgHit
+
+Acc
+Pg
+
+Acc
+
+Open-weight (Qwen3.6-27B)
+
+  
+DR Pixel
+
+8.8
+
+36.3
+
+63.9
+
+40.1
+
+  + vanilla SFT
+
+14.0
+
+53.6
+
+67.2
+
+49.0
+
+  
+DR Pixel
+
+8.9
+
+52.0
+
+67.7
+
+52.1
+
+Ablation of the credit
+
+  + answer weighting 
+
+11.6
+
+54.9
+
+67.2
+
+48.9
+
+  + counterfactual credit
+
+11.0
+
+51.9
+
+68.7
+
+50.9
+
+Table 15: 
+Results on 
+DRPixelBench
+. 
+Tool/q
+ is searches per question. 
+PgHit
+ is the percentage of questions for which the gold page is retrieved, and 
+Acc
+Pg
+ is accuracy restricted to those questions. The lower block adds one component of the credit at a time on top of vanilla SFT baseline, and 
+DR Pixel
+ is the full method, which additionally corrects the reasoning and searching channels against each other. Each component removes searches while gradually benefit the final accuracy.
+
+DR Pixel
+ adds three ingredients to vanilla SFT: a constant weight 
+ on the final answer, the per-step counterfactual credit of 
+Equation 3
+ converted to weights by rank, and the cross-channel correction described after 
+Equation 4
+. 
+Table 15
+ adds them one at a time, with every variation trained on the same 
+ trajectories under the same recipe, so weighting is the only variable. Each ingredient removes searches, from 
+ per question under uniform weighting to 
+ under the full method and gradually benefit the final accuracy.
+
+C.4 
+Other Variation for 
+Counterfactual Credit Reweighting
+
+Model
+
+Tool/q
+
+PgHit
+
+Acc
+Pg
+
+Acc
+
+Reference
+
+  Global rank
+
+11.0
+
+51.9
+
+68.7
+
+50.9
+
+Weight magnitude
+
+  Mean-weight matching
+
+10.1
+
+50.4
+
+63.1
+
+46.8
+
+Rank support
+
+  Within-trajectory rank
+
+10.0
+
+50.3
+
+70.9
+
+50.1
+
+  Within-question rank
+
+9.5
+
+50.2
+
+66.9
+
+48.6
+
+Trajectory contribution
+
+  Per-trajectory mass
+
+8.9
+
+51.6
+
+64.0
+
+45.6
+
+Table 16: 
+Normalising the credit, on 
+DRPixelBench
+. Each variant changes one normalisation choice while the credits, the mask and the training recipe stay fixed. Columns are as in 
+Table 4
+. Rescaling the weights costs reading accuracy, whether the mean weight is matched to the uniform baseline or the mass each trajectory contributes is equalised, while changing the pool a step is ranked against does not help.
+
+Equation 4
+fixes three properties that the counterfactual credit does not itself determine: the magnitude of the surviving weights, the pool of steps a given step is ranked against, and how much mass a single trajectory may contribute. Here we ablate on those three properties in 
+Table 16
+ with the training recipe held fixed.
+
+Weight magnitude.
+
+Masking every step of non-positive credit zeroes about a quarter of the steps and leaves the mean weight roughly a third below the uniform baseline, so the weighted run effectively takes smaller optimisation steps, and a constant factor on all weights is equivalent to a change of learning rate. Restoring the mean to the baseline settles this: accuracy given the gold page falls from 
+ to 
+, the largest reading loss in the family, while the number of searches barely moves.
+
+Rank support.
+
+A counterfactual credit is larger on hard questions, where deleting any step moves the likelihood of the gold answer substantially, so ranking against the whole training set imports question difficulty into a step-level signal. The effect is measurable: the mean surviving weight of a trajectory ranges from 
+ at the tenth percentile to 
+ at the ninetieth, so a step’s weight depends substantially on which trajectory it belongs to. We also try ranking a step only against the other steps of its own trajectory, and only against the steps of the same question’s rollouts. Both remove the leak, because a step is then never compared with a step from a different question. Neither helps: within-trajectory ranking stays on par with the reference (50.1 vs. 50.9) and within-question ranking is 2.3 points lower, so the bias is real but harmless.
+
+Trajectory contribution.
+
+Equal mean weights do not equalise what a trajectory contributes: its total weighted mass spans a factor of about six between the tenth and ninetieth percentiles, since a long or lightly masked trajectory supplies far more weighted tokens. Equalising that mass is the most aggressive variant we tried and the weakest result, five points below the reference. This is because a light trajectory gets multiplied by a large ratio.
+
+Numerical calibration is thus not where the credit acts. Rescaling the weights either does nothing or degrades reading, and changing the support of the rank does nothing at all. What remains is which steps the credit masks and how that mask is distributed along a trajectory.
+
+C.5 
+Counterfactual Credit Reweighting
+ Mechanism Explanation
+
+Figure 7: 
+What the credit masks in the 
+ training trajectories. 
+Share of the Data
+:
+trajectories and search steps by trajectory length; The dashed rules mark the average trajectory, which has 
+ searches, and the same average weighted by how many steps each trajectory contributes, which is 
+. 
+Masked by Length
+: mask rate against trajectory length. 
+Masked by Position
+ and 
+Surviving Weight
+: the same two quantities against position relative to the search that first retrieves a page the final answer cites, marked by the dashed rule; that search is masked 
+ of the time, the minimum of the panel.
+
+Figure 8: 
+Share of questions that issue at least 
+ searches on 
+DRPixelBench
+. The harness stops a
+trajectory at 
+ calls, so the right-hand endpoint of each curve is that model’s exhaustion
+rate. 
+DR Pixel
+ is the lowest curve from the twelfth search on and the only model that
+ends below 
+. Vanilla SFT and Gemini-3.5-Flash share a shape: both stay above 
+ for
+the first eight searches and then run out of budget rather than deciding to stop.
+
+Vanilla SFT and 
+DR Pixel
+ see the same trajectories and differ only in how the loss is weighted, yet one issues 
+ searches per question and the other 
+ at the same page hit rate. We ask what the two models do differently at inference, and what in the loss produces it.
+
+At inference, the difference is stopping.
+
+Figure 8
+ plots the share of questions still searching after 
+ calls. The curves separate at once and never cross: by the fifth search 
+DR Pixel
+ has finished a third of its questions and vanilla SFT almost none. Per step, averaged over the first twelve searches, 
+DR Pixel
+ stops with probability 
+, close to the untrained backbone’s 
+ and GPT-5.4’s 
+, while vanilla SFT stops with probability 
+. At that rate the expected trajectory is 
+ searches, longer than the budget allows, so the cap is what ends a third of its trajectories.
+
+The credit is not symmetric across the two channels.
+
+The credit is much harsher on reasoning than on search. As shown in 
+Figure 7
+, it masks 
+ of reasoning steps but only 
+ of search steps. Only search reacts to trajectory length: almost nothing is masked on trajectories with a single search, 
+, against 
+ on trajectories that reach the budget, while reasoning stays between 
+ and 
+ whatever the length. The small slope reasoning does have is borrowed, since the cross-channel correction of 
+Section
+ 
+5.1
+ masks a reasoning step whenever its query is masked. Length is therefore handled by the search channel: longer trajectories lose a larger share of their search steps, which is how the credit offsets the length bias, and reasoning follows along.
+
+The credit spares the search that finds the evidence and prunes the ones after it.
+
+In each trajectory we locate the first search that returns a page the final answer cites, and measure the mask rate at each position relative to it. That search is almost never masked, 
+ of the time, while every other search is masked between 
+ and 
+. Among the steps that survive it also carries the largest weight, 
+, against 
+ to 
+ for searches a few steps later. Reasoning peaks one step further on, at 
+. This position is never supplied to the method, so the pattern is emergent. Because almost every step the credit removes is issued after the evidence is already in context, the pruning suppresses continuation rather than retrieval, which is why the search count falls while the page hit rate does not.
+
+Appendix D 
+More on Experiment
+
+D.1 
+Supplement Material for Ablation
+
+Figure 9: 
+Accuracy against (a) input and (b) output tokens as page resolution varies. Lowering resolution cuts input tokens by 30% to 48% for a 1 to 4 point drop, while staying 2.7 to 7.4 points more accurate than the OCR-based Text setting.
+
+Appendix E 
+Prompts
+
+Agent system prompt
+
+Image input
+
+{retrieved page images, appended to every tool result}
+
+You are a research assistant who answers questions about scientific papers
+
+through iterative reasoning and research.
+
+## Process
+
+- Show your reasoning inside <think></think> tags.
+
+- Call a tool with exactly:  <call_tool name="TOOL_NAME">your query</call_tool>
+
+- When you have enough evidence, give the final answer with exactly:
+
+  <answer>your answer</answer>
+
+- You may alternate between thinking and tool calls several times.
+
+## STOP after the tag  (this is the most important rule)
+
+Each turn you emit AT MOST ONE <call_tool> or ONE <answer>, and then you STOP WRITING.
+
+Do NOT write a <tool_output> block yourself -- WE run the tool and send you the real
+
+results. Anything you write after the closing </call_tool> is discarded, and any tool
+
+output you invent is a hallucination: the documents, page numbers and numbers in it
+
+are not real.
+
+Your turn looks like exactly this and nothing more:
+
+    <think>What I know so far, and what I still need.</think>
+
+    <call_tool name="TOOL_NAME">my query</call_tool>
+
+Your <think> stays visible to you for the rest of the session, so record in it any
+
+concrete value you read off an image -- that is your working memory.
+
+## Tools (use ONLY these)
+
+{tools}
+
+## Tool Output
+
+After each tool call the results come back to you in a <tool_output> block:
+
+{obs}
+
+Results from EVERY tool call stay visible to you for the rest of the session -- you
+
+can re-read an image you retrieved earlier.
+
+## Before you answer -- check yourself
+
+You may only answer when you can point to the SPECIFIC page/passage id you read the
+
+answer off (e.g. "P2_1"). Ask yourself:
+
+  - Is the exact value/claim the question asks for actually VISIBLE in one of the
+
+    results I received?
+
+  - If NO -> do NOT answer. Search again with a different query.
+
+  - "The retrieved page is about the right topic" is NOT enough. "I remember this
+
+    paper" is NOT enough.
+
+Answering from memory when the evidence is not in front of you is the single worst
+
+failure mode here, because the answer will look confident and be about the wrong paper.
+
+## CRITICAL ANSWERING RULES
+
+- Answer ONLY from evidence you actually retrieved this session. Do NOT answer from
+
+  prior knowledge.
+
+- When the answer involves a specific number, score, magnitude, threshold, or a named
+
+  model/method/dataset, you MUST retrieve it and state the SPECIFIC value(s). A vague
+
+  or directional answer ("generally better", "tends to improve", "competitive",
+
+  "around X") when a precise value exists is treated as WRONG.
+
+- NEVER guess or 

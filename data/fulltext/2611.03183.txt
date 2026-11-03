@@ -1,0 +1,4792 @@
+Auto-Research Agent on MSA Organization to Improve Protein-Protein Complex Structure Prediction
+https://arxiv.org/abs/2611.03183
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+Auto-Research Agent on MSA Organization to Improve Protein-Protein Complex Structure Prediction
+
+Zilu Zhang
+
+Affiliation: 
+Beijing University of Posts and Telecommunications, Beijing, China
+
+  
+
+Jing Bao
+
+Affiliation: 
+School of Artificial Intelligence, Shanghai Jiao Tong University, Shanghai, China
+
+  
+
+Lifeng Qiao
+
+Affiliation: 
+School of Artificial Intelligence, Shanghai Jiao Tong University, Shanghai, China
+
+  
+
+Sheng Xu
+
+Affiliation: 
+Research Institute of Intelligent Complex Systems, Fudan University, Shanghai, China
+
+  
+
+Qiantai Feng
+
+Affiliation: 
+Shanghai Artificial Intelligence Laboratory, Shanghai, China
+∗
+Equal contribution.
+†
+Corresponding authors.
+
+  
+
+Siqi Sun
+
+Affiliation: 
+Research Institute of Intelligent Complex Systems, Fudan University, Shanghai, China
+
+  
+
+Yang Yang
+
+Affiliation: 
+School of Artificial Intelligence, Shanghai Jiao Tong University, Shanghai, China
+
+Abstract
+
+Protein-complex structure prediction with AlphaFold 3 depends on MSA content, depth, and cross-chain pairing.
+Current pipelines apply uniform recipes, typically maximizing depth and pairing by species, yet even whether cross-chain pairing helps AF3 remains contested.
+We show that the value of both depth and pairing is strongly target-dependent, so no single recipe is optimal across interfaces.
+We introduce an autonomous agent that treats a frozen AF3 as a
+black-box experimental instrument.
+For each target, the agent formulates biological hypotheses, analyzes and reorganizes the MSA, and iteratively refines sequence selection and pairing using predictor label-free signals alone.
+On 1,015
+protein–protein interfaces from three benchmarks released after AF3’s
+training cutoff, the agent improves overall interface DockQ over AF3’s
+default pipeline and fixed MSA recipes on every benchmark, while using on average
+60% fewer MSA sequences than the default.
+Gains are largest for inter-species heteromers, where species-based pairing is unreliable: mean DockQ increases from 0.465 to 0.612 on FoldBench and from 0.482 to 0.562 on HD439.
+The improvements arise from both sequence construction and pairing policy, including deliberate non-pairing.
+These results recast MSA design as a target-specific problem and show that an autonomous agent can adapt it at test time through biological reasoning and self-directed, confidence-guided experimentation.
+
+Project page:
+ 
+https://sjtusaicaar.github.io/msa-pairing-agent/
+
+1 
+Introduction
+
+Deep learning has transformed protein structure prediction. AlphaFold2 (AF2)
+
+(
+Jumper et al., 2021
+)
+ achieves near-experimental accuracy for many
+proteins by exploiting co-evolutionary signals in multiple sequence alignments
+(MSAs): by aligning homologous sequences, MSAs reveal conserved positions and
+correlated substitutions that constrain residue–residue contacts. For
+complexes, the same principle extends across chains. AlphaFold-Multimer
+
+(
+Evans et al., 2021
+)
+ and AlphaFold3 (AF3)
+
+(
+Abramson et al., 2024a
+; 
+Abramson et al., 2024b
+)
+ combine
+unpaired MSAs for each chain with paired MSAs, in which homologs of different
+chains are matched by species so that correlated substitutions across the
+interface inform inter-chain geometry; RoseTTAFold 
+(
+Baek et al., 2021
+)
+
+relies on MSA features in a similar way.
+
+Prediction accuracy therefore depends on MSA quality, which varies
+substantially across targets: sparse, redundant, or incomplete alignments
+can limit accuracy. One response is to bypass alignments altogether.
+MSA-free predictors such as ESMFold 
+(
+Lin et al., 2023
+)
+ and
+HelixFold-Single 
+(
+Fang et al., 2023
+)
+ instead encode
+evolutionary regularities in protein language models.
+Like MSA-based methods, however, their accuracy decreases for targets with
+few homologs 
+(
+Lin et al., 2023
+; 
+Fang et al., 2023
+)
+.
+For heteromeric complexes, recent benchmarking 
+(
+Luo et al., 2026
+)
+
+challenges the assumption that precise cross-chain pairing is essential:
+on average, increasing the depth of unpaired alignments helps AF3 as much
+as or more than species-based pairing, a trend that extends to antibody–antigen
+complexes. These findings, however, concern a single construction axis,
+depth versus pairing, and are reported as aggregate trends; how this axis
+interacts with other construction choices, and whether such trends hold
+for individual targets, remains untested.
+
+This ambiguity calls for an agent that decides, for each target, how deep to search, what to filter, and how to pair sequences, and that refines these decisions using feedback from downstream structure prediction.
+Evaluator-guided LLM auto-research offers a relevant precedent. In combinatorial optimization and algorithm design, FunSearch 
+(
+Romera-Paredes et al., 2024
+)
+, EoH 
+(
+Liu et al., 2024
+)
+, ReEvo 
+(
+Ye et al., 2024
+)
+, and AlphaEvolve 
+(
+Novikov et al., 2025
+)
+
+use LLMs to search over programs scored by an evaluator, discovering heuristics that outperform hand-designed ones.
+These successes rest on two conditions: instances are homogeneous, so one program serves the whole problem class; and the score is the objective itself (e.g., tour length or number of bins), so optimizing it solves the task. MSA construction satisfies neither:
+
+•
+
+Target-dependent optima.
+ Proteins differ widely in family size and diversity of available homologs, so a strategy that works well for one target often fails to transfer to another.
+
+•
+
+No ground-truth signal as guidance.
+ For a new target the true structure is unknown, and the only available feedback is AlphaFold3’s confidence scores (e.g., pLDDT, ipTM) 
+(
+Abramson et al., 2024a
+)
+, which are the model’s own estimates of accuracy rather than measurements of it. Optimizing them directly risks exploiting their miscalibration, so they must be weighed against direct analysis of the MSA and predicted structure.
+
+The central challenge is therefore not to find a single better heuristic, but to build a general-purpose environment in which an agent can explore, reflect, and refine a construction strategy for each new target. Our contributions are:
+
+•
+
+Auto-Research Agent.
+ We introduce an autonomous agentic framework that keeps the structure predictor in the loop. The agent iteratively proposes, evaluates, and refines target-specific MSAs using only the predictor’s label-free feedback.
+
+•
+
+SOTA Performance.
+ Across three protein–protein benchmarks, the agent consistently improves over AF3-Default setting and other heuristic strategies, while using substantially shallower MSAs, with average depth reduced by approximately 60%.
+
+•
+
+Target-specific MSA reasoning.
+ The agent’s key capability is to turn target-specific biological diagnoses into an iterative hypothesis-testing process, reading the predictor’s confidence feedback to refine its MSA construction step by step.
+
+2 
+Related Work
+
+MSA construction and pairing.
+
+Building an MSA for a complex involves two decisions: how deep each chain’s
+alignment is, and how its rows are paired across chains.
+
+Retrieval
+ tools such as JackHMMER 
+(
+Eddy, 2011
+)
+, HHblits
+
+(
+Remmert et al., 2012
+)
+, and MMseqs2 
+(
+Steinegger and Söding, 2017
+)
+, as used in
+ColabFold 
+(
+Mirdita et al., 2022
+)
+, determine each chain’s depth and diversity.
+
+Pairing
+ methods then match rows across chains, using species and genomic
+proximity 
+(
+Mirdita et al., 2022
+)
+, coupling or mutual-information objectives
+
+(
+Bitbol et al., 2016
+; 
+Bitbol, 2018
+)
+, or differentiable matching
+
+(
+Lupo et al., 2024
+; 
+Lupo et al., 2025
+)
+.
+Which decision matters more is contested: across hundreds of heterodimers,
+most reported pairing gains stem from the accompanying increase in depth
+
+(
+Luo et al., 2026
+)
+.
+
+Portfolio-based
+ pipelines hedge across these choices by generating
+alternative inputs for each target and keeping the best: DeepMSA2
+
+(
+Zheng et al., 2024b
+)
+ selects among MSAs from hierarchical database searches
+using AlphaFold-based scores; MULTICOM 
+(
+Liu et al., 2023
+; 
+Liu et al., 2025
+)
+
+builds alternative alignments, templates, and paired MSAs from multiple sources of
+evidence; and CAF3 
+(
+Neupane et al., 2026
+)
+ evaluates pre-enumerated MSA and template
+variants for AF3.
+These pipelines adapt to each target only through selection: candidates are
+produced by fixed rules, and the scores do not inform which new candidates to
+generate.
+
+Autonomous research agents.
+
+LLM agents increasingly conduct research in a propose–evaluate–revise loop.
+In domains with reliable evaluators, they evolve programs and heuristics
+against executable scores
+
+(
+Romera-Paredes et al., 2024
+; 
+Novikov et al., 2025
+; 
+Liu et al., 2024
+; 
+Ye et al., 2024
+)
+
+and automate machine-learning research whose experiments return measurable
+outcomes 
+(
+Lu et al., 2024
+; 
+Schmidgall et al., 2025
+)
+. Because the
+evaluator is trustworthy, research reduces to optimizing against it. Agents in chemistry and biology, by contrast, have primarily served a different role: orchestrating specialized domain tools to plan experiments, analyze intermediate results, or execute established research workflows
+
+(
+Bran et al., 2024
+; 
+Ghafarollahi and Buehler, 2024
+; 
+Shen et al., 2024
+; 
+Xin et al., 2024
+; 
+Sinclair et al., 2025
+; 
+Qu et al., 2026
+)
+
+rather than iterate toward an objective. When they do iterate in silico, they
+score candidates with computational proxies such as predicted structure
+confidence 
+(
+Swanson et al., 2025
+)
+, implicitly treating these proxies as
+ground truth; trustworthy closed-loop feedback has so far required physical
+experiments 
+(
+Boiko et al., 2023
+)
+.
+
+3 
+Preliminary
+
+Proteins, Complexes, and MSAs.
+
+Proteins are chains of amino acids (20 common types); writing each as a letter turns a protein into a string, its 
+sequence
+. Many proteins function as complexes of several chains, which fall into three categories: 
+homomers
+ (identical chains), 
+intra-species heteromers
+ (distinct chains from one organism, e.g., hemoglobin’s 
+ and 
+ chains), and 
+inter-species heteromers
+ (chains from different organisms, e.g., a viral protein bound to a host receptor, or an antibody bound to an antigen). 
+Homologs
+ are proteins in different species that descend from a common ancestral gene and share similar sequences and structures. A multiple sequence alignment (MSA) aligns a query’s homologs so that corresponding positions share a column. Because residues in spatial contact tend to mutate together, co-varying columns indicate structural proximity. A single-chain MSA captures only intra-chain coevolution. A 
+paired
+ MSA extends this signal across chains by matching each chain’s homologs by source species, so each row holds proteins from one organism. Pairing therefore mainly benefits intra-species heteromers, whose chains coevolve within one organism.
+
+MSA representation.
+
+Consider a target complex 
+ with 
+ protein chains, and let 
+ be the query sequence of chain 
+, where 
+ is the amino-acid alphabet augmented with a gap token; we omit 
+ from chain-level quantities when clear. Chain 
+ has an unpaired MSA 
+, whose rows are homologs retrieved independently for that chain, and a paired MSA 
+. For each row index 
+, the corresponding rows across chains contain homologs associated with the same UniProt organism ID, with all-gap rows for chains lacking a corresponding homolog. These rows define a putative cross-chain correspondence. The complete MSA representation is 
+. Let 
+ denote the homologs retrieved for all chains of target 
+. A target-specific MSA construction strategy 
+ pairs, orders, and combines these sequences into an MSA proposal 
+.
+
+DockQ evaluation.
+
+We score each interface with DockQ 
+(
+Basu and Wallner, 2016
+)
+,
+which lies in 
+ and combines three measures of agreement with the
+reference structure: the fraction of native interface contacts recovered
+(
+), the RMSD of interface residues (
+), and
+the RMSD of the smaller chain after superposing the larger one
+(
+).
+An interface 
+ on complex target 
+ is a pair of chains in contact in
+the reference structure. Given an MSA proposal 
+, AF3 generates 
+
+structure samples with ranking scores 
+. Let 
+ be
+the DockQ of sample 
+ on interface 
+. We report
+
+which measure average sampling quality, the quality of the structure AF3
+selects, and the best structure it samples, respectively. Dataset-level
+scores are macro-averaged over interfaces.
+
+4 
+Methodology
+
+4.1 
+Overview
+
+We formulate the design of MSA representation as an autonomous agentic exploration process.
+The framework comprises three components: 1) the agent that iteratively proposes MSA representation; 2) the predictor 
+ such as AF3 that generates structure predictions from each proposal; and 3) the runtime environment that executes tool calls, enforces budgets, and manages the prediction-derived signals observed by the agent.
+
+Concretely, given a multichain complex target 
+, the agent constructs an initial 
+MSA representation proposal
+ 
+ that includes unpaired MSAs for every chain and paired MSAs across chains (Preliminaries 
+3
+). The agent then enters an iterative refinement process. In each round 
+, it submits 
+ to 
+ and receives prediction-derived feedback signals 
+ as observables. This feedback is derived exclusively from the outputs of G and does 
+not
+ require access to the ground-truth structure (Appendix 
+A
+). Based on this feedback, the agent may write and execute its own analysis programs before producing a refined proposal, 
+.
+
+This proposal–feedback cycle continues until the submission budget is exhausted or the agent concludes further improvement is unlikely. Finally, the agent nominates one MSA representation 
+ from its previous proposals. We evaluate 
+ by submitting it to 
+ and comparing the resulting predicted structure with the ground-truth structure. We then get the evaluation signal 
+ using DockQ, as defined in Preliminaries 
+3
+.
+
+It is worth noting that, in our main experiments, the runtime exposes only 
+ to the agent. It computes 
+ silently and never exposes these signals through the agent’s context or workspace. As an ablation study, we consider an oracle setting in which 
+ is visible to the agent, as described in Appendix 
+F
+.
+
+Figure 1: 
+An autonomous agent refines per-complex MSA organization via a double loop: inner analysis builds each proposal, and outer AlphaFold 3 feedback plus reflection guides the next.
+
+4.2 
+Autonomous Agent with Predictor-in-the-loop
+
+Double-loop Architecture.
+
+Each run on target 
+ operates via a hierarchical double-loop architecture across three nested levels (Fig. 
+1
+); 1) An outer-loop 
+episode
+ is a sequence of proposal rounds that drives MSA representation evolution. It ends when the agent nominates one previously submitted proposal as the final proposal 
+;
+2) A inner-loop 
+proposal round
+ 
+ is
+an optimization loop consisting of two consecutive phases.
+In 
+Construction
+ phase, the agents iteratively analyzes the target and earlier findings until it successfully submit a proposal 
+ to generator 
+. In 
+Reflection
+ phase, the agent interprets generator feedback 
+ and writes a structured summary 
+ to reflect its learning.
+3) An 
+LLM turn
+ is a single model invocation, which may issue one or more actions. A proposal round typically spans many turns (Appendix 
+K.1
+).
+
+Round 1 is a mandatory control that submits the default AF3 input, so the
+default is always a nominable candidate and the reference for all later
+proposals.
+
+Actions.
+
+At turn 
+ of prospective round 
+, LLM is prompted to generate action 
+ together with the action-specific arguments 
+. The available actions depend on the phase:
+
+(1)
+
+The 
+ and 
+ represent the available actions in Construction and Reflection phases, respectively. The action definitions are:
+
+•
+
+analysis
+ runs an agent-written Python program in the
+sandbox (Section 
+4.3
+) and returns its output.
+It does not change the phase; at most 
+ calls are allowed per reflection.
+
+•
+
+submit
+ executes a builder script, validates the resulting
+proposal, runs 
+, and returns 
+,
+consuming one unit of budget. The round then enters reflection.
+
+•
+
+submit_round_summary
+ stores the summary 
+ and ends
+round 
+.
+
+•
+
+finish
+ nominates one submitted proposal as 
+ with a
+written justification and ends the episode. The agent is instructed to
+weigh proxy confidence, robustness across seeds, and biological
+plausibility. Under ground-truth feedback, the tested proposal with the
+highest mean DockQ is nominated automatically.
+
+Context and Memory.
+
+Round 
+ runs in a single conversation spanning both Construction and Reflection phases.
+The ordered sequence of
+summaries from earlier completed rounds,
+
+, forms the agent’s
+
+cross-round memory
+; it is the 
+only
+ information carried from one
+round to the next. At turn 
+ of round 
+, the model context is
+
+(2)
+
+where 
+ is the fixed system prompt, 
+ is serialized as JSON in
+the first user message (
+ is empty), 
+ is the action,
+
+ is action’s output, and 
+ denotes ordered concatenation.
+Target inputs are never placed in the context; the agent reads them
+through 
+analysis
+.
+
+4.3 
+Runtime and Workspace
+
+The runtime separates what the agent sees from what it keeps: the LLM
+context is reset every round (Section 
+4.2
+), whereas an
+episode-scoped workspace persists. This section
+describes the workspace, the sandbox in which analysis code runs, and how
+the runtime validates actions and enforces budgets.
+
+Workspace.
+
+Each episode has a private workspace. The runtime writes the target
+inputs into it at the start of the episode and adds predictor feedback
+after each valid submission, restricted to what the current execution
+profile makes visible. The agent adds its own files, such as analysis
+programs, derived statistics, notes, and candidate MSA organizations,
+through 
+analysis
+. The runtime thus supplies the target and the
+predictor signal, while the agent decides how to process that signal and
+what to keep. Workspace files never enter the context automatically and
+must be read through 
+analysis
+. The folder layout is given in
+Appendix 
+E
+
+Analysis sandbox.
+
+Rather than a fixed set of analysis tools, the agent receives a
+general-purpose programming environment, so it can decide which evidence
+matters for a given target and compute it itself. Each 
+analysis
+ call specifies an objective and a Python
+program, which runs in a fresh, isolated process. The process may read
+the target inputs, visible predictor feedback, and existing workspace
+files, and may write only to the agent-writable part of the current
+workspace. Network access is disabled to prevent ground-truth leakage.
+The process terminates after the call, and its textual output is
+appended to the context as 
+.
+
+Action validation.
+
+The runtime checks every action against its schema before execution,
+including proposal submissions and memory entries. A failed check is
+returned as the tool output and followed by another LLM turn; it changes
+the context but not the proposal, the memory, or the predictor-call
+count. If a turn contains no action, the runtime appends a continuation
+instruction.
+
+Budgets and termination.
+
+Each episode has an LLM exploration budget and a submission
+budget. Every LLM turn during exploration, including reflection
+and correction turns, counts toward the former; each successfully
+completed submission counts toward the latter. Once the LLM
+exploration budget is exhausted, analysis and new submissions
+are disabled. Up to two additional LLM turns are reserved for
+any pending round summary and 
+finish
+; these turns are
+included in the reported LLM-call total. The episode is marked
+unsuccessful if the required finalization is not completed
+within the allowed calls.
+
+5 
+Experiment Set-up
+
+5.1 
+Benchmark Datasets
+
+We evaluate on three protein–protein interface benchmarks comprising 1,015
+interfaces in total, all released after AF3’s training cutoff (details in Appendix 
+B.2
+ and 
+B.1
+).
+
+FB-v1-pp
+ (278 interfaces; 194 homomeric, 84 heteromeric) is the protein-protein subset of the published FoldBench benchmark 
+(
+Xu et al., 2026
+)
+.
+It excludes interfaces similar to AF3’s
+training data at the chain and whole-complex level, so that accuracy
+reflects what AF3 infers from the input MSA rather than what it has
+memorized.
+
+FB-v2-pp-hard
+ (299 interfaces; 168
+homomeric, 131 heteromeric) is a hard subset of FoldBench-v2 currently under development. It retains only interfaces
+whose local binding geometry and residues differ substantially from
+AF3’s training set.
+
+HD439
+ (438 heteromeric
+interfaces) is a public benchmark  
+(
+Luo et al., 2026
+)
+ comprising entirely of heterodimers: 99
+inter-species and 339 intra-species pairs.
+
+5.2 
+Agent Setup
+
+Predictor.
+
+We use AlphaFold 3 (v3.0.2) as 
+ with the FoldBench
+inference protocol 
+(
+Xu et al., 2026
+)
+: 10 recycles and five
+diffusion samples for each of five fixed random seeds, shared across
+all targets and conditions, giving 25 structures per submission.
+Within each target, all conditions also use the same query sequences
+and templates, so differences in predicted structures arise from the
+MSA input alone.
+The default condition uses the MSAs and species-based pairing of AF3’s standard data
+pipeline. Agent proposals instead specify each chain’s MSA row by row;
+homologs placed in the same row across chains form one row of the
+complex MSA, so the agent controls both which sequences are included and
+which are paired across chains (Appendix 
+B.4
+).
+
+LLM Setting.
+
+The agent uses GLM-5.3 with temperature 0.2, maximum reasoning effort,
+and a maximum response length of 32,768 tokens. Each target is
+processed in an independent episode whose first proposal is the
+AF3-Default control (Appendix 
+B.5
+).
+
+Budget Setting.
+
+Each episode allows at most 60 completed generator runs, including the
+initial Default proposal, and 600 LLM calls in total. Failed or invalid submissions are not
+counted, and the agent may stop early by nominating a final proposal 
+. The analysis Python program has a execution time limit 120s (Appendix 
+B.6
+).
+
+5.3 
+MSA Input Baselines
+
+We compare our agent with the following baselines:
+
+AF3-Default
+ is the initial MSA proposal generated by AF3 Default pipeline. It is submitted directly to the predictor without iterative refinement or proposal selection.
+
+mMSA
+ is the fixed MSA representation strategy where only monomeric alignments are provided, without additional cross-chain pairing.
+
+pMSA
+ is the strategy in which the monomeric alignments are supplemented with cross-chain paired sequences.
+
+uMSA
+ is the strategy in which the monomeric alignments are supplemented with unpaired UniProt hits.
+
+Controlled comparisons.
+
+The agent and AF3-Default always start from identical MSA resources, so
+Agent vs. AF3-Default is our primary comparison: it isolates the effect
+of iterative refinement and proposal selection. The three other
+baselines are controlled with respect to one another, but not always
+with respect to the agent. On the FoldBench sets, they are built from
+separate HHblits and UniProt searches. Because pMSA and uMSA draw on the
+same pool of hits, their difference isolates the effect of pairing, but
+their differences from the agent also reflect MSA source and
+construction. On HD439, the agent and all baselines use the MSAs
+released with the benchmark 
+(
+Luo et al., 2026
+)
+, whose
+unpaired, paired, and UniProt-enriched variants serve as mMSA, pMSA,
+and uMSA, so all comparisons there are input-matched. Implementation
+details are given in Appendix 
+B.3
+.
+
+6 
+Results
+
+6.1 
+Main Results
+
+As Table 
+1
+ shows, the agent’s nominated MSA representations achieve the highest 
+,
+average 
+, and average 
+ across all benchmarks.
+At the benchmark level, 
+ rises
+from 0.584 to 0.604 on FoldBench-v1-pp, from 0.556 to 0.583 on
+FoldBench-v2-pp-hard, and from 0.583 to 0.624 on HD439.
+In six out of the eight interface-type subsets across the three benchmarks,
+and its gains on 
+ over AF3-Default are statistically significant (Appendix Table 
+5
+).
+
+All methods are scored on the same 25 structures from five seeds; the
+agent’s additional predictor runs (6.01 per target on average) are used
+only for search, so the gains do not come from sampling more structures.
+Because nomination uses confidence on these same structures, we also
+re-predict the nominated MSAs with fresh seeds and find that the gains
+persist (Appendix 
+D
+).
+
+Sequence construction and pairing policy.
+
+The agent controls both the sequences included for each chain and their pairing structure, including which sequences are intentionally left unpaired. To assess the contribution of this pairing policy, we independently shuffle the row order of each chain in the agent’s proposed MSA (Appendix Table 
+5
+). This preserves the per-chain sequence content but destroys the proposed pairing structure: selected pairs are broken, while intentionally unpaired sequences can be presented to AF3 as arbitrary pairs. The comparison therefore measures the value of the agent’s complete pairing policy—both pairing and deliberate non-pairing—rather than pairing alone.
+
+For homomers and inter-species heteromers, where informative cross-chain pairing is not expected, shuffling does not significantly change 
+, indicating that the gains primarily arise from sequence construction. For intra-species heteromers, however, shuffling significantly lowers 
+, showing that the agent’s pairing policy provides additional benefit. On the 339 intra-species targets in HD439, preserving this policy accounts for approximately half of the gain over AF3-Default (0.014 out of 0.029), with the remainder attributable to sequence construction.
+
+Table 1: 
+Results across the three protein-protein benchmarks (Appendix 
+B.2
+). The agent’s final MSA nominations are compared with four baselines (Section 
+5.3
+), using DockQ metrics (Section 
+3
+).
+Bold and underline denote
+the best and second-best reported results, respectively.
+
+Dataset
+
+Subset (Number of interfaces)
+
+Metric
+
+Agent
+
+AF3-Default
+
+mMSA
+
+pMSA
+
+uMSA
+
+FB-v1-pp
+
+Homomeric (
+)
+
+DockQ mean
+
+0.554
+
+0.539
+
+0.504
+
+0.532
+
+0.536
+
+DockQ ranking
+
+0.562
+
+0.554
+
+0.511
+
+0.546
+
+0.546
+
+DockQ oracle
+
+0.599
+
+0.598
+
+0.560
+
+0.595
+
+0.598
+
+Intra-species heteromeric (
+)
+
+DockQ mean
+
+0.752
+
+0.751
+
+0.720
+
+0.723
+
+0.721
+
+DockQ ranking
+
+0.779
+
+0.794
+
+0.721
+
+0.728
+
+0.722
+
+DockQ oracle
+
+0.837
+
+0.840
+
+0.807
+
+0.783
+
+0.791
+
+Inter-species heteromeric (
+)
+
+DockQ mean
+
+0.612
+
+0.465
+
+0.478
+
+0.441
+
+0.460
+
+DockQ ranking
+
+0.618
+
+0.468
+
+0.537
+
+0.441
+
+0.490
+
+DockQ oracle
+
+0.646
+
+0.565
+
+0.595
+
+0.494
+
+0.553
+
+Overall (
+)
+
+DockQ mean
+
+0.604
+
+0.584
+
+0.553
+
+0.570
+
+0.574
+
+DockQ ranking
+
+0.617
+
+0.604
+
+0.562
+
+0.582
+
+0.583
+
+DockQ oracle
+
+0.658
+
+0.652
+
+0.620
+
+0.632
+
+0.640
+
+FB-v2-pp-hard
+
+Homomeric (
+)
+
+DockQ mean
+
+0.599
+
+0.575
+
+0.541
+
+0.575
+
+0.568
+
+DockQ ranking
+
+0.597
+
+0.585
+
+0.543
+
+0.574
+
+0.569
+
+DockQ oracle
+
+0.658
+
+0.657
+
+0.620
+
+0.654
+
+0.648
+
+Intra-species heteromeric (
+)
+
+DockQ mean
+
+0.623
+
+0.596
+
+0.514
+
+0.590
+
+0.592
+
+DockQ ranking
+
+0.625
+
+0.602
+
+0.535
+
+0.601
+
+0.594
+
+DockQ oracle
+
+0.680
+
+0.671
+
+0.596
+
+0.664
+
+0.658
+
+Inter-species heteromeric (
+)
+
+DockQ mean
+
+0.371
+
+0.323
+
+0.333
+
+0.318
+
+0.342
+
+DockQ ranking
+
+0.386
+
+0.358
+
+0.360
+
+0.329
+
+0.364
+
+DockQ oracle
+
+0.446
+
+0.474
+
+0.469
+
+0.400
+
+0.474
+
+Overall (
+)
+
+DockQ mean
+
+0.583
+
+0.556
+
+0.510
+
+0.553
+
+0.552
+
+DockQ ranking
+
+0.585
+
+0.567
+
+0.522
+
+0.557
+
+0.556
+
+DockQ oracle
+
+0.643
+
+0.643
+
+0.596
+
+0.631
+
+0.633
+
+HD439
+
+Intra-species heteromeric (
+)
+
+DockQ mean
+
+0.642
+
+0.613
+
+0.612
+
+0.623
+
+0.614
+
+DockQ ranking
+
+0.650
+
+0.628
+
+0.627
+
+0.630
+
+0.632
+
+DockQ oracle
+
+0.688
+
+0.681
+
+0.684
+
+0.684
+
+0.683
+
+Inter-species heteromeric (
+)
+
+DockQ mean
+
+0.562
+
+0.482
+
+0.483
+
+0.496
+
+0.507
+
+DockQ ranking
+
+0.569
+
+0.509
+
+0.515
+
+0.542
+
+0.542
+
+DockQ oracle
+
+0.613
+
+0.599
+
+0.596
+
+0.614
+
+0.605
+
+Overall (
+)
+
+DockQ mean
+
+0.624
+
+0.583
+
+0.583
+
+0.595
+
+0.590
+
+DockQ ranking
+
+0.632
+
+0.601
+
+0.601
+
+0.610
+
+0.612
+
+DockQ oracle
+
+0.671
+
+0.662
+
+0.664
+
+0.668
+
+0.666
+
+6.2 
+Construction quality matters more than depth.
+
+Depth does not explain the gains.
+
+Among fixed heuristics, depth matters more than pairing: on the
+FoldBench sets, where pMSA and uMSA share the same hits, adding them
+unpaired generally outperforms pairing them, consistent with
+
+Luo et al. (2026)
+ on HD439. The agent reverses this intuition.
+Its nominated MSAs average only 40% of AF3-Default’s depth, and half
+retain fewer than 20% of its rows (Appendix Table 
+2
+); since
+AF3-Default and uMSA have similar depths, the same holds relative to
+uMSA. Yet these much shallower MSAs outperform both.
+Shallowness alone is not the cause: mMSA is even shallower on FBv1 and FBv2
+but yields lower DockQ (Table 
+1
+). What matters is which
+rows are kept, not how many.
+
+Table 2: 
+MSA depth across benchmarks.
+
+FBv1
+
+FBv2
+
+HD439
+
+Method
+
+Mean
+
+Median
+
+Mean
+
+Median
+
+Mean
+
+Median
+
+AF3-Default
+
+5,744.5
+
+2,244.5
+
+10,928.3
+
+14,254.0
+
+8,940.7
+
+9,155.5
+
+Agent
+
+2,248.4
+
+428.5
+
+4,097.9
+
+1,025.0
+
+3,417.9
+
+971.5
+
+pMSA
+
+3,363.0
+
+1,767.5
+
+5,447.2
+
+4,429.0
+
+9,199.6
+
+9,423.5
+
+uMSA
+
+5,213.1
+
+2,056.5
+
+10,296.9
+
+12,334.0
+
+11,613.9
+
+16,384.0
+
+mMSA
+
+904.6
+
+1,073.0
+
+1,358.6
+
+1,357.0
+
+7,474.5
+
+7,217.5
+
+From biological judgment to target-specific MSA proposals.
+
+Analyzing agent’s episode trajectories revealed a common pattern: the agent grounds its decisions in biological knowledge and, through iterative submissions, distills them into explicit and reproducible selection procedures.
+
+For example, 8P9C is a complex comprising the tetramerization domains of p63 and p73, two paralogous members of the p53 family, and DARPin 1810 F11, a designed ankyrin repeat protein with no natural orthologs 
+Strubel et al. (2023)
+. Its homologs therefore come from the large natural ankyrin-repeat family. In the default input, 84.5% of the 16,384 rows contained only DARPin sequences, resulting in a mean DockQ of 0.048. The agent separated p63 and p73 candidates to limit paralog mixing, paired them by species, and restricted DARPin sequences to a small, filtered supplement. The selected MSA contained only 425 rows and reached a mean DockQ of 0.866.
+
+Another example, 7R86, pairs the leucine-rich repeat domain of the mouse Nogo receptor RTN4R with the third thrombospondin type 1 repeat of the adhesion GPCR BAI1 
+Wang et al. (2021)
+. Both are widespread repeat modules, so a single species can contribute many candidates for each chain. Species matching therefore yielded 8,191 pairs, while chain B lacked an unpaired alignment (mean DockQ 0.037). The agent kept only 78 high-identity pairs as likely orthologs and recovered 472 B-only rows from the pairing candidate pool, reaching a mean DockQ 0.921.
+
+Across examples, the agent applied a shared biological reasoning framework but adapted its MSA construction to each target. The agent can, for example in the case of 8P9C, design its own ablations to show that both expanding the DARPin supplement and removing selected pairings substantially degraded performance. Notably, agent resolved these choices using predictor confidence alone, without access to DockQ. This demonstrates the agent’s ability to turn biological hypotheses into target-specific decisions through iterative experimentation.
+
+6.3 
+Exploration Gain and Nomination Loss.
+
+The agent’s final result depends on two abilities: finding a better MSA
+during exploration, and picking a good one at the end.
+For each interface, let 
+ be the mean DockQ of AF3 Default, 
+ the
+highest mean DockQ among all proposals the agent tested, and 
+ the mean
+DockQ of the proposal it nominates.
+We call 
+ the 
+exploration gain
+, the largest improvement the
+agent found, and 
+ the 
+nomination regret
+, the part of that
+improvement lost when choosing.
+The final improvement is their difference:
+
+(3)
+
+Figure 
+2
+ compares both quantities on 278
+interfaces from 238 matched FBv1-pp targets under two settings: the main
+setting with 
+predictor feedback
+, and an oracle setting with
+
+ground-truth feedback
+, in which the agent also sees DockQ during
+the search and its best tested proposal is nominated automatically.
+
+With predictor feedback, both steps limit the final result. Using DockQ 
+
+as metric, the exploration gain exceeds 0.05 on 34 of the 278 interfaces,
+and the nomination regret exceeds 0.05 on 13 interfaces.
+On average, the best tested proposal is 0.035 above AF3 Default,
+but nomination gives back 41.0% of this gain, leaving a final improvement of 0.020.
+
+With ground-truth feedback, the agent always nominates its best proposal (target-level),
+so the interface-level nomination regret is almost zero and the exploration gain equals the
+final gain.
+The exploration gain itself also rises from 0.035 to 0.059 (71.7%).
+A more accurate feedback signal thus improves both steps: it helps the
+agent search more effectively and removes the loss at nomination.
+It also suggests that the fidelity of predictor feedback is a key factor limiting agent performance, and
+improving it is a promising direction for strengthening both exploration and nomination.
+
+Figure 2: 
+
+Exploration and nomination on FBv1-pp.
+
+Semi-transparent histograms compare the predictor-feedback and
+ground-truth-guided settings on the same 238 targets:
+(a) nomination regret (
+) and
+(b) exploration gain (
+). More
+predictor-feedback results on FBv2-pp-hard or HD439 are shown in
+Appendix Figure 
+4
+.
+
+7 
+Conclusion
+
+We introduced an autonomous research agent that optimizes MSA representation for protein-complex structure prediction at test time. Using a frozen predictor’s confidence signals, the agent writes and executes analyses, accumulates evidence in memory, and adapts unpaired MSA depth and cross-chain pairing for each interface without ground-truth structures or gradients. Across FoldBench-v1, FoldBench-v2, and HD439, this approach improves overall average accuracy and confidence-based model selection, with smaller gains in best-case accuracy. The discovered strategies also provide insight into the target-dependent value of pairing and depth. Together, these findings establish adaptive MSA representation as an effective training-free approach and demonstrate how autonomous agents can use model feedback to investigate and improve inference in structural biology.
+
+References
+
+Abramson 
+et al.
+ (2024a)
+
+J. Abramson, J. Adler, J. Dunger, R. Evans, T. Green, A. Pritzel, O. Ronneberger, L. Willmore, A. J. Ballard, J. Bambrick, S. W. Bodenstein, D. A. Evans, C. Hung, M. O’Neill, D. Reiman, K. Tunyasuvunakool, Z. Wu, A. Žemgulytė, E. Arvaniti, C. Beattie, O. Bertolli, A. Bridgland, A. Cherepanov, M. Congreve, A. I. Cowen-Rivers, A. Cowie, M. Figurnov, F. B. Fuchs, H. Gladman, R. Jain, Y. A. Khan, C. M. R. Low, K. Perlin, A. Potapenko, P. Savy, S. Singh, A. Stecula, A. Thillaisundaram, C. Tong, S. Yakneen, E. D. Zhong, M. Zielinski, A. Žídek, V. Bapst, P. Kohli, M. Jaderberg, D. Hassabis, and J. M. Jumper
+
+Accurate structure prediction of biomolecular interactions with AlphaFold 3
+.
+
+Nature
+ 
+630
+ (
+8016
+), 
+pp. 493–500
+.
+
+External Links: 
+Document
+
+Cited by: 
+Appendix A
+,
+
+2nd item
+,
+
+§1
+.
+
+Abramson 
+et al.
+ (2024b)
+
+J. Abramson, J. Adler, J. Dunger, R. Evans, T. Green, A. Pritzel, O. Ronneberger, L. Willmore, A. J. Ballard, J. Bambrick, S. W. Bodenstein, D. A. Evans, C. Hung, M. O’Neill, D. Reiman, K. Tunyasuvunakool, Z. Wu, A. Žemgulytė, E. Arvaniti, C. Beattie, O. Bertolli, A. Bridgland, A. Cherepanov, M. Congreve, A. I. Cowen-Rivers, A. Cowie, M. Figurnov, F. B. Fuchs, H. Gladman, R. Jain, Y. A. Khan, C. M. R. Low, K. Perlin, A. Potapenko, P. Savy, S. Singh, A. Stecula, A. Thillaisundaram, C. Tong, S. Yakneen, E. D. Zhong, M. Zielinski, A. Žídek, V. Bapst, P. Kohli, M. Jaderberg, D. Hassabis, and J. M. Jumper
+
+Addendum: accurate structure prediction of biomolecular interactions with AlphaFold 3
+.
+
+Nature
+ 
+636
+ (
+8042
+), 
+pp. E4
+.
+
+External Links: 
+Document
+
+Cited by: 
+Appendix A
+,
+
+§1
+.
+
+Baek 
+et al.
+ (2021)
+
+M. Baek, F. DiMaio, I. Anishchenko, J. Dauparas, S. Ovchinnikov, G. R. Lee, J. Wang, Q. Cong, L. N. Kinch, R. D. Schaeffer, C. Millán, H. Park, C. Adams, C. R. Glassman, A. DeGiovanni, J. H. Pereira, A. V. Rodrigues, A. A. van Dijk, A. C. Ebrecht, D. J. Opperman, T. Sagmeister, C. Buhlheller, T. Pavkov-Keller, M. K. Rathinaswamy, U. Dalwadi, C. K. Yip, J. E. Burke, K. C. Garcia, N. V. Grishin, P. D. Adams, R. J. Read, and D. Baker
+
+Accurate prediction of protein structures and interactions using a three-track neural network
+.
+
+Science
+ 
+373
+ (
+6557
+), 
+pp. 871–876
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+.
+
+Basu and Wallner (2016)
+
+S. Basu and B. Wallner
+
+DockQ: a quality measure for protein-protein docking models
+.
+
+PLOS ONE
+ 
+11
+ (
+8
+), 
+pp. 1–9
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§3
+.
+
+Bitbol 
+et al.
+ (2016)
+
+A. Bitbol, R. S. Dwyer, L. J. Colwell, and N. S. Wingreen
+
+Inferring interaction partners from protein sequences
+.
+
+Proceedings of the National Academy of Sciences
+ 
+113
+ (
+43
+), 
+pp. 12180–12185
+.
+
+External Links: 
+Document
+
+Cited by: 
+§2
+.
+
+Bitbol (2018)
+
+A. Bitbol
+
+Inferring interaction partners from protein sequences using mutual information
+.
+
+PLOS Computational Biology
+ 
+14
+ (
+11
+), 
+pp. e1006401
+.
+
+External Links: 
+Document
+
+Cited by: 
+§2
+.
+
+Boiko 
+et al.
+ (2023)
+
+D. A. Boiko, R. MacKnight, B. Kline, and G. Gomes
+
+Autonomous chemical research with large language models
+.
+
+Nature
+ 
+624
+ (
+7992
+), 
+pp. 570–578
+.
+
+External Links: 
+Document
+
+Cited by: 
+§2
+.
+
+Bran 
+et al.
+ (2024)
+
+A. M. Bran, S. Cox, O. Schilter, C. Baldassari, A. D. White, and P. Schwaller
+
+Augmenting large language models with chemistry tools
+.
+
+Nature Machine Intelligence
+ 
+6
+ (
+5
+), 
+pp. 525–535
+.
+
+External Links: 
+Document
+
+Cited by: 
+§2
+.
+
+Eddy (2011)
+
+S. R. Eddy
+
+Accelerated profile HMM searches
+.
+
+PLoS Computational Biology
+ 
+7
+ (
+10
+), 
+pp. e1002195
+.
+
+External Links: 
+Document
+
+Cited by: 
+§2
+.
+
+Evans 
+et al.
+ (2021)
+
+R. Evans, M. O’Neill, A. Pritzel, N. Antropova, A. Senior, T. Green, A. Žídek, R. Bates, S. Blackwell, J. Yim, O. Ronneberger, S. Bodenstein, M. Zielinski, A. Bridgland, A. Potapenko, A. Cowie, K. Tunyasuvunakool, R. Jain, E. Clancy, P. Kohli, J. Jumper, and D. Hassabis
+
+Protein complex prediction with AlphaFold-Multimer
+.
+
+bioRxiv
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+.
+
+Fang 
+et al.
+ (2023)
+
+X. Fang, F. Wang, L. Liu, J. He, D. Lin, Y. Xiang, K. Zhu, X. Zhang, H. Wu, H. Li, and L. Song
+
+A method for multiple-sequence-alignment-free protein structure prediction using a protein language model
+.
+
+Nature Machine Intelligence
+ 
+5
+ (
+10
+), 
+pp. 1087–1096
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+.
+
+Ghafarollahi and Buehler (2024)
+
+A. Ghafarollahi and M. J. Buehler
+
+ProtAgents: protein discovery via large language model multi-agent collaborations combining physics and machine learning
+.
+
+Digital Discovery
+ 
+3
+ (
+7
+), 
+pp. 1389–1409
+.
+
+External Links: 
+Document
+
+Cited by: 
+§2
+.
+
+Hollmann 
+et al.
+ (2023)
+
+N. M. Hollmann, P. K. A. Jagtap, J. Linse, P. Ullmann, M. Payr, B. Murciano, B. Simon, J. S. Hub, and J. Hennig
+
+Upstream of n-ras c-terminal cold shock domains mediate poly(a) specificity in a novel rna recognition mode and bind poly(a) binding protein
+.
+
+Nucleic Acids Research
+ 
+51
+ (
+4
+), 
+pp. 1895–1913
+.
+
+External Links: 
+ISSN 0305-1048
+,
+
+Document
+,
+
+Link
+,
+
+https://academic.oup.com/nar/article-pdf/51/4/1895/49355962/gkac1277.pdf
+
+Cited by: 
+§G.4
+.
+
+Jumper 
+et al.
+ (2021)
+
+J. Jumper, R. Evans, A. Pritzel, T. Green, M. Figurnov, O. Ronneberger, K. Tunyasuvunakool, R. Bates, A. Žídek, A. Potapenko, A. Bridgland, C. Meyer, S. A. A. Kohl, A. J. Ballard, A. Cowie, B. Romera-Paredes, S. Nikolov, R. Jain, J. Adler, T. Back, S. Petersen, D. Reiman, E. Clancy, M. Zielinski, M. Steinegger, M. Pacholska, T. Berghammer, S. Bodenstein, D. Silver, O. Vinyals, A. W. Senior, K. Kavukcuoglu, P. Kohli, and D. Hassabis
+
+Highly accurate protein structure prediction with AlphaFold
+.
+
+Nature
+ 
+596
+ (
+7873
+), 
+pp. 583–589
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+.
+
+Lin 
+et al.
+ (2023)
+
+Z. Lin, H. Akin, R. Rao, B. Hie, Z. Zhu, W. Lu, N. Smetanin, R. Verkuil, O. Kabeli, Y. Shmueli, A. dos Santos Costa, M. Fazel-Zarandi, T. Sercu, S. Candido, and A. Rives
+
+Evolutionary-scale prediction of atomic-level protein structure with a language model
+.
+
+Science
+ 
+379
+ (
+6637
+), 
+pp. 1123–1130
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+.
+
+Liu 
+et al.
+ (2024)
+
+F. Liu, T. Xialiang, M. Yuan, X. Lin, F. Luo, Z. Wang, Z. Lu, and Q. Zhang
+
+Evolution of heuristics: towards efficient automatic algorithm design using large language model
+.
+
+In 
+Proceedings of the 41st International Conference on Machine Learning
+,
+
+Proceedings of Machine Learning Research
+, Vol. 
+235
+, 
+pp. 32201–32223
+.
+
+External Links: 
+Link
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+Liu 
+et al.
+ (2023)
+
+J. Liu, Z. Guo, T. Wu, R. S. Roy, C. Chen, and J. Cheng
+
+Improving AlphaFold2-based protein tertiary structure prediction with MULTICOM in CASP15
+.
+
+Communications Chemistry
+ 
+6
+ (
+1
+), 
+pp. 188
+.
+
+External Links: 
+Document
+
+Cited by: 
+§2
+.
+
+Liu 
+et al.
+ (2025)
+
+J. Liu, P. Neupane, and J. Cheng
+
+Improving AlphaFold2- and AlphaFold3-based protein complex structure prediction with MULTICOM4 in CASP16
+.
+
+Proteins: Structure, Function, and Bioinformatics
+ 
+94
+ (
+1
+), 
+pp. 131–141
+.
+
+Note: 
+Published online June 2025; issue dated January 2026
+
+External Links: 
+Document
+
+Cited by: 
+§2
+.
+
+Lu 
+et al.
+ (2024)
+
+C. Lu, C. Lu, R. T. Lange, J. Foerster, J. Clune, and D. Ha
+
+The AI scientist: towards fully automated open-ended scientific discovery
+.
+
+External Links: 
+2408.06292
+,
+
+Document
+
+Cited by: 
+§2
+.
+
+Luo 
+et al.
+ (2026)
+
+Y. Luo, W. Wang, Z. Peng, and J. Yang
+
+Benchmarking MSA pairing for protein-protein complex structure prediction reveals a depth-over-pairing principle
+.
+
+bioRxiv
+.
+
+External Links: 
+Document
+
+Cited by: 
+§B.2
+,
+
+§1
+,
+
+§2
+,
+
+§5.1
+,
+
+§5.3
+,
+
+§6.2
+.
+
+Lupo 
+et al.
+ (2024)
+
+U. Lupo, D. Sgarbossa, and A. Bitbol
+
+Pairing interacting protein sequences using masked language modeling
+.
+
+Proceedings of the National Academy of Sciences
+ 
+121
+ (
+27
+), 
+pp. e2311887121
+.
+
+External Links: 
+Document
+
+Cited by: 
+§2
+.
+
+Lupo 
+et al.
+ (2025)
+
+U. Lupo, D. Sgarbossa, M. Milighetti, and A. Bitbol
+
+DiffPaSS—high-performance differentiable pairing of protein sequences using soft scores
+.
+
+Bioinformatics
+ 
+41
+ (
+1
+), 
+pp. btae738
+.
+
+External Links: 
+Document
+
+Cited by: 
+§2
+.
+
+Mirdita 
+et al.
+ (2022)
+
+M. Mirdita, K. Schütze, Y. Moriwaki, L. Heo, S. Ovchinnikov, and M. Steinegger
+
+ColabFold: making protein folding accessible to all
+.
+
+Nature Methods
+ 
+19
+ (
+6
+), 
+pp. 679–682
+.
+
+External Links: 
+Document
+
+Cited by: 
+§2
+.
+
+Neupane 
+et al.
+ (2026)
+
+P. Neupane, J. Liu, and J. Cheng
+
+Improving AlphaFold3 by engineering MSA and template inputs
+.
+
+bioRxiv
+.
+
+External Links: 
+Document
+
+Cited by: 
+§2
+.
+
+Novikov 
+et al.
+ (2025)
+
+A. Novikov, N. Vũ, M. Eisenberger, E. Dupont, P. Huang, A. Z. Wagner, S. Shirobokov, B. Kozlovskii, F. J. R. Ruiz, A. Mehrabian, M. P. Kumar, A. See, S. Chaudhuri, G. Holland, A. Davies, S. Nowozin, P. Kohli, and M. Balog
+
+AlphaEvolve: a coding agent for scientific and algorithmic discovery
+.
+
+External Links: 
+2506.13131
+,
+
+Document
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+Qu 
+et al.
+ (2026)
+
+Y. Qu, K. Huang, M. Yin, K. Zhan, D. Liu, D. Yin, H. C. Cousins, W. A. Johnson, X. Wang, M. Shah, R. B. Altman, D. Zhou, M. Wang, and L. Cong
+
+CRISPR-GPT for agentic automation of gene-editing experiments
+.
+
+Nature Biomedical Engineering
+ 
+10
+, 
+pp. 245–258
+.
+
+External Links: 
+Document
+
+Cited by: 
+§2
+.
+
+Remmert 
+et al.
+ (2012)
+
+M. Remmert, A. Biegert, A. Hauser, and J. Söding
+
+HHblits: lightning-fast iterative protein sequence searching by HMM–HMM alignment
+.
+
+Nature Methods
+ 
+9
+ (
+2
+), 
+pp. 173–175
+.
+
+External Links: 
+Document
+
+Cited by: 
+§2
+.
+
+Romera-Paredes 
+et al.
+ (2024)
+
+B. Romera-Paredes, M. Barekatain, A. Novikov, M. Balog, M. P. Kumar, E. Dupont, F. J. R. Ruiz, J. S. Ellenberg, P. Wang, O. Fawzi, P. Kohli, and A. Fawzi
+
+Mathematical discoveries from program search with large language models
+.
+
+Nature
+ 
+625
+ (
+7995
+), 
+pp. 468–475
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+Schmidgall 
+et al.
+ (2025)
+
+S. Schmidgall, Y. Su, Z. Wang, X. Sun, J. Wu, X. Yu, J. Liu, M. Moor, Z. Liu, and E. Barsoum
+
+Agent laboratory: using LLM agents as research assistants
+.
+
+In 
+Findings of the Association for Computational Linguistics:
+EMNLP 2025
+,
+
+pp. 5977–6043
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Shen 
+et al.
+ (2024)
+
+Y. Shen, Z. Chen, M. Mamalakis, Y. Liu, T. Li, Y. Su, J. He, P. Liò, and Y. G. Wang
+
+TourSynbio: a multi-modal large model and agent framework to bridge text and protein sequences for protein engineering
+.
+
+External Links: 
+2408.15299
+,
+
+Document
+
+Cited by: 
+§2
+.
+
+Sinclair 
+et al.
+ (2025)
+
+M. Sinclair, M. Meigooni, A. Vasan, O. Gokdemir, X. Lian, H. Ma, Y. Babuji, A. Brace, K. Hossain, C. Siebenschuh, T. Brettin, K. Chard, C. Henry, V. Vishwanath, R. L. Stevens, I. T. Foster, and A. Ramanathan
+
+Scalable agentic reasoning for designing biologics targeting intrinsically disordered proteins
+.
+
+External Links: 
+2512.15930
+,
+
+Document
+
+Cited by: 
+§2
+.
+
+Steinegger and Söding (2017)
+
+M. Steinegger and J. Söding
+
+MMseqs2 enables sensitive protein sequence searching for the analysis of massive data sets
+.
+
+Nature Biotechnology
+ 
+35
+ (
+11
+), 
+pp. 1026–1028
+.
+
+External Links: 
+Document
+
+Cited by: 
+§2
+.
+
+Strubel 
+et al.
+ (2023)
+
+A. Strubel, P. Münick, O. Hartmann, A. Chaikuad, B. Dreier, J. V. Schaefer, J. Gebel, C. Osterburg, M. Tuppi, B. Schäfer, V. Buck, M. Rosenfeldt, S. Knapp, A. Plückthun, M. E. Diefenbacher, and V. Dötsch
+
+DARPins detect the formation of hetero-tetramers of p63 and p73 in epithelial tissues and in squamous cell carcinoma
+.
+
+Cell Death & Disease
+ 
+14
+ (
+10
+), 
+pp. 674
+.
+
+Note: 
+https://doi.org/10.1038/s41419-023-06213-0
+
+External Links: 
+Document
+,
+
+ISSN 2041-4889
+,
+
+Link
+
+Cited by: 
+§G.1
+,
+
+§6.2
+.
+
+Swanson 
+et al.
+ (2025)
+
+K. Swanson, W. Wu, N. L. Bulaong, J. E. Pak, and J. Zou
+
+The virtual lab of AI agents designs new SARS-CoV-2 nanobodies
+.
+
+Nature
+ 
+646
+ (
+8085
+), 
+pp. 716–723
+.
+
+External Links: 
+Document
+
+Cited by: 
+§2
+.
+
+Wang 
+et al.
+ (2021)
+
+J. Wang, Y. Miao, R. Wicklein, Z. Sun, J. Wang, K. M. Jude, R. A. Fernandes, S. A. Merrill, M. Wernig, K. C. Garcia, and T. C. Südhof
+
+RTN4/NoGo-receptor binding to BAI adhesion-GPCRs regulates neuronal development
+.
+
+Cell
+ 
+184
+ (
+24
+), 
+pp. 5869–5885.e25
+.
+
+Note: 
+doi: 10.1016/j.cell.2021.10.016https://doi.org/10.1016/j.cell.2021.10.016
+
+External Links: 
+Document
+,
+
+ISSN 0092-8674
+,
+
+Link
+
+Cited by: 
+§G.2
+,
+
+§6.2
+.
+
+Xin 
+et al.
+ (2024)
+
+Q. Xin, Q. Kong, H. Ji, Y. Shen, Y. Liu, Y. Sun, Z. Zhang, Z. Li, X. Xia, B. Deng, and Y. Bai
+
+BioInformatics Agent (BIA): unleashing the power of large language models to reshape bioinformatics workflow
+.
+
+bioRxiv
+.
+
+External Links: 
+Document
+
+Cited by: 
+§2
+.
+
+Xu 
+et al.
+ (2026)
+
+S. Xu, Q. Feng, L. Qiao, H. Wu, T. Shen, Y. Cheng, S. Zheng, and S. Sun
+
+Benchmarking all-atom biomolecular structure prediction with foldbench
+.
+
+Nature Communications
+ 
+17
+, 
+pp. 442
+.
+
+External Links: 
+Document
+
+Cited by: 
+§B.2
+,
+
+§5.1
+,
+
+§5.2
+.
+
+Ye 
+et al.
+ (2024)
+
+H. Ye, J. Wang, Z. Cao, F. Berto, C. Hua, H. Kim, J. Park, and G. Song
+
+ReEvo: large language models as hyper-heuristics with reflective evolution
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+Vol. 
+37
+, 
+pp. 43571–43608
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+Zheng 
+et al.
+ (2024a)
+
+G. Zheng, M. Yin, S. Mehta, I. Chu, S. Wang, A. AlShaye, K. Drainville, A. Buyanbat, F. Bienfait, K. Tenglin, Q. Zhu, and S. H. Orkin
+
+A tetramer of bcl11a is required for stable protein production and fetal hemoglobin silencing
+.
+
+Science
+ 
+386
+ (
+6725
+), 
+pp. 1010–1018
+.
+
+External Links: 
+Document
+,
+
+Link
+,
+
+https://www.science.org/doi/pdf/10.1126/science.adp3025
+
+Cited by: 
+§G.3
+.
+
+Zheng 
+et al.
+ (2024b)
+
+W. Zheng, Q. Wuyun, Y. Li, C. Zhang, L. Freddolino, and Y. Zhang
+
+Improving deep learning protein monomer and complex structure prediction using DeepMSA2 with huge metagenomics data
+.
+
+Nature Methods
+ 
+21
+ (
+2
+), 
+pp. 279–289
+.
+
+External Links: 
+Document
+
+Cited by: 
+§2
+.
+
+Appendix A 
+How Alphafold 3 consumes MSA signals and provide feedback signal to the agent.
+
+Figure 
+3
+ provides an overview of how MSA-derived
+evolutionary signals are consumed by AlphaFold 3 and how the resulting
+predictor-native feedback drives our iterative MSA construction workflow.
+
+Figure 3: 
+
+Overview of MSA-derived evolutionary signals and the
+iterative MSA construction workflow.
+
+AF3 feedback signal.
+
+We use AlphaFold 3 (AF3) 
+(
+Abramson et al., 2024a
+; 
+Abramson et al., 2024b
+)
+
+as a frozen structure predictor.
+For each target, 
+ denotes the query sequences and 
+ the supplied
+per-chain structural templates and their mappings to the query sequences.
+Templates are taken from the precomputed AF3 inputs and held fixed
+throughout the episode, with 
+ when no templates are supplied.
+Given 
+, 
+, and a candidate MSA 
+, AF3 generates 
+ structures
+
+ across model seeds and diffusion samples,
+together with its native confidence outputs.
+Structured feedback reports the ensemble mean and maximum of ipTM, pTM,
+and the native AF3 ranking score.
+The agent can additionally inspect per-sample atomic coordinates,
+per-chain and chain-pair confidence scores, predicted aligned error (PAE),
+per-atom pLDDT, contact probabilities, disorder fractions, and clash indicators.
+Rather than optimizing a predefined scalar surrogate, the agent reasons over
+these predictor-native signals as proxy evidence for structural accuracy,
+considering interface confidence, consistency across samples, biological and
+structural plausibility, and counterevidence when proposing subsequent MSA
+configurations and selecting among previously evaluated candidates.
+We impose no fixed scalar combination of these signals and no rule requiring
+maximization of mean ipTM.
+In the blind setting, neither search nor final selection has access to
+ground-truth target structures or evaluation metrics such as DockQ;
+these are used only for offline evaluation.
+
+MSA organization episode.
+
+Algorithm 
+1
+ summarizes how the agent uses this feedback within a target-specific episode. In each round, the agent inspects the current context and persistent memory, analyzes available evidence, and constructs an MSA candidate for AF3 evaluation. Validation and prediction failures are returned to the agent for revision. After a successful evaluation, the agent examines the AF3 feedback, records its interpretation in round memory, and proceeds to the next round. When the agent finishes, it selects a previously evaluated candidate; if the evaluation budget is exhausted without a valid final selection, the episode returns failure.
+
+Algorithm 1
+ 
+ MSA organization episode for target 
+
+1:
+
+              
+              
+            agent 
+; predictor 
+; evaluation budget 
+
+2:
+
+ 
+ persistent round memory
+
+3:
+
+ initial target context
+
+4:
+
+5:
+
+while
+ 
+ 
+do
+
+6:
+
+7:
+
+              
+              
+              
+// Phase 1: Analyze and construct a candidate
+
+8:
+
+              
+              
+              
+repeat
+
+9:
+
+              
+              
+               
+
+10:
+
+              
+              
+               
+if
+ 
+ 
+then
+
+11:
+
+              
+              
+                 
+
+12:
+
+              
+              
+                 
+
+13:
+
+              
+              
+               
+else
+ 
+if
+ 
+ 
+then
+
+14:
+
+              
+              
+                 
+return
+ previously submitted candidate selected by 
+
+15:
+
+              
+              
+               
+else
+ 
+if
+ 
+ 
+then
+
+16:
+
+              
+              
+                 
+
+17:
+
+              
+              
+               
+end
+ 
+if
+
+18:
+
+              
+              
+              
+until
+ 
+
+19:
+
+20:
+
+              
+              
+              
+// Phase 2: Validate and evaluate the candidate
+
+21:
+
+              
+              
+              
+if
+ 
+ is invalid 
+then
+
+22:
+
+              
+              
+               
+
+23:
+
+              
+              
+               
+continue
+
+24:
+
+              
+              
+              
+end
+ 
+if
+
+25:
+
+              
+              
+              
+
+26:
+
+              
+              
+              
+if
+ prediction fails 
+then
+
+27:
+
+              
+              
+               
+
+28:
+
+              
+              
+               
+continue
+
+29:
+
+              
+              
+              
+end
+ 
+if
+
+30:
+
+              
+              
+              
+
+31:
+
+              
+              
+              
+
+ profile-visible AF3 feedback
+
+32:
+
+              
+              
+              
+
+33:
+
+34:
+
+              
+              
+              
+// Phase 3: Reflect on the completed round
+
+35:
+
+              
+              
+              
+repeat
+
+36:
+
+              
+              
+               
+
+37:
+
+              
+              
+               
+if
+ 
+ 
+then
+
+38:
+
+              
+              
+                 
+
+39:
+
+              
+              
+                 
+
+40:
+
+              
+              
+               
+else
+
+41:
+
+              
+              
+                 
+
+42:
+
+              
+              
+               
+end
+ 
+if
+
+43:
+
+              
+              
+              
+until
+ 
+ is valid
+
+44:
+
+45:
+
+              
+              
+              
+// Phase 4: Commit memory and reset context
+
+46:
+
+              
+              
+              
+
+47:
+
+              
+              
+              
+
+48:
+
+end
+ 
+while
+
+49:
+
+return
+ failure 
+ budget exhausted without valid finish
+
+Appendix B 
+Experimental Details
+
+B.1 
+Prediction Targets and Interface Definition
+
+A prediction target 
+ is the complete complex in one AF3 input. The agent optimizes MSA organization for the complex, so all evaluated interfaces within that target share one trajectory and final selection 
+. Each benchmark-listed interface is a separate evaluation entry, identified by its reference assembly and a pair of chain-copy identifiers. For evaluation, predicted chain copies are matched to their corresponding copies in the reference structure. Copies of the same protein entry share the constructed MSA but retain distinct chain identifiers for evaluation. The agent sees the complete complex, without benchmark interface annotations or knowledge of which interfaces are evaluated.
+
+B.2 
+Benchmark Datasets
+
+Table 
+3
+ summarizes the evaluated subsets.
+All results are computed at the interface level and reported
+separately for each dataset.
+
+Table 3: 
+Composition of the evaluated benchmark subsets.
+
+Dataset
+
+Targets
+
+Interfaces
+
+Homo.
+
+Intra-sp. hetero.
+
+Inter-sp. hetero.
+
+FoldBench-v1
+
+238
+
+278
+
+194
+
+65
+
+19
+
+FoldBench-v2 (hard)
+
+283
+
+299
+
+168
+
+100
+
+31
+
+HD439
+
+438
+
+438
+
+0
+
+339
+
+99
+
+FoldBench-v1.
+
+FoldBench-v1 is the protein–protein subset of FoldBench
+
+(
+Xu et al., 2026
+)
+. To limit overlap with AF3’s training data,
+FoldBench includes only PDB entries deposited between 2023-01-13 (AF3’s
+validation cutoff, later than its 2021-09-30 training cutoff) and
+2024-11-01, and removes interfaces similar in sequence or structure to a
+reconstructed AF3 training set. The subset contains 279 interfaces from
+239 targets. We exclude 8bvk, whose single homomeric interface could not
+be processed because LLM API content filtering interrupted the agent,
+from all methods. The evaluation set thus contains 278 interfaces from
+238 targets: 194 homomeric and 84 heteromeric (65 intra-species, 19
+inter-species).
+
+FoldBench-v2.
+
+FoldBench-v2 is an extension of FoldBench currently under development.
+For each interface released after the AF3 training cutoff, its
+similarity to eligible pre-cutoff reference structures is estimated
+using interface sequence identity and structural mapping coverage,
+rather than global sequence similarity. For a candidate reference,
+the score is the mean of the identity–coverage products on the two
+sides of the interface; the interface similarity 
+ is the maximum
+score over eligible direct and swapped chain matches. This is a proxy
+based on retrieved pre-cutoff references, not an exact measure of
+similarity to AF3’s training set.
+
+The benchmark samples 100 interfaces from each 0.1-wide similarity
+bin over 
+. We evaluate its hard subset, defined by the strict
+criterion 
+. One interface at the boundary (
+) is
+excluded, leaving 299 interfaces from 283 assemblies: 168 homomeric,
+100 intra-species heteromeric, and 31 inter-species heteromeric
+interfaces.
+
+HD439.
+
+HD439 
+(
+Luo et al., 2026
+)
+ contains 439 heterodimeric targets, each contributing one interface: 340 intra-species and 99 inter-species. We exclude 
+7acw
+, an intra-species target whose official MSA is unavailable, leaving 438 targets and 438 interfaces (339 intra-species and 99 inter-species). Based on PDB initial release records, the structures were released between 2021-10-06 and 2024-08-14, all after AF3’s training cutoff of 2021-09-30.
+
+Dataset overlaps.
+
+At the PDB-entry level, our evaluated FoldBench-v1 and FoldBench-v2 sets share 15 entries, FoldBench-v1 and HD439 share 17 entries, and FoldBench-v2 and HD439 share 10 entries. Three entries are present in all three benchmarks.
+We retain overlapping entries in their respective benchmarks without special treatment. For each benchmark experiment, we independently run the agent on every target, including those shared with other benchmarks, and report results separately for each benchmark.
+
+B.3 
+MSA Input Baselines
+
+Default.
+
+Paired and unpaired MSAs are generated using the AlphaFold 3 v3.0.2 data pipeline with UniRef90 (
+2022_05
+), MGnify (
+2022_05
+), UniProt (
+2021_04
+), and Small BFD (
+bfd-first_non_consensus_sequences.fasta
+), and processed by AF3’s built-in pairing procedure (Appendix 
+B.4
+). This condition also serves as the agent’s initial proposal 
+.
+
+Controlled baselines on FoldBench.
+
+The controlled baselines share a monomeric alignment generated by HHblits against Uniclust30 (
+2018_08
+) with an E-value threshold of 
+, minimum query coverage of 50%, maximum sequence identity of 90%, and two iterations. Additional hits are retrieved from UniProt (
+2021_04
+) using one JackHMMER iteration with reporting and inclusion E-value thresholds of 
+ 
+max_sequences=50000
+. Both pMSA and uMSA use the same merged pool of raw search hits, without an additional global hit cap during baseline construction.
+
+•
+
+mMSA
+: the monomeric alignment only.
+
+•
+
+pMSA
+: the monomeric alignment supplemented with complete cross-chain pairs. Hits are grouped by exact header TaxID without taxonomic-rank normalization, retaining only TaxIDs represented in every protein entity. Within each group, hits are matched by their order in the merged alignment: the 
+th hit of each entity forms one paired row, up to the smallest group size across entities. Candidate rows are sorted by the product of their original per-entity row indices, with ties broken by the index sum, within-group rank, and TaxID. The first 8,191 non-query paired rows are retained, or all rows if fewer are available.
+
+•
+
+uMSA
+: the monomeric alignment combined with the same UniProt hit pool used for pMSA, without pairing, and filtered using HHfilter at 99% sequence identity.
+
+Controlled baselines on HD439.
+
+We use the MSA files publicly released with the HD439 benchmark as
+fixed baseline inputs and do not regenerate them. The released
+conditions correspond to the authors’ monomer/unpaired, species-paired,
+and UniProt-enriched constructions, which we denote as mMSA, pMSA, and
+uMSA, respectively. In the released files, these conditions are stored
+under the 
+unpaired
+, 
+paired
+, and 
+uniprot
+
+variants. According to the original paper, the underlying searches use
+HHblits against Uniclust30 (2018_08) and MMseqs2 against UniRef30
+(2022_02) and the ColabFold environmental database (2021_08).
+The paper reports HHblits candidate settings spanning two iterations,
+E-values of 
+, 
+, 
+, and 
+, coverage
+thresholds of 
+ and 
+, and identity thresholds of 
+ and
+
+, with up to 12 selected candidates. It does not provide complete
+command lines or all details of the AlphaFold2-based candidate-selection
+procedure; therefore, we treat the released MSAs as the authoritative
+baseline inputs rather than attempting an independent reconstruction.
+
+Source mismatch between agent and controlled baselines.
+
+On HD439, the agent, Default, and fixed MSA baselines all use
+the official precomputed MSA resources.
+The agent and Default use initial inputs constructed from
+
+comb_filter.a3m
+, with rows assigned to the paired
+or unpaired channel according to whether AF3 can parse a
+species identifier.
+The uMSA baseline places the same combined alignment entirely
+in the unpaired channel; mMSA uses the supplied monomer
+alignments, and pMSA additionally uses the supplied paired
+alignments.
+On FBv1 and FBv2, the agent and Default share the same
+precomputed input MSAs, whereas the fixed baselines use
+separately constructed Uniclust30 and UniProt-based MSAs.
+The Agent–Default comparison therefore evaluates the gains
+from iterative MSA editing and submission selection with
+matched initial MSA resources.
+Comparisons with the fixed baselines on FoldBench additionally
+reflect differences in MSA source and construction, so their
+performance differences cannot be attributed solely to the
+agent.
+
+B.4 
+Predictor Configuration
+
+We use AlphaFold 3 v3.0.2 with 10 recycles and five diffusion
+samples for each of five random seeds
+(
+42
+, 
+66
+, 
+101
+, 
+2024
+, and
+
+8888
+), yielding 25 structures per complex and MSA
+condition on one NVIDIA RTX 5880 Ada GPU (48 GB). A 25-structure
+prediction took 8.0 minutes on average, including initialization,
+compilation when required, inference, and output writing, but
+excluding MSA search, agent execution, and structural evaluation.
+Query sequences, seeds, inference settings, and template inputs
+are fixed across conditions for each complex. All predictions
+use precomputed inputs with the AF3 data pipeline disabled
+during inference. The aggregate AF3 inference GPU hours for each dataset are reported in
+Table 
+4
+.
+
+Table 4: 
+Resource usage of the agent episodes included in the main
+comparison. Submission counts include the initial Default. LLM calls
+count logged provider invocations, including failed and interrupted
+calls; retries within an invocation are not counted separately.
+Token totals include API-reported input and output tokens, including
+cached inputs. GPU hours cover AF3 model inference for successful
+submissions only.
+
+Dataset
+
+Targets
+
+Submissions per target
+
+LLM calls per target
+
+Total tokens
+
+(
+)
+
+AF3 inference
+
+(GPU hours)
+
+Mean
+
+Median
+
+Mean
+
+Median
+
+FoldBench-v1
+
+238
+
+6.55
+
+6
+
+115.11
+
+109
+
+840.35
+
+156.07
+
+FoldBench-v2
+
+283
+
+7.31
+
+7
+
+134.50
+
+126
+
+1,248.56
+
+320.91
+
+HD439
+
+438
+
+7.06
+
+7
+
+140.86
+
+134
+
+1,956.43
+
+348.87
+
+AF3-Default retains the pipeline-generated 
+pairedMsa
+
+and 
+unpairedMsa
+ fields and AF3’s standard featurization.
+For the agent and
+the controlled baselines (
+mMSA
+, 
+pMSA
+, and
+
+uMSA
+), we instead specify the cross-chain row layout
+explicitly: matched homologs occupy corresponding rows, while
+all-gap rows represent chain-specific homologs. These layouts
+are supplied through 
+unpairedMsa
+, with
+
+pairedMsa=""
+ and
+
+resolve_msa_overlaps=false
+. The initial
+
+backend_default
+ proposal preserves both input MSA
+channels; custom 
+manual_row_aligned
+ proposals may
+draw from either channel but write their final layout only to
+
+unpairedMsa
+.
+
+For FBv1 and FBv2, templates were obtained by the AF3 v3.0.2
+data pipeline using HMMsearch against the 2022-09-28 PDB SEQRES
+snapshot and PDB mmCIF structures, with a maximum template
+release date of 2023-01-12. Template structures and
+query-to-template mappings are held fixed across conditions.
+For HD439, no structural templates are supplied.
+
+B.5 
+Agent Configuration
+
+Language model.
+
+We use GLM-5.3 with temperature 0.2, reasoning effort set to
+
+max
+, and a maximum response length of 32,768 tokens.
+Each target is processed in an independent episode with no
+information shared across targets.
+We accessed the model via the Zhipu GLM Coding API during
+September 11–22, 2026 (UTC+8), with the API-reported model
+identifier 
+glm-5.3
+. Table 
+4
+ reports the mean and median
+numbers of LLM calls per target, as well as the total token usage
+for each dataset.
+
+Initial proposal.
+
+The initial proposal 
+ is the Default condition, i.e.,
+AF3’s default processing of the prepared source MSAs for FoldBench-v1 and FoldBench-v2, and the publicly released MSA files for HD439. Query
+sequences, templates, and predictor settings remain fixed across
+all subsequent proposals.
+
+Proposal generation.
+
+The LLM writes complete Python programs to select, filter, combine, reorder, or pair MSA rows using available inputs and accumulated observations. No fixed transformation library or scalar reward is imposed; the agent uses AF3 confidence, cross-sample consistency, and structural and biological plausibility to guide its search.
+
+Before AF3 inference, the host validates the candidate JSON and required protein entities. For manually constructed MSAs, it checks query headers, alignment lengths, equal row counts across chains, and the specified paired-row correspondence. Gap-only rows are permitted for unpaired homologs. Invalid candidates are returned to the agent for correction without running AF3.
+
+Programs run in an isolated Python sandbox with a 120-second limit per execution. The agent can access provided AF3 inputs, earlier observations, and prediction artifacts, but has no network access or access to ground-truth structures and evaluation results.
+
+Final nomination.
+
+At termination, the LLM nominates one successfully evaluated
+proposal 
+, with the initial Default as an eligible choice,
+and provides a rationale. Conflicts among proxy metrics are
+resolved by the LLM’s contextual judgment, without prescribed
+metric weights or priorities. The prediction ensemble already
+computed for the nominated proposal is used for final evaluation;
+no additional inference is run. The mean and median numbers of successful submissions per target,
+including the initial Default, are reported in
+Table 
+4
+.
+
+Isolation from ground truth.
+
+Ground-truth structures and all reference-based evaluation results,
+including DockQ, are withheld from the agent throughout exploration
+and nomination. DockQ is computed separately and used exclusively
+for offline evaluation.
+
+B.6 
+Budgets and Accounting
+
+Each episode permits at most 60 successful predictor submissions,
+including the initial Default, and 600 agent-side LLM calls during
+exploration. A submission is counted only after input validation and
+successful predictor inference; invalid inputs and failed predictions
+do not count, while an invocation that succeeds after internal retries
+counts once. All exploration-stage LLM calls count toward the
+600-call limit, regardless of purpose. Backend or service retries
+within a single provider invocation do not count as separate calls.
+
+If this LLM limit is reached before a valid final nomination, analysis
+and predictor submissions stop. Up to two additional LLM calls are
+allowed solely to finalize the episode: the agent first completes any
+pending round summary, then nominates a previously completed proposal
+via 
+finish
+. If no summary is pending, it nominates directly
+and may retry once if the nomination is invalid. The episode ends
+upon a valid nomination.
+
+B.7 
+Evaluation Metrics
+
+Interface accuracy is measured with DockQ, computed using the
+DockQ implementation in OpenStructure 2.11.1 through the
+FoldBench evaluator and its reference-to-prediction chain
+mapping (Appendix 
+B.1
+). For each interface and experimental
+condition, the primary reported DockQ value is the arithmetic
+mean of the scores across all 25 predicted structures
+(five seeds with five samples per seed). The same aggregation
+is applied to all experimental conditions.
+
+Appendix C 
+Supplementary Results
+
+For the comparisons in Table 
+5
+,
+we compare matched per-interface mean DockQ values
+within each dataset and interface type using two-sided paired
+
+-tests (Agent minus Shuffled and Agent minus AF3-Default).
+Interfaces, including those from the same target, are treated as
+independent; We report two-sided 
+-values; each test uses 
+ degrees of
+freedom, where 
+ is the number of matched interfaces in that group.
+
+Agent has higher mean DockQ than AF3-Default in all eight groups,
+although the gains are small for FBv1 homomers and intra-species
+heteromers. Differences from Shuffled are less consistent, including
+a slight decrease for FBv2 inter-species heteromers. These results
+indicate that the gains over AF3-Default cannot be uniformly
+attributed to preserved cross-chain pairing.
+
+Table 
+6
+ shows 25 interfaces for which the Agent selected a substantially shallower MSA (
+ versus 
+) and improved mean DockQ by at least 0.10. These cases span all three benchmarks and several interface types, illustrating that greater MSA depth does not always yield better structure predictions.
+
+Table 
+7
+ illustrates both the potential and the limitation of the selection process. In some examples, the Agent identifies an improved submission and selects it; in others, an improvement is found but missed at final selection. The Agent can also retain the Default when no tested alternative improves it, although some selections regress. These examples are illustrative and do not represent outcome frequencies across the benchmarks.
+
+Table 5: 
+Mean interface DockQ for the Agent-selected submission
+(Agent), its shuffled-MSA counterpart (Shuffled), and the initial
+native-control submission (AF3-Default).
+Each per-interface score averages DockQ over 25 predicted structures;
+group means weight the 
+ interfaces equally.
+
+ and
+
+ denote Agent minus
+Shuffled and Agent minus AF3-Default, respectively.
+Parentheses in the difference columns report two-sided 
+-values
+from paired 
+-tests on matched per-interface mean scores,
+treating interfaces as independent with 
+ degrees of freedom.
+The 
+-values are unadjusted for multiple comparisons.
+One MSA-shuffling realization is used per target; protein inputs
+identical apart from chain IDs share the same permutation.
+
+Dataset
+
+Interface type
+
+Agent
+
+Shuffled
+
+AF3-Default
+
+ (
+)
+
+ (
+)
+
+FBv1-pp
+
+Homomeric (N=194)
+
+0.554
+
+0.552
+
+0.539
+
+Intra-species heteromeric (N=65)
+
+0.752
+
+0.745
+
+0.751
+
+Inter-species heteromeric (N=19)
+
+0.612
+
+0.526
+
+0.465
+
+FBv2-pp-hard
+
+Homomeric (N=168)
+
+0.599
+
+0.597
+
+0.575
+
+Intra-species heteromeric (N=100)
+
+0.623
+
+0.598
+
+0.596
+
+Inter-species heteromeric (N=31)
+
+0.371
+
+0.380
+
+0.322
+
+HD439
+
+Intra-species heteromeric (N=339)
+
+0.642
+
+0.628
+
+0.613
+
+Inter-species heteromeric (N=99)
+
+0.562
+
+0.537
+
+0.482
+
+Table 6: 
+Interfaces with shallow Agent-selected MSAs and improved DockQ.
+All evaluated interfaces satisfying 
+,
+
+, and 
+ are shown.
+MSA depth is the number of AF3 MSA feature rows after pairing, configured
+overlap handling, merging, and cropping, but before padding; query rows are included.
+DockQ is averaged over 25 structures (five seeds and five diffusion samples per seed)
+for each interface using the corresponding final Agent selection or AF3-Default.
+
+ is Agent minus AF3-Default, computed before rounding.
+Interfaces are identified by target and chain IDs; FoldBench entries use assembly1.
+Interfaces from the same target share MSA depths.
+
+Dataset
+
+Interface
+
+Interface type
+
+MSA depth
+
+DockQ mean
+
+AF3-Default
+
+Agent
+
+AF3-Default
+
+Agent
+
+FBv1
+
+8P9C
+ (
+B
+–
+C
+)
+
+Inter-species heteromeric
+
+16,384
+
+425
+
+0.02936
+
+0.94552
+
++0.91616
+
+8P9C
+ (
+A
+–
+C
+)
+
+Inter-species heteromeric
+
+16,384
+
+425
+
+0.06656
+
+0.78552
+
++0.71896
+
+8J48
+ (
+A
+–
+B
+)
+
+Inter-species heteromeric
+
+12,417
+
+158
+
+0.44776
+
+0.94852
+
++0.50076
+
+7YUJ
+ (
+A
+–
+B
+)
+
+Homomer-like
+
+1,517
+
+327
+
+0.09496
+
+0.43584
+
++0.34088
+
+8PR6
+ (
+A
+–
+B
+)
+
+Homomer-like
+
+1,493
+
+43
+
+0.05188
+
+0.34216
+
++0.29028
+
+8HHV
+ (
+A
+–
+D
+)
+
+Homomer-like
+
+4,316
+
+294
+
+0.56732
+
+0.83340
+
++0.26608
+
+8Q00
+ (
+A
+–
+B
+)
+
+Inter-species heteromeric
+
+7,971
+
+86
+
+0.67020
+
+0.85044
+
++0.18024
+
+8J49
+ (
+A
+–
+B
+)
+
+Inter-species heteromeric
+
+4,220
+
+505
+
+0.13092
+
+0.28416
+
++0.15324
+
+8ABT
+ (
+A
+–
+A-2
+)
+
+Homomer-like
+
+3,938
+
+151
+
+0.81004
+
+0.94712
+
++0.13708
+
+FBv2
+
+7FFN
+ (
+C
+–
+D
+)
+
+Inter-species heteromeric
+
+15,566
+
+212
+
+0.12208
+
+0.63104
+
++0.50896
+
+9HIS
+ (
+B
+–
+D
+)
+
+Intra-species heteromeric
+
+15,114
+
+196
+
+0.63196
+
+0.81644
+
++0.18448
+
+9O5W
+ (
+A
+–
+B
+)
+
+Homomer-like
+
+2,135
+
+56
+
+0.74464
+
+0.90940
+
++0.16476
+
+8CID
+ (
+A
+–
+B
+)
+
+Homomer-like
+
+1,365
+
+116
+
+0.65676
+
+0.79528
+
++0.13852
+
+HD439
+
+7ZHR_1
+ (
+A
+–
+B
+)
+
+Intra-species heteromeric
+
+16,384
+
+330
+
+0.10476
+
+0.86108
+
++0.75632
+
+8BYP_1
+ (
+A
+–
+B
+)
+
+Intra-species heteromeric
+
+8,192
+
+126
+
+0.00768
+
+0.56012
+
++0.55244
+
+8FZZ_2
+ (
+A
+–
+B
+)
+
+Intra-species heteromeric
+
+1,609
+
+68
+
+0.30708
+
+0.80464
+
++0.49756
+
+8GXE_1
+ (
+A
+–
+B
+)
+
+Intra-species heteromeric
+
+14,818
+
+218
+
+0.31168
+
+0.72912
+
++0.41744
+
+7ACX_1
+ (
+A
+–
+B
+)
+
+Intra-species heteromeric
+
+6,835
+
+117
+
+0.25400
+
+0.60648
+
++0.35248
+
+7WDK_1
+ (
+A
+–
+B
+)
+
+Inter-species heteromeric
+
+3,170
+
+407
+
+0.29568
+
+0.60808
+
++0.31240
+
+7Y8V_1
+ (
+A
+–
+B
+)
+
+Intra-species heteromeric
+
+8,192
+
+131
+
+0.20072
+
+0.44360
+
++0.24288
+
+7P99_1
+ (
+A
+–
+B
+)
+
+Inter-species heteromeric
+
+8,752
+
+127
+
+0.60416
+
+0.80168
+
++0.19752
+
+7NA9_1
+ (
+A
+–
+B
+)
+
+Inter-species heteromeric
+
+10,074
+
+170
+
+0.01984
+
+0.18612
+
++0.16628
+
+7TCX_1
+ (
+A
+–
+B
+)
+
+Intra-species heteromeric
+
+2,666
+
+483
+
+0.69208
+
+0.85764
+
++0.16556
+
+7MNX_1
+ (
+A
+–
+B
+)
+
+Intra-species heteromeric
+
+13,121
+
+349
+
+0.62940
+
+0.78488
+
++0.15548
+
+8AJY_1
+ (
+A
+–
+B
+)
+
+Intra-species heteromeric
+
+1,454
+
+114
+
+0.73808
+
+0.86092
+
++0.12284
+
+Table 7: 
+Illustrative exploration and final-selection outcomes across three benchmarks. Default denotes AF3-Default; Submission oracle is the retrospectively best tested submission (including Default); Selection is the original final Agent choice. Each score is the mean DockQ over 25 structures for the indicated interface; parentheses give the submission index. Each target shown has one evaluated interface. ‘No improvement’ means that none of the tested alternatives exceeded Default; it does not refer to untested programs. FoldBench chain IDs refer to assembly 1; HD439 labels follow the released benchmark structures. These selected examples do not estimate outcome frequencies.
+
+Dataset
+
+Interface
+
+Type
+
+Default
+
+Submission oracle
+
+Selection
+
+a) Improvement found and selected
+
+FBv1
+
+9C5S (A–B)
+
+Homomer-like
+
+0.07672 (1)
+
+0.62048 (2)
+
+0.62048 (2)
+
+FBv1
+
+8J48 (A–B)
+
+Inter-species heteromeric
+
+0.44776 (1)
+
+0.94852 (3)
+
+0.94852 (3)
+
+FBv2
+
+9OC6 (A–C)
+
+Inter-species heteromeric
+
+0.18380 (1)
+
+0.90320 (7)
+
+0.90320 (7)
+
+FBv2
+
+8WVY (A–B)
+
+Intra-species heteromeric
+
+0.03564 (1)
+
+0.75060 (6)
+
+0.75060 (6)
+
+HD439
+
+7PPZ_1 (A–B)
+
+Inter-species heteromeric
+
+0.04400 (1)
+
+0.85116 (5)
+
+0.85116 (5)
+
+HD439
+
+7E5B_1 (A–B)
+
+Inter-species heteromeric
+
+0.17972 (1)
+
+0.92192 (5)
+
+0.92192 (5)
+
+b) Improvement found but missed
+
+FBv1
+
+8BZ2 (A–B)
+
+Homomer-like
+
+0.03264 (1)
+
+0.64628 (2)
+
+0.03264 (1)
+
+FBv2
+
+7Z73 (A–F)
+
+Inter-species heteromeric
+
+0.30144 (1)
+
+0.58060 (4)
+
+0.05812 (7)
+
+FBv2
+
+9KL2 (A–B)
+
+Homomer-like
+
+0.38404 (1)
+
+0.79248 (5)
+
+0.38404 (1)
+
+FBv2
+
+7XOZ (A–D)
+
+Homomer-like
+
+0.24872 (1)
+
+0.41188 (3)
+
+0.04768 (8)
+
+HD439
+
+8JC5_1 (A–B)
+
+Intra-species heteromeric
+
+0.00800 (1)
+
+0.58084 (2)
+
+0.00800 (5)
+
+HD439
+
+7V8E_1 (A–B)
+
+Inter-species heteromeric
+
+0.09420 (1)
+
+0.66156 (2)
+
+0.09420 (1)
+
+c) No improvement; Default retained
+
+FBv1
+
+8AND (A–B)
+
+Homomer-like
+
+0.52344 (1)
+
+0.52344 (1)
+
+0.52344 (1)
+
+FBv1
+
+8UPB (A–A-2)
+
+Homomer-like
+
+0.92020 (1)
+
+0.92020 (1)
+
+0.92020 (1)
+
+FBv2
+
+9GWJ (C–D)
+
+Intra-species heteromeric
+
+0.74288 (1)
+
+0.74288 (1)
+
+0.74288 (1)
+
+FBv2
+
+9E55 (B–C)
+
+Inter-species heteromeric
+
+0.56548 (1)
+
+0.56548 (1)
+
+0.56548 (1)
+
+HD439
+
+8H4X_1 (A–B)
+
+Intra-species heteromeric
+
+0.91204 (1)
+
+0.91204 (1)
+
+0.91204 (1)
+
+HD439
+
+8GU7_2 (A–B)
+
+Inter-species heteromeric
+
+0.89944 (1)
+
+0.89944 (1)
+
+0.89944 (1)
+
+d) No improvement; selection regressed
+
+FBv1
+
+8GQP (A–B)
+
+Intra-species heteromeric
+
+0.51828 (1)
+
+0.51828 (1)
+
+0.23116 (3)
+
+FBv2
+
+9KO4 (A–B)
+
+Intra-species heteromeric
+
+0.67592 (1)
+
+0.67592 (1)
+
+0.56896 (2)
+
+FBv2
+
+9LIL (A–B)
+
+Homomer-like
+
+0.75012 (1)
+
+0.75012 (1)
+
+0.64836 (5)
+
+HD439
+
+9BQ2_2 (A–B)
+
+Intra-species heteromeric
+
+0.16796 (1)
+
+0.16796 (1)
+
+0.02080 (7)
+
+HD439
+
+8GBQ_1 (A–B)
+
+Intra-species heteromeric
+
+0.89784 (1)
+
+0.89784 (1)
+
+0.76972 (7)
+
+HD439
+
+8Q0N_1 (A–B)
+
+Intra-species heteromeric
+
+0.40504 (1)
+
+0.40504 (1)
+
+0.29432 (4)
+
+Figure 4: 
+
+Exploration and nomination under predictor-derived and ground-truth feedback.
+ Columns correspond to the three benchmarks, and semi-transparent histograms overlay the standard predictor-feedback setting and the ground-truth-guided setting.
+
+Appendix D 
+Seeds Ablation
+
+We assess sensitivity to the AF3 seeds by evaluating the fixed Agent
+nominations and Default on FoldBench-v1 (238 targets and 278 interfaces).
+The original seeds are 
+42, 66, 101, 2024, 8888
+; the fresh, disjoint
+seed set is 
+137, 271, 503, 1009, 2027
+. Each setting uses five
+diffusion samples per seed and ten recycles, yielding 25 structures per target.
+For each configuration, only the model seeds change; its MSA content and
+row order, templates, other input fields, and MSA overlap setting are preserved.
+The agent does not repeat exploration or nomination. For the 40 targets whose
+nomination is exactly Default, the same completed fresh-seed prediction and
+evaluation supplies both scores; the remaining 198 Default configurations
+are separately re-predicted and evaluated.
+
+Table 8: 
+
+Seed robustness of fixed Agent nominations on FoldBench-v1.
+Results report mean DockQ over interfaces; 
+ denotes Agent minus Default.
+
+Original seeds
+
+Fresh seeds
+
+Interface group
+
+Default
+
+Agent
+
+Default
+
+Agent
+
+Homomeric
+
+194
+
+0.539
+
+0.554
+
++0.014
+
+0.003
+
+0.538
+
+0.553
+
++0.016
+
+0.010
+
+Intra-species heteromeric
+
+65
+
+0.751
+
+0.752
+
++0.001
+
+0.873
+
+0.722
+
+0.731
+
++0.008
+
+0.484
+
+Inter-species heteromeric
+
+19
+
+0.465
+
+0.612
+
++0.147
+
+0.030
+
+0.449
+
+0.606
+
++0.157
+
+0.036
+
+All
+
+278
+
+0.584
+
+0.604
+
++0.020
+
+0.575
+
+0.598
+
++0.024
+
+0.001
+
+DockQ is first averaged over 25 structures per interface and then
+equally over interfaces within each group.
+
+-values are unadjusted two-sided paired 
+-tests on interface-level
+Agent–Default differences. The overall row contains all 278 interfaces.
+
+As shown in Table 
+8
+,
+the overall mean Agent–Default difference is +0.020
+under the original seeds (
+) and
++0.024 under the fresh seeds (
+).
+The tests use interface means as paired observations, treating interfaces as
+independent; the 25 structures are not counted as independent replicates.
+This experiment measures fixed nominations under one additional seed set.
+
+Appendix E 
+Snapshot of workspace folder
+
+Each episode runs in a private sandbox containing its task files and a
+persistent agent-writable working directory, 
+/workspace/
+. We refer
+to the complete sandbox file environment as the episode workspace. The
+runtime supplies the initial target input, submission records, and prediction
+outputs, while the agent uses 
+analysis
+ to inspect these files and
+save its own programs, derived statistics, notes, and candidate MSA
+organizations.
+
+The directory layout for AF3-backed episodes is shown below. RO and RW denote
+read-only and read–write access from within the sandbox, respectively; the
+host runtime can still update the backing files. Iteration directories are
+numbered 
+001
+, 
+002
+, and so on. Ground-truth-dependent
+directories, marked GT-guided below, are absent from the Blind sandbox.
+
+⬇
+
+/
+
+|--
+ 
+input
+/
+ 
+[
+RO
+]
+
+|
+ 
+‘--
+ 
+source
+.
+json
+
+|--
+ 
+observation
+/
+ 
+[
+RO
+]
+
+|
+ 
+‘--
+ 
+current
+.
+json
+
+|--
+ 
+artifacts
+/
+ 
+[
+RO
+]
+
+|
+ 
+‘--
+ 
+<
+iteration
+>/
+
+|
+ 
+|--
+ 
+builder
+.
+py
+
+|
+ 
+|--
+ 
+candidate
+.
+json
+
+|
+ 
+|--
+ 
+builder_stdout
+.
+txt
+
+|
+ 
+|--
+ 
+builder_stderr
+.
+txt
+
+|
+ 
+|--
+ 
+input
+.
+json
+
+|
+ 
+|--
+ 
+run
+.
+log
+
+|
+ 
+‘--
+ 
+predictions
+/
+target
+/
+
+|
+ 
+|--
+ 
+seed
+-<
+seed
+>
+_sample
+-<
+sample
+>/
+ 
+(
+all
+ 
+seeds
+/
+samples
+)
+
+|
+ 
+|
+ 
+|--
+ 
+*
+_model
+.
+cif
+
+|
+ 
+|
+ 
+|--
+ 
+*
+_summary_confidences
+.
+json
+
+|
+ 
+|
+ 
+‘--
+ 
+*
+_confidences
+.
+json
+
+|
+ 
+|--
+ 
+target_ranking_scores
+.
+csv
+
+|
+ 
+|--
+ 
+target_model
+.
+cif
+
+|
+ 
+|--
+ 
+target_summary_confidences
+.
+json
+
+|
+ 
+|--
+ 
+target_confidences
+.
+json
+
+|
+ 
+|--
+ 
+target_data
+.
+json
+
+|
+ 
+‘--
+ 
+TERMS_OF_USE
+.
+md
+
+|--
+ 
+workspace
+/
+ 
+[
+RW
+]
+
+|
+ 
+|--
+ 
+analysis
+/<
+analysis_id
+>.
+py
+
+|
+ 
+|--
+ 
+submissions
+/<
+iteration
+>/
+candidate
+.
+json
+
+|
+ 
+‘--
+ 
+...
+ 
+(
+agent
+-
+created
+ 
+files
+ 
+and
+ 
+directories
+)
+
+|--
+ 
+ground_truth
+/
+ 
+[
+RO
+,
+ 
+GT
+-
+guided

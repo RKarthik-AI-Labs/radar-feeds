@@ -1,0 +1,1814 @@
+Sparse Autoencoder Attribution Graphs Are Decided at the Margin
+https://arxiv.org/abs/2611.00606
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+Sparse Autoencoder Attribution Graphs Are Decided at the Margin
+
+Karl Li
+
+Affiliation: 
+Columbia University
+
+Affiliation: 
+kl3685@columbia.edu
+
+Abstract
+
+Attribution graphs over the features of sparse autoencoders (SAEs) are used to predict what an ablation does and are compared across training seeds. A TopK SAE keeps the largest preactivations at each token, and a feature’s margin is its preactivation’s distance to the cutoff. On five public TopK SAE pairs from three Pythia models, zeroing one feature moves a next layer feature across the cutoff in 0.74 of cases or more, and the crossings carry most of the response’s energy. Over writes that scale a feature’s code by three factors, the graph built on the features active beforehand has a median relative error of 0.247 or more. The margin graph adds the first order change to every preactivation and reranks, at the same cost, and errs by at most 0.033. At the median, the crossing features’ decoded change is 1.24 times the model’s own change in norm or more. Between seeds of one testbed, sparse maps between features explain 0.85 of a graph’s energy on its active features, and 0.47 once the other seed’s graph keeps only its own. The largest model studied is pythia-160m.
+
+1 
+Introduction
+
+Researchers who interpret a language model through sparse autoencoders (SAEs) build attribution graphs over the features of trained SAEs, which this paper calls dictionaries, and ask two questions of such a graph. What does ablating one feature do to the features at the next layer, and how much of the graph survives a change of training seed? A TopK SAE keeps, at each token, the features whose preactivations are positive and among the 
+ largest 
+(
+Gao et al., 2025
+)
+. An attribution graph over two such dictionaries at adjacent layers carries the derivative of each downstream feature’s preactivation with respect to each upstream feature’s code, taken across the block between them 
+(
+Ameisen et al., 2025
+; 
+Marks et al., 2025
+; 
+Farnik et al., 2025
+)
+. Ablating one feature often moves a downstream feature across its cutoff, so the graph used to predict that ablation was built on a set of active features the ablation changes. On the public dictionaries of pythia-70m at layers 3 and 4, zeroing one feature moves a downstream feature across the cutoff in 0.84 of cases. At that ablation the fixed support graph, which keeps only the features active before the ablation, predicts the downstream code’s change with a median relative error of 0.739, and a graph that keeps each feature’s signed distance to the cutoff errs by 0.121.
+
+The field’s graphs are built on the features the clean input makes active. 
+Ameisen et al. (2025)
+ write that “The nodes in the attribution graph represent active features”, and 
+Dunefsky et al. (2024, p. 17)
+ derive the attribution between transcoder features “assuming that this feature is active”. In the graph of 
+Marks et al. (2025, p. 4)
+ the “nodes correspond to feature activations or SAE errors”, and each edge is linearized at the clean activations 
+(
+Marks et al., 2025
+, p. 19)
+. Attribution patching makes “a first-order Taylor expansion” at the clean activation 
+(
+Kramár et al., 2024
+, p. 4)
+, and its corrections recompute the attention softmax or average the gradient along a path 
+(
+Kramár et al., 2024
+; 
+Hanna et al., 2024
+)
+. The first order expansion of a TopK code at the clean input keeps only the active features, since its Jacobian there projects onto them. 
+Ameisen et al. (2025)
+ name the features that expansion leaves out, the inactive ones “that are only ‘one ablation away’ from being active”.
+
+Across seeds, the comparisons reported for dictionaries score one feature at a time, by a cosine rule on encoder and decoder or by how often a feature reappears over many runs 
+(
+Paulo and Belrose, 2026
+; 
+Gerasimov et al., 2026
+)
+. A score of that kind compares each feature’s direction and never the operator between two layers, so it cannot say how much of a graph’s operator survives a change of seed.
+
+A feature’s margin is signed and positive when the feature is active. Its size is the distance its preactivation can travel before the membership changes. This paper makes four contributions. First, it measures how often an intervention that scales one feature’s code moves a downstream feature across the cutoff, against the scaling factor, on five public TopK dictionary pairs and a testbed, and compares a dictionary under a rectified linear unit (ReLU) rule with them as a continuous case (Section 
+3
+). Second, it defines the margin graph, proves it exact where the block is affine and measures it against the fixed support graph and two devices from the literature that correct first order attribution (Section 
+4
+). A Lipschitz constant along a write bounds each preactivation’s first order error. A predicted membership whose margin clears the band those bounds set keeps its sign. The constant is estimated from Jacobians at three points along each write, so the band is an audit after the write, and a calibration locates the write norm at which the error reaches a level fixed in advance. Third, it compares the code’s response with the model’s own change and bounds from below the response a swap forces (Section 
+5
+). On the one layer triple studied, a chain that carries a decoded middle code through the next block fails at the third layer, and the residual stream carries the write there. Fourth, on one testbed it carries a graph’s operator across seeds through sparse nonnegative maps and places the masked graph’s loss on the target’s inactive atoms, which the signs of their margins select (Section 
+6
+).
+
+2 
+Setup
+
+An SAE encodes the residual stream of a language model at one layer. Write 
+ for the width of the stream and 
+ for the width of the dictionary. The encoder 
+ has rows 
+, and the decoder has one unit column for each feature. At an activation 
+ the preactivations are 
+, which is affine in 
+. The code 
+ keeps some of the preactivations and sets the rest to zero, and the features it keeps form the live support 
+. A TopK rule keeps the 
+ largest positive preactivations, with 
+ less than 
+ 
+(
+Gao et al., 2025
+)
+, and its cutoff 
+ is the 
+th largest preactivation. A JumpReLU rule keeps each preactivation that clears the feature’s own threshold 
+(
+Rajamanoharan et al., 2024
+)
+. A ReLU rule keeps every positive one 
+(
+Bricken et al., 2023
+)
+. The running example is the public TopK release on pythia-70m, whose dictionaries have width 32,768 and keep 16 features at a token 
+(
+EleutherAI, 2024b
+)
+. Table 
+ lists the five TopK pairs and the one ReLU pair this paper studies beside the testbed, with each pair’s width, training budget and fraction of variance unexplained.
+
+Two adjacent layers carry two dictionaries. Write 
+ for the upstream dictionary’s decoder, whose unit columns 
+ are the upstream features’ directions, and 
+ and 
+ for the downstream dictionary’s encoder and decoder. The block 
+ carries the upstream residual stream at the token’s position to the downstream one, with every other position held fixed, and 
+ is its Jacobian at the token. The operator 
+ carries upstream codes to downstream preactivations. Its entry 
+ is the derivative of downstream preactivation 
+ with respect to upstream code 
+, which is the virtual weight of 
+Ameisen et al. (2025)
+ between the two features. Write 
+ and 
+ for the diagonal projectors onto the upstream and the downstream live supports. The masked code Jacobian 
+ keeps the operator on the coactive block, and it is the Jacobian between two dictionaries’ codes that 
+Farnik et al. (2025)
+ sparsify.
+
+Under TopK the margin of feature 
+ is 
+ when 
+ is live and 
+ when it is not. Under JumpReLU the margin is 
+ less the feature’s threshold, and under ReLU it is 
+ itself. Every statement below that interprets a margin as a membership assumes a strict gap, that no two preactivations it uses are equal, none is zero and none equals its feature’s threshold. Under that assumption a feature is live exactly when its margin is positive, and the margin is how far its own preactivation must move, with every other one fixed, before its membership changes.
+
+A write on upstream feature 
+ at dose 
+ sets the feature’s code 
+ to 
+. It adds 
+ to the upstream activation, so the upstream reconstruction residual stays in the edited input. A dose of zero is the zero ablation. To first order the downstream preactivations change by 
+, which is one Jacobian-vector product and equals column 
+ of 
+ scaled by 
+. The fixed support graph predicts the downstream code 
+, landing the whole change on the old live support. The margin graph predicts the code the rule assigns to the predicted preactivations 
+, so it reranks them and names which features enter and which leave. Column 
+ of 
+, one product per upstream feature at a token, enters both graphs, and the margin graph keeps every downstream row of that column where the fixed support graph keeps the live rows. A prediction 
+ of the exact code change 
+ has the relative error
+
+(1)
+
+with both changes taken over every coordinate of the downstream dictionary. A graph’s error is the median of that relative error over the interventions, pooled over three predictor doses, the zero ablation and the doses 0.5 and 0.9, which were fixed before any predictor was evaluated.
+
+The five public TopK dictionary pairs and the one ReLU pair are each loaded under the arithmetic of its own library 
+(
+EleutherAI, 2026
+; 
+Marks et al., 2024
+)
+, and the pairs were fixed before any experiment. The release on pythia-70m is studied at layers 3 and 4. It is also studied at the early block from 1 to 2 and at the last of its 6 blocks, from 4 to 5, and the release on pythia-160m at the middle of its 12 blocks, from 6 to 7 
+(
+EleutherAI, 2024a
+)
+. The deduplicated TopK and ReLU releases share a model and a pair of layers at one width 
+(
+EleutherAI, 2024c
+; 
+saprmarks, 2024
+)
+. A testbed pair, cell F, was trained for this paper on pythia-70m at layers 3 and 4 over 8 runs, two of which share an initialization and differ in data order, the retraining pair. Every dictionary is expressed in one gauge, each decoder column at unit norm in the residual stream’s own units, which fixes the units of codes, preactivations and cutoffs and in which the public dictionaries are stored. Cell F centres and scales each activation as 
+, where 
+ is the per coordinate mean and 
+ the mean distance of an activation from 
+ over a block held out before training. It stores unit columns in those units, so in the gauge its code is 
+ and its biases are 
+ and 
+, while its columns and rows are the stored ones applied to raw activations. The experiments take one position from each sequence of 2,048 tokens of the Pile’s validation file, held out for the testbed, which trained on the training split. Every single feature write on every live upstream feature is measured at the first 512 positions, and the transport of Section 
+6
+ uses 1,024 sequences held out from the choice of its cap on a representation’s atoms. Appendix 
+B
+ gives each pair’s provenance and every count.
+
+3 
+Crossings within a model
+
+What does one write do to the downstream support? At rest the nearest margins are small. On the public TopK pairs the median over tokens of the nearest inactive margin runs from 
+ to 
+ in preactivation units, and the cutoff is 0.06 to 0.15 of the largest preactivation.
+
+A single feature ablation moves a downstream feature across the cutoff in 0.74 to 0.89 of zero ablations on the five public pairs, and in 0.92 on cell F, whose 8 runs range from 0.91 to 0.92. The rate follows the size of the write against the margins (Figure 
+1
+). It drops to 0.19 to 0.25 at a dose of 0.9 and to zero at one, which writes nothing. Past one it rises again, to 0.95 to 0.99 at a dose of 4.
+
+Figure 1: 
+The crossing rate against the dose. The rate is the share of single feature writes that move a downstream feature into or out of the live support, over one write on every live upstream feature at each of the 512 positions of the Pile validation file, and higher means more crossings. Cell F, the testbed on pythia-70m, is shown at the zero ablation and the doses 0.5 and 0.9 as the mean over its 8 runs, with a bar for their range. Pairs are labelled by Pythia model size and layers, and the doses are drawn at equal spacing.
+
+The features that cross carry most of the code’s response. Over the zero ablations that cross, the entering and leaving coordinates carry a mean of 0.73 to 0.84 of the response’s energy on the five pairs and 0.79 on cell F, and Appendix 
+B
+ gives each formula. The entering coordinates alone carry 0.33 to 0.39 on the five pairs and 0.37 on cell F. At the median over a write’s crossing coordinates and then over the crossing writes, a crossing coordinate’s code changes 5.7 to 10.1 times as much as its preactivation, an entrant jumping from zero to near the cutoff and a leaver dropping to zero.
+
+The ReLU pair crosses its zero nearly as often, and its crossing coordinates carry almost none of the response. A zero ablation moves one of its downstream features across zero in 0.69 of cases and changes its live count in 0.59. Its crossing coordinates carry 0.05 of the response’s energy, and their code changes 0.43 times as much as their preactivation, since a ReLU code is continuous at its cutoff. The ReLU release differs from the deduplicated TopK release in its rule, its library, its budget and its context, so the contrast is one instance of the continuity Theorem 
+1
+ states.
+
+4 
+The margin graph
+
+What predicts the code under a write at the cost of the fixed support graph? Theorem 
+1
+ answers where the block is affine.
+
+Theorem 1
+ 
+(exactness on an affine segment)
+.
+
+The TopK code is piecewise linear in the preactivations. It is linear on each cell of the partition cut by the hyperplanes 
+ and 
+, continuous across 
+, and discontinuous across a hyperplane 
+ that separates a member of the support from a nonmember. Assume a strict gap and that the block is affine along the write, 
+ for 
+. Then the margin graph’s prediction is the exact code, entering and leaving coordinates included. The fixed support graph and the margin graph differ only on the entering and the leaving coordinates, so on an affine segment the fixed support graph’s relative error on a write is at least the square root of the entering set’s share of that write’s response energy. Write 
+ for the cutoff before the write and 
+ for the write’s reach, the largest absolute first order change of a downstream preactivation. Where the token carries at least 
+ positive preactivations, an entering coordinate’s code jumps from zero to at least 
+ and a leaving coordinate’s drops from at least 
+ to zero, while each preactivation moves by at most 
+.
+
+On the five public TopK pairs the margin graph’s median error runs from 0.013 to 0.033 against 0.247 to 0.669 for the fixed support graph, and on cell F it is 0.017 against 0.786 (Table 
+). A bootstrap over the positions puts the difference of the two medians above zero on every pair studied, and Appendix 
+B
+ gives each interval. Removing the reranking alone, so that membership is decided by the old cutoff, raises the margin graph’s error on cell F to 0.558.
+
+The margin graph also names the features that enter and leave. Its precision on the entering set, microaveraged over the writes, runs from 0.80 to 0.90 on the five pairs and its recall from 0.82 to 0.92. Ranking the features inactive before the write by their predicted preactivations, at the true count of entrants, reaches a precision of 0.84 to 0.93, and ranking them by margin alone reaches 0.42 to 0.49, and Appendix 
+B
+ gives the confusion counts beside the exact oracle’s. On the ReLU pair both graphs err little, at 0.008 and 0.017, since its code never jumps.
+
+Figure 2: 
+Two devices from the literature against the margin graph on cell F, the testbed of 8 runs on pythia-70m. The vertical axis is the mean over runs of each run’s median relative error on the downstream code, lower being better, and the horizontal axis is the number of products per intervention, over one write on every live upstream feature at each of the 512 positions of the Pile validation file at the zero ablation and the doses 0.5 and 0.9. Dashed lines join the devices on the fixed support and solid lines the devices reranked, markers at one product are drawn apart, and the star is the margin graph.
+
+Two devices from the literature correct the first order term of the graphs of Section 
+1
+, and each is evaluated on cell F on the fixed support and reranked. Integrated gradients average the first order term at 
+ points along the write, and the softmax device recomputes the attention weights at the written input with every other map at first order. On the fixed support, integrated gradients err by 0.777 at 5 products and by 0.777 at 10 (Figure 
+2
+). The recomputed attention softmax errs by 0.783 there, against 0.786 for the fixed support graph. Reranked, the softmax device errs by 0.013, under the margin graph’s 0.017 at the same one product on all 8 runs, and integrated gradients err by 
+ and 
+ at 5 and 10 products. On the five public TopK pairs the reranked softmax device errs by 0.011 to 0.026, under the margin graph on all 5 pairs, and on the fixed support by 0.19 to 0.66, and Appendix 
+B
+ gives each device’s errors per pair beside its paths and its cost beyond the product. A reranked device’s remaining error is its own error on the preactivations, carried through the reranking, support mistakes included.
+
+Off an affine segment the first order term errs, and Theorem 
+2
+ bounds the error per write.
+
+Theorem 2
+ 
+(the first order error and the band)
+.
+
+Assume a strict gap. Fix a write 
+ and assume the block’s Jacobian is Lipschitz along the segment, 
+ for 
+, with 
+ the segment’s own constant. Then each downstream preactivation’s first order error is at most 
+. Take the margins on the predicted preactivations, and let 
+ and 
+ be the largest 
+ outside and inside the predicted support, each zero where its set is empty. A predicted member whose predicted margin exceeds its own 
+ plus 
+ lies in the exact support, and a predicted nonmember the size of whose negative predicted margin exceeds its own 
+ plus 
+ lies outside it, so such an entrant enters and such a leaver leaves. Where one constant 
+ bounds 
+ for every write, the same is true with 
+.
+
+A constant along each write is estimated from three Jacobians, at the write’s base, midpoint and endpoint, as the largest ratio of a Jacobian difference to the distance between its points. It is a lower bound on the segment’s own, so the band is an empirical rule. Two of its points lie on the written segment, so the rule is an audit after the write. The rule accepts a predicted membership where the band is satisfied under the write’s own constant and the write’s norm lies inside the regime below, set on half the 512 positions. On the other half it is scored on 4 sampled features per position at three doses over cell F’s 8 runs and the five public TopK pairs. It accepts no wrong membership among 668,393,327, at 0.59 to 0.87 of a single feature write’s predicted memberships and 0.32 to 0.57 of its live ones. At the zero ablation it accepts 0.012 to 0.067 of a subset write’s, again with none wrong (Appendix 
+E
+).
+
+The first order error grows with the write. The regime compares the preactivations’ error, the norm of the first order change of the downstream preactivations less their exact change, over the exact change’s norm, with the write’s norm in units of the downstream cutoff’s median over the positions, both in the gauge of Section 
+2
+. On single feature writes the median error first reaches 0.3 at a write of 5.55 on cell F, its 8 runs pooled, and 3.90 on the release at layers 3 and 4, and on subset writes at 7.54 and 4.48. The two populations pooled give boundaries of 7.26 and 4.36, within a ratio of 1.66, under the factor of 2.0 fixed before the measurement, and the median write is 1.68 and 3.57 cutoff units. Appendix 
+E
+ gives every run’s and pair’s boundary, set on half the positions and scored on the other, from 3.22 to 9.60 on the public pairs’ single feature writes.
+
+The graph is built once per token at one product per live feature, and a write on any subset at any dose is then a sum of its members’ columns and a sort. The subsets are random sets of two, four, eight and sixteen live upstream features, 16 per size at each position, ablated to zero. On the subsets of two the once built graph errs by 0.287 on cell F, against 0.770 for the fixed support graph. On the subsets of sixteen it errs by 0.458 against 0.551, and on the release at that size it errs above the fixed support graph, at 0.670 against 0.631. The path predictor reranks integrated gradients, and at 
+ it errs by at most 0.0043 on cell F and 0.124 on the release at every size (Appendix 
+E
+).
+
+5 
+The readout
+
+Does the code’s response say what the model did? A write changes the downstream activation by 
+, and the decoder maps the code’s change to 
+. The part of 
+ on features live before and after the write is its stable part. The part on features that entered or left is its entering and leaving part. The rest of the activation change, 
+, is the change of the reconstruction residual, so the three parts sum to 
+, to within 
+ on every intervention measured.
+
+Over the crossing interventions the entering and leaving part alone has a median norm of 1.24 to 1.72 times the activation change’s on the five TopK pairs, and 1.56 on cell F (Figure 
+3
+). Its projection on the activation change, over the change’s squared norm, has a median of 0.21 to 0.29, and 0.24 on cell F. The whole decoded change has 1.41 to 1.82 times the activation change’s norm, at a median cosine with that change of 0.27 to 0.50 and 0.38 on cell F.
+
+Figure 3: 
+The decoded change against the activation’s own change, and five chains across two blocks. The stable part decodes the change on features live throughout and the entering and leaving part the change on features that entered or left. The reconstruction residual’s change completes the activation change. Panels a and b give each part’s norm and projection share against the activation change, medians over the crossing writes at the zero ablation and the doses 0.5 and 0.9 on the 512 positions of the Pile validation file, cell F, the testbed on pythia-70m, averaging its 8 runs. Dashed lines mark the change’s norm and 0.5, the ceiling on the share fixed before the measurement. Panel c gives each chain’s median error on the third layer’s code, lower being better, on the pythia-70m release at layers 3, 4 and 5 over 24,576 writes. Through the second block the fixed support, margin and exact chains carry their decoded middle code change, the exact activation change chain the exact change and the residual chain one product through both blocks. Each chain crosses the second block at first order at the clean middle activation, and all but the fixed support chain rerank at the third layer. Pairs are labelled by Pythia model size and layers.
+
+Theorem 
+4
+ in Appendix 
+A
+ bounds that response from below at a swap on any block, by the cutoff times the separation of the swapping decoder columns less three reaches per swapped pair. On all 345,178 crossing single feature writes at every position and predictor dose of the five public TopK pairs and cell F, the measured part is at or above the bound. On the writes that swap one pair the bound is positive on 0.55 of the five public pairs’ writes and 0.70 of cell F’s. Where it is positive its median ratio to the activation change is 1.21 and 1.28, against a measured median of 2.61 and 2.53 on the same writes. The reconstruction residual’s change cancels the excess.
+
+Over every intervention the ReLU pair’s decoded change has a median projection share of 0.38 on the activation change, a median norm ratio of 0.64 and a median cosine of 0.60. The rule 
+, fixed before the measurement, counts a decoded change as following the activation change where its share is at least 0.5 and its norm ratio between 0.50 and 1.25, and the ReLU pair’s share is under that floor, so 
+ fired.
+
+On the pythia-70m release at layers 3, 4 and 5, the chains that carry the fixed support graph’s, the margin graph’s and the exact decoded middle code through the second block err at the third layer’s code by 0.884, 0.999 and 0.996. The exact activation change chain errs by 0.029, and the residual chain, one product through both blocks in the residual stream, errs by 0.053 at one product per live feature. Every chain carries its middle change through the second block at first order, as one Jacobian-vector product at the clean middle activation. All but the fixed support chain, which keeps the third layer’s support fixed, then rerank at the third layer. The rule 
+ took as its reference write the zero ablation of the token’s live upstream feature of largest code, whose first order change of each middle preactivation is that feature’s reach. It split the margin graph’s decoded middle code change on every two hop write at the three doses into its parts on the middle features whose margins lie beyond and within that reach, and asked the first part’s share of the exact middle change to exceed the second’s by 0.2. The difference was 0.16, so 
+ fired, and Appendix 
+E
+ gives the operands. On affine segments a decoded chain’s third layer preactivations differ from the residual chain’s by the second block’s image of what the decoded code drops, which for the exact code is the reconstruction residual’s change (Theorem 
+4
+), and the chain errors above are that difference under the third layer’s rule.
+
+6 
+Transport across seeds
+
+How much of a graph’s operator survives a change of seed? Take dictionaries 
+ and 
+ from two seeds of one model, each with an upstream decoder and a downstream encoder at one layer pair. Each atom of the source 
+ is written as a sparse nonnegative combination of the target 
+’s atoms. The decoder columns give a map 
+ with 
+, and the encoder rows a map 
+ with 
+.
+
+Figure 4: 
+The admission curve on cell F, the testbed of 8 runs on pythia-70m, on 1,024 held out positions of the Pile validation file. The vertical axis is the explained fraction on the masked code Jacobian, higher being closer, and the horizontal axis is the share of the target’s atoms admitted to its mask. Its live atoms stay, and its inactive atoms enter nearest the cutoff first. Between seeds averages the 30 pairs, with one standard deviation shaded. Random admission draws as many inactive atoms uniformly, at 3 draws a pair, and the position null permutes the target’s positions. The dotted line marks a tenth of the inactive atoms, where the rule fixed before the measurement asked for half the gap recovered.
+
+Theorem 3
+ 
+(transport and the mask term)
+.
+
+Let 
+ and 
+ be the operators of 
+ and 
+ at a token. If 
+ and 
+, then 
+ at every token and for any two widths, with no matching. Write 
+ and 
+ for the projectors onto the two dictionaries’ upstream and downstream live supports. The masked identity 
+ is true at a token where every row of 
+ at a live downstream feature of 
+ places no weight on an inactive downstream atom of 
+, and every column of 
+ at a live upstream feature of 
+ places no weight on an inactive upstream atom of 
+. The part the masks change, 
+, is the transport carried by the maps’ weight on 
+’s atoms whose margins are not positive at the token. It depends on the sign of each margin and never on its size. Without exact representation, write 
+ and 
+. Then 
+ exactly, and its Frobenius norm is at most 
+.
+
+So the masked graph of 
+, carried to 
+, drops the part of the operator carried by 
+’s inactive atoms, and that weight leaves or enters whole as a margin’s sign flips.
+
+The maps are fitted on cell F by nonnegative orthogonal matching pursuit on unit vectors 
+(
+Nguyen et al., 2019
+)
+, to a relative residual of 0.436, with at most 32 atoms in each representation. A vector that misses the tolerance keeps its closest fit, so the identity is used in its approximate form. The decoder columns have unit norm in the gauge of Section 
+2
+, and the fitted coefficients 
+ of the encoder rows are carried back to that gauge’s rows by their norms, 
+. Maps are fitted over the 30 ordered pairs among the six independent seeds and both directions of the retraining pair, and Appendix 
+C
+ specifies the fit, the choice of its cap and every null to the count and the seed. A prediction 
+ of a reference operator 
+ explains the fraction 
+ of the reference’s energy, summed over the held out positions 
+, on the whole operator unmasked and on the source’s coactive block otherwise, averaged over a class’s pairs.
+
+Two rules fixed before the measurement fired on the maps. 
+ fired, since the maps represent 0.71 of the decoder columns at a median of 5 atoms, over its bound of 4, and 0.24 of the encoder rows, under its floor of 0.5. 
+ fired, since a narrower dictionary of width 2,048 written over cell F’s atoms takes two or more atoms for a mean share of 0.85 of its columns, under the largest between seeds, 0.89.
+
+On the unmasked operator the sparse maps explain 0.57 of the energy between seeds against 0.22 for a one-to-one matching of atoms (Table 
+). That gain of 0.35 clears the bound of 0.19 fixed before the measurement. Random maps of matched sparsity put each vector on as many target atoms as its fitted map, drawn uniformly, with the coefficients refitted, and the permutation null relabels the target’s atoms under the fitted maps. The maps beat every one of 20 random draws and every one of 200 null draws on all 30 pairs, the random maps explain 0.003 on average, and the null explains 
+, a fraction below zero. On the masked code Jacobian the same maps explain 0.47. With the whole target dictionary available, the target’s unmasked operator carried through the same maps onto the same block, they explain 0.85. The gap between the two scores is 0.38 between seeds and 0.34 on the retraining pair. It splits exactly into the mask term’s own energy at 0.34 and twice the mask term’s inner product with the representation residual at 0.05, each over the reference’s energy. The representation residual’s own energy, 0.15, enters both scores and cancels in the gap.
+
+Theorem 
+3
+ places that loss on the target’s atoms of nonpositive margin, and the admission curve of Figure 
+4
+ tests whether the atoms nearest the cutoff carry most of it. A share of 0.1 of the target’s inactive atoms admitted at random recovers 0.11 of the gap between seeds, in proportion to the atoms admitted, and a null permuting the target’s positions recovers 
+. The same share taken nearest the cutoff first recovers 0.73 of the gap between seeds and 0.76 on the retraining pair, so most of the loss sits on the inactive atoms nearest the cutoff.
+
+7 
+Related work
+
+Metadictionaries write one dictionary’s decoder directions as sparse combinations of another’s on one model and one layer 
+(
+Leask et al., 2025
+; 
+Bussmann et al., 2024b
+; 
+Rubinstein et al., 2010
+; 
+Li et al., 2016
+)
+, model merging carries weights through a permutation or a transport plan 
+(
+Ainsworth et al., 2023
+; 
+Singh and Jaggi, 2020
+; 
+Blondel et al., 2018
+; 
+Liu et al., 2023
+; 
+Cuturi et al., 2023
+)
+, and causal abstraction composes exact bijective translations 
+(
+Geiger et al., 2025
+)
+. Features are matched across layers 
+(
+Balagansky et al., 2025
+; 
+Cao et al., 2026
+; 
+Chen et al., 2025
+; 
+Sweeney, 2026
+)
+ and dictionaries trained jointly across seeds or models 
+(
+Thasarathan et al., 2025
+; 
+Váradi and Kmetty, 2026
+; 
+Wang et al., 2025
+)
+. Identifiability results make two dictionaries coincide up to a permutation with scaling or signs 
+(
+Aharon et al., 2006
+; 
+Nelson et al., 2026
+; 
+Song et al., 2026
+)
+, and a permutation at positive scales is the case of Section 
+6
+’s maps with one atom per column and row.
+
+Feature interventions run at high strengths 
+(
+Lindsey et al., 2025
+; 
+Templeton et al., 2024
+)
+, and their side effects are forecast or validated by ablation 
+(
+Duan, 2026
+; 
+Chalnev et al., 2024
+; 
+Droste et al., 2026
+)
+. JumpReLU and BatchTopK dictionaries select by a threshold, so the margin is defined beside TopK 
+(
+Rajamanoharan et al., 2024
+; 
+Lieberum et al., 2024
+; 
+Bussmann et al., 2024a
+)
+, and benchmarks score features at rest 
+(
+Karvonen et al., 2025
+; 
+Chanin et al., 2025
+)
+.
+
+Attribution patching and its corrections 
+(
+Nanda, 2023
+; 
+Syed et al., 2024
+; 
+Kramár et al., 2024
+; 
+Sundararajan et al., 2017
+; 
+Hanna et al., 2024
+; 
+Marks et al., 2025
+)
+, circuit searches 
+(
+Conmy et al., 2023
+; 
+Bhaskar et al., 2024
+; 
+Mueller et al., 2025
+)
+, replacement models 
+(
+Ge et al., 2024
+; 
+Dunefsky et al., 2024
+; 
+Ameisen et al., 2025
+)
+ and crosscoders 
+(
+Lindsey et al., 2024
+)
+ build the first order graphs Section 
+4
+ reranks. For a multilayer perceptron (MLP), 
+Kramár et al. (2024, p. 42)
+ linearize to the next node’s preactivation and recompute the nonlinearity, and the margin graph applies that factored form to a TopK readout, whose recomputed rule is a sort. It names the inactive features one ablation away that 
+Ameisen et al. (2025)
+ propose to consider, at the product count of the graph they build. A network of ReLU blocks is a max-affine spline 
+(
+Balestriero and Baraniuk, 2018
+; 
+Hanin and Rolnick, 2019a
+; 
+Hanin and Rolnick, 2019b
+)
+, while a TopK code jumps across the cells Theorem 
+1
+ names.
+
+8 
+Limitations
+
+No JumpReLU dictionary was studied. The one public release with adjacent residual layers is built on a model behind an access agreement this study lacks. No transcoder was studied. The largest model studied is pythia-160m. The transport is measured on one cell, between seeds and on its retraining pair, because no public release carries a second seed. Integrated gradients were evaluated on cell F alone. No runtime or memory was measured, and the cost model counts Jacobian-vector products.
+
+9 
+Conclusion
+
+A zero ablation moves the downstream support in most cases on every TopK pair studied, and the margin graph predicts the code and that change. A reader who builds a graph keeps every downstream row and reranks at no added product. A reader who ablates a feature learns from the margin graph which features enter and leave, and audits each predicted membership after the write by the band inside the regime its norm sets. On 4 sampled features per position at three doses that audit accepted no wrong membership at 0.59 to 0.87 of a single feature write’s memberships. On the one triple studied every decoded middle code failed at the third layer while one product through the residual stream carried it. A reader who compares two seeds compares the operator, or the source’s coactive block with the target’s mask widened by its inactive atoms nearest the cutoff, since a masked graph carries each token’s sign pattern into its edges. Which nodes of a circuit across several blocks does a residual stream chain predict at each layer’s code, and do decoded middle codes fail on other triples?
+
+References
+
+Aharon et al. (2006)
+
+Michal Aharon, Michael Elad, and Alfred M. Bruckstein.
+
+On the uniqueness of overcomplete dictionaries, and a practical way to retrieve them.
+
+Linear Algebra and its Applications
+, 416(1):48–67, 2006.
+
+doi: 
+10.1016/j.laa.2005.06.035
+.
+
+Ainsworth et al. (2023)
+
+Samuel K. Ainsworth, Jonathan Hayase, and Siddhartha Srinivasa.
+
+Git re-basin: Merging models modulo permutation symmetries.
+
+In 
+International Conference on Learning Representations
+, 2023.
+
+arXiv:2209.04836.
+
+Ameisen et al. (2025)
+
+Emmanuel Ameisen, Jack Lindsey, Adam Pearce, Wes Gurnee, Nicholas L. Turner, Brian Chen, Craig Citro, David Abrahams, Shan Carter, Basil Hosmer, Jonathan Marcus, Michael Sklar, Adly Templeton, Trenton Bricken, Callum McDougall, Hoagy Cunningham, Thomas Henighan, Adam Jermyn, Andy Jones, Andrew Persic, Zhenyi Qi, T. Ben Thompson, Sam Zimmerman, Kelley Rivoire, Thomas Conerly, Chris Olah, and Joshua Batson.
+
+Circuit tracing: Revealing computational graphs in language models.
+
+Transformer Circuits Thread, 2025.
+
+URL 
+https://transformer-circuits.pub/2025/attribution-graphs/methods.html
+.
+
+Balagansky et al. (2025)
+
+Nikita Balagansky, Ian Maksimov, and Daniil Gavrilov.
+
+Mechanistic permutability: Match features across layers.
+
+In 
+International Conference on Learning Representations
+, 2025.
+
+arXiv:2410.07656.
+
+Balestriero and Baraniuk (2018)
+
+Randall Balestriero and Richard G. Baraniuk.
+
+A spline theory of deep learning.
+
+In 
+International Conference on Machine Learning
+, pages 374–383, 2018.
+
+Bhaskar et al. (2024)
+
+Adithya Bhaskar, Alexander Wettig, Dan Friedman, and Danqi Chen.
+
+Finding transformer circuits with edge pruning.
+
+In 
+Advances in Neural Information Processing Systems
+, 2024.
+
+arXiv:2406.16778.
+
+Blondel et al. (2018)
+
+Mathieu Blondel, Vivien Seguy, and Antoine Rolet.
+
+Smooth and sparse optimal transport.
+
+In 
+International Conference on Artificial Intelligence and Statistics
+, 2018.
+
+arXiv:1710.06276.
+
+Bricken et al. (2023)
+
+Trenton Bricken, Adly Templeton, Joshua Batson, Brian Chen, Adam Jermyn, Tom Conerly, Nicholas L Turner, Cem Anil, Carson Denison, Amanda Askell, Robert Lasenby, Yifan Wu, Shauna Kravec, Nicholas Schiefer, Tim Maxwell, Nicholas Joseph, Alex Tamkin, Karina Nguyen, Brayden McLean, Josiah E Burke, Tristan Hume, Shan Carter, Tom Henighan, and Chris Olah.
+
+Towards monosemanticity: Decomposing language models with dictionary learning.
+
+Transformer Circuits Thread, 2023.
+
+URL 
+https://transformer-circuits.pub/2023/monosemantic-features/index.html
+.
+
+Bussmann et al. (2024a)
+
+Bart Bussmann, Patrick Leask, and Neel Nanda.
+
+BatchTopK sparse autoencoders, 2024a.
+
+Bussmann et al. (2024b)
+
+Bart Bussmann, Michael Pearce, Patrick Leask, Joseph Bloom, Lee Sharkey, and Neel Nanda.
+
+Showing SAE latents are not atomic using meta-SAEs.
+
+AI Alignment Forum, 2024b.
+
+URL 
+https://www.lesswrong.com/posts/TMAmHh4DdMr4nCSr5
+.
+
+Candes and Tao (2005)
+
+E.J. Candes and T. Tao.
+
+Decoding by linear programming.
+
+IEEE Transactions on Information Theory
+, 51(12):4203–4215, 2005.
+
+doi: 
+10.1109/TIT.2005.858979
+.
+
+Candès (2008)
+
+Emmanuel J. Candès.
+
+The restricted isometry property and its implications for compressed sensing.
+
+Comptes Rendus. Mathématique
+, 346(9-10):589–592, 2008.
+
+doi: 
+10.1016/j.crma.2008.03.014
+.
+
+Cao et al. (2026)
+
+Tue M. Cao, Nguyen Do, and My T. Thai.
+
+Semantic optimal transport for sparse autoencoder feature matching and circuit compression, 2026.
+
+Chalnev et al. (2024)
+
+Sviatoslav Chalnev, Matthew Siu, and Arthur Conmy.
+
+Improving steering vectors by targeting sparse autoencoder features, 2024.
+
+Chanin et al. (2025)
+
+David Chanin, James Wilken-Smith, Tomáš Dulka, Hardik Bhatnagar, Satvik Golechha, and Joseph Bloom.
+
+A is for absorption: Studying feature splitting and absorption in sparse autoencoders.
+
+In 
+Advances in Neural Information Processing Systems
+, 2025.
+
+arXiv:2409.14507.
+
+Chen et al. (2025)
+
+Alan Chen, Jack Merullo, Alessandro Stolfo, and Ellie Pavlick.
+
+Transferring linear features across language models with model stitching.
+
+In 
+Advances in Neural Information Processing Systems
+, 2025.
+
+arXiv:2506.06609.
+
+Conmy et al. (2023)
+
+Arthur Conmy, Augustine N. Mavor-Parker, Aengus Lynch, Stefan Heimersheim, and Adrià Garriga-Alonso.
+
+Towards automated circuit discovery for mechanistic interpretability.
+
+In 
+Advances in Neural Information Processing Systems
+, 2023.
+
+arXiv:2304.14997.
+
+Cuturi et al. (2023)
+
+Marco Cuturi, Michal Klein, and Pierre Ablin.
+
+Monge, bregman and occam: Interpretable optimal transport in high-dimensions with feature-sparse maps.
+
+In 
+International Conference on Machine Learning
+, 2023.
+
+arXiv:2302.04065.
+
+Donoho and Elad (2003)
+
+David L. Donoho and Michael Elad.
+
+Optimally sparse representation in general (nonorthogonal) dictionaries via 
+ minimization.
+
+Proceedings of the National Academy of Sciences
+, 100(5):2197–2202, 2003.
+
+doi: 
+10.1073/pnas.0437847100
+.
+
+Donoho et al. (2006)
+
+D.L. Donoho, M. Elad, and V.N. Temlyakov.
+
+Stable recovery of sparse overcomplete representations in the presence of noise.
+
+IEEE Transactions on Information Theory
+, 52(1):6–18, 2006.
+
+doi: 
+10.1109/TIT.2005.860430
+.
+
+Droste et al. (2026)
+
+Hendrik Droste, Christian Medeiros Adriano, Kathrin Korte, and Holger Giese.
+
+Where decoder cosine similarity fails for SAE feature flow discovery, 2026.
+
+Duan (2026)
+
+Evan Duan.
+
+Pre-intervention prediction of sparse autoencoder steering side effects, 2026.
+
+Dunefsky et al. (2024)
+
+Jacob Dunefsky, Philippe Chlenski, and Neel Nanda.
+
+Transcoders find interpretable LLM feature circuits.
+
+In 
+Advances in Neural Information Processing Systems
+, 2024.
+
+arXiv:2406.11944.
+
+EleutherAI (2024a)
+
+EleutherAI.
+
+sae-pythia-160m-32k.
+
+Hugging Face model repository EleutherAI/sae-pythia-160m-32k, 2024a.
+
+URL 
+https://huggingface.co/EleutherAI/sae-pythia-160m-32k
+.
+
+licence mit, last modified 2024-08-05.
+
+EleutherAI (2024b)
+
+EleutherAI.
+
+sae-pythia-70m-32k.
+
+Hugging Face model repository EleutherAI/sae-pythia-70m-32k, 2024b.
+
+URL 
+https://huggingface.co/EleutherAI/sae-pythia-70m-32k
+.
+
+licence mit, last modified 2024-08-05.
+
+EleutherAI (2024c)
+
+EleutherAI.
+
+sae-pythia-70m-deduped-32k.
+
+Hugging Face model repository EleutherAI/sae-pythia-70m-deduped-32k, 2024c.
+
+URL 
+https://huggingface.co/EleutherAI/sae-pythia-70m-deduped-32k
+.
+
+licence none stated on the repository, last modified 2024-08-15.
+
+EleutherAI (2026)
+
+EleutherAI.
+
+sparsify.
+
+GitHub repository EleutherAI/sparsify, licence MIT, 2026.
+
+URL 
+https://github.com/EleutherAI/sparsify
+.
+
+Farnik et al. (2025)
+
+Lucy Farnik, Tim Lawson, Conor Houghton, and Laurence Aitchison.
+
+Jacobian sparse autoencoders: Sparsify computations, not just activations.
+
+In 
+International Conference on Machine Learning
+, 2025.
+
+arXiv:2502.18147.
+
+Gao et al. (2025)
+
+Leo Gao, Tom Dupre la Tour, Henk Tillman, Gabriel Goh, Rajan Troll, Alec Radford, Ilya Sutskever, Jan Leike, and Jeffrey Wu.
+
+Scaling and evaluating sparse autoencoders.
+
+In 
+International Conference on Learning Representations
+, 2025.
+
+arXiv:2406.04093.
+
+Ge et al. (2024)
+
+Xuyang Ge, Fukang Zhu, Wentao Shu, Junxuan Wang, Zhengfu He, and Xipeng Qiu.
+
+Automatically identifying local and global circuits with linear computation graphs, 2024.
+
+Geiger et al. (2025)
+
+Atticus Geiger, Duligur Ibeling, Amir Zur, Maheep Chaudhary, Sonakshi Chauhan, Jing Huang, Aryaman Arora, Zhengxuan Wu, Noah Goodman, Christopher Potts, and Thomas Icard.
+
+Causal abstraction: A theoretical foundation for mechanistic interpretability.
+
+Journal of Machine Learning Research
+, 26(83), 2025.
+
+URL 
+https://jmlr.org/papers/v26/23-0058.html
+.
+
+Gerasimov et al. (2026)
+
+Gleb Gerasimov, Timofei Rusalev, Nikita Balagansky, Daniil Laptev, Vadim Kurochkin, and Daniil Gavrilov.
+
+Unstable features, reproducible subspaces: Understanding seed dependence in sparse autoencoders, 2026.
+
+Gribonval and Nielsen (2003)
+
+R. Gribonval and M. Nielsen.
+
+Sparse representations in unions of bases.
+
+IEEE Transactions on Information Theory
+, 49(12):3320–3325, 2003.
+
+doi: 
+10.1109/TIT.2003.820031
+.
+
+Hanin and Rolnick (2019a)
+
+Boris Hanin and David Rolnick.
+
+Complexity of linear regions in deep networks.
+
+In 
+International Conference on Machine Learning
+, pages 2596–2604, 2019a.
+
+arXiv:1901.09021.
+
+Hanin and Rolnick (2019b)
+
+Boris Hanin and David Rolnick.
+
+Deep ReLU networks have surprisingly few activation patterns.
+
+In 
+Advances in Neural Information Processing Systems
+, volume 32, 2019b.
+
+arXiv:1906.00904.
+
+Hanna et al. (2024)
+
+Michael Hanna, Sandro Pezzelle, and Yonatan Belinkov.
+
+Have faith in faithfulness: Going beyond circuit overlap when finding model mechanisms.
+
+In 
+Conference on Language Modeling
+, 2024.
+
+arXiv:2403.17806.
+
+Karvonen et al. (2025)
+
+Adam Karvonen, Can Rager, Johnny Lin, Curt Tigges, Joseph Isaac Bloom, David Chanin, Yeu-Tong Lau, Eoin Farrell, Callum Stuart McDougall, Kola Ayonrinde, Demian Till, Matthew Wearden, Arthur Conmy, Samuel Marks, and Neel Nanda.
+
+SAEBench: A comprehensive benchmark for sparse autoencoders in language model interpretability.
+
+In 
+International Conference on Machine Learning
+, 2025.
+
+arXiv:2503.09532.
+
+Kramár et al. (2024)
+
+János Kramár, Tom Lieberum, Rohin Shah, and Neel Nanda.
+
+Atp*: An efficient and scalable method for localizing LLM behaviour to components, 2024.
+
+Leask et al. (2025)
+
+Patrick Leask, Bart Bussmann, Michael Pearce, Joseph Bloom, Curt Tigges, Noura Al Moubayed, Lee Sharkey, and Neel Nanda.
+
+Sparse autoencoders do not find canonical units of analysis.
+
+In 
+International Conference on Learning Representations
+, 2025.
+
+arXiv:2502.04878.
+
+Li et al. (2016)
+
+Yixuan Li, Jason Yosinski, Jeff Clune, Hod Lipson, and John Hopcroft.
+
+Convergent learning: Do different neural networks learn the same representations?
+
+In 
+International Conference on Learning Representations
+, 2016.
+
+arXiv:1511.07543.
+
+Lieberum et al. (2024)
+
+Tom Lieberum, Senthooran Rajamanoharan, Arthur Conmy, Lewis Smith, Nicolas Sonnerat, Vikrant Varma, János Kramár, Anca Dragan, Rohin Shah, and Neel Nanda.
+
+Gemma scope: Open sparse autoencoders everywhere all at once on Gemma 2.
+
+In 
+Proceedings of the 7th BlackboxNLP Workshop: Analyzing and Interpreting Neural Networks for NLP
+, pages 278–300. Association for Computational Linguistics, 2024.
+
+doi: 
+10.18653/v1/2024.blackboxnlp-1.19
+.
+
+arXiv:2408.05147.
+
+Lindsey et al. (2024)
+
+Jack Lindsey, Adly Templeton, Jonathan Marcus, Thomas Conerly, Joshua Batson, and Christopher Olah.
+
+Sparse crosscoders for cross-layer features and model diffing.
+
+Transformer Circuits Thread, 2024.
+
+URL 
+https://transformer-circuits.pub/2024/crosscoders/index.html
+.
+
+Lindsey et al. (2025)
+
+Jack Lindsey, Wes Gurnee, Emmanuel Ameisen, Brian Chen, Adam Pearce, Nicholas L. Turner, Craig Citro, David Abrahams, Shan Carter, Basil Hosmer, Jonathan Marcus, Michael Sklar, Adly Templeton, Trenton Bricken, Callum McDougall, Hoagy Cunningham, Thomas Henighan, Adam Jermyn, Andy Jones, Andrew Persic, Zhenyi Qi, T. Ben Thompson, Sam Zimmerman, Kelley Rivoire, Thomas Conerly, Chris Olah, and Joshua Batson.
+
+On the biology of a large language model.
+
+Transformer Circuits Thread, 2025.
+
+URL 
+https://transformer-circuits.pub/2025/attribution-graphs/biology.html
+.
+
+Liu et al. (2023)
+
+Tianlin Liu, Joan Puigcerver, and Mathieu Blondel.
+
+Sparsity-constrained optimal transport.
+
+In 
+International Conference on Learning Representations
+, 2023.
+
+arXiv:2209.15466.
+
+Marks et al. (2024)
+
+Samuel Marks, Adam Karvonen, and Aaron Mueller.
+
+dictionary_learning.
+
+GitHub repository saprmarks/dictionary_learning, licence MIT, 2024.
+
+URL 
+https://github.com/saprmarks/dictionary_learning
+.
+
+Marks et al. (2025)
+
+Samuel Marks, Can Rager, Eric J Michaud, Yonatan Belinkov, David Bau, and Aaron Mueller.
+
+Sparse feature circuits: Discovering and editing interpretable causal graphs in language models.
+
+In 
+International Conference on Learning Representations
+, 2025.
+
+arXiv:2403.19647.
+
+Mueller et al. (2025)
+
+Aaron Mueller, Atticus Geiger, Sarah Wiegreffe, Dana Arad, Iván Arcuschin, Adam Belfki, Yik Siu Chan, Jaden Fried Fiotto-Kaufman, Tal Haklay, Michael Hanna, Jing Huang, Rohan Gupta, Yaniv Nikankin, Hadas Orgad, Nikhil Prakash, Anja Reusch, Aruna Sankaranarayanan, Shun Shao, Alessandro Stolfo, Martin Tutek, Amir Zur, David Bau, and Yonatan Belinkov.
+
+MIB: A mechanistic interpretability benchmark.
+
+In 
+International Conference on Machine Learning
+, 2025.
+
+arXiv:2504.13151.
+
+Nanda (2023)
+
+Neel Nanda.
+
+Attribution patching: Activation patching at industrial scale.
+
+Blog post, 2023.
+
+URL 
+https://www.neelnanda.io/mechanistic-interpretability/attribution-patching
+.
+
+Nelson et al. (2026)
+
+Walter Nelson, Theofanis Karaletsos, and Francesco Locatello.
+
+Toward identifiable sparse autoencoders.
+
+In 
+International Conference on Machine Learning
+, 2026.
+
+arXiv:2605.31245.
+
+Nguyen et al. (2019)
+
+Thanh Thi Nguyen, Jerome Idier, Charles Soussen, and El-Hadi Djermoune.
+
+Non-negative orthogonal greedy algorithms.
+
+IEEE Transactions on Signal Processing
+, 67(21):5643–5658, 2019.
+
+doi: 
+10.1109/TSP.2019.2943225
+.
+
+Paulo and Belrose (2026)
+
+Gonçalo Paulo and Nora Belrose.
+
+Sparse autoencoders trained on the same data learn different features.
+
+In 
+International Conference on Learning Representations
+, 2026.
+
+arXiv:2501.16615.
+
+Rajamanoharan et al. (2024)
+
+Senthooran Rajamanoharan, Tom Lieberum, Nicolas Sonnerat, Arthur Conmy, Vikrant Varma, János Kramár, and Neel Nanda.
+
+Jumping ahead: Improving reconstruction fidelity with JumpReLU sparse autoencoders, 2024.
+
+Rubinstein et al. (2010)
+
+R. Rubinstein, M. Zibulevsky, and M. Elad.
+
+Double sparsity: Learning sparse dictionaries for sparse signal approximation.
+
+IEEE Transactions on Signal Processing
+, 58(3):1553–1564, 2010.
+
+doi: 
+10.1109/TSP.2009.2036477
+.
+
+saprmarks (2024)
+
+saprmarks.
+
+pythia-70m-deduped-saes.
+
+Hugging Face model repository saprmarks/pythia-70m-deduped-saes, 2024.
+
+URL 
+https://huggingface.co/saprmarks/pythia-70m-deduped-saes
+.
+
+licence mit, last modified 2024-07-29.
+
+Singh and Jaggi (2020)
+
+Sidak Pal Singh and Martin Jaggi.
+
+Model fusion via optimal transport.
+
+In 
+Advances in Neural Information Processing Systems
+, 2020.
+
+arXiv:1910.05653.
+
+Song et al. (2026)
+
+Xiangchen Song, Aashiq Muhamed, Yujia Zheng, Lingjing Kong, Zeyu Tang, Mona T. Diab, Virginia Smith, and Kun Zhang.
+
+Mechanistic interpretability should prioritize feature consistency in sparse autoencoders.
+
+In Maria Liakata, Viviane P. Moreira, Jiajun Zhang, and David Jurgens, editors, 
+Proceedings of the 64th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)
+, pages 2172–2210, San Diego, California, United States, July 2026. Association for Computational Linguistics.
+
+ISBN 979-8-89176-390-6.
+
+doi: 
+10.18653/v1/2026.acl-long.99
+.
+
+URL 
+https://aclanthology.org/2026.acl-long.99/
+.
+
+Sundararajan et al. (2017)
+
+Mukund Sundararajan, Ankur Taly, and Qiqi Yan.
+
+Axiomatic attribution for deep networks.
+
+In 
+International Conference on Machine Learning
+, pages 3319–3328, 2017.
+
+arXiv:1703.01365.
+
+Sweeney (2026)
+
+John Sweeney.
+
+Signed-permutation coordinate transport for RMSNorm transformers, 2026.
+
+Syed et al. (2024)
+
+Aaquib Syed, Can Rager, and Arthur Conmy.
+
+Attribution patching outperforms automated circuit discovery.
+
+In 
+Proceedings of the 7th BlackboxNLP Workshop: Analyzing and Interpreting Neural Networks for NLP
+, pages 407–416. Association for Computational Linguistics, 2024.
+
+doi: 
+10.18653/v1/2024.blackboxnlp-1.25
+.
+
+arXiv:2310.10348.
+
+Templeton et al. (2024)
+
+Adly Templeton, Tom Conerly, Jonathan Marcus, Jack Lindsey, Trenton Bricken, Brian Chen, Adam Pearce, Craig Citro, Emmanuel Ameisen, Andy Jones, Hoagy Cunningham, Nicholas L Turner, Callum McDougall, Monte MacDiarmid, Alex Tamkin, Esin Durmus, Tristan Hume, Francesco Mosconi, C. Daniel Freeman, Theodore R. Sumers, Edward Rees, Joshua Batson, Adam Jermyn, Shan Carter, Chris Olah, and Tom Henighan.
+
+Scaling monosemanticity: Extracting interpretable features from Claude 3 Sonnet.
+
+Transformer Circuits Thread, 2024.
+
+URL 
+https://transformer-circuits.pub/2024/scaling-monosemanticity/index.html
+.
+
+Thasarathan et al. (2025)
+
+Harrish Thasarathan, Julian Forsyth, Thomas Fel, Matthew Kowal, and Konstantinos G. Derpanis.
+
+Universal sparse autoencoders: Interpretable cross-model concept alignment.
+
+In 
+International Conference on Machine Learning
+, 2025.
+
+arXiv:2502.03714.
+
+Tropp (2004)
+
+J.A. Tropp.
+
+Greed is good: Algorithmic results for sparse approximation.
+
+IEEE Transactions on Information Theory
+, 50(10):2231–2242, 2004.
+
+doi: 
+10.1109/TIT.2004.834793
+.
+
+Váradi and Kmetty (2026)
+
+Bendegúz Váradi and Zoltán Kmetty.
+
+Cross-seed explainability using procrustes-conditioned joint end-to-end top-k sparse autoencoders, 2026.
+
+Wang et al. (2025)
+
+Sophie L. Wang, Alex Quach, Nithin Parsan, and John J. Yang.
+
+Enforcing orderedness to improve feature consistency, 2025.
+
+Appendix A 
+Proofs
+
+Every statement below was also checked in double precision on constructed instances from fixed seeds. The checks from seed 9200 confirm Theorem 
+1
+’s exact prediction on affine blocks and the fixed support graph’s difference on the entering and leaving coordinates. They also confirm the code’s linearity between rank changes and Theorem 
+2
+’s bound and band, with the mask term of Theorem 
+3
+ and the write that flips it, and all 8 pass. The checks from seed 9000 confirm Theorem 
+3
+’s two identities with the atom that breaks the masked one and its decomposition with its bound. They also confirm that a representation’s class, the count of atoms at the first step that meets the tolerance as Appendix 
+C
+ sorts it, depends on the tolerance, and all 6 pass. The checks from seed 9500 confirm the single swap bound of Theorem 
+4
+ on affine blocks, the growth of the ratio across tokens whose gap at the cutoff shrinks, the residual’s absorption of the excess, the residual chain’s identity, Proposition 
+2
+’s conditions and the band’s remainder, and all 12 pass. The checks from seed 9700 confirm the set where the graphs differ, the entering set’s share, the band at a cutoff at or below zero, the clipped margin, the entrant’s jump against the write’s reach, the tie and the chain identity on preactivations, and all 12 pass. The checks of Theorem 
+4
+ as stated here run from seed 9800 on residual streams of width 24, dictionaries of width 60 at a TopK of 5 and instances built by hand, at a relative tolerance of 
+, and all 6 pass. They confirm both bounds on writes through a nonlinear block, the affine form and the floor on a swapping write’s reach. With coincident decoder columns the ratio stays at one half, and with a cutoff that shrinks with the gap it stays at the square root of five over two. At one token with a fixed cutoff and gap, no write whose reach is under half the gap swaps.
+
+Throughout, 
+ is the upstream activation at the token, 
+ the write, 
+ the downstream activation and 
+ the downstream preactivations, which are affine in the downstream activation. The exact preactivations after the write are 
+ and the predicted ones are 
+, with 
+. The live support before the write is 
+, the exact support after it is 
+ and the predicted support is 
+. A strict gap is assumed throughout, that no two coordinates of a preactivation vector a statement uses are equal, none is zero and none equals its feature’s threshold under a JumpReLU rule.
+
+This appendix proves three further statements.
+
+Theorem 4
+ 
+(the readout overshoot and the residual chain)
+.
+
+Write 
+ for the block’s image of the write, 
+ for the write’s exact reach, the largest absolute change of a downstream preactivation, and 
+ for the largest downstream decoder column norm. Assume that the token carries at least 
+ positive preactivations before and after the write, and that the write swaps 
+ pairs, the entrants 
+ entering the live support and the leavers 
+ leaving it. Then the entering and leaving part of the decoded code change and the whole decoded change satisfy
+
+and the ratio of each to 
+ is at least the same right-hand side over 
+. On a block affine along the write, 
+ and 
+. Where 
+ and the gap 
+ at the cutoff is positive, a write whose reach is under 
+ leaves the support unchanged. The reconstruction residual’s change satisfies 
+. Now let the write cross two blocks with Jacobians 
+ and 
+, the middle dictionary’s decoder 
+ and the third layer’s encoder 
+, and assume the first block is affine along the write and the second along the middle change 
+ it induces. Then 
+ are the exact third layer preactivations, and the residual chain’s code under the third layer’s rule is the exact code. A chain that carries a decoded middle code change 
+ through the second block forms third layer preactivations that differ from the residual chain’s by 
+, which for the exact middle code is the second block’s image of the middle reconstruction residual’s change.
+
+Proposition 1
+ 
+(unique and stable maps)
+.
+
+Let 
+ be an atom of 
+ and 
+ a column of 
+ that represents it with a support of 
+ atoms. If every set of at most 
+ columns of 
+ is linearly independent, which is the case when the spark of 
+ exceeds 
+, then no other representation of 
+ uses at most 
+ atoms, and likewise for each row of 
+ over the rows of 
+. If two representations of one atom 
+ meet a relative residual 
+ on supports 
+ and 
+, they differ by at most 
+, where 
+ is the smallest singular value of the columns of 
+ indexed by 
+.
+
+Proposition 2
+ 
+(the band per feature)
+.
+
+Assume an affine block, and call the size of a feature’s own first order preactivation change its own reach, with the write’s reach 
+ the largest of them. A live feature whose margin exceeds its own reach plus the largest reach among the inactive features keeps its membership, and an inactive feature the size of whose negative margin exceeds its own reach plus the largest reach among the live features stays out. A live feature whose own move is under its margin leaves only where an inactive partner’s move and its own together reach its margin and the size of the partner’s. The decoded first order change of a live feature that keeps its membership is the rank one operator 
+ applied to the activation change.
+
+Proof of Theorem 
+1
+.
+
+On each cell of the partition cut by the hyperplanes 
+ and 
+ the order of the preactivations and their signs are fixed, so the support is a fixed set 
+ and the code is 
+, which is linear. Each cell is an intersection of halfspaces and so convex. The cells are finitely many, so the code is piecewise linear. Across 
+ a coordinate enters or leaves at the value zero, so the code is continuous there. Across a hyperplane 
+ that separates a member from a nonmember, one coordinate goes from zero to the shared value and the other from that value to zero. The shared value is positive, so the code jumps there. These cells are the activation regions of 
+Hanin and Rolnick [2019b]
+ for one dictionary, and the spline view of 
+Balestriero and Baraniuk [2018]
+ states the partition into cells and the linearity on each for a network of ReLU blocks.
+
+Suppose 
+ for 
+. Then 
+, and since 
+ is affine in the downstream activation, 
+. The margin graph’s prediction is the code of 
+, which is the code of 
+, the exact code, on every coordinate, the entering and leaving ones included. The ranking plays no part in the argument, since the prediction is exact before any ranking is computed.
+
+On a feature 
+ in 
+ the margin graph predicts 
+, and the fixed support graph predicts 
+, since the code equals the preactivation on the live support. On a predicted leaver, in 
+ and not in 
+, the fixed support graph predicts 
+ and the margin graph zero. On a predicted entrant 
+, in 
+ and not in 
+, the fixed support graph predicts zero and the margin graph 
+, which is positive. Everywhere else both predict zero. So the set where the two differ lies inside the entering and the leaving coordinates, it contains every entrant, and it contains a leaver exactly when 
+ is not zero. On an affine segment the exact change on an entrant 
+ is 
+ and the fixed support graph’s change there is zero, so the squared norm of its error is at least the exact response’s energy on the entering set, and dividing by the response’s energy gives the bound on its relative error. The energy on the leaving coordinates enters no such bound, since the fixed support graph predicts a leaver’s change up to its jump.
+
+Where the token carries at least 
+ positive preactivations the cutoff 
+ is positive and every inactive feature lies outside the top 
+. On an affine segment every preactivation moves by at most 
+, so the 
+th largest preactivation after the write is at least 
+. An entrant is among the 
+ largest after the write, so its code rises from zero to at least 
+. A leaver was among the 
+ largest before it, so its code was at least 
+ and drops to zero.
+∎
+
+Proof of Theorem 
+2
+.
+
+Along the segment,
+
+by integrating the derivative along the segment and taking the norm under the integral, which is the mean value form of Taylor’s theorem on one segment. Taking the remainder through the encoder row 
+ by the Cauchy and Schwarz inequality gives 
+.
+
+Take the margins on 
+, whose 
+th and 
+ plus first largest values are 
+ and 
+. Take 
+ in 
+ with 
+. Every 
+ outside 
+ has 
+, because 
+ either lies outside the top 
+ of 
+, where 
+, or lies inside it with 
+. So 
+, and 
+. Then 
+ outranks every feature outside 
+ in 
+ and is positive, at most 
+ features can outrank it, and it lies in 
+.
+
+Take 
+ outside 
+ with 
+. Where 
+, every one of the 
+ largest predicted preactivations is positive, so 
+ contains exactly 
+ features each with 
+, and 
+ for each of them, so 
+ features outrank 
+ in 
+ and 
+ lies outside 
+. Where 
+, the condition becomes 
+, so 
+ and 
+ is not positive, so it lies outside 
+. Where one constant 
+ bounds 
+ for every write, 
+, so every membership the band admits under 
+ it admits under the write’s own constant as well, and the uniform statement follows.
+∎
+
+Proof of Theorem 
+3
+.
+
+If 
+ and 
+, then 
+. Nothing about 
+, the masks or the widths enters, so the identity is true at every token and for any two widths, and it asks nothing of a matching.
+
+The two conditions of the masked identity are 
+ and 
+, so 
+ and 
+. Under both, 
+.
+
+Without the two conditions and under exact representation, 
+. In general the masked difference carries this term beside 
+. Since 
+, the term is the transport carried by the weight of 
+ on the downstream atoms of 
+ that 
+ keeps, plus the transport carried by the weight of 
+ on the upstream atoms of 
+ that 
+ keeps, through 
+’s live downstream atoms. A projector 
+ keeps exactly the atoms that are inactive at the token, and an atom is inactive exactly when its margin is not positive. The term therefore depends on the margins only through their signs.
+
+For the residual, 
+. Taking norms by the triangle inequality and 
+ with its counterpart 
+ gives the bound.
+∎
+
+Proof of Theorem 
+4
+.
+
+Since 
+ is affine in the downstream activation, 
+ exactly on any block, so 
+. Every order statistic of the preactivations moves by at most 
+. At least 
+ coordinates of 
+ lie at or above its 
+th largest value 
+ and each moves by at most 
+, so 
+. At least 
+ coordinates lie at or below 
+ and end at or below 
+, so 
+.
+
+Under the assumption both supports contain 
+ features, so as many leave as enter. An entrant 
+ was outside the top 
+, so 
+, and it is inside after the write, so 
+ and 
+. A leaver 
+ had 
+ and ends with 
+, so 
+. The entrant’s code rises from zero to 
+, which is positive, the leaver’s drops by 
+, and each of the 
+ stable members changes by at most 
+, so
+
+whose first three terms are 
+. The second and third terms have norm at most 
+ together and the fourth at most 
+, and the triangle inequality gives both bounds. A swap needs 
+, so 
+, and dividing gives the ratios. On a block affine along the write, 
+ and 
+.
+
+Let 
+. Every member of 
+ ends at or above 
+, which is positive and above 
+, and every other feature ends at or below 
+. So the 
+ largest preactivations after the write are the members of 
+, all positive, and 
+. Since 
+ is the change of the reconstruction residual, 
+.
+
+Across two blocks the first block’s affinity along the write gives the middle change 
+ exactly, and the second block’s affinity along 
+ gives the third layer’s activation change 
+. The third layer preactivations are therefore 
+ exactly, which is what one product through both blocks forms, and the code of those preactivations under the third layer’s rule is the exact code by the argument of Theorem 
+1
+. A chain that carries 
+ forms 
+, which differs from the residual chain’s 
+ by 
+. For the exact middle code, 
+ is the change of the middle reconstruction residual. The identity is on the third layer’s preactivations, and the third layer’s rule applied to the two vectors need not differ by that vector, which is why the chains are compared at the third layer’s code.
+∎
+
+Proof of Proposition 
+1
+.
+
+If 
+ for two representations of 
+ on supports of at most 
+ atoms each, then 
+ with 
+ supported on at most 
+ columns, which are linearly independent, so 
+. That is the uniqueness theorem of 
+Donoho and Elad [2003]
+ and 
+Gribonval and Nielsen [2003]
+ applied column by column, and its restricted isometry form is that of 
+Candes and Tao [2005]
+. The same argument on the rows of 
+ gives each row of 
+. For stability, 
+. Since 
+ is supported on 
+, 
+. The classical forms of the same bound are those of 
+Donoho et al. [2006]
+ under coherence and 
+Candès [2008]
+ under a restricted isometry.
+∎
+
+Proof of Proposition 
+2
+.
+
+On an affine block the first order change of each preactivation is its exact change, so a feature’s own reach is the size of its move. The argument of Theorem 
+2
+, with each feature’s own reach in place of its error bound, then gives the first two conclusions. Take a live feature 
+ whose own move is under its margin, 
+. Then 
+, so 
+ is positive after the write, and if it leaves it leaves by rank, which needs 
+ features above it in 
+ and so an inactive feature 
+ with 
+. Then 
+, the margin of 
+, because an inactive 
+ has 
+, and by the same inequality taken from the other side 
+, the size of 
+’s margin, since a live 
+ has 
+. A live feature whose own move is not under its margin can leave with no partner, by dropping to zero. A live feature that keeps its membership changes by 
+, so its decoded change is 
+, the rank one operator 
+ applied to the activation change.
+∎
+
+Appendix B 
+Dictionaries and measurements
+
+Each public dictionary is loaded from its repository, on the model its card names, and under the arithmetic of the library that trained it, which subtracts the decoder bias before the encoder and adds it after the decoder 
+[
+EleutherAI, 2026
+, 
+Marks et al., 2024
+]
+. Table 
+ gives each dictionary’s repository, model, layers, rule, budget and licence. The EleutherAI releases on pythia-70m and pythia-160m state a budget of 8.2 billion tokens of the Pile at a context of 2,049, and the deduplicated TopK release states none. The ReLU release’s library states 2 billion tokens, and its configuration states 120,000 steps at 16,384 activations per batch and a context of 128, with an 
+ penalty of 0.1.
+
+The experiments use the validation file val.jsonl.zst of the corpus repository monology/pile-uncopyrighted. Its card names the subsets removed from the collection, Books3, BookCorpus2, OpenSubtitles, YTSubtitles and OWT2. Each model’s own tokenizer tokenizes the documents in file order. A document under 16 characters is skipped, which is the rule of the packer written for the testbed, and each document is followed by the end of text token. The rule skipped 2 of the 1,666 documents the experiments used, and the skipped documents contained 4 tokens. It skipped 83 of the 144,467 documents the testbed’s training and its held out block used, and those contained 335 tokens. The stream is cut into sequences of 2,048 tokens, and each sequence gives one position, drawn uniformly from the positions after the first up to position 2,047 of the sequence indexed from zero, from seed 20260921. Both rules and the draw were fixed before any experiment. The first 256 sequences are the measurement sample, which chose the transport’s sparsity level and nothing else, and the next 1,024 are the held out sample. The first 512 positions of the held out sample carry every single feature write, at 10 doses for the crossing rate and 3 for the predictors. The transport uses all 1,024.
+
+Cell F was trained for this paper on pythia-70m at the layers of its first public pair, with a TopK rule keeping 32 features and an expansion of 32 over the residual stream’s width of 512, for 199,999,488 activations for each of 8 runs. Its trainer is this paper’s own and follows the recipe of 
+Gao et al. [2025]
+. It streams the same repository’s training split in file order under the packer’s rules and drops the first position of every packed sequence, the one position that attends to nothing but itself, so a sequence of 2,048 tokens yields 2,047 activations. The first 1,048,576 activations form the block held out before training, on which the mean 
+ and the scale 
+ of Section 
+2
+ are computed. Every run shares 
+ and 
+, with 
+ at 12.424 at layer 3 and 13.093 at layer 4, so in the gauge of Section 
+2
+ every code, preactivation and cutoff is 
+ times its stored value and a write’s norm in cutoff units is 0.949 times its stored ratio. The fraction of variance unexplained is measured on the first 65,536 activations of that block at each checkpoint. On a second block of 1,048,576 drawn after training it ranges from 0.1128 to 0.1131 at layer 3 and from 0.1543 to 0.1559 at layer 4 over the 8 runs.
+
+The loss is the squared reconstruction error summed over coordinates and averaged over the batch, plus one over 32 times an auxiliary term. A latent is dead when it fired on none of the last 10,000,000 activations. None counts as dead before that many were trained. The auxiliary term decodes the positive parts of the 256 largest preactivations among the dead latents, or of every dead latent where fewer are dead. It fits them to the residual of the live reconstruction,
+
+where 
+ keeps those preactivations at row 
+, 
+ is the live reconstruction, 
+ is its run’s batch mean, and both sums run over the rows of the 8 runs trained together. The coefficient 
+ is one for all 8 runs, their summed count of dead latents over 8 times the smaller of 256 and the largest count among them, capped at one, and the term is off where no run has a dead latent. Table 
+ gives 
+ and every run’s dead count at the checkpoints where any run had one. The term was off at the first 12 of the 14 checkpoints of each layer, through 50,970,624 activations. At the last two 
+ ranged from 0.25 to 0.44, above 0.01 at 2 of the 14. The coupling it carried reached at most 3 of a run’s 16,384 latents at a checkpoint, the dead ones, through their encoder and decoder weights and the run’s bias 
+. Each run uses Adam at a learning rate of 
+ with PyTorch’s default betas of 0.9 and 0.999 and epsilon of 
+, on batches of 4,096 activations. The model’s activations are taken in bfloat16 and cast to single precision before centring. Every parameter and optimizer state is in single precision, under PyTorch 2.8.0. Each run permutes each chunk of 1,000,000 collected activations by its own generator and consumes it in batches of 4,096. That generator is seeded at the run’s shuffle seed times 1,000,003 plus the layer times 10,007 plus the chunk’s index. The rate warms up linearly over 1,000 steps as the sparsify library does, and it stays constant after the warmup where that library decays 
+[
+EleutherAI, 2026
+]
+. Decoder columns are renormalised to unit norm after every step. The encoder starts from a uniform draw, from a generator seeded at the run’s initialization seed plus 7,919 times the layer, bounded by the inverse square root of the stream’s width and the decoder from its normalised transpose, with both biases at zero. Each run writes a checkpoint at each of 14 targets, one, two and five times each power of ten from 10,000 to 200,000,000 activations, and Appendix 
+D
+ uses them as the 9 budgets the training reached. The six runs of independent seeds take initialization seeds 100 to 105 and shuffle seeds 200 to 205. The retraining pair shares the initialization seed 106 and takes the shuffle seeds 206 and 207. The narrower configuration at width 2,048 with 25 features kept trains on the same stream to 100,941,824 activations, and the small block configurations of both widths fit 12,288 distinct activations over 32,768,000 presentations. The remote computations behind the paper took 31.8 accelerator hours, summed over calls that each ran on one NVIDIA A100 80GB, of which 20.8 trained the testbed, 1.7 measured the public releases, 5.4 fitted and scored the transport and 3.9 measured the readout and its audits.
+
+The block between two layers is the model’s next transformer block, from the residual stream after the upstream layer to the residual stream after the downstream one. Its Jacobian is taken at one position with every earlier position’s keys and values fixed. Every exact response and every Jacobian is taken in double precision, on a model loaded in double precision. Before any experiment uses the operator it is checked four ways on the first 4 positions of the held out sample, with 3 random directions each, from seed 1 for the check at the release’s single precision softmax and seed 2 for the three in double precision. The block function is compared with the model’s own forward pass at the release’s softmax and in double precision, the Jacobian with the Jacobian-vector product through the whole layer, and the Jacobian with a central difference at a step of 
+. Each check’s value is the largest over positions and directions of the Euclidean norm of the difference over the reference’s norm, and Table 
+ gives each check’s tolerance and value on every pair, every value within its tolerance. On cell F two ways to compute one edge were compared as well. The first multiplies the encoder row by the forward mode product of the decoder column, and the second pulls the encoder row back in reverse mode and multiplies it by the column. They differed by 
+ against a tolerance of 
+, since the block computes its softmax in single precision, and no result of this paper uses either.
+
+Table 
+ counts every pair’s writes and crossings per dose, and no write at any dose has a zero exact response. Tables 
+ and 
+ give both graphs’ code errors at each dose for every pair and for every run of cell F, and the margin graph errs less than the fixed support graph in every cell of both tables. Each share of Section 
+3
+ is the mean over the writes that cross at the zero ablation of a per write share. For a write whose code change is 
+, with entering set 
+ and leaving set 
+, the crossing share is 
+ and the entering share is 
+, where 
+ keeps the change on the set 
+.
+
+A bootstrap over the positions, fixed before it ran, bounds the two graphs’ medians and their difference. It draws the 512 positions with replacement 2,000 times from seed 20260924 and keeps every write at a drawn position once per draw, and Table 
+ gives the interval of each statistic. No resample on any pair puts the difference at or under zero.
+
+The support predictors of Section 
+4
+ rank the features inactive before the write. The margin graph is scored at its own count, and its ordering at the true count 
+ of entrants ranks those features by their predicted preactivations. Each predictor below admits the true count of entrants and removes the true count of leavers, which differ under the ReLU rule, whose live count moves. The margin alone lets the inactive features whose margins are smallest in size enter and the live features whose margins are smallest leave. The edge alone lets the inactive features with the largest first order increase enter and the live features with the largest first order decrease leave. The null swaps inactive features drawn uniformly at random into the support and live features out of it, from seed 20260921 plus the run on cell F and from seed 20260921 on the releases. The exact oracle reranks the exact preactivations at the true count, and it gives the entering set at a precision and a recall of 1.00 on every pair. The implementation treats a feature as live where its preactivation is positive and at or above the 
+th largest, and no exact preactivation tied at that boundary on any of the 673,701 interventions the oracle scored. The results for the margin alone, the edge alone and the null list each one’s hits beside its predicted and true counts, so its true positives are the hits and its false positives and false negatives are the two counts less the hits. Table 
+ gives the confusion counts of all six on the entering set, and Figure 
+5
+ draws their precision and recall, where only the exact oracle reaches one and the null stays near zero.
+
+Table 
+ gives the same counts on the leaving set, where the margin graph’s precision runs from 0.89 to 0.93 and its recall from 0.92 to 0.95 on the five public TopK pairs.
+
+Figure 5: 
+Predicting which features enter the support under a write. The precision in panel a and the recall in panel b, higher being better, on the entering set of six predictors on every pair studied, microaveraged over one single feature write on every live upstream feature at each of the 512 positions of the Pile validation file and pooled over the zero ablation and the doses 0.5 and 0.9, with cell F, the testbed on pythia-70m, as the mean over its 8 runs. The exact oracle reranks the exact preactivations after the write at the true count of entrants and is at one. The margin graph is scored at its own count, and its ordering of the predicted preactivations at the true count is drawn beside it. At the true count the margin alone admits the inactive features whose margins are smallest in size, the edge alone those with the largest signed first order change and the null a uniform draw. Each predictor is offset on its pair’s row so no two markers overprint, and pairs are labelled by Pythia model size and layers.
+
+Of the devices of Section 
+4
+, integrated gradients average the first order term at 
+ points along the write, at the fractions 
+ for 
+ from one to 
+, at 5 and 10 products. The softmax device recomputes the attention weights exactly at the written input, through the first layer norm, the query and key projections of the written position with the earlier positions’ keys fixed, the rotary rotation, the scores and the softmax. The exact weights then combine the earlier positions’ fixed values with the position’s own value taken at first order. The MLP, which takes the block’s input through the second layer norm, is taken at first order by the same Jacobian-vector product along the write, and the output projection applies exactly. Each device is evaluated on the fixed support and reranked. The two softmax devices were also evaluated on the five public TopK pairs, over one write on every live upstream feature at each of the 512 positions at the three doses, and Table 
+ gives their errors beside both graphs’ with each device’s products and retained rows.
+
+Appendix C 
+Fitting the maps
+
+Each source vector and each target atom is set to unit norm, so the tolerance is a relative residual and a coefficient is measured against a unit atom. The tolerance of 0.436 is the residual a unit vector leaves on one unit atom at a cosine of 0.9. At each step the solver takes the target atom with the largest positive inner product with the current residual and refits the coefficients on every chosen atom by nonnegative least squares. The refit is an accelerated proximal gradient in double precision. Its step is the inverse of 1.01 times the exact largest eigenvalue of the chosen atoms’ Gram matrix, and its momentum follows 
+ and 
+, restarted at 
+ and 
+ whenever the objective rises. Each step’s refit starts from the previous step’s coefficients, with the new atom at its inner product with the residual floored at zero. The refit checks the optimality violation every 25 iterations and stops once it drops to 
+ or at 1,000 iterations, where the violation is 
+. Here 
+ is the chosen atoms’ Gram matrix and 
+ their inner products with the vector. The entry 
+ is 
+ where 
+ and 
+ where 
+. A vector stops at the first step that meets the tolerance or at the cap of 32 atoms, and sooner where no atom lowers its residual. A vector that never meets the tolerance keeps its closest fit. A coefficient above 
+ counts as an atom, and the count deletes no coefficient.
+
+The fit carries its coefficients back to each dictionary’s rows in the gauge of Section 
+2
+ by their norms. The decoder columns have unit norm in that gauge, so 
+ is the fitted coefficients themselves. A source encoder row is rebuilt as its own norm times the combination of unit target rows, so 
+, with 
+ the coefficients fitted on unit rows.
+
+The level is the cap on 

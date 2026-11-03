@@ -1,0 +1,671 @@
+RecGroupMemory: Feedback-Aware Cohort Memory for E-Commerce Recommendation
+https://arxiv.org/abs/2611.02453
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+RecGroupMemory: Feedback-Aware Cohort Memory for E-Commerce Recommendation
+
+Conference: 
+ACM Web Conference 2027; May 10–14, 2027; Dublin, Ireland
+Review manuscript for the ACM Web Conference 2027
+CCS: 
+Information systems Recommender systems
+CCS: 
+Computing methodologies Intelligent agents
+
+Wendong Zhang
+
+Note: 
+Corresponding author.
+
+Affiliation: 
+
+email: 
+xianzhi.zwd@alibaba-inc.com
+
+, 
+
+Weipeng Huang
+
+Affiliation: 
+
+email: 
+weipeng.hwp@taobao.com
+
+, 
+
+Zhixin Ma
+
+Affiliation: 
+
+email: 
+mazhixin.mzx@taobao.com
+
+, 
+
+Bin Zhang
+
+Affiliation: 
+
+email: 
+tianji.zb@taobao.com
+
+ and 
+
+Dimin Wang
+
+Affiliation: 
+
+email: 
+dimin.wdm@taobao.com
+
+© none
+
+Abstract.
+
+Cohort memory can support LLM-based recommendation planning through group-level user profiles and advice. As outcome feedback becomes available, this guidance may need to be updated while preserving the underlying observations. We present 
+RecGroupMemory
+, a workflow that provides this memory to an orchestration LLM and separates memory construction from feedback-based revision. It uses feedback from the previous day to revise decision guidance, while validation checks keep selected source values unchanged. Online comparisons were conducted among Taobao users with low purchasing power selected by the business team. Relative to a no-memory baseline, memory without feedback and memory with feedback showed increases of 
+ and 
+, respectively, in the number of guided transaction users.
+
+Keywords: 
+e-commerce recommendation, cohort memory, large language models, online feedback, user profiles
+
+1. 
+Introduction
+
+Cohort memory summarizes observations about users with shared characteristics to support an orchestration LLM in planning Web recommendation workflows across requests. Delayed browsing and transaction outcomes may challenge earlier guidance without changing the cohort definition, observation window, or recorded metrics. Updating this memory requires revising recommendation judgments while preserving their observational basis. Unconstrained regeneration risks changing the recorded observations. The same observations can support different planning judgments as later outcomes arrive. Keeping observations separate from guidance makes these revisions explicit: an update changes the interpretation of a cohort record while retaining the evidence against which that interpretation can be checked.
+
+Prior recommendation work models user interests and behavioral histories 
+(
+Zhou et al., 2018
+; 
+Kang and McAuley, 2018
+; 
+Pi et al., 2019
+; 
+Chen et al., 2018
+)
+, uses language models for recommendation 
+(
+Geng et al., 2022
+; 
+Bao et al., 2023
+)
+, and updates profiles or retrieves user-history memory 
+(
+Bang and Song, 2025
+; 
+Wang et al., 2025
+)
+. Agent memory research studies reflection and memory management 
+(
+Park et al., 2023
+; 
+Packer et al., 2023
+; 
+Chhikara et al., 2025
+)
+, as well as feedback-based revision 
+(
+Shinn et al., 2023
+; 
+Madaan et al., 2023
+)
+. We focus on using external recommendation outcomes to revise cohort-level planning guidance.
+
+Recommendation feedback depends on the policy that generated it 
+(
+Swaminathan and Joachims, 2015
+; 
+Schnabel et al., 2016
+)
+. Our workflow provides planning advice rather than learning a ranking policy, and linking feedback to memory through Memory ID does not establish causal attribution.
+
+We propose 
+RecGroupMemory
+ (Figure 
+1
+), with the following contributions:
+
+•
+
+The framework separates memory construction from feedback revision and provides an orchestration LLM with cohort profiles (Profile) and advice (Advise) derived from multiple observation sources.
+
+•
+
+The revision procedure uses outcome feedback linked by Memory ID to update decision content while preserving selected source values. Eligibility checks, validation, and fallback to the original record control the update.
+
+•
+
+Online comparisons among business-selected Taobao users with low purchasing power show increases in guided transaction users of 
+ for memory without feedback and 
+ for memory with feedback, each relative to its corresponding no-memory baseline.
+
+The Evidence Extractor organizes multi-source observations into event, experiment, and context memory in Shallow Memory. The Memory Builder constructs cohort memory and the Memory Refiner revises its guidance; knowledge supports both. Evidence Logs link to Memory Logs by Memory ID and provide outcomes to Memory Refiner. Refined Cohort Memory is published to Shallow Memory, which retains Profile, Advise, and Evidence. Only Profile and Advise feed the orchestration LLM for workflow planning. Online logs return to Evidence Logs, which also update user signals. Stored memory feeds Memory Refiner for feedback refinement in the next cycle.
+
+Figure 1. 
+RecGroupMemory system overview. Multi-source evidence and online outcomes support nearline synthesis and feedback refinement. Published Profile and Advise guide the orchestration LLM; stored memory supports subsequent updates.
+The Evidence Extractor organizes multi-source observations into event, experiment, and context memory in Shallow Memory. The Memory Builder constructs cohort memory and the Memory Refiner revises its guidance; knowledge supports both. Evidence Logs link to Memory Logs by Memory ID and provide outcomes to Memory Refiner. Refined Cohort Memory is published to Shallow Memory, which retains Profile, Advise, and Evidence. Only Profile and Advise feed the orchestration LLM for workflow planning. Online logs return to Evidence Logs, which also update user signals. Stored memory feeds Memory Refiner for feedback refinement in the next cycle.
+
+2. 
+The RecGroupMemory Framework
+
+The framework separates memory construction, feedback revision, and online planning. The Evidence Extractor organizes observations from multiple sources in Shallow Memory. The Memory Builder combines these observations into a cohort memory record, and the Memory Refiner reassesses its guidance when linked outcome feedback becomes available. The online orchestration LLM uses the published Profile and Advise to plan the recommendation workflow. Feedback revision updates the planning context without scoring items or executing downstream recommendation stages.
+
+Each update operates on a cohort memory record rather than an individual interaction or a model parameter. The record contains observations for a defined user group and time window, along with guidance derived from them. This guidance can be revised while selected source values remain unchanged.
+
+2.1. 
+Memory Inputs and Feedback
+
+The Evidence Extractor extracts observations from multiple sources to form event, experiment, and context memory in Shallow Memory. The Memory Builder combines these observations into cohort memory, and the Memory Refiner revises its guidance using outcome feedback (Figure 
+1
+).
+
+The feedback node reads the current response 
+ from date partition 
+ and left-joins previous-day feedback 
+ by Memory ID. Revision requires exactly one matching feedback row and upstream flags confirming profile validity, baseline matching, and feedback eligibility. Records with no unique match, failed eligibility checks, or invalid source responses retain 
+. Eligibility does not guarantee sufficient evidence for every objective. The prompt considers missing metrics when selecting a direction and recording uncertainty.
+
+For Memory ID 
+ and metric 
+, upstream feedback is 
+, where 
+ is computed over all traffic with the same profile in the platform’s first-guess recommendation feed. This observational feedback covers activity, browsing, item-detail views, and transactions. The prompt uses this signed relative change directly: zero indicates no observed change, whereas a missing value indicates absent evidence and must not be treated as neutral or positive feedback.
+
+For an eligible record, a historical profile 
+ retrieved from Shallow Memory provides optional context. Retrieval checks the cohort and any available version metadata; 
+ need not come from the immediately preceding partition. Revision can proceed without history if retrieval fails. Budgeted knowledge retrieval supplies terminology and business context. The prompt uses history to compare earlier advice and changes over time, but does not allow historical measurements to replace current observations or override new feedback. 
+ remains the revision baseline.
+
+These inputs have distinct roles: 
+ identifies what is being revised, 
+ supplies outcome evidence, and 
+ supplies optional historical context. Available history cannot compensate for missing or ambiguous feedback matching. This separation prevents the availability of retrieval from being confused with eligibility for revision.
+
+2.2. 
+Constrained Decision Revision
+
+Figure 
+2
+ shows how the Memory Refiner revises decision content while validation preserves selected source values. Seven values must match 
+: schema version, cohort, recommender version, memory scope, segment definition, observation window, and aggregated metrics. Profile and Advise must remain nonempty strings. The prompt permits changes to their content, structured advice, profile confidence, uncertainties, and change metadata. The validator checks selected values and required structure, rather than enforcing a complete whitelist of editable JSON fields. The fixed values identify the cohort, observation window, and measured behavior to which the advice applies. Preserving them prevents an apparent improvement in the narrative from being obtained by changing the population or measurements. Editable decision content instead describes how those observations should inform subsequent planning.
+
+Profile summarizes the cohort’s current funnel performance and what the feedback suggests about the existing strategy. Advise specifies adjustments for particular objectives, their rationale, and rollback conditions. The prompt records missing metrics and data-quality concerns in uncertainties and summarizes changes from 
+ in change metadata. Confidence and uncertainty qualify the interpretation. The conversion-prioritized prompt requests a concise profile and ordered advice, with final discrete strengths stored in structured advice.
+
+Advice strengths are integers in 
+ for four objectives: click-through rate (CTR), item-page views (IPV), conversion rate (CVR), and gross merchandise value (GMV). The intended update is
+
+(1)
+
+where 
+ is taken from 
+, or set to zero for legacy records without structured advice. The action 
+revert to previous
+ keeps the strength in 
+ unchanged rather than restoring 
+.
+
+The candidate stores the final strength 
+, not the increment 
+. These values express advice strength, not calibrated probabilities or ranking-score multipliers. Clipping can leave the stored strength unchanged at a bound, so the rationale helps distinguish the requested adjustment from its numerical result.
+
+Objective priorities are configurable. The conversion-prioritized prompt emphasizes CVR and suppresses GMV adjustment; the browsing-prioritized prompt emphasizes IPV with transaction safeguards. Validation checks advice structure, integer type, and range; only the browsing configuration also checks direction-to-strength consistency. Conservative choices and most semantic constraints depend on the prompt. Equation 
+1
+ therefore describes the intended update, not a guarantee enforced across all configurations.
+
+The conversion-prioritized prompt permits CVR strengthening only when the relative changes in both transaction UV and order count are available and strictly positive. Positive intermediate browsing feedback cannot substitute for either outcome. If either relative change is missing or non-positive, the prompt calls for conservative conversion advice. It separates assessment of the previous strategy from selection of the next adjustment: retaining the current advice under insufficient evidence does not imply that the strategy succeeded.
+
+For example, positive browsing feedback accompanied by missing transaction UV cannot satisfy the conversion-strengthening condition. The record can remain eligible for revision while that particular adjustment lacks support. The resulting Profile can describe the observed browsing response, and Advise can retain a conservative conversion position while recording the missing outcome in uncertainties.
+
+Figure 2. 
+Feedback-aware revision with at most one repair and original-response fallback. Fixed values are checked against 
+. Direction-to-strength checks depend on configuration; semantic policies remain prompt-based.
+Three outlined stages on a white background show input alignment, decision revision, and validation with writing. Current memory C_T and previous-day feedback F_(T-1) are left-joined by Memory ID and checked for eligibility and source validity. Passing records enter Memory Refiner, supported by optional historical memory H_T from Shallow Memory, knowledge, and prompt policies. Candidate U_T enters validation; an invalid candidate permits one repair and recheck. A valid candidate is accepted. Ineligible or invalid-source records, still-invalid candidates, and handled model failures retain C_T. Accepted and retained responses are written to database partition T with source evidence preserved. Direction-to-strength checks depend on configuration; semantic policies remain prompt-based.
+
+2.3. 
+Validation and Workflow Integration
+
+Let 
+ denote the generated candidate after at most one repair attempt, 
+ the output response, and 
+ indicate that the record is eligible and its source response is valid. For handled record-level outcomes,
+
+(2)
+
+where 
+ checks the fixed source values and required output fields. Eligibility permits revision; acceptance requires the candidate to pass validation.
+
+The Memory Refiner returns a complete JSON response rather than a patch. The feedback node parses this response and checks fixed-value equality, required text fields, and structured advice. An invalid candidate may undergo one repair attempt, which asks the model to restore valid JSON and fixed values while retaining its conclusions and advice text. The repaired candidate is validated again against 
+, but these checks do not establish semantic equivalence. Invalid source records bypass generation, and handled model or validation failures retain the original response.
+
+An accepted update replaces the response and model metadata while retaining source evidence columns. The feedback node writes records to database partition 
+; publication to Shallow Memory occurs in a separate stage. The store retains Profile, Advise, and Evidence, but only Profile and Advise enter the orchestration LLM for workflow planning. Stored memory and online evidence support later updates. The revision node does not produce ranking weights. The database stores the revision output, whereas Shallow Memory makes the published record available to later planning and revision. A successful database write and a published memory record are therefore separate workflow outcomes. Figure 
+1
+ shows the publication boundary, while Figure 
+2
+ ends at the database write.
+
+Before processing, source IDs must be nonempty and unique. After writing the records, the job checks that the output and input have the same record count and ID set. Per-record statuses distinguish accepted generation from ineligible input, invalid source, and handled model failures. Acceptance indicates successful validation, not necessarily changed advice or improved outcomes. Fallback preserves record coverage without establishing that the original advice is optimal. Publication failures remain the responsibility of the surrounding pipeline.
+
+3. 
+Online Experiments
+
+3.1. 
+Experimental Setup
+
+Online experiments were conducted among Taobao users with low purchasing power selected by the business team. The no-memory baseline 
+ uses an orchestration LLM to plan the recommendation workflow from request context. Existing components handle retrieval, ranking, and re-ranking.
+
+Experiment E1 compares 
+ with memory 
+, which adds Profile and Advise generated by the Memory Builder to the planning context, without feedback revision. Experiment E2 compares its no-memory baseline with feedback-aware memory 
+, which uses the same memory interface and enables the Memory Refiner to revise these fields using previous-day outcomes. Each experiment reports relative changes against its own no-memory control.
+
+Table 1. 
+Relative changes against each experiment’s no-memory baseline.
+
+Metric
+
+ (E1)
+
+ (E2)
+
+Transaction UV
+
+Orders
+
+PCVR
+
+Exposure UV
+
+Click UV
+
+IPV UV
+
+3.2. 
+Results
+
+Table 
+1
+ shows positive changes in transaction UV, orders, and PCVR for both configurations. Relative to their respective baselines, 
+ and 
+ increase transaction UV by 
+ and 
+, orders by 
+ and 
+, and PCVR by 
+ and 
+, respectively.
+
+These transaction gains coincide with small changes in exposure UV: 
+ for 
+ and 
+ for 
+. For 
+, click UV and IPV UV decline by 
+ and 
+, despite the increases in transaction metrics. For 
+, these browsing metrics rise slightly, by 
+ and 
+. The observed improvements are therefore concentrated in transaction outcomes, while exposure and browsing volumes remain close to baseline.
+
+Although 
+ reports larger transaction-related uplifts, the two configurations are compared with their respective baselines. These results do not directly estimate the incremental benefit of adding feedback to 
+.
+
+4. 
+Discussion and Limitations
+
+Validation covers selected source values and output structure; semantic correctness still depends on the LLM and prompt instructions. Historical retrieval is not tied to a specific date or content hash, so Memory ID alone cannot identify the version previously used online. Fallback operates on individual records, and a failed partition write may still leave partial output.
+
+The experiments evaluate complete workflow configurations on a selected user population. Deployment artifacts corresponding to the experiments are unavailable, limiting attribution to individual revision safeguards. Broader deployment and evaluation of these safeguards require feedback ablations under matched conditions, traces linking served memory to revisions, and runtime measurements. Natural-language memory and small cohorts also require access controls, retention limits, and aggregation safeguards. Evaluation should distinguish record eligibility, validation acceptance, changes in advice, and downstream outcomes. These events answer different questions about coverage, structural reliability, revision behavior, and recommendation performance. Recording them separately would make failures and unchanged advice easier to interpret without treating every accepted response as an effective update.
+
+5. 
+Conclusion
+
+The framework integrates cohort memory construction, feedback revision, and LLM-based recommendation planning. It revises Profile and Advise while preserving selected source values, using validation and fallback to the original record to control updates.
+
+References
+
+Bang and Song (2025)
+
+S. Bang and H. Song
+
+LLM-based user profile management for recommender system
+.
+
+External Links: 
+2502.14541v2
+
+Cited by: 
+§1
+.
+
+Bao 
+et al.
+ (2023)
+
+K. Bao, J. Zhang, Y. Zhang, W. Wang, F. Feng, and X. He
+
+TALLRec: an effective and efficient tuning framework to align large language model with recommendation
+.
+
+In 
+Proceedings of the 17th ACM Conference on Recommender Systems
+,
+
+pp. 1007–1014
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+.
+
+Chen 
+et al.
+ (2018)
+
+X. Chen, H. Xu, Y. Zhang, J. Tang, Y. Cao, Z. Qin, and H. Zha
+
+Sequential recommendation with user memory networks
+.
+
+In 
+Proceedings of the Eleventh ACM International Conference on Web Search and Data Mining
+,
+
+pp. 108–116
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+.
+
+Chhikara 
+et al.
+ (2025)
+
+P. Chhikara, D. Khant, S. Aryan, T. Singh, and D. Yadav
+
+Mem0: building production-ready AI agents with scalable long-term memory
+.
+
+External Links: 
+2504.19413
+
+Cited by: 
+§1
+.
+
+Geng 
+et al.
+ (2022)
+
+S. Geng, S. Liu, Z. Fu, Y. Ge, and Y. Zhang
+
+Recommendation as language processing (RLP): a unified pretrain, personalized prompt & predict paradigm (P5)
+.
+
+In 
+Proceedings of the 16th ACM Conference on Recommender Systems
+,
+
+pp. 299–315
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+.
+
+Kang and McAuley (2018)
+
+W. Kang and J. McAuley
+
+Self-attentive sequential recommendation
+.
+
+In 
+2018 IEEE International Conference on Data Mining
+,
+
+pp. 197–206
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+.
+
+Madaan 
+et al.
+ (2023)
+
+A. Madaan, N. Tandon, P. Gupta, S. Hallinan, L. Gao, S. Wiegreffe, U. Alon, N. Dziri, S. Prabhumoye, Y. Yang, S. Gupta, B. P. Majumder, K. Hermann, S. Welleck, A. Yazdanbakhsh, and P. Clark
+
+Self-refine: iterative refinement with self-feedback
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+Vol. 
+36
+, 
+pp. 46534–46594
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+.
+
+Packer 
+et al.
+ (2023)
+
+C. Packer, S. Wooders, K. Lin, V. Fang, S. G. Patil, I. Stoica, and J. E. Gonzalez
+
+MemGPT: towards LLMs as operating systems
+.
+
+External Links: 
+2310.08560
+
+Cited by: 
+§1
+.
+
+Park 
+et al.
+ (2023)
+
+J. S. Park, J. O’Brien, C. J. Cai, M. R. Morris, P. Liang, and M. S. Bernstein
+
+Generative agents: interactive simulacra of human behavior
+.
+
+In 
+Proceedings of the 36th Annual ACM Symposium on User Interface Software and Technology
+,
+
+pp. 1–22
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+.
+
+Pi 
+et al.
+ (2019)
+
+Q. Pi, W. Bian, G. Zhou, X. Zhu, and K. Gai
+
+Practice on long sequential user behavior modeling for click-through rate prediction
+.
+
+In 
+Proceedings of the 25th ACM SIGKDD International Conference on Knowledge Discovery and Data Mining
+,
+
+pp. 2671–2679
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+.
+
+Schnabel 
+et al.
+ (2016)
+
+T. Schnabel, A. Swaminathan, A. Singh, N. Chandak, and T. Joachims
+
+Recommendations as treatments: debiasing learning and evaluation
+.
+
+In 
+Proceedings of the 33rd International Conference on Machine Learning
+,
+
+Proceedings of Machine Learning Research
+, Vol. 
+48
+, 
+New York, New York, USA
+, 
+pp. 1670–1679
+.
+
+External Links: 
+Link
+
+Cited by: 
+§1
+.
+
+Shinn 
+et al.
+ (2023)
+
+N. Shinn, F. Cassano, A. Gopinath, K. Narasimhan, and S. Yao
+
+Reflexion: language agents with verbal reinforcement learning
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+Vol. 
+36
+, 
+pp. 8634–8652
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+.
+
+Swaminathan and Joachims (2015)
+
+A. Swaminathan and T. Joachims
+
+Counterfactual risk minimization: learning from logged bandit feedback
+.
+
+In 
+Proceedings of the 32nd International Conference on Machine Learning
+,
+
+Proceedings of Machine Learning Research
+, Vol. 
+37
+, 
+Lille, France
+, 
+pp. 814–823
+.
+
+External Links: 
+Link
+
+Cited by: 
+§1
+.
+
+Wang 
+et al.
+ (2025)
+
+C. Wang, Y. Zhang, F. Zhu, J. Zhang, T. Shi, and F. Feng
+
+Leveraging memory retrieval to enhance LLM-based generative recommendation
+.
+
+In 
+Companion Proceedings of the ACM on Web Conference 2025
+,
+
+pp. 1346–1350
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+.
+
+Zhou 
+et al.
+ (2018)
+
+G. Zhou, X. Zhu, C. Song, Y. Fan, H. Zhu, X. Ma, Y. Yan, J. Jin, H. Li, and K. Gai
+
+Deep interest network for click-through rate prediction
+.
+
+In 
+Proceedings of the 24th ACM SIGKDD International Conference on Knowledge Discovery and Data Mining
+,
+
+pp. 1059–1068
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+.
+
