@@ -1,7 +1,7 @@
 # Paper candidates — 2026-11-04 (IST)
 
-Generated 2026-11-04 07:32 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
-Totals: 30 new topic matches · 11 other new cs.IR · 122 seen in earlier runs.
+Generated 2026-11-04 07:56 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Totals: 30 new topic matches · 11 other new cs.IR · 121 seen in earlier runs.
 Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
 
 ## New papers matching your topics (30), highest score first
@@ -310,7 +310,7 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Dataset Recommendation for Heterogeneous and Dynamic Scholarly Graphs via Multimodal Representation Learning — https://arxiv.org/abs/2611.05071
 - Factorized MLLM Embeddings for Composed Image Retrieval — https://arxiv.org/abs/2611.05193
 
-## Already listed on an earlier day, still inside the look-back window (122)
+## Already listed on an earlier day, still inside the look-back window (121)
 - Do GEO Gains Survive the Live Web? Evaluating In-the-Wild Visibility Gains of Generative Engine Optimization via LIVE-GEO — https://arxiv.org/abs/2611.01126 (score 15)
 - Building Weighted PubMed Citation Graphs at Scale: A Pipeline and an Audit of Edge-Similarity Features — https://arxiv.org/abs/2611.01044 (score 14)
 - From Tool State to Scientific Action: Auditing Decision Provenance in Biomedical Research Agents — https://arxiv.org/abs/2611.01527 (score 14)
