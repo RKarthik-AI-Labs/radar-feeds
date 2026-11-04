@@ -1,7 +1,7 @@
-# Paper candidates — 2026-11-03 (IST)
+# Paper candidates — 2026-11-04 (IST)
 
-Generated 2026-11-03 08:29 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
-Totals: 35 new topic matches · 24 other new cs.IR · 60 seen in earlier runs.
+Generated 2026-11-04 01:10 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Totals: 35 new topic matches · 24 other new cs.IR · 28 seen in earlier runs.
 Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
 
 ## New papers matching your topics (35), highest score first
@@ -74,6 +74,15 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 
 > Relevance modeling is fundamental to e-commerce search, determining how well retrieved products satisfy the needs expressed in a user's query. Accurate judgments require interpreting user intent, comparing product attributes, and applying business-specific matching criteria. Current methods based on large language models (LLMs) leverage contextual understanding and reasoning, focusing on incorporating domain-specific context and enhancing reasoning performance. Despite these advances, difficult query-product pairs remain challenging when evidence from different perspectives supports conflicting conclusions. A single reasoning pass may fail to reconcile these conflicts and ensure that decisive evidence guides the final judgment. To address this challenge, we propose Collaborative Adjudication with Debate and Replay Experience (CADRE), a framework for evidence-based adjudication in e-commerce relevance assessment. CADRE organizes three expert agents sharing a frozen backbone to analyze product attributes, user intent, and business rules in separate contexts, while a trainable Verifier assesses their supporting evidence against the applicable matching criteria to determine relevance. Under expert disagreement, a Verifier-guided debate elicits targeted clarification and revision of disputed interpretations before final adjudication. We optimize the Verifier through multi-turn group relative policy optimization and adapt successful-experience replay so that trajectories yielding correct terminal labels can be reused alongside fresh rollouts in subsequent updates. For efficient online serving, we use CADRE as an offline teacher to distill its relevance judgments into a lightweight student model. Offline evaluations and online A/B tests on an e-commerce search advertising platform demonstrate that CADRE improves relevance classification and key business and relevance satisfaction metrics.
 
+### StreamDuo: A Live Commentator and a Research Agent for Unseen Games
+- arXiv 2611.01120 · v1 2026-10-31 00:00 UTC · 
+- Authors: Zixian Gao, Penghao Luo, Xiangcheng Cao, Lixin Xiu et al.
+- Topics: Query fan-out · score 10 · found via HF daily papers
+- Link: https://arxiv.org/abs/2611.01120
+- Full text: not stored: license is arxiv-default, which does not allow redistribution; read it on arXiv
+
+> Streaming video LLMs can now commentate live gameplay, but they are trained and tested on the same games. We study cross-game streaming commentary, in which a model trained on one game commentates games it has never seen, and find that current commentators transfer their timing but not their knowledge of the game world. We propose StreamDuo, which pairs a trainable commentator with a frozen research agent that reads the wiki of the game being played. When the commentator sees something it cannot name, it sends the current frames, and the research agent returns a few wiki entries two seconds later while the stream continues. We train only the commentator, on a single game, in two stages. Information-gain labels teach it to ask only where an answer would help it say what the human caster said, and on-policy self-distillation from a copy of itself that sees the ideal answer teaches it to use noisy answers. Trained on Baldur's Gate 3 and tested on ten unseen games, StreamDuo raises entity recall from 0.082 to 0.116 over Proact-VL trained on the same data, cuts source-game leakage from 9.9% to 1.0%, and achieves the best timing and the highest judged liveliness and overall quality among streaming models.
+
 ### Designing Informative Actions: Action Construction for Long-Horizon Research Agents
 - arXiv 2611.00773v1 · v1 2026-10-31 09:33 UTC · cs.AI
 - Authors: Alkut Arxidin, Shaoning Zeng, Jianhang Zhou, Jianping Gou et al.
@@ -105,7 +114,7 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 ### DR Pixel: Page-Native Deep Research with Vision-Language Models
 - arXiv 2611.03097v1 · v1 2026-11-02 13:13 UTC · cs.CL, cs.CV, cs.IR
 - Authors: Tiansheng Hu, Yichuan Wang, James V. Talwar, Nicholas Tomlin et al.
-- Topics: Query fan-out · score 10 · found via cs.CL, cs.IR
+- Topics: Query fan-out · score 10 · found via HF daily papers, cs.CL, cs.IR
 - Link: https://arxiv.org/abs/2611.03097
 - Full text: data/fulltext/2611.03097.txt
 
@@ -259,7 +268,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Topics: Agents · score 8 · found via cs.HC
 - Link: https://arxiv.org/abs/2611.01891
 - arXiv comment: Preprint, under review
-- Full text: data/fulltext/2611.01891.txt
 
 > Modifying an existing application is difficult when it does not provide programmatic access for that change. Recent advances in computer-use agents (CUAs) enable richer understanding and operation of existing interfaces, while generative UI (GenUI) makes it practical to generate new ones. We examine how these advances expand software modification through a design space of what can be changed and a framework for how modifications can be implemented. We then introduce Interface Quilt, a system that combines CUAs and GenUI to generate interface patches, which are new interfaces displayed over an existing application to modify its presentation, interaction, and capabilities. Through demonstrations across a variety of applications, we show that interface patches support a range of modifications without source code, APIs, or accessibility data.
 
@@ -327,16 +335,8 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 
 > Computer-use agents for scientific software require application-specific expertise. Much of this expertise is documented in human-authored software manuals and web pages. However, turning these resources into executable, reusable skills remains challenging due to mismatches between documented and deployed software versions and differences in scope between documentation coverage and task requirements. We introduce ScienceCUA, a two-stage framework combining resource-to-skill construction with execution-guided skill evolution. First, ScienceCUA identifies tasks supported by the software from its documentation, infers operational trajectories, and generalizes them into reusable Skills. Command catalogs, syntax constraints, and shortcuts are organized separately as References for on-demand lookup. Then, ScienceCUA uses execution feedback to drive skill self-evolution by contrasting successful and failed trajectories for the same task, identifying deficiencies, revising existing skills or adding new ones, and updating the skill library only after repeated validation in real environments. To enable reliable evaluation without benchmark noise or task leakage, we introduce two improved benchmarks. ScienceBoard-Verified provides an audited and corrected basis for measuring task performance, while ScienceBoard-VE separates skill evolution from final testing through disjoint evolution and test tasks and further supports native-agent evaluation. Experiments show that the initial Skills and References improve average task success rate by up to 7.23 percentage points over the base model, while skill self-evolution increases the total gain over the baseline to as much as 17.12 percentage points. ScienceCUA turns software documentation into an evolving set of executable skills and queryable references, offering a practical way for general-purpose agents to use scientific software reliably and at scale.
 
-### IAMRAGBENCH: Benchmarking Authorization Expansions in LLM-Generated AWS IAM Policies under RAG Poisoning
-- arXiv 2611.03431v1 · v1 2026-11-02 16:52 UTC · cs.CR
-- Authors: Hasan Kaplan, Indika Kumara, Willem-Jan van den Heuvel, Damian Andrew Tamburri
-- Topics: RAG (generic), Manipulation · score 8 · found via cs.CR
-- Link: https://arxiv.org/abs/2611.03431
-- arXiv comment: 20 pages, 4 figures, 5 tables
-
-> Large language models (LLMs) using retrieval-augmented generation (RAG) can synthesize Amazon Web Services (AWS) Identity and Access Management (IAM) policies from tasks and operational documents. Attacker-controlled context may induce provider-valid policies that exceed trusted authorization requirements. We present IAMRAGBENCH, a 60-case benchmark spanning scope, conditions, explicit denies, trust, permissions boundaries, and role delegation. It combines deterministic authorization-envelope scoring with case-specific validation, including request-level checks where supported. An attack requires a provider-valid clean policy that satisfies the task and a provider-valid treatment policy that violates the envelope, matches a predeclared goal, preserves an intended request, and newly authorizes a forbidden request. Across five endpoints, included-context exposure produces 49 exact authorization deltas, including 46 goal-matched attacks (46/292; 15.75\%). End-to-end BM25 over 720 documents retrieves the designated poison for all 60 tasks at \(k=5\) but produces 7/294 goal-matched attacks (2.38\%). Presenting the same weakening as a final security architecture exception produces 74/116 attacks in a frozen two-endpoint stress test (63.79\%) and 115/294 in a post hoc all-five extension using the same frozen prompts (39.12\%). In a replay of 194 provider-valid treatment policies that violate task requirements, AWS \texttt{CheckNoNewAccess} reports no new access for four of 168 goal-matched exact attacks. The full pre-deployment rule rejects all 171 exact deltas and routes five unresolved cases to review. These findings support treating IAM copilots as untrusted proposal generators whose outputs require independent authorization checks before deployment.
-
-## More new topic matches, lower score, title only (40)
+## More new topic matches, lower score, title only (41)
+- IAMRAGBENCH: Benchmarking Authorization Expansions in LLM-Generated AWS IAM Policies under RAG Poisoning — https://arxiv.org/abs/2611.03431 (score 8; RAG (generic), Manipulation)
 - WebHarbor: Docking Real Websites for Evolving GUI Agent Environments — https://arxiv.org/abs/2611.03634 (score 8; Agents)
 - PACT: Defending Recommendation against Promotional News Rewriting via Attack-Diverse Score Consistency — https://arxiv.org/abs/2611.00972 (score 7; Brand/product recommendation, Manipulation)
 - Is That Clear? The Impacts of Clarifying Questions on Human-LLM Interaction — https://arxiv.org/abs/2611.01087 (score 7; Citation & source selection, Manipulation)
@@ -404,47 +404,22 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Diverse-Teacher On-Policy Distillation for Generative Recommendation — https://arxiv.org/abs/2611.03272
 - From FAIR to AI-FAIR Metadata-First Infrastructure for AI-Enabled Science — https://arxiv.org/abs/2611.03327
 
-## Already listed on an earlier day, still inside the look-back window (60)
-- Who Owns Digital News, and Who Gets Cited: Measuring Media Concentration Across 77 Countries and Seven AI Systems — https://arxiv.org/abs/2610.40164 (score 13)
+## Already listed on an earlier day, still inside the look-back window (28)
 - Search When Needed, Proceed When Reliable: Metacognitive Reliability Supervision for Efficient Agentic Search — https://arxiv.org/abs/2610.41738 (score 13)
-- KARMA: Training-Free Knowledge-Atomic Harness Evolution for Industrial Advertising Agents — https://arxiv.org/abs/2610.39884 (score 12)
 - DeFT-RAG: Decomposing Multi-Hop Questions into Self-Contained Sub-Questions with Reusable Answers — https://arxiv.org/abs/2610.37826 (score 12)
 - AgentShield: Fortifying Web Applications Against AI Agents and Agentic Browsers — https://arxiv.org/abs/2610.41181 (score 11)
-- Letting AI Formulate the Research Question: Autonomous Research Agents — https://arxiv.org/abs/2610.39620 (score 10)
-- Heterogeneous Co-Evolution Learning for Tool-Efficient Search Agents with Zero Labels — https://arxiv.org/abs/2610.39682 (score 10)
-- rTaste: Do Research Agents Have Taste? Evaluating Early Stage Research Judgment — https://arxiv.org/abs/2610.40488 (score 10)
-- WeFair: Fidelity-Aware Alignment from Human Feedback for Personalized Query Rewriting in Short-Video Search — https://arxiv.org/abs/2610.16927 (score 10)
 - AI evaluators favor job applications written by certain AI models, independent of candidate quality — https://arxiv.org/abs/2610.41866 (score 10)
 - BlindToChange: AI Agents Can Find Changes When Asked But Do They Look When Needed? — https://arxiv.org/abs/2610.41435 (score 9)
-- DynaRev: Benchmarking Web Agents under Dynamic Goal Revision — https://arxiv.org/abs/2610.40133 (score 8)
-- EnvOS: Auditing Computer-Use Agents When the World Moves On : Phenomenon-Based Task Construction, Certification, and Evidence-Based Evaluation — https://arxiv.org/abs/2610.40246 (score 8)
-- Mage-VL-Cowork: A Full Training Recipe to Learn Hybrid Computer Use From Evolved Harnesses — https://arxiv.org/abs/2610.40747 (score 8)
-- Elucidating the Design Space of LM Data Attribution — https://arxiv.org/abs/2610.40655 (score 8)
-- Language Models Show Conformity Bias in RAG: When the Majority Endorses a Poisoned Claim — https://arxiv.org/abs/2610.41012 (score 8)
-- ReplayRCA: Measuring Post-hoc Diagnosis and Live Oversight of Agent Failures by Counterfactual Replay — https://arxiv.org/abs/2610.41025 (score 8)
 - Language Models Show a "Women-Are-Wonderful" Effect in Blame Attribution That is Not Just Leniency — https://arxiv.org/abs/2610.41116 (score 8)
 - ANGLER: Verifier-Grounded Benchmarking with an Adaptive Attacker for Web Agents — https://arxiv.org/abs/2610.41272 (score 8)
 - Cross-Interface Authorization for AI Computer-Use Agents — https://arxiv.org/abs/2610.41397 (score 8)
 - Hybrid Computer Use: A Unified Programmatic, Semantic, and Visual Interface for General Agents — https://arxiv.org/abs/2610.41432 (score 8)
 - Beyond Smart Homes: Characterizing IoT Vulnerabilities Across Sectors, Vendors, and Products — https://arxiv.org/abs/2610.42032 (score 8)
-- Evaluating Conversational Explainability in Healthcare: Comparing the Explainability Assistant and a Traditional XAI Dashboard — https://arxiv.org/abs/2610.39634 (score 7)
-- Decompose, Estimate, Select: Coverage-Aware Context Construction for Long-Form RAG — https://arxiv.org/abs/2610.40314 (score 7)
-- Retrieving from Your Own Mistakes: On-Policy Training of Embedding Models for Multi-Hop Retrieval-Augmented Generation — https://arxiv.org/abs/2610.40409 (score 7)
-- Wizard: Manipulate Any World in Real Time via Agentic Control — https://arxiv.org/abs/2610.40339 (score 6)
-- SEAL: Sealed Queries for Local Sanitization against Indirect Prompt Injection — https://arxiv.org/abs/2610.39758 (score 6)
-- From Teleoperation to Long-Horizon Dexterity: Evaluating Visuomotor Skills and Offline Proxies for Dexterous Manipulation — https://arxiv.org/abs/2610.40828 (score 6)
 - Real Computation or Merely Naming? A Pre-Registered Mechanism Audit of 25 Cognitive-Architecture Modules in an LLM-Based Agent System — https://arxiv.org/abs/2610.41604 (score 6)
 - When Does Test-Time Search Help World Action Models? An Empirical Audit of Candidate Selection and Simulator Integrity — https://arxiv.org/abs/2610.41970 (score 6)
 - SecPO: Principled Adversarial Training for Prompt Injection Security — https://arxiv.org/abs/2610.41998 (score 6)
-- Prevented is Not Protected: What Attack Success Rate Hides about RAG — https://arxiv.org/abs/2610.40742 (score 5)
 - Context as Infrastructure: Knowledge Compilation for Retrieval in Agentic Systems with Harnesses — https://arxiv.org/abs/2610.41172 (score 5)
 - ProSearch: Benchmarking Multi-Constraint Protocol Retrieval in Experimental Science — https://arxiv.org/abs/2610.41396 (score 5)
 - Completeness and Cost of Retrieval Structures for Multi-Tool Requests in LLM Agents — https://arxiv.org/abs/2610.41905 (score 5)
-- Retrieve-then-Disambiguate: Scalable Reviewer Discovery — https://arxiv.org/abs/2610.40768 (score 4)
-- ProdCrawl: A Replayable Test Collection for Focused Crawling — https://arxiv.org/abs/2610.40855 (score 4)
-- WebOverlay: High-Throughput Vision-Only Distillation for Extreme Aspect-Ratio Web Overlay Detection — https://arxiv.org/abs/2610.41037 (score 4)
-- Beyond IPS: Reliable Counterfactual Evaluation in Multi-Stage Ad Systems without Logged Propensities — https://arxiv.org/abs/2610.40112 (score 3)
 - Pix2Evidence: A Multimodal RAG System for Text and Visual Evidence — https://arxiv.org/abs/2610.41335 (score 2)
-- xPRT: Cross-Passage Retrieval Pretraining — https://arxiv.org/abs/2610.40122 (score 1)
-- Glance: The Generator Is Its Own Reranker — https://arxiv.org/abs/2610.40454 (score 1)
 - Hierarchical Dual-Graph Retrieval for Long-form Audio Reasoning — https://arxiv.org/abs/2610.41390 (score 1)
