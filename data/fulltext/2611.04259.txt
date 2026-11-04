@@ -1,0 +1,4242 @@
+ReuseGR: Offline--Online Decoupled Generative Retrieval via Adaptive Prefix Reuse
+https://arxiv.org/abs/2611.04259
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+ReuseGR: Offline–Online Decoupled Generative Retrieval via Adaptive Prefix Reuse
+
+Conference: 
+The ACM Web Conference 2027; 2027; 
+Proceedings of the ACM Web Conference 2027 (WWW ’27)
+CCS: 
+Information systems Recommender systems
+CCS: 
+Information systems Retrieval models and ranking
+
+Xujing Wang
+
+Note: 
+Equal Contribution
+
+Affiliation: 
+Xidian University
+, 
+Xi’an
+, 
+Shaanxi
+, 
+China
+
+email: 
+xjwong@stu.xidian.edu.cn
+
+, 
+
+Yufeng Chen
+
+Note: 
+Project leader
+
+Affiliation: 
+Alibaba International Digital Commerce Group
+, 
+Hangzhou
+, 
+Zhejiang
+, 
+China
+
+email: 
+chenyufeng.cyf@alibaba-inc.com
+
+, 
+
+Boxuan Zhang
+
+Affiliation: 
+Alibaba International Digital Commerce Group
+, 
+Hangzhou
+, 
+Zhejiang
+, 
+China
+
+email: 
+boxuan.zbx@alibaba-inc.com
+
+, 
+
+Chao Wei
+
+Affiliation: 
+Alibaba International Digital Commerce Group
+, 
+Hangzhou
+, 
+Zhejiang
+, 
+China
+
+, 
+
+Cai Xu
+
+Affiliation: 
+Xidian University
+, 
+Xi’an
+, 
+Shaanxi
+, 
+China
+
+email: 
+cxu@xidian.edu.cn
+
+, 
+
+Jie Zhao
+
+Affiliation: 
+Xidian University
+, 
+Xi’an
+, 
+Shaanxi
+, 
+China
+
+, 
+
+Weiru Zhang
+
+Affiliation: 
+Alibaba International Digital Commerce Group
+, 
+Hangzhou
+, 
+Zhejiang
+, 
+China
+
+, 
+
+Wei Zhao
+
+Affiliation: 
+Xidian University
+, 
+Xi’an
+, 
+Shaanxi
+, 
+China
+
+ and 
+
+Ziyu Guan
+
+Note: 
+Corresponding author
+
+Affiliation: 
+Xidian University
+, 
+Xi’an
+, 
+Shaanxi
+, 
+China
+
+email: 
+zyguan@xidian.edu.cn
+
+2027
+
+Abstract.
+
+Larger generative retrieval models can improve retrieval quality, but their decoding cost makes low-latency serving difficult. When different users submit the same query, generating complete Semantic IDs (SIDs) for every request repeats computation, while their interaction histories call for different results. The challenge is to reuse large-model computation across requests while keeping retrieval personalized.
+
+We propose 
+ReuseGR
+, which separates query-level candidate planning from request-level personalized completion. A 7B offline planner generates SID prefix sets shared across requests with the same query. A 0.5B online model uses each request’s history to select prefixes and generate the remaining tokens. ReuseCut chooses a cache depth for each query based on historical coverage, balancing computation reuse and candidate coverage. To strengthen online completion, we transfer 7B suffix-scoring knowledge to 0.5B through path-level knowledge distillation (Path KD). BudgetCut then selects scored branches to improve final top-100 recall under a fixed branch budget. Its selection policy is initialized by on-policy distillation (OPD) and refined through group-relative policy optimization (GRPO).
+
+On an industrial search-advertising dataset with approximately 2M query–item records and 3.38M catalog items, ReuseGR improves query-level HR@100 by 3.83 percentage points and reduces mean online latency by 38.9% relative to an all-online 0.5B baseline when prefixes are prepared. It achieves HR@100 comparable to an all-online 7B baseline with 57.7% lower online latency. A 14-day user-level online A/B test against the 0.5B baseline shows relative gains of 0.93% in click-through rate and 1.05% in revenue per thousand requests.
+
+Keywords: 
+Generative retrieval, Semantic ID, Personalized search, Adaptive prefix caching, Knowledge distillation, Sponsored search
+
+1. 
+Introduction
+
+Search-advertising systems select candidates from million-item catalogs
+for downstream ranking, making candidate quality central to user experience
+and advertising value. Traditional retrieval matches queries
+against indexed item representations 
+(
+Huang et al., 2013
+; 
+Karpukhin et al., 2020
+)
+.
+Generative retrieval learns to predict candidate identifiers directly,
+allowing semantic knowledge in the model to guide candidate
+selection 
+(
+Tay et al., 2022
+; 
+Wang et al., 2022
+)
+.
+Semantic IDs (SIDs) represent items as short token sequences whose prefixes
+group related items 
+(
+Rajput et al., 2023
+)
+. This structure lets a
+generator select candidates through successive token predictions.
+As illustrated in the upper half of Figure 
+1(a)
+, the model
+reads a query and user history, then decodes complete SIDs one token at a time.
+
+(a)
+ 
+Prefix reuse
+
+(b)
+ 
+Efficiency and quality
+
+Figure 1
+. 
+Query-prefix reuse in ReuseGR. (a) Queries reuse different prefix
+lengths (one and three tokens shown, dashed) and use their histories to
+complete suffixes. Cache depths range from zero to three. (b) Complete-SID HR@100 and
+mean online latency on AE-PV (44,225 queries, one A100, batch size 1), with
+cached prefixes available for ReuseGR.
+Left: full online retrieval repeats prefix decoding for requests
+with the same query and different histories. ReuseGR caches one token for
+query q\_A and three for q\_B. Requests for each query share these prefixes
+(dashed outlines) and use their histories for 0.5B suffix completion.
+Right: latency
+and HR at 100 compare 7B and 0.5B end-to-end retrieval with ReuseGR.
+
+Larger generators improve retrieval quality but increase online decoding
+cost. Existing methods address this cost in several ways: distillation
+teaches a smaller decoder or lightweight prediction heads to imitate a
+large teacher, reducing computation per prediction 
+(
+Zhang et al., 2026
+; 
+Guo et al., 2026
+)
+;
+parallel prediction produces SID tokens in the same model call instead
+of waiting for each preceding token, reducing sequential computation 
+(
+Hou et al., 2025
+)
+; speculative decoding lets a small model draft
+candidate sequences for batched verification by a large
+model 
+(
+Lin et al., 2025
+)
+; prompt caching reuses attention states for
+shared input blocks, such as history and item representations, reducing
+repeated context processing 
+(
+Zhao et al., 2026
+)
+.
+These approaches lower the cost of online prediction, while candidate
+SIDs are still generated for each search. Repeated queries offer another
+source of savings: sharing large-model planning across users.
+
+We ask whether part of this planning can be performed offline and reused
+by users who submit the same query. The upper half of
+Figure 
+1(a)
+ makes the opportunity concrete: two histories
+lead to different complete SIDs, yet their shared initial tokens are
+recomputed for both searches. Our idea is to cache query-dependent SID
+prefixes and let the current history guide their completion online.
+Each prefix preserves a subtree with multiple continuations, so the
+online model can generate candidates beyond a precomputed list of
+complete SIDs. This would share expensive planning while keeping final
+candidate selection responsive to the user.
+
+Our click-log analysis examines the feasibility of this idea and the
+choice of prefix length. When predicting the next SID token at matched
+preceding prefixes, query information contributes much more at the first
+two layers than at later layers (Figure 
+3
+). This supports
+sharing coarse candidate structure across users. The suitable sharing
+boundary also varies by query: model-generated prefix sets at
+query-specific depths retain 78.62% of target
+SIDs on average, versus 74.18% at a uniform
+two-token depth under the same prefix-count limit. These are reachable
+target fractions before online completion. A deeper cut saves decoding
+steps but narrows the available subtrees; a shallower cut leaves more
+choices for history-conditioned generation. The design must therefore
+identify reusable prefixes and select how far each query can reuse them.
+
+We implement this design as 
+ReuseGR
+. In the lower half of
+Figure 
+1(a)
+, query 
+ reuses one token and 
+ reuses
+three; users searching for either query share its prefixes while their
+histories guide different suffixes. ReuseCut predicts these depths from
+query text using historical target-coverage labels. A 7B offline planner
+produces the shared prefix sets, and a 0.5B online model completes them
+using the current query and history. To guide the small model’s suffix
+scoring with large-model knowledge, we apply path-level knowledge
+distillation (Path KD) from the 7B teacher. After scoring, branches are
+merged to form the final retrieval results, so branch selection affects
+which relevant SIDs enter the top-100 ranking. We develop BudgetCut to
+learn this selection under a fixed branch budget. On-policy distillation
+(OPD) initializes its policy from marginal recall gains, and group-relative
+policy optimization (GRPO) refines the policy using the recall of complete
+selected branch sets.
+
+On AE-PV, an industrial search-advertising dataset with 3.38M items and
+44,225 Test queries, ReuseGR achieves 85.82% query-level
+HR@100 and 46.05% Recall@100 at
+71.45 ms mean online latency with prepared prefixes.
+It gains 3.83 HR@100 points and reduces latency by 38.9% over an
+all-online 0.5B baseline, with HR@100 comparable to all-online 7B at
+57.7% lower latency (Figure 
+1(b)
+). Matching depths to
+queries improves HR@100 by 3.17 points over permuted assignments with
+the same depth distribution. With actual request histories, completion
+recovers clicked SIDs outside the query-only 7B top-100 list on 5.67%
+of rows. A 14-day user-level online A/B test against 0.5B end-to-end
+retrieval yields relative gains of 0.93% in click-through rate and
+1.05% in revenue per thousand requests.
+
+In summary, our key contributions are threefold:
+
+First, we identify shared SID-prefix structure and
+query-dependent reuse boundaries in click logs, providing an empirical
+basis for sharing large-model candidate planning across users while
+retaining history-conditioned completion.
+
+Second, we develop ReuseGR to connect 7B offline planning with
+0.5B online personalized retrieval through adaptive prefix-depth
+selection, suffix-score distillation, and set-dependent branch admission.
+
+Third, we validate query–depth matching and personalized
+completion through controlled experiments and comparisons with
+complete-result caching and reranking, and demonstrate the system’s
+retrieval quality, serving efficiency, and business value on industrial
+data and in a 14-day online A/B test.
+
+2. 
+Related Work
+
+Generative retrieval and Semantic IDs.
+
+Generative retrieval learns candidate selection through identifier
+prediction: entity names 
+(
+De Cao et al., 2021
+)
+, document
+IDs 
+(
+Tay et al., 2022
+; 
+Wang et al., 2022
+)
+, or
+substrings 
+(
+Bevilacqua et al., 2022
+)
+. Learned
+identifiers 
+(
+Sun et al., 2023
+)
+ and vector-quantized
+codes 
+(
+van den Oord et al., 2017
+; 
+Lee et al., 2022
+)
+ structure candidate representations.
+P5 unifies recommendation tasks as generation 
+(
+Geng et al., 2022
+)
+; TIGER
+and LETTER construct semantic item codes 
+(
+Rajput et al., 2023
+; 
+Wang et al., 2024
+)
+.
+OneRec and OneSearch extend this paradigm to unified recommendation and
+search 
+(
+Deng et al., 2025
+; 
+Chen et al., 2025
+; 
+Chen et al., 2026
+)
+.
+DGI jointly optimizes indexing and retrieval through a differentiable
+training path and scaled cosine scores 
+(
+Wang et al., 2026
+)
+.
+
+Search caching and offline generation.
+
+Precomputation reuses work across searches. Dense retrieval stores document
+vectors 
+(
+Karpukhin et al., 2020
+)
+; classical search precomputes score
+bounds 
+(
+Ding and Suel, 2011
+)
+ and caches results, postings, scores, and
+list intersections 
+(
+Baeza-Yates et al., 2008
+; 
+Ozcan et al., 2012
+)
+, with index-aware
+invalidation 
+(
+Blanco et al., 2010
+)
+. For generative systems, RARE caches
+commercial intentions in sponsored search 
+(
+Liu et al., 2025
+)
+; OneRec-Think
+precomputes user-conditioned SID prefixes for online completion in
+recommendation 
+(
+Liu et al., 2026
+)
+. ReuseGR shares query-only SID
+prefix sets across users and selects their depths from historical target
+coverage, leaving final completion to each user’s current history.
+
+Distillation and efficient online inference.
+
+Distillation transfers teacher distributions or
+sequences 
+(
+Hinton et al., 2015
+; 
+Kim and Rush, 2016
+)
+; SmartGR distills
+hierarchical predictions and beam rankings 
+(
+Zhang et al., 2026
+)
+, while
+SID-MLP uses MLP prediction heads 
+(
+Guo et al., 2026
+)
+. Parallel
+prediction 
+(
+Hou et al., 2025
+)
+, speculative
+verification 
+(
+Leviathan et al., 2023
+; 
+Lin et al., 2025
+)
+, and vectorized
+constraints 
+(
+Su et al., 2026
+)
+ reduce decoding work.
+IO-aware attention 
+(
+Dao et al., 2022
+)
+, attention-state caching,
+and memory management 
+(
+Kwon et al., 2023
+; 
+Zheng et al., 2024
+; 
+Zhao et al., 2026
+)
+ improve
+execution efficiency. ReuseGR combines large-model prefix reuse with distillation for the
+smaller online suffix scorer.
+
+Budgeted decoding and policy optimization.
+
+Budgeted decoding allocates computation among candidate trajectories.
+GRC learns SID refinement trajectories and schedules reflection during
+beam search 
+(
+Xing et al., 2026
+)
+.
+On-policy distillation supervises student-generated
+sequences 
+(
+Agarwal et al., 2024
+)
+; GRPO uses group-relative
+rewards 
+(
+Shao et al., 2024
+)
+. BudgetCut trains branch admission with these
+objectives while keeping the planner and scorer fixed.
+
+3. 
+Preliminaries
+
+Items, identifiers, and requests.
+
+Let 
+ be the item catalog. A fixed codebook maps item 
+ to
+its complete Semantic ID (SID),
+
+.
+A SID layer is one token position. Token 
+ indexes a codeword;
+a prefix 
+ specifies a subtree.
+The bucket 
+ contains items sharing a complete SID.
+Our codebook uses 
+ and 
+; the first two tokens define a coarse cell.
+We use the supplied item-to-SID mapping throughout all retrieval comparisons.
+Given request 
+, 
+ is the normalized query and 
+ is the
+recent interaction history used by the retriever.
+A generator predicts full SIDs as
+
+(1)
+
+Retrieval ranks distinct full SIDs; their buckets are expanded into items
+for downstream ranking. Offline planning uses 
+ alone; online completion
+uses the full 
+. Query-macro evaluation uses each query’s history from its
+first log row (canonical history); request-level evaluation uses each request’s
+actual history.
+
+Layer-wise reusability and KeyProbe.
+
+To assess which SID layers support query-level reuse, KeyProbe compares
+query-specific and global token predictions.
+For target row 
+ with query 
+ and SID 
+, it removes the entire row
+and predicts 
+ by the most frequent token among other rows sharing
+
+. Denote this prediction by 
+ and the
+most frequent token across queries with the same prefix (the global mode)
+by 
+;
+ties select the smallest token. Let 
+ contain rows with a
+leave-one-out query reference and
+
+. Both predictors are evaluated on 
+.
+For 
+, define their per-query accuracy and its query-macro gain:
+
+(2)
+
+Support is the fraction of all evaluation rows with a query reference;
+
+ gives each query in 
+ equal weight.
+This diagnostic motivates query-level prefix sharing; historical prefix
+coverage supplies ReuseCut’s depth labels (Section 
+4.2
+).
+Separately, 
+ measures the 7B–0.5B next-token accuracy gap, given
+the query and true preceding SID tokens, without history
+(Appendix 
+B
+).
+
+Reuse depth and serving cost.
+
+Depth 
+ is the number of cached SID tokens. A prepared
+query leaves 
+ layers online; 
+ starts from the empty root. Mean online
+latency comprises lookup time 
+, suffix evaluation, and branch selection
+plus ranking the merged candidates with cost 
+:
+
+(3)
+
+where 
+ counts branches scored at layer 
+. ReuseCut changes 
+.
+BudgetCut acts after the final-layer readout: it controls which scored
+branches enter the final merged ranking and reduces its candidate pool.
+
+4. 
+Methodology
+
+4.1. 
+System Overview
+
+ReuseGR separates shared candidate planning from personalized completion
+(Figure 
+2
+). Offline, a 7B model generates SID prefixes at
+a depth selected for each query. Online, a 0.5B model expands these
+prefixes using the current query and history; BudgetCut selects scored
+branches for the final ranking. Cold misses use a separate 0.5B end-to-end (E2E) model.
+
+Figure 2
+. 
+ReuseGR architecture. Top: ReuseCut predicts cache depths,
+CellPlan plans prefixes offline, and CellStore shares them
+with context-conditioned LeafFill. After batched 
+ readout,
+BudgetCut admits branches and merges their already-scored leaves
+into top-
+ SID buckets. Bottom: Path KD distills the 0.5B scorer before
+freezing it; Masked Listwise OPD followed by Clipped GRPO trains only the
+branch policy head. Cold misses use the separate 0.5B E2E endpoint. 
+Top: offline planning shows cached prefixes of lengths zero,
+one, two, and three. A shared query-keyed cache feeds online completion,
+which formats the request history, expands to the layer-three frontier,
+scores layer-four leaves, extracts eight-dimensional branch features,
+admits at most B branches, and merges scored leaves into SID buckets.
+Prepared depth-zero queries start from the empty root; cold misses use a
+separate 0.5B E2E model. Bottom: Path KD updates student LoRA; the frozen
+scorer supports policy-head training with OPD and GRPO. 
+
+4.2. 
+Adaptive Prefix Caching
+
+ReuseCut predicts cache depths from query text to balance reuse and
+candidate coverage. Historical click-prefix sets supply depth labels;
+7B CellPlan independently generates the prefixes stored for completion.
+
+Model-generated prefixes.
+
+For query 
+ and depth 
+, 7B CellPlan with
+parameters 
+ selects the top-
+ prefixes from 
+,
+the depth-
+ prefixes occupied by catalog items:
+
+(4)
+
+Scores are cumulative masked log probabilities. With 
+, depth 1
+retains all legal root tokens, depth 2 enumerates their legal children,
+and depth 3 uses exact best-first search. Each depth is ranked
+independently for its top-
+ frontier.
+
+Historical coverage labels. 
+
+To label depths with sufficient historical target coverage, let 
+
+be the 
+ aggregated outcome rows, with target SIDs 
+,
+for query 
+. Let
+
+ be the empirical reference set of
+top-
+ prefixes at depth 
+ ranked by historical click mass (computed via
+whole-row leave-one-out on Fit and preceding-day logs on cross-day Test). The
+empirical row-level coverage at depth 
+ is
+
+(5)
+
+ReuseCut applies the Wilson-score lower endpoint (
+) 
+(
+Wilson, 1927
+)
+
+to 
+ as a finite-support coverage criterion. For 
+,
+it assigns the supervision target 
+ as the deepest level whose
+coverage scores at every level through that depth meet threshold 
+:
+
+(6)
+
+Actual reachability is measured on the model-generated sets
+
+. We set 
+, 
+, and
+
+. Queries with 
+ are
+marked as 
+Unknown
+, assigned conservative depth 
+ during training-cache
+construction, and excluded from depth-classifier fitting.
+
+Query-text depth prediction.
+
+ReuseCut predicts reusable depths from normalized query text, allowing
+cache preparation for queries with insufficient click history. A
+class-balanced multinomial logistic classifier is fitted on labeled Fit
+queries. Let 
+ encode hashed character 3–5-grams and length
+features. For depth classes 
+, it predicts
+
+(7)
+
+Dev macro-F1 selects regularization, breaking ties by lower depth MAE
+and then stronger regularization. Query-only prediction assigns
+depths to unseen queries.
+
+Cache contents and availability. 
+
+For an offline query pool 
+, CellStore
+indexes each positive-depth entry as
+
+(8)
+
+where 
+ is the cached prefix score.
+Define 
+ and 
+.
+Prepared queries with 
+ use the Path KD scorer from this
+root, without stored prefixes. Cold misses instead use the separate E2E
+model. Fixed-SFT sets 
+ uniformly across cached queries.
+
+4.3. 
+Prefix-Conditioned Completion
+
+At cached depth 
+, 0.5B LeafFill with parameters 
+ completes
+prefix 
+ under request context 
+:
+
+(9)
+
+All cache depths feed a common 
+ frontier of three-token branches
+for 
+ scoring and BudgetCut selection. LeafFill encodes 
+ once,
+shares prompt KV states across branches, and restricts continuations to
+the occupied codebook trie. For 
+, a best-first priority queue uses
+the composite score below to form candidate set 
+ at this
+frontier; for 
+, cached 
+ supplies it directly.
+Score ties are broken lexicographically. Serving retains up to 64
+branches: the top 56 by cumulative score plus up to eight deterministic
+hash-selected alternatives.
+
+SID scoring.
+
+For a prefix 
+ extending cached 
+, define its
+composite score by combining the offline prior and online suffix scores:
+
+(10)
+
+for 
+. At 
+ this scores a branch; at 
+, 
+
+scores a complete SID. The weight 
+ balances offline and online
+contributions: the adaptive decoder and matched depth controls use 1.0;
+Fixed-SFT uses its tuned value 1.5. Distinct SIDs are ranked by 
+
+to return top-
+ candidate buckets.
+
+4.4. 
+Scorer Distillation
+
+Path KD strengthens online suffix scoring by matching token distributions
+along true target prefixes. The frozen 7B teacher (
+) reads
+
+ alone; the 0.5B LoRA student (
+) reads 
+.
+For Fit row 
+, split depth 
+ uses 
+ with probability 
+,
+otherwise a uniform draw from 
+.
+For temperature 
+ and legal tokens 
+, define
+
+ and
+
+.
+Here 
+ denotes logits and 
+ masked softmax. The distillation loss is
+
+(11)
+
+where 
+ is the query-normalized training-row weight and 
+
+is supervised SID cross-entropy over active layers with observed or
+click-derived soft targets. The combined objective is
+
+(12)
+
+Only student LoRA 
+(
+Hu et al., 2022
+)
+ parameters 
+ are optimized, at every
+suffix layer. The teacher, base weights, and prefix entries stay fixed.
+We use 
+ and 
+.
+The distilled scorer is frozen before BudgetCut training.
+
+4.5. 
+BudgetCut: Recall-Aware Admission
+
+BudgetCut optimizes recall of the merged top-100 ranking under a fixed
+branch budget. High-scoring branches can introduce non-target leaves
+that displace relevant SIDs. OPD and GRPO learn set-dependent admission:
+a branch’s utility depends on those already selected.
+Freezing the planner and scorer preserves cached frontiers and leaf
+scores, letting policy rollouts evaluate branch combinations without
+repeated SID generation.
+
+The frozen 0.5B scorer evaluates valid 
+ continuations for all
+three-token branches 
+ in one batch.
+At 
+, its at most 
+ cached branches pass unchanged. Eight-dimensional features 
+
+combine branch scores, tree statistics, and top-8 leaf summaries
+(Appendix 
+C
+). All valid leaves (
+ per branch) remain
+available for final ranking.
+
+Conditioned on selected set 
+, the policy chooses from
+
+ until admitting
+
+ branches without replacement.
+At 
+, this reduces the maximum merge pool from 2,048 to 1,024
+already-scored leaves.
+
+Training caches branch features and legal leaf scores in 
+.
+For top-100 distinct SIDs 
+ in the selected
+union, the reward and marginal recall utility are:
+
+(13)
+
+(14)
+
+where 
+ pools distinct full SIDs clicked in Fit for 
+,
+including targets outside the frontier. Policy training uses nonempty
+groups. Utility is computed
+after union re-ranking as a difference of Recall fractions, giving
+
+; negative values reflect target displacement.
+OPD initializes admission from these utilities; GRPO optimizes the complete set.
+
+A two-layer MLP with trainable parameters 
+ scores each available branch:
+
+(15)
+
+where 
+ concatenates the eight-dimensional branch feature vector 
+, the mean
+feature vector of already-selected branches (zero when 
+), 
+, and 
+.
+The rollout action probability is:
+
+(16)
+
+4.5.1. 
+Masked Listwise On-Policy Distillation
+
+At each visited selection state, OPD uses unscaled marginal utilities
+
+ as teacher logits at unit temperature over 
+:
+
+(17)
+
+The utility teacher supervises the branch head with the same action mask
+
+, using teacher-to-head KL divergence:
+
+(18)
+
+where 
+ stops gradients, 
+,
+and 
+ is the visited-state distribution of rollout
+snapshot 
+ for each request 
+.
+Fit-only target-branch augmentation is specified in
+Appendix 
+C
+; Dev/Test candidates use no target labels.
+
+4.5.2. 
+Clipped Group-Relative Policy Optimization
+
+GRPO 
+(
+Shao et al., 2024
+)
+ optimizes the quality of the complete admitted set 
+.
+For each request, 
+ trajectories are sampled from rollout policy 
+ with rewards
+
+ standardized into group advantages:
+
+(19)
+
+Let 
+ be the importance ratio and 
+ the
+divergence penalty relative to the frozen OPD reference policy 
+ (definitions in
+Appendix 
+C
+). The policy optimization objective is:
+
+(20)
+
+ and 
+ denote chosen-action log probabilities under
+the current and rollout heads, respectively; 
+ indexes trajectories
+and 
+ selection steps.
+
+ stabilizes group standardization; 
+ is the
+PPO 
+(
+Schulman et al., 2017
+)
+ clip parameter and 
+ the reference-penalty
+weight. OPD initializes the head for GRPO with the planner and scorer
+frozen. Training samples actions; serving chooses the highest-probability
+action at each step.
+
+5. 
+Experiments
+
+Table 1
+. 
+Query-macro complete-SID retrieval on 44,225 Test queries (canonical histories,
+three-seed means). One A100, batch size 1; ReuseGR uses available prefixes.
+Bold: column best. 
+
+HR (%)
+
+Recall (%)
+
+Latency
+
+Speedup
+
+Method
+
+@1
+
+@10
+
+@100
+
+@1
+
+@10
+
+@100
+
+(ms) 
+
+vs. 7B 
+
+DSSM 
+(
+Huang et al., 2013
+)
+
+15.21
+
+48.91
+
+75.33
+
+2.22
+
+13.05
+
+38.40
+
+73.32
+
+T5-DSI-SID 
+(
+Tay et al., 2022
+)
+
+31.98
+
+59.95
+
+78.28
+
+5.50
+
+18.87
+
+39.38
+
+211.62
+
+0.5B E2E 
+(
+Qwen Team, 2025
+)
+
+35.72
+
+65.13
+
+81.99
+
+5.61
+
+21.83
+
+45.53
+
+117.00
+
+7B E2E (Teacher) 
+(
+Qwen Team, 2025
+)
+
+39.62
+
+69.94
+
+85.71
+
+6.43
+
+24.79
+
+50.96
+
+168.88
+
+SmartGR 
+(
+Zhang et al., 2026
+)
+
+36.82
+
+66.75
+
+83.56
+
+5.92
+
+22.84
+
+46.90
+
+114.20
+
+OneRec-Think 
+(
+Liu et al., 2026
+)
+
+35.45
+
+64.92
+
+81.48
+
+5.72
+
+21.75
+
+44.92
+
+74.20
+
+ReuseGR (Full)
+
+71.45
+
+Table 2
+. 
+Controlled ablations on Test. Upper: 7B planning, 
+ unless noted.
+Lower: popularity (SFT, 
+) and 0.5B planning (fixed: SFT,
+
+; Full: Path KD and OPD+GRPO). Unpruned: up to 64 branches;
+budgeted policies: 
+.
+
+HR (%)
+
+Recall (%)
+
+Latency
+
+Configuration
+
+@1
+
+@10
+
+@100
+
+@1
+
+@10
+
+@100
+
+(ms) 
+
+Fixed-SFT (
+, 
+)
+
+36.35
+
+65.71
+
+82.04
+
+5.99
+
+22.58
+
+45.65
+
+69.33
+
+Fixed-SFT (
+, 
+)
+
+36.48
+
+65.84
+
+82.11
+
+6.05
+
+22.70
+
+45.72
+
+69.33
+
+ReuseCut + SFT, unpruned
+
+36.62
+
+65.98
+
+82.64
+
+6.11
+
+22.91
+
+44.38
+
+76.09
+
+ReuseCut + Path KD, unpruned
+
+36.99
+
+66.36
+
+83.32
+
+6.22
+
+23.26
+
+44.76
+
+76.09
+
+ReuseCut + Path KD, score heuristic
+
+36.84
+
+66.15
+
+82.91
+
+6.18
+
+23.08
+
+44.52
+
+71.03
+
+ReuseCut + Path KD + OPD
+
+37.83
+
+67.34
+
+84.20
+
+6.36
+
+23.89
+
+45.32
+
+71.45
+
+Full (OPD + GRPO)
+
+38.74
+
+68.53
+
+85.82
+
+6.52
+
+24.16
+
+46.05
+
+71.45
+
+Empirical popularity cache (
+)
+
+31.45
+
+58.92
+
+76.48
+
+4.92
+
+19.15
+
+39.84
+
+69.33
+
+0.5B planner (
+)
+
+35.58
+
+64.96
+
+81.82
+
+5.57
+
+21.74
+
+45.38
+
+69.33
+
+0.5B planner + Full online
+
+36.85
+
+66.42
+
+83.46
+
+6.08
+
+22.84
+
+45.69
+
+71.45
+
+Table 3
+. 
+Depth-assignment controls on 44,225 Test queries with canonical
+histories. Full: Path KD and BudgetCut (
+); SFT: score-based decoding.
+Quality in %; mean latency in ms on one A100, batch size 1. 
+
+HR (%)
+
+Recall
+
+Mean
+
+System
+
+Depth assignment
+
+Steps
+
+@1
+
+@10
+
+@100
+
+@100
+
+(ms)
+
+Full
+
+Adaptive
+
+1.72
+
+2.28
+
+97.84
+
+38.74
+
+68.53
+
+85.82
+
+46.05
+
+71.45
+
+Full
+
+Fixed 
+ (retrained)
+
+2.00
+
+2.00
+
+96.69
+
+37.65
+
+67.18
+
+84.15
+
+45.40
+
+67.25
+
+Full
+
+Fixed 
+ (inference switch)
+
+2.00
+
+2.00
+
+96.69
+
+37.42
+
+66.85
+
+83.76
+
+45.12
+
+67.25
+
+Full
+
+Permuted depths
+
+1.72
+
+2.28
+
+95.76
+
+36.65
+
+66.10
+
+82.65
+
+43.85
+
+73.10
+
+SFT
+
+Adaptive
+
+1.72
+
+2.28
+
+97.84
+
+36.62
+
+65.98
+
+82.64
+
+44.38
+
+76.09
+
+SFT
+
+Permuted depths
+
+1.72
+
+2.28
+
+95.76
+
+36.05
+
+65.13
+
+81.44
+
+44.63
+
+76.10
+
+We evaluate overall performance (RQ1), adaptive prefix reuse (RQ2), scorer
+and policy contributions (RQ3), personalization and generalization (RQ4),
+serving cost (RQ5), and online outcomes (RQ6).
+
+5.1. 
+Experimental Setup
+
+Data and evaluation.
+
+AE-PV is an industrial search-advertising dataset with 3.38M catalog items,
+indexed by four-layer SIDs with 
+. The Day-1 modeling subset has
+1,000,042 rows across 43,776 queries, split by query into Fit (41,651)
+and Dev (2,125).
+Sampling targets come from cross-day overlap in the full PV8M logs:
+20.97% of queries, 36.87% of logged rows, and 37.68% of clicks.
+Relative to the modeling subset, the day-2 source has 9,276 Seen queries
+among 377,532 (2.46%). We retain these and select whole Unseen query
+groups to match the target shares. Test contains 992,118 rows and 44,225 queries:
+9,276 Seen and 34,949 Unseen. Each query has 15.77 distinct clicked SIDs on average.
+The main evaluation uses the first source-row history 
+ and prepared
+prefixes for both Seen and Unseen queries. Training details appear in
+Appendix 
+A
+.
+
+Baselines. 
+
+We compare three generative retrieval routes and an index-based reference.
+
+Full online generation: 
+ T5-DSI-SID adapts DSI with a
+T5-Base encoder–decoder and valid-trie constraints to generate four-token
+SIDs 
+(
+Raffel et al., 2020
+; 
+Tay et al., 2022
+)
+. The all-online 0.5B and 7B
+end-to-end (E2E) baselines use Qwen2.5-0.5B-Instruct and Qwen2.5-7B-Instruct,
+respectively 
+(
+Qwen Team, 2025
+)
+; both generate all four SID tokens
+online from the query and history.
+
+Distillation-based acceleration: 
+ SmartGR transfers hierarchical
+SID predictions and beam rankings from 7B to 0.5B while retaining
+four-token online decoding 
+(
+Zhang et al., 2026
+)
+.
+
+Prefix precomputation: 
+ our search adaptation of
+OneRec-Think 
+(
+Liu et al., 2026
+)
+ caches two-token prefixes per query
+from 
+ and uses 0.5B to complete them under 
+.
+
+DSSM 
+(
+Huang et al., 2013
+)
+ is the index-based reference: it retrieves 1,000
+items by approximate nearest-neighbor search, then maps and deduplicates
+them to top-100 SIDs. All methods share the catalog, item-to-SID mapping,
+and Test targets. ReuseGR combines 7B planning and 0.5B completion with
+ReuseCut (
+, 
+, 
+), Path KD (
+),
+and BudgetCut (
+). Fixed-depth controls are evaluated in the ablations.
+
+Query-level metrics.
+
+Let 
+ pool distinct clicked SIDs over query 
+’s Test rows,
+and 
+ be its top-
+ distinct predictions. Queries receive equal weight:
+
+(21)
+
+A query can have multiple ground truths. Hit@k is 1 if any is retrieved
+(0 otherwise); Recall@k is the fraction of ground truths retrieved.
+We report percentages before item expansion at 
+ and
+percentage-point differences. Model results average seeds 
+
+per query; paired-bootstrap 95% intervals resample these query means
+2,000 times 
+(
+Efron, 1979
+)
+.
+
+Timing boundary.
+
+Timings use 44,225 canonical queries on one A100, batch size 1, with
+shared prompt/prefix KV states and batched branch scoring.
+ReuseGR uses prepared prefixes; cold misses run 0.5B E2E.
+Mixed-traffic latency estimates are reported separately.
+
+5.2. 
+Overall Performance (RQ1)
+
+ReuseGR reaches 85.82% HR@100 and 46.05% Recall@100 at 71.45 ms
+(Table 
+1
+), gaining 3.83 HR@100 and 3.40 HR@10 points
+(
+) over 0.5B E2E with 38.9% lower mean latency.
+Against the distilled SmartGR baseline, it gains 2.26 HR@100
+points and reduces mean latency by 37.4%.
+
+Against OneRec-Think, ReuseGR gains 4.34 HR@100 points with
+3.7% lower mean latency. Its HR@100 is comparable to 7B E2E
+(85.82/85.71%) with a 
+ speedup; SID Recall@100 is
+46.05/50.96% and Item Recall@500 is 44.68/49.10%, respectively.
+
+SID-to-item retrieval.
+
+An in-memory compressed sparse row (CSR) index expands top-100 SIDs
+into disjoint item buckets under matched quotas of 100/500 items, adding
+0.35 ms. ReuseGR reaches 80.64/85.36% Item HR@100/500 versus
+76.42/81.54% for 0.5B E2E; Item Recall@500 rises from 43.92% to 44.68%.
+Full item metrics and the Dev-selected expansion rule appear in
+Appendix 
+D
+.
+
+The first panel shows query-key predictive accuracy gains of 61.18, 25.95, 3.51, and minus 1.57 percentage points across four SID layers. The second panel shows retained row shares of 48.60, 36.15, 19.00, and 9.15 percent of evaluation rows. 
+
+Figure 3
+. 
+Layer-wise KeyProbe: (a) query-macro accuracy gain over the
+matched global-mode baseline; (b) retained row share. Error bars give
+the reported 95% intervals for layers 3/4. 
+The first panel shows query-key predictive accuracy gains of 61.18, 25.95, 3.51, and minus 1.57 percentage points across four SID layers. The second panel shows retained row shares of 48.60, 36.15, 19.00, and 9.15 percent of evaluation rows. 
+
+5.3. 
+Adaptive Prefix Reuse (RQ2)
+
+Layer-wise evidence.
+
+On the rows retained at each layer, KeyProbe’s query-key gain
+(Eq. 
+2
+; Figure 
+3
+) is
+61.18/25.95 points at layers 1/2 and 3.51 at layer 3; the layer-4
+interval spans zero. This motivates shared coarse prefixes and
+history-conditioned completion. Given the query and true preceding SID
+tokens, 7B improves next-token accuracy over 0.5B by 1.69–2.53 points
+without history, motivating suffix distillation
+(Appendix 
+B
+).
+
+Depth and candidate reachability.
+
+ReuseCut assigns 7,446, 11,374, 11,679, and 13,726 Test queries to depths
+0–3, averaging 2.28 online steps. Let 
+ be the fraction of
+queries with any target SID reachable through the cached frontier, and
+
+ the mean fraction of reachable target SIDs per query.
+These upper-bound HR and Recall before branch admission and the top-
+
+cutoff. Adaptive reuse raises 
+ from
+
+ at fixed 
+ to 
+.
+
+Table 
+3
+ compares Full depth controls using 7B
+planning, Path KD, and BudgetCut (
+). The retrained fixed-
+
+control matches Full’s training budget; the inference switch keeps Full’s weights.
+Adaptive Full trades 4.20 ms additional mean latency for gains of
+1.67 HR@100 and 0.65 Recall@100 points over the retrained control.
+
+Depth permutation preserves depth counts and the 2.28 average online
+steps, using query-specific frontiers and the Full scorer/head. Adaptive
+assignment gains 2.08 
+ points and 3.17/2.20
+HR@100/Recall@100 points, demonstrating the benefit of query–depth matching.
+
+Under SFT, adaptive assignment gains 1.20 HR@100 points over permuted
+depths with a 0.25-point Recall@100 trade-off; Full improves both metrics.
+Appendix 
+B
+ gives
+uniform SFT references and depth-label counts. On 6,237
+support-qualified Test-Seen queries (
+), depth prediction reaches
+68.91% exact accuracy, 95.13% within one layer, and MAE 0.36.
+
+Source of reusable prefixes. 
+
+With SFT completion at 
+ and 
+, 7B planning reaches
+82.04% HR@100 versus 76.48% for empirical popularity with global Fit
+fallback, a 5.56-point gain. At 
+, 7B/0.5B planning reaches
+82.11/81.82%; with identical Full online components, it reaches
+85.82/83.46% (Table 
+2
+). These controls show gains
+from semantic planning and the larger planner.
+
+5.4. 
+Component and Policy Ablations (RQ3)
+
+For suffix scoring, Path KD improves all six metrics on the same
+adaptive, unpruned frontier at unchanged latency: HR@100 rises from
+82.64% to 83.32% and Recall@100 from 44.38% to 44.76%
+(Table 
+2
+). For branch selection, BudgetCut (OPD+GRPO) admits up to 32 branches
+after 
+ scoring. With the scorer and 
+ fixed, it gains 2.91 HR@100
+and 1.53 Recall@100 points over the score heuristic for 0.42 ms
+additional latency. Reachability remains
+
+throughout.
+
+Against the unpruned union, BudgetCut merges fewer already-scored
+leaves, saving 4.64 ms and gaining 2.50 HR@100 points (95% CI
+
+). The score heuristic saves 5.06 ms with a 0.41-point
+HR@100 trade-off. Pruning requires 
+; depth-3 queries
+pass unchanged. Full gains 3.71 HR@100 points over Fixed-SFT (
+, 
+)
+for 2.12 ms additional mean latency.
+
+The left panel shows real-history HR at 1 and HR at 100 gains over empty, canonical, and within-query shuffled histories. The right panel compares a 7B complete-result cache, 0.5B reranking of 100, 500, or 1000 cached SIDs, and ReuseGR on HR at 100 and mean latency. 
+
+Figure 4
+. 
+Personalization on 286,046 non-canonical history rows.
+(a) Real-history gains over history controls.
+(b) Row-macro HR@100 versus canonical-workload mean latency (A100, batch size 1).
+Numeric labels: reranking pool size; Cache: 100 complete SIDs.
+ReuseGR uses available prefixes. 
+The left panel shows real-history HR at 1 and HR at 100 gains over empty, canonical, and within-query shuffled histories. The right panel compares a 7B complete-result cache, 0.5B reranking of 100, 500, or 1000 cached SIDs, and ReuseGR on HR at 100 and mean latency. 
+
+5.5. 
+Personalization and Generalization (RQ4)
+
+We test history-dependent prefix completion and target recovery beyond
+cached complete-SID lists. We evaluate 286,046 non-canonical history rows from 12,454 multi-history
+queries, weighting rows equally against their clicked SIDs
+(Table 
+4
+; Figure 
+4
+).
+Query-only 7B caches top-
+ complete SIDs, optionally reranked by 0.5B
+with history. ReuseGR uses real, first-row canonical 
+, empty,
+or within-query shuffled histories.
+
+Table 4
+. 
+History-conditioned personalization. HR: three-seed row-macro
+(%, 286,046 rows); mean latency: 44,225 canonical queries,
+one A100, batch size 1. Cache sizes are payloads. 
+
+Method
+
+HR@1
+
+HR@100
+
+ms
+
+Bytes/query
+
+7B cache, 
+
+37.15
+
+84.18
+
+0.18
+
+400
+
+Rerank, 
+
+39.52
+
+84.18
+
+13.00
+
+400
+
+Rerank, 
+
+40.18
+
+86.85
+
+28.70
+
+2,000
+
+Rerank, 
+
+40.55
+
+87.62
+
+46.40
+
+4,000
+
+ReuseGR, empty
+
+38.85
+
+87.88
+
+71.45
+
+256
+
+ReuseGR, canonical
+
+40.48
+
+88.34
+
+71.45
+
+256
+
+ReuseGR, shuffled
+
+38.64
+
+87.52
+
+71.45
+
+256
+
+ReuseGR, real
+
+41.22
+
+88.95
+
+71.45
+
+256
+
+With cache and weights fixed, real histories improve HR@100 by
+1.07/0.61/1.43 points over empty/canonical/shuffled histories.
+HR@1 gains over canonical/shuffled histories are 0.74/2.58 points;
+29.4% of top-1 SIDs change versus canonical input.
+
+At 
+, history-aware reranking retains the cached top-100 SID set.
+Expanding the pool to 1,000 raises HR@100 from 84.18% to 87.62%;
+ReuseGR reaches 88.95% with a 256-byte prefix payload at 71.45 ms.
+
+ReuseGR retrieves the clicked SID outside the 7B Top-100 list on 5.67%
+of rows, recovering 35.84% of rows missed by that list. Shared hits (83.28%) and
+cache-only hits (0.90%) yield a net 4.77-point HR@100 gain.
+
+On the full 44,225-query canonical-history workload, histories improve
+query-macro HR@100 by 0.44/0.89 points over empty/shuffled input
+(Figure 
+5
+). For query generalization, ReuseGR with
+prepared prefixes raises Unseen HR@10 from 60.46% to 63.01% over
+0.5B E2E; Head/Torso mean latencies are 55.24/68.14 ms
+(Table 
+13
+).
+
+Canonical, empty, and shuffled histories yield HR at 100 of
+85.82, 85.38, and 84.93 percent. Their top-one SID change rates relative
+to canonical input are zero, 33.8, and 41.2 percent.
+
+Figure 5
+. 
+History sensitivity on 44,225 canonical-history Test queries
+(RQ4). Points show query-macro HR@100; percentages below the history
+settings give top-1 SID change rates relative to canonical input. 
+Canonical, empty, and shuffled histories yield HR at 100 of
+85.82, 85.38, and 84.93 percent. Their top-one SID change rates relative
+to canonical input are zero, 33.8, and 41.2 percent.
+
+5.6. 
+Cache Availability and Cost (RQ5)
+
+Table 5
+. 
+Serving scenarios. Q/P: prepared shares by queries/logged rows
+(%). Static Q uses measured partition quality; starred rows project
+query-macro endpoints. All mixed mean latencies are projections. 
+
+Regime
+
+Q
+
+P
+
+HR@100
+
+Mean (ms)
+
+Prepared
+
+100.00
+
+100.00
+
+85.82
+
+71.45
+
+Cold (0.5B E2E)
+
+0.00
+
+0.00
+
+81.99
+
+117.00
+
+Static Q
+
+20.97
+
+36.87
+
+82.38
+
+100.21
+
+Static mix
+∗
+
+20.97
+
+36.87
+
+83.40
+
+100.21
+
+Backfill
+∗
+
+42.15
+
+58.40
+
+84.23
+
+90.40
+
+Rolling 1M
+∗
+
+68.50
+
+84.20
+
+85.21
+
+78.65
+
+For partial cache availability, Static Q serves 9,276 Seen queries with
+ReuseGR and 34,949 Unseen queries
+with 0.5B E2E, reaching 82.38% query-macro HR@100 and
+45.70% Recall@100 (Table 
+5
+). Backfill/Rolling
+project fixed query-macro quality and latency endpoints against prepared
+logged-row share 
+, including cached prefixes and 
+ roots.
+Of 44,225 prepared queries, 36,779 (83.16%) have positive depth.
+For maintenance, prefix payloads total 256 MB per 1M entries; 10% daily refresh costs 2.44 A100
+GPU-hours. Two cache hits cover the planning cost.
+
+5.7. 
+Online Evaluation (RQ6)
+
+We conducted a 14-day online A/B test on a leading global e-commerce platform serving hundreds of millions of users.
+
+ReuseGR replaces the 0.5B E2E retriever. ReuseCut
+selects a cache depth per query, and the 7B planner stores SID prefixes
+and scores. Prepared queries use the current history to complete cached
+prefixes or the depth-zero root; BudgetCut filters branches before top-100 SID
+ranking and item expansion.
+
+Request serving and cache maintenance run separately. A cache miss
+immediately uses the original 0.5B E2E model to decode all four SID layers
+with the current context. Missed queries with positive predicted depth
+enter a deduplicated, rate-limited queue for asynchronous 7B planning.
+Published entries serve later requests; periodic refresh limits staleness.
+Depth-zero misses remain fully online without backfill. Requests therefore
+never wait for 7B planning, and both hit and miss paths retain current
+user context.
+
+A 14-day user-level A/B test assigned 10% traffic per arm in production
+search advertising. Other retrieval channels, quotas, ranking, and
+bidding were unchanged. From pooled counts, CTR (clicks/impressions) and
+RPM (revenue per 1,000 requests) rose 0.93% and 1.05% relative to
+baseline. Orders per request rose 0.78%; CVR (orders/clicks) fell 0.21%.
+SID-tagged impression/click shares rose 3.00/4.70 percentage points; the
+share of requests with a SID-tagged impression rose 5.36 points. These
+shares measure channel participation with potentially overlapping tags.
+
+6. 
+Conclusion
+
+ReuseGR combines 7B offline query-prefix planning with 0.5B online
+history-conditioned completion, using ReuseCut for adaptive depth,
+Path KD for suffix scoring, and BudgetCut for branch admission. Adaptive prefix reuse balances retrieval quality and efficiency.
+On AE-PV’s 3.38M-item catalog,
+ReuseGR achieves 85.82% HR@100 and 46.05% Recall@100 at 71.45 ms with
+available prefix entries: 38.9% lower latency than 0.5B e2e and comparable
+HR@100 to 7B e2e. Query-level prefix reuse shares computation across
+requests, while each request’s history guides candidate selection within
+the cached subtrees.
+A 14-day online A/B test yields relative CTR and RPM gains of 0.93% and
+1.05% over the 0.5B e2e baseline.
+
+References
+
+Agarwal 
+et al.
+ (2024)
+
+R. Agarwal, N. Vieillard, Y. Zhou, P. Stanczyk, S. Ramos, M. Geist, and O. Bachem
+
+On-policy distillation of language models: learning from self-generated mistakes
+.
+
+In 
+The Twelfth International Conference on Learning Representations
+,
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+Baeza-Yates 
+et al.
+ (2008)
+
+R. Baeza-Yates, A. Gionis, F. Junqueira, V. Murdock, V. Plachouras, and F. Silvestri
+
+Design trade-offs for search engine caching
+.
+
+ACM Transactions on the Web
+ 
+2
+ (
+4
+).
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Bevilacqua 
+et al.
+ (2022)
+
+M. Bevilacqua, G. Ottaviano, P. Lewis, W. Yih, S. Riedel, and F. Petroni
+
+Autoregressive search engines: generating substrings as document identifiers
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+Vol. 
+35
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Blanco 
+et al.
+ (2010)
+
+R. Blanco, E. Bortnikov, F. Junqueira, R. Lempel, L. Telloli, and H. Zaragoza
+
+Caching search engine results over incremental indices
+.
+
+In 
+Proceedings of the 33rd International ACM SIGIR Conference on Research and Development in Information Retrieval
+,
+
+pp. 82–89
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Chen 
+et al.
+ (2025)
+
+B. Chen, X. Guo, S. Wang, Z. Liang, Y. Lv, Y. Ma, X. Xiao, B. Xue, X. Zhang, Y. Yang, H. Dai, X. Xu, T. Zhao, M. Peng, X. Zheng, C. Wang, Q. Zhao, Z. Zhai, Y. Zhao, B. Liu, J. Lv, X. Liang, Y. Ding, J. Chen, C. Lei, W. Ou, H. Li, and K. Gai
+
+OneSearch: a preliminary exploration of the unified end-to-end generative framework for e-commerce search
+.
+
+arXiv preprint arXiv:2509.03236
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Chen 
+et al.
+ (2026)
+
+B. Chen, S. Wang, Y. Ma, Z. Liang, X. Zhang, Y. Lv, Y. Yang, H. Dai, L. Mao, T. Zhao, Z. Qian, X. Sun, Z. Zhai, Y. Zhao, B. Liu, J. Lv, X. Liang, H. Kong, J. Chen, H. Li, C. Lei, W. Ou, and K. Gai
+
+OneSearch-V2: the latent reasoning enhanced self-distillation generative search framework
+.
+
+arXiv preprint arXiv:2603.24422
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Dao 
+et al.
+ (2022)
+
+T. Dao, D. Y. Fu, S. Ermon, A. Rudra, and C. Ré
+
+FlashAttention: fast and memory-efficient exact attention with IO-awareness
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+Vol. 
+35
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+De Cao 
+et al.
+ (2021)
+
+N. De Cao, G. Izacard, S. Riedel, and F. Petroni
+
+Autoregressive entity retrieval
+.
+
+In 
+The Ninth International Conference on Learning Representations
+,
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+Deng 
+et al.
+ (2025)
+
+J. Deng, S. Wang, K. Cai, L. Ren, Q. Hu, W. Ding, Q. Luo, and G. Zhou
+
+OneRec: unifying retrieve and rank with generative recommender and iterative preference alignment
+.
+
+arXiv preprint arXiv:2502.18965
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Ding and Suel (2011)
+
+S. Ding and T. Suel
+
+Faster top-k document retrieval using block-max indexes
+.
+
+In 
+Proceedings of the 34th International ACM SIGIR Conference on Research and Development in Information Retrieval
+,
+
+pp. 993–1002
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Efron (1979)
+
+B. Efron
+
+Bootstrap methods: another look at the jackknife
+.
+
+The Annals of Statistics
+ 
+7
+ (
+1
+), 
+pp. 1–26
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§5.1
+.
+
+Geng 
+et al.
+ (2022)
+
+S. Geng, S. Liu, Z. Fu, Y. Ge, and Y. Zhang
+
+Recommendation as language processing (RLP): a unified pretrain, personalized prompt & predict paradigm (P5)
+.
+
+In 
+Proceedings of the 16th ACM Conference on Recommender Systems
+,
+
+pp. 299–315
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Guo 
+et al.
+ (2026)
+
+Z. Guo, Y. Hou, C. M. Ju, N. Shah, and J. McAuley
+
+MLPs are efficient distilled generative recommenders
+.
+
+arXiv preprint arXiv:2605.12617
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+Hinton 
+et al.
+ (2015)
+
+G. Hinton, O. Vinyals, and J. Dean
+
+Distilling the knowledge in a neural network
+.
+
+arXiv preprint arXiv:1503.02531
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Hou 
+et al.
+ (2025)
+
+Y. Hou, J. Li, A. Shin, J. Jeon, A. Santhanam, W. Shao, K. Hassani, N. Yao, and J. McAuley
+
+Generating long semantic IDs in parallel for recommendation
+.
+
+In 
+Proceedings of the 31st ACM SIGKDD Conference on Knowledge Discovery and Data Mining
+,
+
+External Links: 
+Link
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+Hu 
+et al.
+ (2022)
+
+E. J. Hu, Y. Shen, P. Wallis, Z. Allen-Zhu, Y. Li, S. Wang, L. Wang, and W. Chen
+
+LoRA: low-rank adaptation of large language models
+.
+
+In 
+The Tenth International Conference on Learning Representations
+,
+
+External Links: 
+Link
+
+Cited by: 
+§4.4
+.
+
+Huang 
+et al.
+ (2013)
+
+P. Huang, X. He, J. Gao, L. Deng, A. Acero, and L. Heck
+
+Learning deep structured semantic models for web search using clickthrough data
+.
+
+In 
+Proceedings of the 22nd ACM International Conference on Information and Knowledge Management
+,
+
+External Links: 
+Link
+
+Cited by: 
+Table 12
+,
+
+§1
+,
+
+§5.1
+,
+
+Table 1
+.
+
+Karpukhin 
+et al.
+ (2020)
+
+V. Karpukhin, B. Oguz, S. Min, P. Lewis, L. Wu, S. Edunov, D. Chen, and W. Yih
+
+Dense passage retrieval for open-domain question answering
+.
+
+In 
+Proceedings of the 2020 Conference on Empirical Methods in Natural Language Processing
+,
+
+pp. 6769–6781
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+Kim and Rush (2016)
+
+Y. Kim and A. M. Rush
+
+Sequence-level knowledge distillation
+.
+
+In 
+Proceedings of the 2016 Conference on Empirical Methods in Natural Language Processing
+,
+
+pp. 1317–1327
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Kwon 
+et al.
+ (2023)
+
+W. Kwon, Z. Li, S. Zhuang, Y. Sheng, L. Zheng, C. H. Yu, J. E. Gonzalez, H. Zhang, and I. Stoica
+
+Efficient memory management for large language model serving with PagedAttention
+.
+
+In 
+Proceedings of the 29th Symposium on Operating Systems Principles
+,
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Lee 
+et al.
+ (2022)
+
+D. Lee, C. Kim, S. Kim, M. Cho, and W. Han
+
+Autoregressive image generation using residual quantization
+.
+
+In 
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition
+,
+
+pp. 11523–11532
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+Leviathan 
+et al.
+ (2023)
+
+Y. Leviathan, M. Kalman, and Y. Matias
+
+Fast inference from transformers via speculative decoding
+.
+
+In 
+Proceedings of the 40th International Conference on Machine Learning
+,
+
+Proceedings of Machine Learning Research
+, Vol. 
+202
+, 
+pp. 19274–19286
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+Lin 
+et al.
+ (2025)
+
+X. Lin, C. Yang, W. Wang, Y. Li, C. Du, F. Feng, S. Ng, and T. Chua
+
+Efficient inference for large language model-based generative recommendation
+.
+
+In 
+The Thirteenth International Conference on Learning Representations
+,
+
+External Links: 
+Link
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+Liu 
+et al.
+ (2025)
+
+T. Liu, Z. Wang, M. Qin, Z. Lu, X. Chen, Y. Yang, and P. Shu
+
+Real-time ad retrieval via LLM-generative commercial intention for sponsored search advertising
+.
+
+In 
+Proceedings of the 2025 Conference on Empirical Methods in Natural Language Processing
+,
+
+pp. 28948–28960
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Liu 
+et al.
+ (2026)
+
+Z. Liu, S. Wang, X. Wang, R. Zhang, J. Deng, H. Bao, J. Zhang, W. Li, P. Zheng, X. Wu, Y. Hu, Q. Hu, X. Luo, L. Ren, Z. Zhang, Q. Wang, K. Cai, Y. Wu, H. Cheng, Z. Cheng, L. Ren, H. Wang, Y. Su, R. Tang, K. Gai, and G. Zhou
+
+OneRec-Think: in-text reasoning for generative recommendation
+.
+
+In 
+Proceedings of the 64th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)
+,
+
+pp. 2664–2681
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+Table 12
+,
+
+§2
+,
+
+§5.1
+,
+
+Table 1
+.
+
+Ozcan 
+et al.
+ (2012)
+
+R. Ozcan, I. S. Altingovde, B. B. Cambazoglu, F. P. Junqueira, and O. Ulusoy
+
+A five-level static cache architecture for web search engines
+.
+
+Information Processing & Management
+ 
+48
+ (
+5
+), 
+pp. 828–840
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Qwen Team (2025)
+
+Qwen Team
+
+Qwen2.5 technical report
+.
+
+arXiv preprint arXiv:2412.15115
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+Appendix A
+,
+
+Table 12
+,
+
+Table 12
+,
+
+§5.1
+,
+
+Table 1
+,
+
+Table 1
+.
+
+Raffel 
+et al.
+ (2020)
+
+C. Raffel, N. Shazeer, A. Roberts, K. Lee, S. Narang, M. Matena, Y. Zhou, W. Li, and P. J. Liu
+
+Exploring the limits of transfer learning with a unified text-to-text transformer
+.
+
+Journal of Machine Learning Research
+ 
+21
+ (
+140
+), 
+pp. 1–67
+.
+
+External Links: 
+Link
+
+Cited by: 
+§5.1
+.
+
+Rajput 
+et al.
+ (2023)
+
+S. Rajput, N. Mehta, A. Singh, R. Hulikal Keshavan, T. Vu, L. Heldt, L. Hong, Y. Tay, V. Q. Tran, J. Samost, M. Kula, E. H. Chi, and M. Sathiamoorthy
+
+Recommender systems with generative retrieval
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+Vol. 
+36
+.
+
+External Links: 
+Link
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+Schulman 
+et al.
+ (2017)
+
+J. Schulman, F. Wolski, P. Dhariwal, A. Radford, and O. Klimov
+
+Proximal policy optimization algorithms
+.
+
+arXiv preprint arXiv:1707.06347
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§4.5.2
+.
+
+Shao 
+et al.
+ (2024)
+
+Z. Shao, P. Wang, Q. Zhu, R. Xu, J. Song, X. Bi, H. Zhang, M. Zhang, Y. K. Li, Y. Wu, and D. Guo
+
+DeepSeekMath: pushing the limits of mathematical reasoning in open language models
+.
+
+arXiv preprint arXiv:2402.03300
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+,
+
+§4.5.2
+.
+
+Su 
+et al.
+ (2026)
+
+Z. Su, I. Katsman, Y. Wang, R. He, L. Heldt, R. Keshavan, S. Wang, X. Yi, M. Gao, O. Dalal, L. Hong, E. Chi, and N. Han
+
+Vectorizing the trie: efficient constrained decoding for LLM-based generative retrieval on accelerators
+.
+
+arXiv preprint arXiv:2602.22647
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Sun 
+et al.
+ (2023)
+
+W. Sun, L. Yan, Z. Chen, S. Wang, H. Zhu, P. Ren, Z. Chen, D. Yin, M. de Rijke, and Z. Ren
+
+Learning to tokenize for generative retrieval
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+Vol. 
+36
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Tay 
+et al.
+ (2022)
+
+Y. Tay, V. Q. Tran, M. Dehghani, J. Ni, D. Bahri, H. Mehta, Z. Qin, K. Hui, Z. Zhao, J. Gupta, T. Schuster, W. W. Cohen, and D. Metzler
+
+Transformer memory as a differentiable search index
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+Vol. 
+35
+, 
+pp. 21831–21843
+.
+
+External Links: 
+Link
+
+Cited by: 
+Table 12
+,
+
+§1
+,
+
+§2
+,
+
+§5.1
+,
+
+Table 1
+.
+
+van den Oord 
+et al.
+ (2017)
+
+A. van den Oord, O. Vinyals, and K. Kavukcuoglu
+
+Neural discrete representation learning
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+Vol. 
+30
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+Wang 
+et al.
+ (2024)
+
+W. Wang, H. Bao, X. Lin, J. Zhang, Y. Li, F. Feng, S. Ng, and T. Chua
+
+Learnable item tokenization for generative recommendation
+.
+
+In 
+Proceedings of the 33rd ACM International Conference on Information and Knowledge Management
+,
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Wang 
+et al.
+ (2026)
+
+X. Wang, Y. Chen, B. Zhang, J. Zhao, C. Wei, C. Xu, Z. Guan, W. Zhao, W. Zhang, and X. Zeng
+
+Differentiable geometric indexing for end-to-end generative retrieval
+.
+
+arXiv preprint arXiv:2603.10409
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Wang 
+et al.
+ (2022)
+
+Y. Wang, Y. Hou, H. Wang, Z. Miao, S. Wu, Q. Chen, Y. Xia, C. Chi, G. Zhao, Z. Liu, X. Xie, H. Sun, W. Deng, Q. Zhang, and M. Yang
+
+A neural corpus indexer for document retrieval
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+Vol. 
+35
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+Wilson (1927)
+
+E. B. Wilson
+
+Probable inference, the law of succession, and statistical inference
+.
+
+Journal of the American Statistical Association
+ 
+22
+ (
+158
+), 
+pp. 209–212
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§4.2
+.
+
+Xing 
+et al.
+ (2026)
+
+H. Xing, H. Deng, L. Mu, J. Hu, Y. Zhang, X. Zeng, and J. Zhang
+
+Learning to reflect and correct: towards better decoding trajectories for large-scale generative recommendation
+.
+
+arXiv preprint arXiv:2602.23639
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Zhang 
+et al.
+ (2026)
+
+Z. Zhang, Y. Cui, B. Wang, Y. He, C. Yu, C. Yuan, W. Sun, C. Wang, and J. Chen
+
+SmartGR: hierarchy and beam-aware knowledge distillation for generative recommendation
+.
+
+arXiv preprint arXiv:2608.02048
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+Table 12
+,
+
+§1
+,
+
+§2
+,
+
+§5.1
+,
+
+Table 1
+.
+
+Zhao 
+et al.
+ (2026)
+
+Z. Zhao, Y. Wang, and A. C. Zhou
+
+RcLLM: accelerating generative recommendation via beyond-prefix KV caching
+.
+
+arXiv preprint arXiv:2605.07443
+.
+
+Note: 
+Accepted to ICDCS 2026 according to the authors’ arXiv record
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+Zheng 
+et al.
+ (2024)
+
+L. Zheng, L. Yin, Z. Xie, C. Sun, J. Huang, C. H. Yu, S. Cao, C. Kozyrakis, I. Stoica, J. E. Gonzalez, C. Barrett, and Y. Sheng
+
+SGLang: efficient execution of structured language model programs
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+Vol. 
+37
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Appendix A 
+Experimental Protocol and Reproducibility
+
+Data and sampling.
+
+Normalization trims, lowercases, and collapses whitespace.
+Full PV8M logs, referenced to full day-1 logs, supply cross-day targets of
+20.9746/36.8653/37.6813% by queries/logged rows/click mass.
+Sampled Seen queries overlap the 43,776-query Day-1 modeling subset.
+Sampling (seed 0) retains all 9,276 overlaps from 8,997,726 day-2 rows
+(377,532 queries), then selects whole Unseen groups to match targets
+within 
+. Test has 992,118 clicked-SID outcome rows and 1,014,759
+clicks: 975,968 rows have one click; 16,150 have multiple clicks.
+Each row has one scalar item ID and complete SID; its click count records
+repeated clicks on that item.
+Row-macro metrics weight rows equally; prefix frequencies use click mass;
+mixture scenarios use logged-row shares. Canonical contexts use each query’s
+first source-row history; 
+ deduplicates its Test target SIDs.
+Day-1 Fit (41,651 queries, 947,519 rows) trains both SID models;
+Dev (2,125 queries, 52,523 rows) selects them. Fit/Dev and Dev/Test are
+query-disjoint; all 9,276 Seen Test queries occur in Fit.
+
+The catalog occupies 1,001 coarse cells and 355,438 leaf SIDs
+(9.51 items per leaf). Test queries average 15.77 distinct clicked SIDs
+and 19.50 items.
+
+Prompts and history.
+
+Offline CellPlan uses 
+Query: {norm_q}\nPredict target SID:
+,
+with query input alone and no reasoning tokens.
+Online LeafFill uses 
+Query: {norm_q}\nHistory: {h_slots}\nPredict target SID:
+
+(192-token limit). History packs up to 20 recent interactions, most-recent-first,
+as 
+"{title_trunc} [{s1}.{s2}.{s3}.{s4}]"
+.
+Real histories contain only interactions before the request timestamp.
+Prepared queries filter history by the offline 7B top-1 
+ codeword.
+The 0.5B E2E baseline and cold fallback use the logged query-match mask
+(
+hist_qmatch
+), then four-layer trie-constrained decoding (beam 32).
+Shuffling samples a different history from the same query, with seed 42.
+
+Models and optimization.
+
+Qwen2.5-7B-Instruct and Qwen2.5-0.5B-Instruct 
+(
+Qwen Team, 2025
+)
+ use four SID layers
+with 32 values each. Path KD’s supervised term uses targets 
+:
+
+(22)
+
+For row click count 
+ and Fit rows 
+ of query 
+,
+
+; thus each query’s weights sum to one.
+Each epoch visits every Fit row once in a query-stratified shuffle,
+giving equal total objective weight per query.
+
+ is the validity-masked, temperature-1 student distribution.
+For each 
+, soft targets normalize Fit click frequencies
+over legal next tokens, with zero mass outside 
+.
+They are blended equally with the observed one-hot target before
+combining supervised and distillation losses.
+KD uses AdamW, learning rate 
+, batch size 96, eight epochs,
+and LoRA rank/alpha/dropout 64/128/0.05 on
+attention and feed-forward projections. Main and depth-control experiments
+use model-based planning, with click-prior adjustments and history reranking
+bonuses disabled. Full HR@100 has across-seed standard deviation 0.09
+points. Anonymized records retain normalized queries, history
+signatures, SIDs, and click counts without personally identifiable information;
+commercial logs remain private under corporate data governance.
+
+Empirical popularity control.
+
+At 
+, Fit click counts rank query-specific coarse cells. Global Fit
+frequency fills unused slots up to 32 and supplies all 32 cells for queries
+without Fit clicks. Prefix scores are add-one-smoothed log frequencies
+(
+); ties follow coarse-cell ID. Completion uses the fixed-depth
+0.5B SFT scorer and score-based decoder. The matched 7B control also uses
+
+ and 
+.
+
+Baseline configurations.
+
+DSSM averages the first 32 WordPiece embeddings, applies
+
+ MLP towers and 
+ normalization, and trains on Fit
+click pairs for five epochs with InfoNCE temperature 0.05. Retrieval uses
+cosine scores and Faiss HNSW; each SID takes its maximum item score.
+SmartGR uses Qwen2.5-7B/0.5B teacher/student and beam 32, training on Fit
+for eight epochs with AdamW at 
+. Hierarchy and
+beam-ranking distillation terms each have weight 0.5; Dev HR@10 selects
+the checkpoint. The OneRec-Think search adaptation caches 7B top-32
+
+ prefixes by query, using 
+ offline. Online 0.5B
+completes two layers under 
+ with beam 32; timing includes lookup
+and both steps.
+
+Appendix B 
+Additional Prefix-Reuse Analyses
+
+Layer-wise diagnostics.
+
+For valid target rows 
+, the next-token model-scale gain is
+
+(23)
+
+where 7B/0.5B predictions 
+ condition
+on query 
+ and true 
+, without history. All predictors use 992,118 equally
+weighted rows per layer, separate from KeyProbe’s subsets. Gains use
+unrounded accuracies; 2,000 paired query-cluster resamples retain all rows.
+At layer 4, 7B exceeds the global-mode predictor by 11.50 points
+(95% CI 
+). Effective vocabulary and random accuracy are
+aggregated separately.
+
+Table 6
+. 
+KeyProbe support and query-key predictive gain by SID layer.
+Support is retained row share (%); gain and 95% intervals are query-macro
+accuracy differences (percentage points). 
+
+Layer
+
+Support
+
+Gain
+
+95% CI
+
+1
+
+48.60
+
++61.18
+
+—
+
+2
+
+36.15
+
++25.95
+
+—
+
+3
+
+19.00
+
++3.51
+
+4
+
+9.15
+
+Table 7
+. 
+Next-token accuracy (%, 992,118 rows). Models use 
+
+and true 
+, without history. 
+: effective vocabulary;
+
+: 7B
+0.5B; Gain: 7B
+global mode (both pt). 
+
+Layer
+
+Random
+
+Mode
+
+0.5B
+
+7B
+
+Gain
+
+1
+
+32.00
+
+3.12
+
+5.70
+
+63.15
+
+64.93
+
++1.79
+
++59.24
+
+2
+
+31.36
+
+3.19
+
+13.60
+
+41.49
+
+43.35
+
++1.86
+
++29.75
+
+3
+
+29.91
+
+3.35
+
+24.24
+
+41.58
+
+43.27
+
++1.69
+
++19.03
+
+4
+
+21.99
+
+5.18
+
+33.22
+
+42.19
+
+44.72
+
++2.53
+
++11.50
+
+Coverage and depth prediction. 
+
+With 
+ aggregated rows, the Wilson lower bound is
+
+(24)
+
+using whole-row counts and 
+ (nominal 95% Wilson interval) as a
+depth-label score. Click-weighted coverage uses
+
+,
+where 
+ is the positive click count.
+The predictor uses 262,144 nonnegative, 
+-normalized hashed
+
+char_wb
+ 3–5-gram features and normalized character/token lengths.
+Balanced logistic regression uses L-BFGS (at most 500 iterations, seed 0).
+Dev searches 
+ on known labels (
+), selecting
+
+ for 27,581 labeled Fit queries.
+
+For reachable targets 
+
+(all targets at 
+), the query-macro ceilings are
+
+(25)
+
+At 
+, known-label counts are 27,581/41,651 Fit,
+1,445/2,125 Dev, and 6,237/9,276 Test-Seen. Test-Seen depth errors
+(exact, 
+, 
+, 
+, 
+) number
+4,298/926/709/163/141. Exact accuracy is 68.91%; within-one-layer accuracy
+is 5,933/6,237 (95.13%); MAE is 0.36.
+
+Table 8
+. 
+Reachable hit/recall ceilings and realized top-100 quality (%) on 44,225 Test queries.
+
+Hit Rate (%)
+
+Recall (%)
+
+Configuration
+
+HR@100
+
+Recall@100
+
+Fixed 
+ (0.5B E2E)
+
+100.00
+
+81.99
+
+100.00
+
+45.53
+
+Fixed-SFT 
+ (
+)
+
+100.00
+
+82.01
+
+100.00
+
+45.60
+
+Fixed-SFT 
+ (
+)
+
+96.69
+
+82.04
+
+74.18
+
+45.65
+
+Fixed-SFT 
+ (
+)
+
+96.69
+
+82.11
+
+74.18
+
+45.72
+
+Fixed-SFT 
+ (
+)
+
+89.14
+
+80.12
+
+56.40
+
+42.45
+
+Adaptive (ReuseCut + SFT)
+
+97.84
+
+82.64
+
+78.62
+
+44.38
+
+Adaptive (ReuseCut + Path KD)
+
+97.84
+
+83.32
+
+78.62
+
+44.76
+
+Adaptive (ReuseGR Full)
+
+97.84
+
+85.82
+
+78.62
+
+46.05
+
+Seen (9,276 queries)
+
+99.12
+
+94.68
+
+86.45
+
+54.12
+
+Unseen (34,949 queries)
+
+97.50
+
+83.47
+
+76.54
+
+43.91
+
+First drop is the earliest layer 
+ whose Wilson score falls below
+
+, assigning depth 
+; no drop assigns depth 3.
+Click-weighted counts use 1,022,150 Train clicks (43,776 queries) and
+382,374 Test-Seen clicks (9,276 queries), including Unknown in the denominator.
+
+Table 9
+. 
+Click-weighted first-drop counts. Train uses whole-row leave-one-out;
+Test-Seen uses the preceding day’s cache.
+
+Train
+
+Test-Seen
+
+Position
+
+Click count
+
+Share, %
+
+Click count
+
+Share, %
+
+L1
+
+10,011
+
+0.9794
+
+18,748
+
+4.9031
+
+L2
+
+98,158
+
+9.6031
+
+48,238
+
+12.6154
+
+L3
+
+364,496
+
+35.6597
+
+75,784
+
+19.8193
+
+L4
+
+295,078
+
+28.8684
+
+92,667
+
+24.2346
+
+No drop
+
+223,861
+
+21.9010
+
+140,915
+
+36.8527
+
+Unknown
+
+30,546
+
+2.9884
+
+6,022
+
+1.5749
+
+Total
+
+1,022,150
+
+100.0000
+
+382,374
+
+100.0000
+
+Fixed-SFT controls share the same 0.5B SFT checkpoint,
+
+, and score-based decoder.
+
+Table 10
+. 
+Fixed-SFT (
+): query-macro HR/Recall (%) and mean latency (ms), 44,225 Test queries.
+
+HR (%)
+
+Recall (%)
+
+Mean
+
+Depth
+
+@1
+
+@10
+
+@100
+
+@1
+
+@10
+
+@100
+
+(ms)
+
+0.5B E2E (
+)
+
+35.72
+
+65.13
+
+81.99
+
+5.61
+
+21.83
+
+45.53
+
+117.00
+
+Fixed-SFT 
+
+36.08
+
+65.42
+
+82.01
+
+5.81
+
+22.21
+
+45.60
+
+93.16
+
+Fixed-SFT 
+
+36.35
+
+65.71
+
+82.04
+
+5.99
+
+22.58
+
+45.65
+
+69.33
+
+Fixed-SFT 
+
+35.94
+
+64.38
+
+80.12
+
+5.89
+
+21.78
+
+42.45
+
+45.50
+
+Appendix C 
+BudgetCut Implementation and Training
+
+Features and candidate flow.
+
+The 
+ head (2,561 parameters) reads eight branch
+features, selected-set means, and two budget scalars.
+At 
+, 
+ retains up to 56 score-ranked and eight hash-selected
+branches; at 
+, all 
+ cached branches pass unchanged.
+
+ contains branch 
+’s valid 
+ tokens (
+),
+all scored in the batched readout (3.84 ms). Features 6–8 summarize
+the top-8 leaves.
+
+Table 11
+. 
+Eight branch features 
+ for 
+.
+
+Dim
+
+Feature and source
+
+1
+
+Frozen 
+ logit 
+
+2
+
+Masked 
+ log-probability 
+
+3
+
+Parent-prefix cumulative score at 
+
+4
+
+Branch cumulative score 
+
+5
+
+Static leaf count 
+
+6
+
+Best valid 
+ leaf score 
+
+7
+
+Mean score of top-8 valid 
+ leaves
+
+8
+
+Number of valid top-8 leaves (
+)
+
+OPD and GRPO share Fit pools (
+ branches) at empirical depths 
+.
+Reachable target branches fill first (lexicographic ID if truncated), then
+up to 56 score-ranked and eight hash-selected branches fill remaining
+slots without duplicates.
+
+ stores all legal leaf scores for exact union rewards.
+Dev/Test and serving use up to 64 model/hash branches; the head admits
+
+ distinct branches, keeping all if 
+.
+
+GRPO probabilities and training.
+
+For action 
+ after selected set 
+, write
+
+;
+
+ uses the rollout head and 
+ the frozen OPD
+reference with the same action mask. The implementation uses
+
+(26)
+
+Losses average valid actions per trajectory and trajectories per request;
+padding contributes neither loss nor reward.
+
+OPD uses 
+, four epochs, two trajectories per context, learning rate
+
+, gradient accumulation 32, and unit target/rollout
+temperatures. GRPO uses one epoch, group size 
+, one step per rollout,
+learning rate 
+, clipping 
+, KL weight 
+,
+and rollout temperature 1. Both clip gradient norms at 1.0.
+All 13,726 depth-3 queries retain their branches; the full-cohort HR@100
+gains of 2.91/2.50 points correspond to 4.22/3.63 points among the 30,499
+
+ queries versus the score heuristic/unpruned reference.
+
+Appendix D 
+Additional Retrieval and Serving Results
+
+Item retrieval and expansion (RQ1).
+
+Table 12
+. 
+Item HR/Recall (%, three-seed query-macro) and expansion (ms). Fixed-SFT: 
+, 
+.
+
+Item HR (%)
+
+Item Recall (%)
+
+Expand
+
+Method
+
+@100
+
+@500
+
+@100
+
+@500
+
+(ms) 
+
+DSSM (Direct Item ANN) 
+(
+Huang et al., 2013
+)
+
+69.84
+
+75.33
+
+26.12
+
+38.40
+
+—
+
+T5-DSI-SID 
+(
+Tay et al., 2022
+)
+
+72.60
+
+77.82
+
+28.94
+
+37.95
+
+0.35
+
+0.5B E2E 
+(
+Qwen Team, 2025
+)
+
+76.42
+
+81.54
+
+33.85
+
+43.92
+
+0.35
+
+SmartGR 
+(
+Zhang et al., 2026
+)
+
+78.24
+
+83.12
+
+34.85
+
+44.32
+
+0.35
+
+OneRec-Think 
+(
+Liu et al., 2026
+)
+
+75.96
+
+81.08
+
+33.40
+
+43.35
+
+0.35
+
+7B E2E (Teacher) 
+(
+Qwen Team, 2025
+)
+
+80.58
+
+85.28
+
+37.42
+
+49.10
+
+0.35
+
+Fixed-SFT 
+
+76.85
+
+81.68
+
+34.28
+
+44.15
+
+0.35
+
+ReuseGR (Full)
+
+80.64
+
+85.36
+
+36.14
+
+44.68
+
+0.35
+
+CSR buckets rank items by a 30-day prior, breaking ties by item ID.
+The window 
+ ends at day-1 Fit’s end 
+, excluding
+Dev/Test. For impressions/clicks 
+ and catalog CTR 
+,
+
+(27)
+
+using 
+, 
+. Top-100 SID buckets expand by descending
+
+,
+where 
+ indexes ranked SID buckets and 
+ is zero-based
+intra-bucket rank, until 100/500 distinct
+items are collected (0.35 ms). The 2,125-query Dev grid
+
+ selects 
+ by Item Recall@500
+and Item HR@100.
+
+Table 13
+. 
+Query-frequency generalization (RQ4): query-macro HR@10
+(%, three-seed means). Fit clicks: Head 
+, Torso 1–19, Unseen zero.
+Fixed-SFT: 
+, 
+. Bold: column best.
+
+Head
+
+Torso
+
+Unseen
+
+All
+
+Queries
+
+4,120
+
+5,156
+
+34,949
+
+44,225
+
+Share (%)
+
+9.32
+
+11.66
+
+79.03
+
+100.00
+
+Avg. 
+
+2.68
+
+2.14
+
+1.54
+
+1.72
+
+Mean (ms)
+
+55.24
+
+68.14
+
+73.85
+
+71.45
+
+HR@10 (%)
+
+0.5B E2E
+
+84.15
+
+81.60
+
+60.46
+
+65.13
+
+Fixed-SFT 
+
+87.90
+
+84.82
+
+60.44
+
+65.84
+
+ReuseGR
+
+91.24
+
+87.82
+
+63.01
+
+68.53
+
+7B E2E
+
+91.85
+
+88.90
+
+64.56
+
+69.94
+
+Serving mixtures and cost (RQ5).
+
+For prepared logged-row share 
+, projections use
+
+ with fixed prepared/cold endpoints:
+query-macro quality and 71.45/117.00 ms mean latency.
+Static uses 9,276/44,225 queries and 365,747/992,118 rows;
+Backfill/Rolling set 18,641/30,294 prepared queries and
+579,397/835,363 prepared rows. At 
+,
+projected HR@1 is 36.83/37.48/38.26%, HR@10 is 66.38/67.12/67.99%,
+and Recall@100 is 45.72/45.83/45.97%. Static partition quality is
+measured with equal query weights. Prepared timing has four nonoverlapping
+stages: lookup/depth (0.18 ms), prompt/cached-prefix prefill and 
+
+expansion (67.01 ms), 
+ readout/features (3.84 ms), and admission/union
+ranking (0.42 ms). Warm/cold measured P95 is 86.40/132.50 ms.
+For serial A100 serving (batch 1), 
+
+(
+ in ms) gives 5.9/8.5/14.0 for 7B/0.5B/warm ReuseGR.
+Planning takes 88.0 ms/query: 10% daily refresh of 1M entries costs
+2.44 GPU-hours. Each cache hit saves 45.55 ms; two cover the planning cost.
+
+Online A/B statistics (RQ6).
+
+Each arm includes approximately 12.8M distinct users. User-clustered
+bootstrap with 1,000 resamples gives 95% intervals for relative gains
+of 
+ in CTR and 
+ in RPM.
+Two-sided tests compare pooled arm-level ratios, using user-clustered
+sandwich covariance, the delta method, and a normal reference distribution.
+The 
+-values are 
+ for CTR,
+
+ for RPM, and 
+ for orders per request.
+

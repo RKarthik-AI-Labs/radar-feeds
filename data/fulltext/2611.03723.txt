@@ -1,0 +1,2275 @@
+EMBERS: Empirically Motivated Robustness Testing of Deep Research Systems via Defect-Guided Fuzzing
+https://arxiv.org/abs/2611.03723
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+EMBERS: 
+E
+mpirically 
+M
+otivated Ro
+b
+ustness Testing of D
+e
+ep 
+R
+esearch 
+S
+ystems via Defect-Guided Fuzzing
+
+DOI: 
+XXXXXXX.XXXXXXX
+Conference: 
+Make sure to enter the correct
+conference title from your rights confirmation email; June 03–05,
+2018; Woodstock, NY
+ISBN: 
+978-1-4503-XXXX-X/2018/06
+CCS: 
+Software and its engineering Software testing and debugging
+
+Shuochuan Li
+
+email: 
+lishuochuan@tju.edu.cn
+
+Affiliation: 
+Tianjin University
+, 
+Tianjin
+, 
+China
+
+, 
+
+Zan Wang
+
+Note: 
+Corresponding Author.
+
+email: 
+wangzan@tju.edu.cn
+
+Affiliation: 
+Tianjin University
+, 
+Tianjin
+, 
+China
+
+, 
+
+Dong Wang
+
+Affiliation: 
+Tianjin University
+, 
+Tianjin
+, 
+China
+
+, 
+
+Yuhang Jiang
+
+Affiliation: 
+Tianjin University
+, 
+Tianjin
+, 
+China
+
+, 
+
+Huajin Cui
+
+Affiliation: 
+Tianjin University
+, 
+Tianjin
+, 
+China
+
+, 
+
+Chen Zhang
+
+Affiliation: 
+Huawei Technologies Co., Ltd.
+, 
+Shenzhen
+, 
+China
+
+, 
+
+Gang Wang
+
+Affiliation: 
+Huawei Technologies Co., Ltd.
+, 
+Shenzhen
+, 
+China
+
+ and 
+
+Junjie Chen
+
+Affiliation: 
+Tianjin University
+, 
+Tianjin
+, 
+China
+
+2025
+
+Abstract.
+
+Deep Research (DR) systems extend large language models into autonomous agents that decompose complex information needs, iteratively search the web, and synthesize evidence to answer challenging questions.
+However, their multi-stage execution may introduce robustness risks, as variations in user questions or intermediate search inputs may propagate across research stages and lead to incorrect answers.
+Existing evaluations focus on task-solving capabilities or robustness against external evidence disturbances, leaving intrinsic weaknesses in DR execution insufficiently explored.
+Thus, we conduct an empirical study of 1,932 execution trajectories from three representative DR systems and identify nine recurring defect categories across subquestion formulation, online search, and final reasoning.
+Guided by these findings, we propose 
+EMBERS
+, an empirically motivated, defect-guided fuzzing framework for robustness testing of DR systems.
+Starting from correctly answered seed questions, 
+EMBERS
+ generates stage-targeted test inputs using defect-guided mutation, web-search-assisted fidelity assurance, and diversity-aware seed maintenance.
+Experiments across 16 framework–model–dataset settings show that 
+EMBERS
+ achieves 3.21 times the failure-discovery throughput of the strongest baseline under identical testing budgets.
+Human and LLM-assisted evaluations demonstrate that most generated inputs preserve the original information need and necessary contextual constraints.
+Moreover, model fine-tuning experiments show consistent-answer performance improvement, highlighting their value for robustness testing and model improvement.
+
+Keywords: 
+Software Testing, Fuzzing,
+Robustness Testing, Deep Research Systems
+
+1. 
+Introduction
+
+Large language models (LLMs) have evolved into autonomous agents that plan, use external tools, and make multi-round decisions.
+Among these applications, Deep Research (DR) systems have emerged as a promising paradigm for complex information-seeking tasks, integrating long-horizon planning, iterative web search, multi-source evidence collection, and information synthesis 
+(
+Huang et al., 2025
+)
+.
+Building on earlier web-assisted question-answering systems 
+(
+Nakano et al., 2021
+; 
+Shao et al., 2024
+; 
+Qin et al., 2023
+)
+, DR systems autonomously formulate subquestions, retrieve relevant evidence, and synthesize final answers.
+However, their long and interactive execution processes introduce substantial reliability challenges.
+
+Unlike conventional question-answering systems, DR systems involve multiple interdependent stages, including subquestion formulation, online search, and final reasoning.
+Errors introduced at an early stage may propagate through subsequent stages and affect the final answer.
+For example, incorrect entity identification may redirect subsequent searches, while minor variations in search expressions may lead to irrelevant evidence.
+Such reliability challenges are also reflected in execution consistency: WebSailor 
+(
+Li et al., 2025a
+)
+ achieves a Pass@1 of 18.34% on FRAMES-ZH 
+(
+Krishna et al., 2025
+)
+, but only 6% of questions are answered correctly across three independent runs (Consistent@3).
+Moreover, single-run accuracy on fixed questions may overlook robustness weaknesses, as a system that correctly answers an original question may fail under answer-preserving variations in user questions or intermediate search inputs.
+We refer to such pass-to-fail behavioral changes as 
+robustness failures
+.
+
+Existing studies have primarily evaluated DR systems using benchmarks for complex information-seeking capabilities 
+(
+Krishna et al., 2025
+; 
+Wei and others, 2025
+; 
+Du and others, 2025
+; 
+FutureSearch et al., 2025
+)
+.
+For instance, DeepResearch Bench 
+(
+Du and others, 2025
+)
+ evaluates research report quality, evidence coverage, and citation accuracy.
+However, these static benchmarks rely on predefined questions, which may become outdated and provide limited insights into robustness under controlled input variations.
+To address these limitations, DR-Arena 
+(
+Gao et al., 2026
+)
+ dynamically constructs research tasks from live web information and adaptively increases task difficulty to explore system capability boundaries.
+Recent studies have also investigated the robustness of DR systems against misleading or manipulated external web evidence 
+(
+Zhu et al., 2026
+; 
+Dong et al., 2026
+; 
+Nie et al., 2026
+; 
+Pan et al., 2026a
+; 
+Bi et al., 2026
+)
+.
+Despite these advances, existing approaches primarily focus on overall task-solving capabilities or robustness against unreliable external information, leaving robustness weaknesses arising within DR execution processes largely unexplored.
+Moreover, they lack systematic testing strategies informed by recurring defects across different stages of DR execution.
+Such weaknesses are equally important, as even minor perturbations in user questions or intermediate search inputs may disrupt question interpretation, evidence retrieval, and final reasoning without manipulating external web content.
+In practical applications such as scientific literature reviews and business analysis, these failures may cause critical evidence to be overlooked or incorrect conclusions to be produced.
+When such outputs inform subsequent research or decision-making, seemingly minor input variations can lead to misleading analyses and potentially costly decisions.
+
+To systematically investigate the robustness weaknesses of DR systems and guide targeted test generation, we conduct an empirical study of their execution trajectories.
+Specifically, we collect 1,932 execution trajectories from three representative DR systems developed by leading industrial and academic research groups, i.e., DeepDiver 
+(
+Shi et al., 2025
+)
+, WebSailor 
+(
+Li et al., 2025a
+)
+, and WebExplorer 
+(
+Liu et al., 2025a
+)
+.
+We evaluate these systems on three benchmarks, i.e., Bamboogle 
+(
+Aksitov and others, 2023
+)
+, FRAMES-ZH 
+(
+Shi et al., 2025
+)
+, and BrowseComp-ZH 
+(
+Zhou et al., 2025
+)
+, covering diverse information-seeking tasks ranging from compositional multi-hop reasoning to challenging open-web information retrieval.
+Following statistical sampling 
+(
+Singh and Mangat, 1996
+)
+, we manually analyze 384 trajectories to investigate two aspects: the distribution of observed failure origins across DR execution stages (
+RQ1
+) and the recurring defect characteristics underlying these failures (
+RQ2
+).
+Our empirical analysis yields the following key findings.
+For RQ1, subquestion formulation accounts for the largest proportion of classified failures (65.6%), followed by online search (24.2%) and final reasoning (10.2%), indicating that early-stage errors are a major source of observed failures.
+For RQ2, we identify nine recurring defect categories, revealing three major weaknesses: early interpretation errors can misdirect subsequent research, online search is sensitive to non-semantic variations and distracting evidence, and final reasoning may fail even when the required facts have been retrieved.
+
+However, translating these empirical findings into effective robustness tests presents three technical challenges.
+First, the interdependent execution stages of DR systems make it difficult to construct targeted perturbations that expose specific weaknesses without introducing unrelated changes.
+Second, modifying natural-language questions or intermediate search inputs may inadvertently alter essential facts, contextual constraints, or reference answers, challenging test validity.
+Third, the vast input space and costly multi-round execution of DR systems make it difficult to efficiently explore diverse robustness weaknesses while avoiding redundant test generation.
+To address these challenges, we propose 
+EMBERS
+, an empirically motivated, defect-guided fuzzing framework for robustness testing of DR systems.
+Specifically, 
+EMBERS
+ first initializes a seed pool with questions the target DR system consistently answers correctly, along with their execution trajectories.
+For each selected seed, a dual-stage mutation selection strategy determines whether to modify the original user question or an intermediate search input and then selects an applicable rule from nine defect-guided mutation rules derived from our empirical findings.
+An LLM-based mutation operator generates test inputs via multi-round planning and online fact verification, aiming to preserve the original information need and reference answer.
+The generated inputs are subsequently executed on the target DR system, and a semantic answer oracle identifies potential pass-to-fail robustness failures.
+Finally, diversity-aware seed maintenance retains promising non-failing inputs for further mutation, enabling continued exploration of potential robustness failures.
+
+We further evaluate 
+EMBERS
+ through three research questions examining its failure-detection effectiveness (
+RQ3
+), the contributions of its core components (
+RQ4
+), and its performance in human and LLM-assisted evaluations (
+RQ5
+).
+We conduct extensive experiments across 16 framework–model–dataset settings, combining two DR frameworks (i.e., WebSailor 
+(
+Li et al., 2025a
+)
+ and WebExplorer 
+(
+Liu et al., 2025a
+)
+) and their corresponding backbone models on four evaluation datasets (i.e., FRAMES 
+(
+Krishna et al., 2025
+)
+, FRAMES-ZH 
+(
+Shi et al., 2025
+)
+, BrowseComp 
+(
+Wei and others, 2025
+)
+, and OpenSeeker 
+(
+Du et al., 2026
+)
+).
+Compared with DR-Arena and RobustAlpacaEval, 
+EMBERS
+ achieves 3.21 times the failure-discovery throughput of the strongest baseline under identical 24-hour testing budgets.
+Ablation experiments confirm the effectiveness of its core components, while human and LLM-assisted evaluations demonstrate high mutation fidelity and assess the reliability of automated correctness judgments.
+Beyond failure detection, fine-tuning WebSailor-32B with 
+EMBERS
+-generated data improves three-run consistent correctness by up to 9.13 percentage points on held-out benchmarks, demonstrating their potential for improving DR systems.
+Overall, these results highlight the effectiveness of empirically motivated, defect-guided fuzzing for robustness testing and reliability improvement of DR systems.
+
+Contributions.
+
+In summary, this work makes the following contributions:
+(1) We conduct an empirical study of 1,932 execution trajectories from three representative DR systems, identifying nine recurring defect categories across three execution stages.
+(2) We propose 
+EMBERS
+, an empirically motivated, defect-guided fuzzing framework that integrates defect-guided mutation, web-search-assisted fidelity assurance, and diversity-aware seed maintenance to systematically expose robustness failures.
+(3) We conduct comprehensive automated and human evaluations, demonstrating superior failure-detection effectiveness over existing approaches and the potential of 
+EMBERS
+-generated data to improve DR system performance through fine-tuning.
+To support future research, we publicly release our replication package 
+(
+, 2026
+)
+, which includes all necessary code and resources to reproduce the results.
+
+2. 
+Background and Related Work
+
+This section reviews the architectures of DR systems and existing approaches to evaluating and testing their reliability.
+
+Deep Research Systems.
+
+DR systems leverage LLMs to solve complex information-seeking tasks through long-horizon planning, iterative web search, and evidence synthesis 
+(
+Huang et al., 2025
+)
+.
+Based on their execution architectures, existing DR systems can be broadly categorized into ReAct-based and multi-agent-based systems.
+
+ReAct-based DR systems typically employ a single agent to iteratively decompose questions, formulate search queries, retrieve web evidence, and update their reasoning following the ReAct paradigm 
+(
+Yao et al., 2023
+)
+.
+Recent studies have enhanced their research capabilities through different strategies.
+For example, WebDancer 
+(
+Wu et al., 2025a
+)
+ combines supervised fine-tuning and reinforcement learning, while DeepDiver 
+(
+Shi et al., 2025
+)
+ introduces adaptive search intensity scaling.
+WebThinker 
+(
+Li et al., 2025b
+)
+ integrates reasoning, web exploration, and report writing, whereas WebSailor 
+(
+Li et al., 2025a
+)
+ and WebExplorer 
+(
+Liu et al., 2025a
+)
+ enhance long-horizon research through uncertainty reduction and extended web exploration, respectively.
+Despite these advances, sequential DR systems remain vulnerable to error propagation, where early decomposition or retrieval errors may affect subsequent decisions 
+(
+Wu et al., 2025b
+)
+.
+Multi-agent-based DR systems instead distribute research tasks among collaborating agents, typically involving a planner, specialized research agents, and a writer.
+For example, MindSearch 
+(
+Chen et al., 2024
+)
+ dynamically constructs research graphs to coordinate parallel WebSearchers, while DeepResearcher 
+(
+Zheng et al., 2025
+)
+ employs specialized agents for information acquisition and cross-source validation.
+DeepDiver-V2 
+(
+openPangu Team, 2025
+)
+ adopts a planner-centric architecture to coordinate information seekers and a writer, whereas MiroFlow 
+(
+Su et al., 2026
+)
+ introduces flexible agent orchestration for complex research workflows.
+
+Although multi-agent architectures improve task decomposition and information coverage, their individual research agents often still rely on ReAct-based execution, where errors may propagate through subsequent research steps.
+In this study, we focus on three representative ReAct-based DR systems, i.e., DeepDiver, WebSailor, and WebExplorer.
+These systems adopt different strategies for long-horizon information seeking and have been recognized or adopted in subsequent studies of web research agents 
+(
+Wu et al., 2025b
+; 
+Zhang et al., 2026
+; 
+Pan et al., 2026b
+)
+.
+Moreover, their available execution trajectories enable us to systematically investigate recurring failure patterns across subquestion formulation, online search, and final reasoning.
+
+Deep Research System Evaluation.
+
+Existing DR evaluation approaches primarily rely on static benchmarks to assess information retrieval, multi-hop reasoning, and evidence synthesis.
+Early benchmarks include WebArena 
+(
+Zhou et al., 2024
+)
+ for web interaction, Bamboogle 
+(
+Aksitov and others, 2023
+)
+ for compositional question answering, FRAMES 
+(
+Krishna et al., 2025
+)
+ for multi-step retrieval and reasoning, and BrowseComp 
+(
+Wei and others, 2025
+)
+ for challenging open-web information seeking.
+More recent benchmarks evaluate complete research workflows.
+For example, Du et al. 
+(
+Du and others, 2025
+)
+ introduce DeepResearch Bench with 100 expert-designed tasks to evaluate research quality and citation accuracy.
+DeepResearch Arena 
+(
+Wan et al., 2025
+)
+ constructs tasks from academic seminars, while DeepWideSearch 
+(
+Lan et al., 2025
+)
+ evaluates reasoning depth and information coverage.
+To improve evaluation reproducibility, FutureSearch 
+(
+FutureSearch et al., 2025
+)
+ provides a frozen search environment, while BrowseComp-Plus 
+(
+Chen et al., 2026b
+)
+ uses a fixed document corpus to disentangle retrieval effectiveness from agent capabilities.
+However, static benchmarks rely on predefined questions and reference answers, which may become outdated as web information evolves or suffer data contamination.
+To address these limitations, DR-Arena 
+(
+Gao et al., 2026
+)
+ dynamically generates research tasks from live web information and adaptively increases their difficulty to explore DR capability boundaries.
+
+Beyond capability-oriented evaluation, recent studies investigate the robustness and security of DR systems under unreliable or adversarial web environments.
+SafeSearch 
+(
+Dong et al., 2026
+)
+ assesses search-agent safety under unreliable web content, while DRNOISE 
+(
+Nie et al., 2026
+)
+ and MisKnow-Agent 
+(
+Zhu et al., 2026
+)
+ investigate the impact of misleading external evidence on research outcomes.
+Similarly, FORGE 
+(
+Pan et al., 2026a
+)
+ examines how poisoned documents can redirect research planning, and HAE-GEO 
+(
+Bi et al., 2026
+)
+ evaluates evidence verification and recovery under hierarchical web poisoning.
+AgentFence 
+(
+Puppala et al., 2026
+)
+ further investigates security vulnerabilities across different agent architectures.
+Another line of research explores input-level robustness testing for QA systems and LLMs.
+QATest 
+(
+Liu et al., 2022
+)
+ introduces multi-level semantic mutations for QA fuzzing, while QAQA 
+(
+Shen et al., 2022
+)
+ employs sentence-level metamorphic relations to generate semantics-preserving test cases.
+More recently, RobustAlpacaEval 
+(
+Cao et al., 2024
+)
+ generates semantically equivalent paraphrases to assess the robustness of LLMs under alternative input formulations.
+These studies demonstrate the potential of systematic input mutation for evaluating model robustness.
+
+Overall, existing studies primarily focus on task-solving capabilities, robustness against unreliable external information, or general-purpose input mutations, leaving robustness weaknesses arising within DR execution processes insufficiently explored.
+Moreover, existing testing approaches do not explicitly leverage recurring defects across different execution stages to guide targeted test generation.
+In contrast, 
+EMBERS
+ derives mutation strategies from empirically identified defects and systematically explores pass-to-fail robustness failures through defect-guided fuzzing.
+
+3. 
+Empirical Study
+
+To systematically characterize the failure origins and recurring defect patterns of DR systems, we conduct an empirical study of their execution trajectories.
+Specifically, we investigate the following two research questions (RQs):
+
+•
+
+RQ1:
+ Where are the earliest unrecovered errors observed in failed DR execution trajectories?
+
+•
+
+RQ2:
+ What recurring defect characteristics underlie failures in DR systems?
+
+The resulting findings provide empirical guidance for designing the defect-guided fuzzing framework presented in Section 
+4
+.
+
+3.1. 
+Data Collection and Annotation
+
+Figure 1
+. 
+Illustrative execution trajectory of a Deep Research system.
+
+Deep Research systems.
+
+To ensure the credibility and representativeness of our study, we select three representative ReAct-based DR systems: DeepDiver 
+(
+Shi et al., 2025
+)
+, WebSailor 
+(
+Li et al., 2025a
+)
+, and WebExplorer 
+(
+Liu et al., 2025a
+)
+.
+DeepDiver is a proprietary industrial system whose execution trajectories are provided by our industrial collaborators, while WebSailor and WebExplorer are open-source research frameworks.
+As shown in Fig. 
+1
+, these systems iteratively formulate subquestions, perform online searches, and synthesize retrieved evidence into final answers.
+Their observable execution trajectories record intermediate reasoning, search queries, retrieved information, and final answers, enabling us to investigate observed failure origins rather than relying solely on final-answer correctness.
+
+Benchmarks.
+
+We evaluate the selected DR systems on three benchmarks covering complementary information-seeking scenarios: Bamboogle 
+(
+Aksitov and others, 2023
+)
+, FRAMES-ZH 
+(
+Shi et al., 2025
+)
+, and BrowseComp-ZH 
+(
+Zhou et al., 2025
+)
+.
+Bamboogle consists of compositional questions that require systems to connect information from multiple sources.
+FRAMES-ZH evaluates information retrieval and multi-step reasoning in Chinese information-seeking tasks, while BrowseComp-ZH contains difficult-to-find factual questions that typically require iterative browsing and evidence integration.
+In total, we collect 1,932 execution trajectories.
+We employ DeepSeek-V3.2 
+(
+DeepSeek-AI and others, 2025
+)
+ to assess answer correctness, requiring each answer to satisfy all constraints and requested components of the original question.
+Following statistical sampling 
+(
+Singh and Mangat, 1996
+)
+, we randomly select 384 incorrect trajectories for manual analysis, corresponding to a 95% confidence level and a 5% margin of error under standard sampling assumptions.
+
+Failure-origin annotation.
+
+Following prior studies on trajectory-based failure attribution 
+(
+Zhang et al., 2025
+; 
+Barke et al., 2026
+)
+, we inspect the observable reasoning and tool-use trajectories to identify the earliest unrecovered errors associated with incorrect final answers.
+Given a user question 
+ and a target DR system 
+, we represent its execution trajectory as:
+
+(1)
+
+where 
+, 
+, and 
+ denote subquestion formulation, online search, and final reasoning, respectively, and 
+ is the final answer.
+We examine three critical stages:
+
+•
+
+Subquestion Formulation.
+
+The DR interprets the user question, identifies the relevant entities, relationships, and constraints, and decomposes the original task into intermediate subquestions to guide subsequent information retrieval.
+
+•
+
+Online Search.
+
+Based on the formulated subquestions, the DR constructs search queries, retrieves relevant web information, and examines the returned webpage content.
+It then extracts and summarizes useful evidence to support subsequent research and reasoning.
+
+•
+
+Final Reasoning.
+
+The DR integrates the collected evidence across multiple subquestions and performs the reasoning or operations required by the original task, such as counting, arithmetic, and chronological ordering, to produce the final answer.
+
+For each incorrect trajectory, we examine the sequence of reasoning and tool-use actions to identify the earliest observable error that remains uncorrected and is associated with the incorrect final answer.
+Specifically, we compare the formulated subquestions with the original task requirements, inspect the retrieved evidence, and trace how erroneous interpretations or information are carried into subsequent search and reasoning steps.
+Errors that are subsequently corrected and no longer affect the final answer are excluded from primary failure attribution.
+When an earlier error propagates into later stages, we attribute the failure to the stage where the error first appears rather than counting its downstream consequences separately.
+For example, if a subquestion misidentifies the target entity and subsequent searches consistently retrieve evidence about the incorrect entity, leading to a wrong final answer, the failure is attributed to subquestion formulation.
+As our empirical study aims to characterize recurring failure patterns and their propagation across DR execution stages, we adopt trajectory-based attribution based on observable execution evidence rather than counterfactual interventions to establish causal necessity.
+
+Taxonomy construction.
+
+Following prior studies 
+(
+Ren et al., 2025
+; 
+Nourry et al., 2023
+; 
+Wang et al., 2025
+; 
+Revoredo et al., 2021
+)
+, we adopt a similar iterative manual annotation procedure to identify and categorize recurring defects in DR systems.
+We define a defect pattern as a recurring type of erroneous execution behavior characterized by similar triggering conditions and error manifestations.
+We use the three execution stages as an initial shared vocabulary, while specific defect categories are derived inductively rather than predefined.
+Specifically, before formal annotation, two authors, who are proficient in English and Chinese and familiar with multi-step web QA, independently examine the same 100 incorrect trajectories to identify recurring defect patterns.
+They compare their judgments, discuss inconsistent interpretations, and iteratively refine the taxonomy and annotation guidelines until reaching a consensus.
+After establishing a shared understanding of the criteria and forming an initial taxonomy, they divide the remaining trajectories approximately evenly and annotate them separately using the established taxonomy.
+When an observed failure cannot be explained by any existing category, the annotators jointly determine whether it represents a new recurring defect.
+A new category is introduced only when its underlying error mechanism is clearly distinguishable and occurs across multiple trajectories.
+The annotation process is supervised by two industry practitioners, who also review and validate the resulting taxonomy.
+Ultimately, we identify nine recurring defect categories, organized according to the three critical stages of DR execution.
+Table 
+1
+ summarizes their definitions and distributions.
+
+Table 1
+. 
+Taxonomy of defects identified in Deep Research systems.
+
+Category
+
+Description
+
+Ratio
+
+Subquestion Formulation
+
+65.6%
+
+D1:
+ Misleading or Ambiguous Wording
+
+Ambiguous expressions lead to incorrect interpretations of entities, temporal relations, or references.
+
+18.8%
+
+D2:
+ Obscure or Niche Description
+
+Indirect or uncommon descriptions make it difficult to identify the intended entity.
+
+10.9%
+
+D3:
+ Missing Necessary Context
+
+Essential constraints are omitted in subquestion formulation, resulting in ambiguous information needs.
+
+18.5%
+
+D4:
+ Attention Allocation Bias
+
+Essential clues are overlooked despite being available in the original question.
+
+17.4%
+
+Online Search
+
+24.2%
+
+D5:
+ Related Popular Topic Distraction
+
+Popular neighboring topics or incomplete evidence divert retrieval from the intended target.
+
+4.7%
+
+D6:
+ Retrieval Strategy Sensitivity
+
+Irrelevant terms or colloquial query expressions redirect retrieval away from the intended evidence.
+
+5.7%
+
+D7:
+ Translation Issue
+
+Ambiguous translations or multilingual expressions distort entity identification and retrieval direction.
+
+2.6%
+
+D8:
+ Unreadable Webpage Content
+
+Relevant webpages are inaccessible or incompletely parsed, leaving critical evidence unavailable.
+
+11.2%
+
+Final Reasoning
+
+10.2%
+
+D9:
+ Complex Research with Simple Operation
+
+The system retrieves the required facts but fails on simple counting, ordering, or arithmetic operations.
+
+10.2%
+
+3.2. 
+RQ1: Distribution of Observed Failure Origins
+
+To characterize the distribution of observed failure origins, we attribute each incorrect trajectory to the execution stage where its earliest unrecovered error is identified.
+Among the 384 examined incorrect trajectories, 252 (65.6%) failures are attributed to subquestion formulation, followed by 93 (24.2%) from online search and 39 (10.2%) from final reasoning.
+Subquestion formulation accounts for nearly two-thirds of the classified failures, indicating that early-stage question interpretation is a major source of errors in DR systems.
+When a system incorrectly identifies an entity, relation, or task constraint, the resulting subquestions may direct subsequent searches toward irrelevant information.
+Such errors can propagate through multiple research steps, making it difficult for the system to recover from an incorrect initial interpretation.
+Online search represents the second-largest source of failures, suggesting that correctly understanding the information need does not necessarily guarantee successful evidence retrieval.
+Errors in search query formulation or evidence acquisition may still prevent the system from obtaining the required information.
+Although final reasoning accounts for a smaller proportion, its failures demonstrate that retrieving relevant evidence alone does not guarantee a correct answer, particularly when additional reasoning or calculations are required.
+Overall, these results highlight the importance of examining robustness weaknesses across different stages of DR execution rather than focusing solely on initial question interpretation.
+Notably, the reported proportions characterize the distribution of identified failure origins, rather than the failure probabilities of individual execution stages.
+
+Answering RQ1.
+
+Subquestion formulation is the most frequent origin of the classified failures (65.6%), followed by online search (24.2%) and final reasoning (10.2%).
+These findings highlight the importance of robustness testing across multiple execution stages, particularly the early stages where errors may propagate through subsequent research steps.
+
+3.3. 
+RQ2: Recurring Defect Characteristics
+
+To characterize the underlying weaknesses of DR systems, we further analyze the recurring defect patterns in the incorrect execution trajectories.
+Our analysis identifies nine recurring defect categories (D1–D9), comprising four in subquestion formulation, four in online search, and one in final reasoning, as summarized in Table 
+1
+.
+The relative frequencies of these defects may vary with backbone LLMs, execution strategies, and retrieval configurations.
+As our study does not independently vary these factors, the reported distributions characterize the evaluated DR configurations rather than universal defect frequencies.
+In the following, we characterize each category in terms of its triggering conditions, observed failure behaviors, and distinguishing characteristics, illustrated with representative cases.
+
+Subquestion Formulation
+ 
+(65.6%)
+.
+This stage involves interpreting the entities, relationships, and constraints in a user question to determine intermediate information needs.
+Defects at this stage may misdirect subsequent research before relevant evidence is retrieved.
+We identify four recurring categories, as follows:
+
+D1: Misleading or Ambiguous Wording
+ 
+(18.8%)
+.
+Questions containing ambiguous temporal, referential, or relational expressions may cause DR systems to adopt incorrect interpretations despite sufficient contextual clues.
+For example, when asked about the number of female athletes participating in an Olympics associated with the main cauldron of the 1984 Los Angeles Games, a DR system incorrectly assumed that the target event occurred after 1984, overlooking the intended reference to an earlier event in 1932.
+This defect manifests as premature interpretation of ambiguous expressions, steering subsequent research toward incorrect entities or temporal relationships.
+
+D2: Obscure or Niche Description
+ 
+(10.9%)
+.
+Some questions describe target entities through indirect or uncommon clues rather than explicit names.
+Although the complete question may contain sufficient clues to identify the target, DR systems can struggle to resolve these descriptions into precise entities.
+For example, describing a target as “a lake in California that expanded around 1966” may lead the system to formulate broad search queries without identifying the intended lake.
+Unlike ambiguous wording, this defect primarily arises from difficulties in recovering an entity from indirect descriptions, which can misdirect subsequent information retrieval.
+
+D3: Missing Necessary Context
+ 
+(18.5%)
+.
+DR systems may omit essential qualifiers or contextual constraints when decomposing the original question into intermediate information needs.
+Such omissions can make generated subquestions ambiguous even when the original task provides sufficient information.
+For example, when searching a film’s in-story setting, the system may simplify “American Pie 4 story setting time” to “American Pie 4 story time”, omitting the qualifier “setting” and potentially retrieving film’s release date instead of its narrative period.
+Unlike D1, where existing clues are misinterpreted, this defect arises when necessary information is lost during subquestion formulation, causing subsequent searches to pursue underspecified or incorrect targets.
+
+D4: Attention Allocation Bias
+ 
+(17.4%)
+.
+Even when all necessary clues are present, DR systems may focus on salient but less relevant information while overlooking essential relationships.
+For example, one question connects a famous portrait, a river mentioned in a Chinese song, and a legislative meeting in the lyricist’s ancestral hometown.
+Answering it requires identifying the river to establish the intended relationship, but the system concentrates on the explicitly mentioned legislative meeting without formulating subquestions about the river.
+Unlike D3, necessary information is not omitted from the task representation but receives insufficient attention during decomposition.
+
+Online Search
+ 
+(24.2%)
+.
+Online search involves constructing search queries from intermediate information needs, retrieving web information, and extracting supporting evidence.
+Even when the intended information need is correctly identified, failures may arise from query formulation, evidence selection, or webpage accessibility.
+We identify four recurring categories, as follows:
+
+D5: Related Popular Topic Distraction
+ 
+(4.7%)
+.
+Search results may favor popular topics that share keywords with the intended target, causing DR systems to prioritize frequently encountered but incomplete or irrelevant evidence.
+For example, when investigating the number of Brendan Fraser’s children, a system repeatedly focused on search results discussing two of his sons while overlooking evidence about his third child.
+Subsequent searches reinforced this incomplete interpretation rather than verifying the full set of relevant information.
+This defect reflects the influence of topic popularity on evidence selection and iterative search direction.
+
+D6: Retrieval Strategy Sensitivity
+ 
+(5.7%)
+.
+The effectiveness of online search can be sensitive to query wording and structure, even when the underlying information need remains unchanged.
+We observe two manifestations.
+First, unrelated or overly prominent terms may dilute critical search keywords.
+For example, in a question concerning a 
+Suicide Squad
+ spin-off, the system emphasized terms associated with the original film and its filming location while overlooking the spin-off itself, resulting in irrelevant search results.
+Second, colloquial expressions may be carried directly into search queries instead of being reformulated into precise retrieval terms.
+For instance, an expression such as “Where did they shoot the Peacemaker show?” may lead to less focused retrieval than “Peacemaker TV series filming location”.
+Both manifestations demonstrate query formulation may redirect retrieval despite preserving the underlying information need.
+
+D7: Translation Issue
+ 
+(2.6%)
+.
+Multilingual search may fail when translated expressions do not preserve the canonical names or intended meanings of target entities.
+For example, translating 
+Postcolonial Love Poem
+ into a generic Chinese expression equivalent to “postcolonial love poetry” may cause search results to focus on a broad literary topic rather than the specific publication.
+In another case, an English reformulation of a geographical query led the system to identify Belfast Harbour instead of the River Lagan.
+This defect arises from translation ambiguity, distorting entity identification and redirecting subsequent retrieval.
+
+D8: Unreadable Webpage Content
+ 
+(11.2%)
+.
+Even when a DR system locates relevant webpages, it may fail to access or extract the information needed to answer the question.
+Such failures can arise from dynamic rendering, anti-crawling mechanisms, inaccessible URLs, or limitations of browsing tools.
+For example, a browsing tool may retrieve a relevant webpage but omit the passage containing the required fact, leaving the system with insufficient evidence for subsequent reasoning.
+Unlike the preceding search-related defects, this category primarily concerns the accessibility and extraction of web evidence rather than the relevance of search queries or retrieved results.
+
+Final Reasoning
+ 
+(10.2%)
+.
+Final reasoning integrates evidence collected throughout the research process and performs the operations required to produce the final answer.
+We identify one recurring defect category at this stage, as follows:
+
+D9: Complex Research with Simple Operation
+ 
+(10.2%)
+.
+DR systems may successfully retrieve the required facts but fail to perform relatively simple operations after a long research process.
+For example, when asked to sum the numerical values of the years marking the beginning and end of John Lennon’s life, a system may incorrectly sum the individual digits of these years rather than the years themselves.
+Similar failures occur in tasks involving counting or chronological ordering, even when the necessary evidence has already been collected.
+These failures suggest that long research trajectories can interfere with the preservation of task requirements, even when the final operation itself is straightforward.
+
+Answering RQ2.
+
+Our analysis identifies nine recurring defect categories across three critical stages of DR execution.
+These defects reveal distinct weaknesses in information-need interpretation, evidence retrieval, and final reasoning, providing empirical guidance for designing targeted robustness tests rather than relying solely on general-purpose input perturbations.
+
+3.4. 
+Implications for Defect-Guided Fuzzing
+
+The findings from RQ1 and RQ2 reveal three recurring weaknesses across critical stages of DR execution, providing insights into the design of targeted robustness tests.
+
+L1: Early Interpretation Errors Can Propagate Across Research Stages.
+
+Our stage-level analysis reveals that subquestion formulation accounts for the largest proportion of classified failures.
+Once a DR system misinterprets an entity, relation, or task constraint, subsequent searches may reinforce the incorrect interpretation rather than correct it.
+This finding motivates targeted mutations of user questions to examine whether DR systems can consistently recover the intended information need from alternative expressions.
+
+L2: Online Search is Sensitive to Query Formulation and Retrieved Evidence.
+
+Our defect analysis shows that irrelevant terms, colloquial expressions, multilingual ambiguity, and distracting neighboring topics can redirect retrieval even when the underlying information need remains unchanged.
+This finding motivates targeted mutations of intermediate search inputs to examine how variations in query formulation affect evidence retrieval and subsequent reasoning.
+In contrast, failures caused by inaccessible webpages primarily concern the external environment and require different testing interventions.
+
+L3: Correct Evidence Retrieval Does Not Guarantee Accurate Final Reasoning.
+
+Our analysis identifies cases where DR systems successfully retrieve the required facts but fail to perform simple counting, ordering, or arithmetic operations after lengthy research processes.
+This finding motivates targeted tests that introduce simple reasoning demands into complex research tasks, while ensuring that the intended output and reference answer remain consistent.
+
+Implications for Robustness Testing.
+
+These findings suggest three key requirements for effective DR robustness testing.
+First, the identified failure stages and defect characteristics provide empirically grounded, yet non-exhaustive, guidance for targeting observed robustness weaknesses.
+Second, generated test inputs should preserve the original information need and reference answer, requiring careful verification of factual and semantic constraints.
+Third, testing should encourage diversity across seed questions and mutation strategies to explore different potential failure behaviors rather than repeatedly exposing similar weaknesses.
+Together, these requirements motivate systematic, defect-guided robustness testing, which complements broader evaluations by targeting empirically observed weaknesses without claiming exhaustive coverage of all possible failures.
+
+4. 
+Approach
+
+This section presents 
+EMBERS
+, a defect-guided fuzzing framework for robustness testing of Deep Research systems.
+As illustrated in Fig. 
+2
+, 
+EMBERS
+ initializes a seed pool with correctly answered questions and iteratively generates stage-targeted test inputs based on empirically identified defect characteristics.
+The generated inputs are executed on the target DR system to identify potential robustness failures, while promising non-failing inputs are retained for further mutation to support continued exploration.
+In the following, we first introduce the diversity measurement and web-search-assisted fidelity assurance mechanism, followed by the defect-guided fuzzing process, including seed initialization, mutation, execution, and failure identification, and seed maintenance.
+
+4.1. 
+Diversity Measurement
+
+Effective robustness testing should not only expose numerous failures but also explore diverse underlying weaknesses.
+However, repeatedly mutating similar inputs may lead to redundant failures, while directly determining whether different failures originate from distinct defects is challenging due to the multi-stage execution and open-ended outputs of DR systems.
+To address this challenge, inspired by prior studies that approximate fault diversity using observable information 
+(
+You et al., 2023
+; 
+Xie et al., 2019
+)
+, 
+EMBERS
+ employs a lightweight diversity measurement based on two complementary aspects: static diversity and dynamic diversity.
+
+Static Diversity.
+
+The first aspect considers static initial seeds from which failure-inducing inputs are generated.
+The intuition is that different initial questions typically involve distinct information needs, entity relationships, search paths, and reasoning requirements, making derived test inputs more likely to expose different robustness weaknesses 
+(
+Chen et al., 2020
+; 
+Wang et al., 2020
+; 
+Xie et al., 2019
+; 
+Liu et al., 2025b
+; 
+Shen et al., 2022
+)
+.
+Specifically, given two failure-inducing inputs 
+ and 
+ generated through a series of mutations from different initial seeds 
+ and 
+, respectively, we consider them more likely to expose different weaknesses, even when they are generated using the same mutation rule.
+Here, initial seeds refer to inputs admitted into the seed pool before fuzzing begins; formally, 
+ denotes the identifier of initial seed 
+.
+
+Figure 2
+. 
+The overview of 
+EMBERS
+
+Dynamic Diversity.
+
+The second aspect considers dynamic mutation-induced failure behaviors, complementing static information from initial seeds.
+Unlike classification systems, where failure behaviors can be characterized by prediction transitions 
+(
+You et al., 2023
+; 
+Xie et al., 2019
+)
+, DR systems produce open-ended answers, making such transitions hard to define.
+To approximate failure behaviors here, 
+EMBERS
+ uses the applied mutation rule as an observable proxy.
+The intuition is that different mutation rules target distinct defect characteristics and may therefore expose different robustness weaknesses, even when applied to the same initial seed.
+For example, obscure-description mutation examines entity identification under indirect descriptions, whereas translation-sensitive mutation examines whether multilingual expressions affect evidence retrieval.
+Accordingly, inputs generated using different mutation rules are considered more likely to exercise distinct failure mechanisms.
+Formally, for a generated input 
+, we denote the mutation rule applied in its latest mutation step as 
+.
+
+Combining these two aspects, 
+EMBERS
+ represents the diversity state of a generated input as:
+
+(2)
+
+This representation approximates potential failure diversity through the originating information need and mutation strategy, without requiring precise identification of underlying defects.
+As described in Section 
+4.3.4
+, 
+EMBERS
+ uses these diversity states to guide the retention of promising non-failing inputs and reduce redundant exploration.
+
+4.2. 
+Web Search-Assisted Fidelity Assurance
+
+Another challenge in DR system fuzzing is how to preserve the fidelity of generated test inputs.
+Unlike conventional structured inputs, natural-language questions contain interconnected entities, relations, and contextual constraints, making modification prone to unintended semantic changes.
+For example, replacing an explicit entity name with an indirect description may introduce multiple possible targets, while adding background information or translating entity names may alter the intended reference.
+Such mutations can invalidate robustness testing if they change the original information need or make the reference answer ambiguous.
+
+To address this challenge, 
+EMBERS
+ employs a web-search-assisted LLM mutation operator to generate test inputs while preserving essential factual and semantic constraints.
+The operator is guided by a structured prompt specifying the assigned mutation rule, preservation constraints, and positive and negative examples.
+These constraints require generated inputs to retain answer-determining information, preserve the intended target and reference answer, and avoid fabricated facts or unintended answer changes.
+Specifically, the operator follows a multi-round procedure consisting of four steps:
+
+•
+
+Step 1: Mutable Subject Identification.
+
+The operator first identifies entities, relations, temporal expressions, attributes, or search terms that can be modified according to the assigned mutation rule.
+Meanwhile, it distinguishes these mutable elements from essential constraints that must be preserved to maintain the original information need.
+For example, in a historical-event ordering question, event names may be replaced with equivalent descriptions, but the target events and their ordering requirement must remain unchanged.
+
+•
+
+Step 2: Mutation Direction and Constraint Determination.
+
+Based on the identified elements, the operator explores potential mutation directions and determines the constraints that each modification must satisfy.
+For example, obscure-description mutation may replace an explicit entity name with an indirect description, whereas attention-distraction mutation may introduce additional but irrelevant factual information.
+The operator selects a suitable mutation direction while maintaining the original task requirements.
+
+•
+
+Step 3: Online Fact Verification.
+
+Before generating the mutated input, the operator invokes a web-search tool to verify the factual validity of the proposed modifications.
+Retrieved evidence is used to check entity descriptions, contextual relationships, temporal constraints, and multilingual expressions, with additional searches performed when necessary.
+This step provides external evidence for mutations involving obscure or specialized knowledge that may be difficult to verify using the LLM’s parametric knowledge alone.
+
+•
+
+Step 4: Generation and Inspection.
+
+Using the verified information, the operator generates the mutated input and inspects its consistency with the original information need and mutation constraints.
+Depending on the mutation target, it produces either a modified user question or an intermediate search input while preserving the preceding execution context.
+The resulting mutation and supporting evidence are recorded for subsequent testing and inspection.
+
+Through constraint-guided mutation and online fact verification, 
+EMBERS
+ aims to reduce factual inaccuracies and unintended semantic changes in generated test inputs.
+By maintaining the original information need and reference answer, this mechanism improves the validity of pass-to-fail robustness testing, although complete preservation cannot be guaranteed.
+
+4.3. 
+Defect-Guided Fuzzing Process
+
+The large input space of DR systems makes unguided mutation inefficient, as many generated inputs either fail to expose new weaknesses or inadvertently alter the original information need.
+To improve failure discovery, 
+EMBERS
+ adopts a defect-guided fuzzing process based on the empirical findings in Section 
+3
+.
+Following the standard fuzzing workflow 
+(
+You et al., 2023
+; 
+Xie et al., 2019
+)
+, the process consists of four steps: seed initialization, mutation, execution and failure identification, and seed maintenance.
+
+4.3.1. 
+Seed Initialization
+
+To discover robustness weaknesses through answer-preserving input mutations, 
+EMBERS
+ initializes its seed pool with questions that the target DR system can answer correctly.
+These questions establish a passing baseline, allowing failures observed on mutated inputs to be distinguished from errors already present in the original questions.
+To reduce the influence of execution randomness, 
+EMBERS
+ retains only questions that the target DR system answers correctly across three independent executions.
+For each retained question 
+, 
+EMBERS
+ constructs a seed 
+ consisting of the question, its reference answer 
+, and a corresponding execution trajectory 
+:
+
+(3)
+
+The trajectory records the system’s reasoning, generated subquestions, search actions, retrieved evidence, and final answer, as defined in Section 
+3.1
+.
+By retaining both the original question and its execution trajectory, 
+EMBERS
+ enables subsequent mutations of either the user question or intermediate search inputs, providing the basis for stage-targeted robustness testing.
+
+Table 2
+. 
+Defect-guided mutation rules in 
+EMBERS
+.
+
+Mutation Rule
+
+Description
+
+Subquestion Formulation
+
+M1:
+ Misleading-ambiguity
+
+Rephrases temporal, referential, or relational expressions into potentially misleading forms while preserving their original meaning, testing the system’s ability to resolve ambiguity.
+
+M2:
+ Obscure-description
+
+Replaces explicit entity or event names with verified indirect descriptions that uniquely identify the same target, testing entity resolution during subquestion formulation.
+
+M3:
+ Missing-context
+
+Makes contextual qualifiers less explicit while retaining answer-determining information, testing whether the system preserves essential constraints during subquestion formulation.
+
+M4:
+ Attention-distraction
+
+Introduces truthful but irrelevant background information to reduce the salience of critical clues, testing whether the system maintains attention to essential information.
+
+Online Search
+
+M5:
+ Related-hot-topic
+
+Introduces popular neighboring topics into search expressions to test whether related but irrelevant information distracts retrieval from the intended target.
+
+M6:
+ Unrelated-word
+
+Injects irrelevant or high-frequency terms into search expressions to test whether noisy keywords redirect retrieval away from the intended evidence.
+
+M7:
+ Spoken-language
+
+Reformulates keyword-based search queries into colloquial expressions while preserving their meaning, testing sensitivity to alternative query formulations.
+
+M8:
+ Translation-sensitive
+
+Introduces alternative translations, mixed-language expressions, or non-standard entity names to test whether multilingual retrieval preserves the intended entities and relationships.
+
+Final Reasoning
+
+M9:
+ Complex-simple-combination
+
+Incorporates auxiliary counting, ordering, or arithmetic steps into complex research tasks, while explicitly preserving the original requested output and reference answer, testing the system’s ability to perform simple operations after extensive research.
+
+4.3.2. 
+Defect-guided Mutation
+
+Mutation is the core operation of 
+EMBERS
+, transforming correctly answered seeds into new test inputs that target empirically identified robustness weaknesses.
+Unlike general-purpose textual perturbations, 
+EMBERS
+ derives nine mutation rules from the defect characteristics identified in Section 
+3
+.
+As summarized in Table 
+2
+, these rules target different stages of DR execution.
+
+Defect-guided Mutation Rules.
+
+The nine mutation rules (M1–M9) are designed to expose weaknesses across subquestion formulation, online search, and final reasoning.
+For subquestion formulation, M1–M4 are derived from D1–D4 and modify the original user question to examine whether the DR system correctly interprets entities, relationships, and contextual constraints.
+For online search, M5–M8 are derived from D5–D7 and modify intermediate search-oriented inputs to investigate sensitivity to distracting topics, irrelevant terms, colloquial expressions, and multilingual ambiguity.
+Notably, D6 (Retrieval Strategy Sensitivity) motivates two complementary rules, M6 (Unrelated-word mutation) and M7 (Spoken-language mutation), which target different aspects of query formulation.
+For final reasoning, M9 (Complex-simple-combination mutation), derived from D9, introduces auxiliary counting, ordering, or arithmetic operations into complex research tasks while aiming to preserve the original information need and expected answer.
+We do not directly design a mutation rule for D8 (Unreadable Webpage Content), as it primarily concerns external webpage accessibility and content extraction rather than weaknesses behind the reasoning process of the DR system itself.
+Such environment-level failures are beyond the scope of our input-level fuzzing approach 
+(
+FutureSearch et al., 2025
+; 
+Wang et al., 2026
+; 
+Yin et al., 2026
+)
+.
+The mutation target depends on the execution stage being tested.
+Rules targeting subquestion formulation and final reasoning operate on the original user question, requiring the DR system to restart its research process.
+In contrast, online-search rules modify intermediate subquestions or search queries while preserving the preceding execution context.
+These mutations are generated by the web-search-assisted operator described in Section 
+4.2
+, which aims to maintain factual and semantic consistency with the original task.
+
+Dual-stage Mutation Rule Selection.
+
+Different mutation rules target distinct robustness weaknesses, making their selection important for effective failure discovery.
+However, directly sampling from all available rules couples mutation opportunities to the number of rules associated with each target, potentially leading to uneven exploration.
+To address this limitation, 
+EMBERS
+ adopts a dual-stage selection strategy that separates mutation target selection from mutation rule selection.
+This design enables explicit control over mutation opportunities at different input levels while ensuring that each selected rule is compatible with its target.
+
+Specifically, 
+EMBERS
+ considers two mutation target categories within a seed trajectory: the original user question 
+ and intermediate search-oriented inputs 
+.
+Given a selected seed 
+, let 
+ denote its available target categories.
+First, 
+EMBERS
+ samples a target category 
+ and then selects a concrete mutation point 
+ from:
+
+(4)
+
+where 
+ denotes the original user question and 
+ denotes the 
+-th intermediate search-oriented subquestion in the seed trajectory.
+The target-selection probabilities are configurable to control the testing budget allocated to different input levels.
+In our experiments, the two target categories are assigned equal selection probabilities.
+
+Once the mutation target is determined, 
+EMBERS
+ selects an applicable mutation rule from the rule set associated with the selected target.
+Let 
+ denote the rules applicable to target category 
+.
+Specifically, 
+ contains M1–M4 and M9, while 
+ contains M5–M8.
+A mutation rule 
+ is then randomly selected and applied to the chosen mutation point through the web-search-assisted mutation operator.
+By separating target selection from rule selection, 
+EMBERS
+ avoids directly coupling the testing budget to the number of available mutation rules and supports balanced exploration of question-level and intermediate-search mutations.
+Although we adopt a simple randomized selection strategy, our dual-stage design can be extended with adaptive optimization techniques, as explored in prior mutation scheduling studies 
+(
+Lyu et al., 2019
+; 
+Jauernig et al., 2023
+)
+, to dynamically adjust rule-selection probabilities based on failure-discovery feedback in future work.
+
+4.3.3. 
+Execution and Failure Identification
+
+After mutation, 
+EMBERS
+ executes the generated test input on the target DR system to determine whether it induces a robustness failure.
+The execution strategy depends on the selected mutation target.
+For question-level mutations, 
+EMBERS
+ replaces the original user question and restarts the DR system to produce a complete execution trajectory.
+For intermediate-search mutations, it preserves the reasoning and tool-use history preceding the mutation point, replaces the selected subquestion or search query, and resumes the remaining execution.
+This prefix-preserving execution strategy enables targeted testing of intermediate research stages without modifying the underlying model parameters.
+
+After execution, 
+EMBERS
+ obtains the final answer 
+ and employs a semantic answer oracle 
+ to assess its correctness against the reference answer 
+.
+Since DR systems produce open-ended responses containing explanations, citations, and alternative expressions, exact string matching is insufficient.
+Instead, the oracle identifies the final conclusion and evaluates whether it satisfies all required answer components, allowing semantically equivalent expressions and superficial formatting differences.
+Answers containing incorrect conclusions, missing required components, or no determinate final answer are classified as incorrect.
+Given the original system output 
+ and the mutated output 
+, a test input is identified as failure-inducing when:
+
+(5)
+
+where 
+ indicates whether the evaluated answer is correct.
+This condition captures pass-to-fail transitions in which the original question is answered correctly, but the mutated input produces an incorrect answer.
+For each identified failure, 
+EMBERS
+ records the originating seed, mutation target, applied rule, mutation history, generated input, execution trajectory, and oracle judgment to support subsequent analysis.
+
+4.3.4. 
+Diversity-aware Seed Maintenance
+
+Seed maintenance determines which correctly answered mutated inputs should be retained for further exploration.
+Retaining every generated input may lead to redundant mutations, whereas discarding all non-failing inputs prevents the exploration of potentially informative mutation chains.
+To balance these concerns, 
+EMBERS
+ employs two complementary mechanisms: potential input evaluation and seed probability update.
+Both mechanisms leverage the diversity measurement introduced in Section 
+4.1
+ to guide iterative fuzzing.
+
+Potential Input Evaluation.
+
+A straightforward retention strategy is to preserve inputs that introduce previously unseen diversity states.
+However, the number of such states is limited, and state novelty alone cannot distinguish promising candidates once the same states are revisited.
+To support continued exploration, 
+EMBERS
+ further evaluates the potential of non-failing inputs using their execution trajectories.
+In our empirical study, incorrectly answered executions exhibit an average trajectory length of 19.86 steps, approximately 1.31 times that of correctly answered executions, which average 15.19 steps.
+This observation suggests an association between longer research processes and execution failures, motivating the use of trajectory length as a lightweight heuristic for exploration potential.
+Specifically, longer trajectories may involve more extensive subquestion formulation, web searching, and reasoning, providing richer intermediate contexts for subsequent mutations.
+Accordingly, within each diversity state, a non-failing input is retained only when its trajectory length exceeds the historical maximum observed for that state.
+Formally, given a generated input 
+, its execution trajectory 
+, and diversity state 
+, the seed pool 
+ is updated as follows:
+
+(6)
+
+where 
+ denotes the length of the execution trajectory, measured by the total number of reasoning steps and tool calls, and 
+ denotes the historical maximum length among previously evaluated inputs in the same diversity state.
+This strategy retains inputs that extend the explored trajectory-length frontier within their respective diversity states, reducing redundant seed accumulation while preserving candidates for higher-order mutation.
+
+Seed Probability Update.
+
+As the seed pool expands, 
+EMBERS
+ must allocate mutation opportunities among initial and newly retained seeds.
+Repeatedly selecting the same seed may limit exploration diversity, while excessive mutation depth increases the risk of semantic drift.
+To balance these factors, 
+EMBERS
+ employs an exponential decay strategy that adjusts seed selection weights by mutation depth and selection frequency.
+Specifically, for each seed 
+, let 
+ denote its mutation generation, i.e., the number of successive mutations from its initial seed, and 
+ denote the number of times selected for mutation.
+The unnormalized seed-selection weight is calculated as:
+
+(7)
+
+where 
+ and 
+
+denote the initial and reference final selection weights,
+respectively, and
+
+controls the decay rate.
+The parameter 
+ controls the decay scale, specifying the weighted mutation activity at which the selection weight decreases from 
+ to 
+.
+This mechanism reduces the priority of deeply mutated or frequently selected seeds, limiting redundant exploration and mitigating the risk of substantial semantic deviations from the initial questions.
+Meanwhile, 
+ and 
+ control the relative influence of mutation depth and selection frequency on the decay rate.
+During seed selection, the weights of all active seeds are normalized to obtain their sampling probabilities.
+Consequently, deeply mutated or frequently selected seeds gradually receive lower selection priority, encouraging broader exploration while limiting repeated mutations and unintended semantic deviations.
+
+5. 
+Experimental Setup
+
+To systematically evaluate 
+EMBERS
+, we investigate the following three research questions:
+
+•
+
+RQ3:
+ How effective is 
+EMBERS
+ in detecting robustness failures?
+
+•
+
+RQ4:
+ How do the core components contribute to the effectiveness of 
+EMBERS
+?
+
+•
+
+RQ5:
+ How does 
+EMBERS
+ perform in human and LLM-assisted evaluations?
+
+Studied DR Systems.
+
+We select two representative open-source ReAct-based DR frameworks, WebSailor 
+(
+Li et al., 2025a
+)
+ and WebExplorer 
+(
+Liu et al., 2025a
+)
+, for evaluating 
+EMBERS
+.
+Although DeepDiver 
+(
+Shi et al., 2025
+)
+ is included in our empirical study, it is excluded from fuzzing experiments because it is a proprietary industrial system.
+Its execution trajectories were provided by our industrial collaborators, but we lack the executable access required to inject mutations and resume intermediate executions.
+Both selected frameworks support long-horizon web research and have been considered in subsequent studies of web research agents 
+(
+Wu et al., 2025b
+; 
+Zhang et al., 2026
+; 
+Pan et al., 2026b
+)
+.
+Moreover, their open-source implementations and model checkpoints enable us to inspect execution trajectories, modify intermediate search inputs, and resume execution from selected mutation points, which are essential for stage-targeted robustness testing.
+WebSailor trains web agents through difficult task synthesis, trajectory-based cold-start training, and agentic reinforcement learning, while WebExplorer employs model-based exploration, iterative query evolution, supervised fine-tuning, and reinforcement learning.
+We use their largest officially released model checkpoints for the two frameworks, namely WebSailor-32B
+1
+1
+
+1
+
+https://huggingface.co/Alibaba-NLP/WebSailor-32B
+ and WebExplorer-8B
+2
+2
+
+2
+
+https://huggingface.co/hkust-nlp/WebExplorer-8B
+.
+Rather than restricting evaluation to their native framework–model pairings, we combine each framework with both backbone models, yielding four configurations.
+This crossed design enables us to examine the effectiveness of 
+EMBERS
+ across different execution frameworks and backbone models.
+Together with the four datasets retained for fuzzing, these configurations produce 16 experimental settings.
+
+Table 3
+. 
+Initial seed selection statistics across framework–model configurations.
+
+Model
+
+Overall
+
+FRAMES
+
+FRAMES-ZH
+
+BrowseComp
+
+BrowseComp-ZH
+
+OpenSeeker
+
+Candidates
+
+4,109
+
+824
+
+230
+
+1,266
+
+289
+
+1,500
+
+WebSailor Framework
+
+WebSailor-32B
+
+775 (18.86%)
+
+400 (48.54%)
+
+139 (60.43%)
+
+90 (7.11%)
+
+19 (6.57%)
+
+127 (8.47%)
+
+WebExplorer-8B
+
+602 (14.65%)
+
+366 (44.42%)
+
+103 (44.78%)
+
+57 (4.50%)
+
+13 (4.50%)
+
+63 (4.20%)
+
+WebExplorer Framework
+
+WebSailor-32B
+
+732 (17.81%)
+
+377 (45.75%)
+
+130 (56.52%)
+
+92 (7.27%)
+
+19 (6.57%)
+
+114 (7.60%)
+
+WebExplorer-8B
+
+271 (6.60%)
+
+153 (18.57%)
+
+41 (17.83%)
+
+28 (2.21%)
+
+8 (2.77%)
+
+41 (2.73%)
+
+Candidates denotes the number of questions in each benchmark.
+For each framework–model configuration, cells report the number
+of initial seeds answered correctly in all three independent runs
+and their percentage relative to the benchmark size.
+
+Datasets and Initial Seeds.
+
+We collect candidate seed questions from five datasets: FRAMES 
+(
+Krishna et al., 2025
+)
+, FRAMES-ZH 
+(
+Shi et al., 2025
+)
+, BrowseComp 
+(
+Wei and others, 2025
+)
+, BrowseComp-ZH 
+(
+Zhou et al., 2025
+)
+, and OpenSeeker 
+(
+Du et al., 2026
+)
+.
+These datasets cover diverse English and Chinese information-seeking tasks, ranging from multi-hop reasoning to challenging open-web retrieval.
+Each question is associated with a reference answer for correctness assessment.
+Specifically, FRAMES contains 824 multi-hop questions requiring evidence integration across multiple sources, while FRAMES-ZH provides 230 Chinese-translated questions adopted by DeepDiver.
+BrowseComp consists of 1,266 challenging English web-search questions, whereas BrowseComp-ZH contains 289 Chinese questions spanning 11 domains.
+OpenSeeker provides synthesized multi-hop question–answer pairs constructed through fact-grounded web-graph expansion and entity obfuscation.
+We randomly sample 1,500 question–answer pairs from its released training split as candidate seeds.
+In total, the five datasets provide 4,109 candidate questions for each framework–model configuration.
+Following the seed-initialization procedure in Section 
+4.3.1
+, we independently execute each candidate question three times under each framework–model configuration.
+Only questions answered correctly in all three executions are retained as initial seeds, reducing the influence of execution randomness on subsequent pass-to-fail failure identification.
+Each configuration maintains a separate seed pool containing the original questions, reference answers, and corresponding execution trajectories.
+Table 
+3
+ summarizes the number of retained seeds and their retention rates across the five datasets.
+Notably, BrowseComp-ZH yields only 19, 13, 19, and 8 retained seeds across the four configurations.
+Given its substantially smaller seed pools than the other datasets, we exclude BrowseComp-ZH from the subsequent fuzzing experiments to avoid comparisons based on very limited initial inputs.
+
+Baselines.
+
+To evaluate 
+EMBERS
+, we select two representative approaches with complementary test-generation strategies: RobustAlpacaEval 
+(
+Cao et al., 2024
+)
+ and DR-Arena 
+(
+Gao et al., 2026
+)
+.
+RobustAlpacaEval generates semantically equivalent paraphrases to evaluate robustness against linguistic variations, whereas DR-Arena dynamically constructs research tasks using live web information to explore DR systems’ capability boundaries.
+These approaches represent general-purpose input perturbation and DR-specific dynamic task generation, respectively.
+Other DR robustness and security studies 
+(
+Dong et al., 2026
+; 
+Nie et al., 2026
+; 
+Zhu et al., 2026
+; 
+Pan et al., 2026a
+; 
+Bi et al., 2026
+)
+ are excluded as baselines because they primarily investigate failures induced by manipulated web content or external evidence, which differ from our input-level intervention setting.
+For fair comparisons, all approaches share the same initial seed pool, target framework–model configuration, correctness oracle, and wall-clock testing budget within each experimental setting.
+Under this shared testing budget, we execute each generated test input only once, prioritizing broader test exploration over repeated executions given the high cost of long-horizon DR tasks.
+
+Evaluation Metrics.
+
+Following prior fuzzing and QA testing studies 
+(
+You et al., 2023
+; 
+Shen et al., 2022
+; 
+Liu et al., 2025b
+)
+, we primarily measure testing effectiveness by the number of failure-inducing test inputs discovered within a fixed time budget.
+Since 
+EMBERS
+ aims to continuously explore robustness failures rather than measure accuracy on a fixed benchmark, this metric captures failure-discovery capability under comparable testing resources 
+(
+Dong et al., 2026
+; 
+Nie et al., 2026
+; 
+Zhu et al., 2026
+)
+.
+Specifically, we report two metrics based on the semantic answer oracle 
+ defined in Section 
+4.3.3
+.
+
+Failure-Inducing Test Inputs (
+)
+ counts generated inputs for which the target DR system produces an incorrect answer relative to the original reference answer, despite consistently answering the corresponding initial seed correctly.
+
+Passing Test Inputs (
+)
+ counts generated inputs for which the target system continues to produce a correct answer.
+We report both metrics to characterize failure discovery and the overall volume of evaluated test inputs.
+All approaches are evaluated under identical wall-clock budgets within each setting.
+A higher 
+ indicates greater failure-discovery capability under the allocated budget, but does not necessarily correspond to a larger number of distinct underlying defects.
+Moreover, oracle-identified failures may include invalid mutations or incorrect correctness judgments.
+We further assess mutation fidelity and answer-assessment reliability through human and LLM-assisted evaluations in RQ5.
+
+Implementation.
+
+We implement 
+EMBERS
+ in Python and employ DeepSeek-V3.2 
+(
+DeepSeek-AI and others, 2025
+)
+ through an OpenAI-compatible API for mutation generation and semantic answer oracle 
+.
+For mutation generation, we enable thinking mode and adopt the model’s default temperature setting.
+The mutation operator and DR systems access Google Search through Serper 
+(
+Serper, 2026
+)
+ for online fact verification, retrieving up to three search results per query and performing additional searches when necessary.
+Web pages are parsed via Jina 
+(
+Jina, 2026
+)
+ for content extraction.
+Following prior fuzzing research 
+(
+You et al., 2023
+)
+, each fuzzing run is allocated a wall-clock budget of 24 hours.
+Also, for the seed probability update process, we set 
+ to be 1 and 
+ to be 0.05, 
+ to be 10, 
+ to be 1, and 
+ to be 0.5.
+We record mutation histories, retrieved evidence, execution trajectories, final answers, and oracle judgments to facilitate subsequent analysis and reproducibility.
+
+6. 
+Results
+
+Table 4
+. 
+Overall performance of 
+EMBERS
+ and baselines.
+
+Approach
+
+Model
+
+Overall
+
+FRAMES
+
+FRAMES-ZH
+
+BrowseComp
+
+OpenSeeker
+
+Fail
+
+Correct
+
+Fail
+
+Correct
+
+Fail
+
+Correct
+
+Fail
+
+Correct
+
+Fail
+
+Correct
+
+WebSailor Framework
+
+RobustAlpacaEval
+
+WebSailor-32B
+
+432
+
+1789
+
+110
+
+776
+
+36
+
+265
+
+160
+
+447
+
+126
+
+301
+
+WebExplorer-8B
+
+309
+
+1118
+
+82
+
+527
+
+23
+
+159
+
+103
+
+270
+
+101
+
+162
+
+DR-Arena
+
+WebSailor-32B
+
+895
+
+1587
+
+255
+
+397
+
+137
+
+288
+
+222
+
+400
+
+281
+
+502
+
+WebExplorer-8B
+
+534
+
+1153
+
+162
+
+285
+
+143
+
+296
+
+110
+
+260
+
+119
+
+312
+
+EMBERS
+
+WebSailor-32B
+
+1429
+
+4005
+
+372
+
+1034
+
+278
+
+1271
+
+502
+
+731
+
+277
+
+969
+
+WebExplorer-8B
+
+1501
+
+4022
+
+317
+
+922
+
+367
+
+1216
+
+412
+
+985
+
+405
+
+899
+
+WebExplorer Framework
+
+RobustAlpacaEval
+
+WebSailor-32B
+
+245
+
+949
+
+41
+
+312
+
+38
+
+210
+
+82
+
+196
+
+84
+
+231
+
+WebExplorer-8B
+
+74
+
+446
+
+23
+
+149
+
+4
+
+37
+
+21
+
+138
+
+26
+
+122
+
+DR-Arena
+
+WebSailor-32B
+
+727
+
+1308
+
+247
+
+449
+
+98
+
+164
+
+136
+
+270
+
+246
+
+425
+
+WebExplorer-8B
+
+439
+
+1024
+
+245
+
+601
+
+75
+
+153
+
+34
+
+107
+
+85
+
+163
+
+EMBERS
+
+WebSailor-32B
+
+1922
+
+4108
+
+579
+
+1079
+
+376
+
+1286
+
+641
+
+722
+
+326
+
+1021
+
+WebExplorer-8B
+
+3488
+
+3377
+
+929
+
+952
+
+927
+
+1027
+
+881
+
+655
+
+751
+
+743
+
+Fail and Correct denote
+
+ and 
+,
+respectively.
+
+6.1. 
+RQ3: Comparison with Baselines
+
+Analysis.
+
+To evaluate the effectiveness of 
+EMBERS
+ in detecting robustness failures, we compare it with RobustAlpacaEval and DR-Arena across 16 framework–model–dataset settings.
+For fair comparison, all approaches use the same initial seed pools and a 24-hour testing budget within each setting.
+We report the number of failure-inducing (
+Fail
+) and correctly answered (
+Correct
+) test inputs to assess failure discovery and test generation capability.
+Additionally, we examine the distribution of failures across initial seeds in a representative setting and analyze the failure counts and failure-inducing rates (FI Rates) of the nine mutation rules across all 16 settings.
+The FI Rate is calculated as
+
+.
+
+Results.
+
+Table 
+4
+ presents the overall comparison results across frameworks, models, and datasets.
+
+In terms of overall failure detection
+, 
+EMBERS
+ consistently identifies more failure-inducing inputs than both baselines across all four framework–model configurations.
+Specifically, 
+EMBERS
+ identifies 8,340 failure-inducing inputs across the 16 settings, achieving 3.21 and 7.87 times the failure counts of DR-Arena and RobustAlpacaEval, respectively.
+At the dataset level, 
+EMBERS
+ achieves the highest failure count in 15 of the 16 settings.
+The only exception is on OpenSeeker under the WebSailor framework with WebSailor-32B, where 
+EMBERS
+ identifies slightly fewer failures than DR-Arena, while generating far more correctly answered inputs.
+These results indicate that defect-guided fuzzing achieves greater failure-discovery effectiveness than general-purpose input perturbation and dynamic research-task generation under the same testing budget.
+However, as these counts rely on automated correctness judgments, they represent potential rather than independently verified robustness failures, whose input fidelity and assessment reliability are further examined in RQ5.
+
+In terms of framework–model generality
+, 
+EMBERS
+ outperforms the strongest baseline, DR-Arena, across all four framework–model configurations, with relative improvements ranging from 59.66% to 694.53%.
+The largest improvement is observed under the WebExplorer framework with WebExplorer-8B, where 
+EMBERS
+ identifies 7.95 times as many failure-inducing inputs.
+Importantly, the improvements are observed in both native and crossed framework–model pairings, suggesting that the effectiveness of 
+EMBERS
+ is not restricted to a particular framework or backbone model among those evaluated.
+
+In terms of test generation capability
+, 
+EMBERS
+ evaluates substantially more inputs within the same testing budget.
+Specifically, it generates 3.11 and 4.45 times as many test inputs as DR-Arena and RobustAlpacaEval, respectively.
+For correctly answered inputs, the corresponding improvements are 3.06 and 3.61 times.
+This advantage is particularly valuable for iterative fuzzing, where promising correctly answered inputs can serve as candidates for further mutation and exploration.
+These findings indicate that 
+EMBERS
+ supports more extensive test exploration within a fixed time budget, contributing to its greater failure-discovery capability.
+
+Figure 3
+. 
+Distribution of failure-inducing and correctly answered inputs across 90 initial seeds on BrowseComp under the WebSailor framework with WebSailor-32B.
+
+In terms of initial-seed coverage
+, we examine how failure-inducing inputs are distributed across the 90 initial seeds on BrowseComp under the WebSailor framework with WebSailor-32B.
+As shown in Fig. 
+3
+, 
+EMBERS
+ generates 1,233 test inputs, of which 502 induce potential robustness failures.
+Notably, 89 of the 90 initial seeds contribute at least one failure-inducing input, indicating that failure discovery is distributed across a broad range of original questions rather than concentrated in a small subset.
+Although failures originating from different seeds do not necessarily correspond to distinct underlying defects, their broad distribution supports the use of initial-seed identity as a lightweight indicator of static diversity, as introduced in Section 
+4.1
+.
+
+Figure 4
+. 
+Failure discovery and FI rates of nine defect-guided mutation rules across 16 experimental settings.
+
+In terms of mutation-rule effectiveness
+, Fig. 
+4
+ presents the failure counts, correctly answered inputs, and FI Rates of the nine defect-guided mutation rules (M1–M9).
+All nine rules identify failure-inducing inputs, suggesting that the defect characteristics identified in our empirical study provide useful guidance for the construction of effective robustness tests.
+Among them, M3 (Missing-context mutation) and M2 (Obscure-description mutation) achieve the highest failure counts and FI Rates of 65.95% and 55.14%, respectively.
+Their strong performance suggests that mutations affecting entity identification and contextual constraints are particularly effective at exposing weaknesses during subquestion formulation.
+Such interpretation errors may subsequently propagate through online search and final reasoning, consistent with the defect characteristics D2 and D3 identified in our empirical study.
+Among online-search mutations, M7 (Spoken-language mutation) and M8 (Translation-sensitive mutation) achieve higher failure counts and FI Rates than M5 and M6.
+In contrast, M6 (Unrelated-word mutation) evaluates the largest number of inputs but exhibits the lowest FI Rate (20.84%).
+These results suggest that variations in query expressions and multilingual representations may be more effective at exposing search-related weaknesses than simply introducing irrelevant terms.
+Furthermore, M9 (Complex-simple-combination mutation) achieves an FI Rate of 35.39%, indicating that incorporating simple operations into complex research tasks can also expose potential reasoning weaknesses.
+Overall, the nine mutation rules exhibit different failure-discovery patterns across the three execution stages.
+These differences provide empirical support for using mutation-rule identity as a complementary indicator of dynamic diversity in Section 
+4.1
+.
+Although different rules do not necessarily reveal distinct underlying defects, their varying effectiveness suggests that they exercise different aspects of DR system robustness and motivate diversity-aware exploration.
+
+Answering RQ3.
+
+Under the same testing budget, 
+EMBERS
+ achieves 3.21 times the failure-discovery throughput of the strongest baseline, with consistent improvements across framework–model configurations.
+Failures are distributed across nearly all examined initial seeds, while all nine mutation rules expose potential robustness failures with varying effectiveness, supporting the use of seed identity and mutation-rule identity as complementary diversity indicators.
+
+Table 5
+. 
+Performances of 
+EMBERS
+ and variants across two native framework–model configurations.
+
+Approach
+
+Model
+
+FRAMES
+
+FRAMES-ZH
+
+Fail
+
+Correct
+
+Fail
+
+Correct
+
+WebSailor Framework
+
+EMBERS
+
+WebSailor-32B
+
+372
+
+1034
+
+278
+
+1271
+
+w/o dual-stage selection
+
+WebSailor-32B
+
+194
+
+1312
+
+111
+
+1338
+
+w/o seed maintenance
+
+WebSailor-32B
+
+343
+
+1056
+
+255
+
+1190
+
+w/o mutation online
+
+WebSailor-32B
+
+237
+
+796
+
+183
+
+858
+
+WebExplorer Framework
+
+EMBERS
+
+WebExplorer-8B
+
+929
+
+952
+
+927
+
+1027
+
+w/o dual-stage selection
+
+WebExplorer-8B
+
+852
+
+1033
+
+850
+
+1150
+
+w/o seed maintenance
+
+WebExplorer-8B
+
+903
+
+989
+
+890
+
+1014
+
+w/o mutation online
+
+WebExplorer-8B
+
+697
+
+518
+
+691
+
+579
+
+6.2. 
+RQ4: Ablation Study
+
+Analysis.
+
+To investigate the contribution of each core component in 
+EMBERS
+, we conduct an ablation study by removing one component at a time.
+Since DR systems involve long-horizon reasoning and iterative web interactions, repeatedly executing them across numerous configurations incurs substantial computational and ti

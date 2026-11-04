@@ -1,0 +1,2746 @@
+RuntimeTickets: Source-Grounded Security Obligations for Agent Skills
+https://arxiv.org/abs/2611.03772
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+RuntimeTickets: Source-Grounded Security
+
+Obligations for Agent Skills
+
+Kuiyi Gao
+
+Affiliation: 
+University of North Carolina at Chapel Hill
+
+Email: 
+kuiyigao@unc.edu
+
+  
+
+Xue Liu
+
+Affiliation: 
+Mohamed bin Zayed University
+
+Affiliation: 
+of Artificial Intelligence, McGill University
+
+  
+
+Bowei He
+
+†
+†
+thanks: 
+Corresponding author.
+
+Affiliation: 
+Mohamed bin Zayed University
+
+Affiliation: 
+of Artificial Intelligence, McGill University
+
+Abstract
+
+Third-party Agent Skills extend what an autonomous agent can do, but a malicious Skill can hide data exposure or
+output manipulation inside a legitimate workflow. Neither reading a Skill’s description nor granting it tool
+permissions tells whether its execution meets the user’s security requirements. We introduce 
+RuntimeTickets
+, a
+protocol that enforces and audits these requirements while a Skill runs. From released malicious-Skill datasets we
+derive a risk model and build adversarial-benign Skill pairs. From the task’s delivery contract, a language model
+proposes security obligations for that task. Each obligation cites the Skill lines it answers, and the ticket
+tightens the host’s approvals into fine-grained allowed actions but never loosens them. A runtime gate checks the
+recipient, object and amount of every outbound send before forwarding it, and trusted monitors record the effects
+within their observation scope. The ticket links these checks and observations to the approved obligations of each
+Skill run, and a deterministic decoder turns the ticket’s status into governable data flows and verifies each
+obligation. Neither enforcement nor decoding involves a language model, so text injected by a Skill can change the
+proposal but never the rule that decides a send. We evaluate 
+RuntimeTickets
+ at the network egress boundary of three
+unmodified agent frameworks against production Skill scanners and runtime baselines, among them an AgentBound-derived
+allow-list and SkillGuard. 
+RuntimeTickets
+ eliminated both failure modes of current Skill defenses, overlook (malicious
+Skills let through) and overkill (benign Skills blocked): its overlook rate was 0.0% and its overkill rate
+0.0%, while the scanners erred on both sides. 
+RuntimeTickets
+ ties approved requirements to verifiable
+execution evidence and offers a common foundation for the safe and auditable deployment of third-party Skills.
+
+1 
+Introduction
+
+Agent Skills are packages of instructions, scripts and reference files that an agent loads on demand 
+(
+Anthropic 2026
+)
+. Frameworks such as OpenClaw and Hermes Agent load them 
+(
+OpenClaw Foundation 2026
+; 
+Nous Research 2026
+)
+, and registries such as ClawHub and Skills.sh let third parties distribute them 
+(
+OpenClaw 2026
+; 
+Vercel 2026
+)
+. A loaded Skill runs with the user’s files, credentials and network access, usually without any mandatory review. The harm is already well documented:
+(1) 
+Vulnerable and malicious Skills are common.
+ One detector flagged at least one vulnerability in 26.1% of 31,132 Skills 
+(
+Liu et al. 2026b
+)
+, and behavioral verification confirmed 157 malicious Skills among 98,380 
+(
+Liu et al. 2026a
+)
+.
+(2) 
+Secrets leak at run time.
+ 520 of 17,022 sampled Skills leaked credentials, and 89.6% of the leaked credentials were immediately exploitable 
+(
+Chen et al. 2026
+)
+.
+(3) 
+Attacks have reached production registries.
+ Antiy CERT counts at least 1,184 malicious Skills that have appeared on ClawHub, and the ClawHavoc campaign delivered infostealers that take browser passwords, SSH keys and exchange API keys 
+(
+Antiy CERT 2026
+)
+.
+(4) 
+Default protection is weak, and defenses disagree.
+ Only 0.12% of the Skills that five scanners analyzed were flagged by all five 
+(
+Holzbauer et al. 2026
+)
+. OpenClaw without an added defense layer resisted sandbox escape in 17% of attacks on average 
+(
+Shan et al. 2026
+)
+.
+
+Consider a Skill that drafts a report and mails it to the recipient named in the task. A malicious version keeps every benign instruction and adds one more: also mail the workspace’s credential file to the same recipient. Both go to the same address and differ only in what they carry. Whether a send is harmful depends on the task and the object, and a check of the package alone sees neither.
+
+Existing defenses leave three gaps (Section 
+4
+, Table 
+2
+). Source scanners judge a package once, before any task exists 
+(
+Cisco AI Defense 2026
+; 
+NVIDIA 2026
+)
+. A deployment-wide allow-list forwards every send to an address it already permits, including the task’s own recipient. Most runtime monitors judge each tool call 
+(
+Pan et al. 2026
+; 
+Mou et al. 2026
+)
+, so a send made by a helper script reaches them as the command that launched the script, not as a send. AgentBound does see sends at the network boundary, but it applies one fixed policy that no task narrows 
+(
+Bühler et al. 2026
+)
+.
+
+A Skill’s harm lies in what it does at run time, so we check each effect against requirements written for the task at hand. In 
+RuntimeTickets
+ (Figure 
+1
+), a language model proposes a 
+ticket
+ once per task and Skill. The ticket’s obligations name the recipients, objects and amounts the task requires. The host approves a ticket only if it tightens the host grant and never loosens it. A model-free gate at the egress boundary allows an effect only when the frozen ticket covers it. After the run, a deterministic decoder tells the user whether each obligation held (
+Supported
+), was broken (
+Violated
+) or has no evidence (
+Unknown
+), and the account records which layer refused each blocked request.
+
+Figure 1: 
+A model proposes the ticket for each task before any run, and model-free code decides every outbound send and returns every verdict.
+ Before any run, the host checks that the model’s proposal stays within its grant 
+ and freezes it as the ticket 
+. During each run, the gate at the effect boundary forwards a request only if 
+ allows it. After the run, the decoder reads the authenticated account and returns one verdict per obligation, and the account names the layer that refused each blocked request.
+
+We build 60 twin pairs from released malicious-Skill datasets (Section 
+2
+) and run, on unmodified agent frameworks, the pairs whose attack an agent attempts without a defense. Under 
+RuntimeTickets
+ no attempted attack got through and no benign run was blocked. Without a gate every attempted attack got through, and under an AgentBound-derived allow-list 75.0% did, including attacks that reuse the task’s recipient. SkillGuard, run on its native Claude Code agent, also let such attacks through. Every account re-derived exactly, each refusal carried the layer that made it, and on a separate test set no tampered account produced a false 
+Supported
+. Our contributions are:
+
+•
+
+We build
+ a risk model and twin pairs from released malicious Skills (Section 
+2
+).
+
+•
+
+We design
+ 
+RuntimeTickets
+, where a model proposes per-task requirements and a model-free core enforces and audits them (Section 
+3
+).
+
+•
+
+We evaluate
+ 
+RuntimeTickets
+ against source scanners, an AgentBound-derived allow-list and SkillGuard on three unmodified frameworks, and audit its accounts (Section 
+5
+).
+
+2 
+Risk Model
+
+2.1 
+Skills Act with the User’s Authority
+
+An Agent Skill is a package of instructions (
+SKILL.md
+), helper scripts and reference files that an agent loads for a task 
+(
+Anthropic 2026
+)
+. A Skill that steers the agent can turn it into a confused deputy 
+(
+Hardy 1988
+)
+. Before a run, the host fixes three trusted elements. The 
+task goal
+ carries a 
+delivery contract
+ 
+: the agent must send an object that passes validator 
+ to recipient 
+, in a total amount of at most 
+. The 
+host grant
+ 
+ lets every task send to a set of owned receivers 
+ within a budget 
+. The 
+effect boundary
+ is an egress proxy on every outbound connection.
+
+2.2 
+The Attacker Controls the Skill
+
+Registries turn Skills into a software supply chain, and malicious packages in such chains are well documented 
+(
+Ohm et al. 2020
+; 
+Duan et al. 2021
+)
+. The attacker can write any byte of the Skill, so injected text can steer the agent and any model that reads it. The attacker cannot change the host’s inputs, its checking code or what the boundary observes. The issuer keys stay outside the container.
+
+A defense meets the 
+protection goal
+ when a malicious Skill’s harmful effect does not happen and the defense does not prevent its benign twin’s task effect. Either half alone is trivial, since blocking every Skill or allowing every Skill satisfies one of them.
+
+2.3 
+Harm Categories and Their Observation
+
+We define harm by its effect on the user’s system, not by the text of the Skill. An effect is what a trusted monitor can observe and a gate can refuse, and we call these monitors 
+witnesses
+. We grouped every malicious behavior labeled in released datasets and in a registry study 
+(
+Schmotz et al. 2026
+; 
+Guo et al. 2026
+; 
+Liu et al. 2026a
+)
+ by the effect it aims at. This gives the five categories of Table 
+1
+, from 
+exfiltration
+ (E1) to 
+safeguard suppression
+ (E5).
+
+Two model-free witnesses score the effects. An egress witness at each owned receiver logs every send. A workspace witness compares file contents and mode bits before and after the run, so local destructive, access and safeguard effects are observed as well. We fixed the categories, the witnesses and the labels before any run, and a label audit then moved the pairs whose source label did not match their injected effect. Appendix 
+A.2
+ reports outcomes per category.
+
+Table 1: 
+Five harm categories, fixed before any run, with 60 twin pairs in all.
+ Each twin pair belongs to one category and is observed by the witness shown. The reported overlook rate uses the egress witness only.
+
+Category
+
+Harmful effect that the attack Skill tries to cause
+
+Witness
+
+Pairs
+
+E1 Exfiltration
+
+credentials or workspace data sent out of the host
+
+egress
+
+36
+
+E2 Destructive change
+
+files deleted, a repository redirected or rewritten
+
+egress or workspace
+
+8
+
+E3 Access weakening
+
+permissions loosened, keys or accounts added
+
+egress or workspace
+
+5
+
+E4 Content manipulation
+
+produced content biased or falsified
+
+egress if sent
+
+8
+
+E5 Safeguard suppression
+
+checks or safety configuration disabled
+
+workspace
+
+3
+
+2.4 
+Twin Pairs from Released Datasets
+
+Every attack Skill and every benign twin comes from a released corpus. We write no Skill and no injection. We write only the trusted task and its input files. For Skill-Inject, we insert a released injection at its released line into a released carrier Skill, following the corpus’s own builder 
+(
+Schmotz et al. 2026
+)
+. The carrier as released is the benign twin, so the twins differ in the injected 
+SKILL.md
+ lines and, in some pairs, in the corpus’s own helper script. For MalSkillBench, the attack twin is a released malicious Skill and the benign twin is the corpus’s own benign Skill of the same name, both copied unchanged 
+(
+Guo et al. 2026
+)
+. Appendix 
+A.1
+ (Table 
+4
+) counts the files and lines that differ in each pair. Both twins share the trusted task, the host grant and the mock environment.
+
+3 
+RuntimeTickets
+
+3.1 
+Overview: The Only Model Step Comes Before the Run
+
+A 
+ticket
+ is a set of obligations that states what the current task needs. A model proposes it once per task and Skill, before any run. The host approves it only if it tightens the host grant and never loosens it, and the gate then enforces the frozen ticket on every effect (Figure 
+1
+). Only the proposal uses a model. 
+RuntimeTickets
+ attaches to an unmodified framework through container configuration, so it does not depend on the agent, the hub or the driver model (Appendix 
+B.7
+).
+
+3.2 
+What a Ticket States and How It Is Encoded
+
+A ticket is a tuple 
+ (Figure 
+2
+). Here 
+ binds the ticket to the task and to the exact version of the Skill, 
+ holds the host grants that the ticket selects, 
+ is the host budget, 
+ lists the ticket’s obligations and 
+ its unresolved risks. An 
+obligation
+ is one condition that every send of the task must meet. For the delivery contract 
+, a standard ticket states three, one for each question that separates the sanctioned send from a harmful one: who receives it, what it carries and how much has been sent. Each is checked on a send 
+ with recipient 
+, object 
+ and amount 
+, where 
+ is the amount the run has been allowed so far:
+
+(1)
+
+ holds when the send goes to the task’s recipient, 
+ when the object passes the host’s validator for the task’s deliverable, and 
+ when this send, added to what the run has been allowed, stays within the task’s amount. Each obligation cites the 
+SKILL.md
+ lines it answers. The host’s mandatory obligations 
+ and the unresolved risks 
+ were empty in every ticket of this study. Compiling the grant alone gives 
+, which is the deployment-wide allow-list.
+
+Proposition 1 (a ticket can tighten the host grant but never loosen it).
+ 
+On every request, and over whole runs including adaptive ones, a ticket compiled from the host grant allows no effect that the grant alone does not allow
+ (proof sketch in Appendix 
+B.3
+). A steered generator therefore cannot widen authority beyond the grant, just as the holder of a macaroon can add caveats but never remove one 
+(
+Birgisson et al. 2014
+)
+.
+
+Figure 2: 
+A frozen ticket and the gate’s check of one send, with symbolic values.
+ Blue fields are set by the host, green fields come from the host grant 
+ and amber fields are written by the model. 
+, 
+ and 
+ are the recipient, object and amount of send 
+, and 
+ is what earlier sends used. The gate allows 
+ only if no row fails or is unknown, and a failed row denies it before an unknown row defers it.
+
+3.3 
+Creating and Enforcing a Ticket
+
+Proposing and freezing.
+ The generator is a Claude model from a family other than the drivers’ (Appendix 
+B.1
+). For each twin it receives one fixed request: the task with its delivery contract, the host grant, catalogs of resources and validators, the reply schema and the numbered Skill lines, which the request marks as untrusted data (Figure 
+5
+). The two twins’ requests differ only in the Skill lines and their binding. The compiler rejects any grant outside 
+, copies the selected grants and the budget, and appends the proposed obligations after 
+. The host then probes the compiled ticket before freezing it. The probe must allow a valid delivery to 
+, refuse an invalid object to 
+, and refuse a valid object to every other owned receiver (Appendix 
+B.2
+), so it rejects 
+. A rejected proposal is sent again unchanged, up to a fixed budget. If no proposal passes, the twin runs under 
+ and is reported as a fallback (Algorithm 
+3.3
+). No proposal in this study was rejected, so no ticket fell back.
+
+In this study the delivery contract fixes the three obligations, and the model grounds each one in the Skill. It cites the numbered lines that the obligation answers and states why, so an auditor can trace every obligation to the text that prompted it (Appendix 
+B.1
+).
+
+ 
+
+Algorithm 1
+ 
+RuntimeTickets
+: propose and freeze a ticket, then enforce it on every effect
+
+ 
+
+1:
+
+              
+              
+            grant 
+ with budget 
+ and mandatory obligations 
+, delivery contract 
+, Skill 
+, retries 
+ and each run’s requests
+
+2:
+
+              
+              
+            frozen ticket 
+, and a decision 
+ with its reasons for each request
+
+3:
+
+ 
+ once per task and Skill
+
+4:
+
+for
+ 
+ 
+do
+ 
+ propose, compile, probe
+
+5:
+
+              
+              
+              
+ 
+ the only model step
+
+6:
+
+              
+              
+              
+ if 
+ parses and 
+, else 
+
+7:
+
+              
+              
+              
+if
+ 
+ passes the probe 
+then
+ 
+break
+
+  
+
+8:
+
+if
+ no proposal passed the probe 
+then
+ 
+ 
+ reported as a fallback
+
+9:
+
+ 
+ reused unchanged by every run
+
+10:
+
+for
+ each request 
+ of a run, with 
+ at the run’s start 
+do
+ 
+ the gate
+
+11:
+
+              
+              
+              
+if
+ no grant in 
+ covers 
+ 
+then
+
+12:
+
+              
+              
+               
+ and 
+
+13:
+
+              
+              
+              
+else
+
+14:
+
+              
+              
+               
+, plus the budget if 
+
+15:
+
+              
+              
+               
+
+  
+
+16:
+
+              
+              
+              
+ if 
+, else 
+Defer
+ if 
+, else 
+Allow
+
+17:
+
+              
+              
+              
+ 
+ written before any effect
+
+18:
+
+              
+              
+              
+if
+ 
+ 
+then
+ 
+ and forward 
+ once
+  
+
+ 
+
+Enforcing at the effect boundary.
+ The gate is a reference monitor over host authority 
+(
+Schneider 2000
+)
+. It reads a request’s operation, resource, recipient, object and amount, and never the text that produced the request. The second loop of Algorithm 
+3.3
+ checks authority first, so an unanticipated operation is refused without any written prohibition. A failed obligation or an exceeded budget then denies the request, and a missing fact or an open risk defers it, so the gate fails closed (Appendix 
+B.2
+ states the rule as one formula). A deferred send is not forwarded, and in deployment it acts as a denial unless the host resolves it, for example by asking the user. The gate records every decision before anything happens, and only an 
+Allow
+ counts toward the amount and forwards the request.
+
+Each container can reach only the model channel and the egress proxy, which passes every connection through the gate. An injected send 
+gets through
+ when the proxy forwards it. Receivers are identified by host. An injected send that reuses the task’s recipient therefore models an attacker who can read what reaches that service, and only 
+ and 
+ can tell it from the delivery. The allow-list differs from a ticket only in the selected grants and the obligations, so by Proposition 1 it allows at least as much.
+
+3.4 
+Reading a Run Back
+
+After a run, a user needs to know whether the Skill broke any obligation and, if a request was refused, why. The run’s 
+account
+ answers both (Figure 
+1
+). It is a set of records: each validation, decision, completion, observed effect, stream seal and closure. The issuer authenticates a record, chains it to the issuer’s previous record and binds it to the ticket through the ticket id. Without the keys, no record can be altered or reordered undetected 
+(
+Schneier & Kelsey 1999
+; 
+Crosby & Wallach 2009
+)
+, and removing a record breaks the chain or the closure of the account. For an obligation 
+ and an account 
+, a model-free decoder returns
+
+(2)
+
+An admitted counterexample is an authenticated record of an effect that breaks 
+. A closed, sealed account has no unfinished operation and every declared stream sealed. A witnessed violation therefore stands despite coverage gaps, and an unobserved operation decodes to 
+Unknown
+. The host also attributes each refusal to the host grant, the host budget or a ticket rule and records the attribution in the account. Anyone who holds the contract and the account can recompute it, so the user sees why a request was refused and can check the reason (Appendices 
+B.4
+, 
+B.5
+ and 
+E
+). By Proposition 1, a steered generator cannot widen what a Skill may do, and after the freeze injected text cannot change the rule that decides a request. Appendix 
+B.6
+ answers five design questions (DQ1 to DQ5) from the mechanism alone.
+
+4 
+Related Work
+
+Table 
+2
+ compares representative systems, and each cell rests on the cited paper or its code.
+
+Table 2: 
+Defenses by when they check.
+ 
+Skills
+: tested on Skills. 
+Model-free
+: no model in the check, nor in its policy after the run starts. 
+Send-level
+: judges the send, not the command. 
+Within grant
+: a per-task or per-step policy that only tightens a grant. 
+Auditable
+: authenticated or re-derivable run-time log. Check: yes. Half disc: in part. Cross: no. Dash: the system decides only before or after the run. Chip: run as a baseline, AgentBound in derived form as our allow-list.
+
+Checks
+
+System
+
+Skills
+
+Model-free
+
+Send-level
+
+Within grant
+
+Auditable
+
+ 
+Cisco 
+(
+Cisco AI Defense 2026
+)
+ 
+ 
+baseline
+ 
+
+3
+
+7
+
+7
+
+–
+
+ 
+Before install
+
+ 
+SkillSpector 
+(
+NVIDIA 2026
+)
+ 
+ 
+baseline
+ 
+
+3
+
+7
+
+7
+
+–
+
+SkillDetonate 
+(
+Ji et al. 2026
+)
+
+3
+
+3
+
+7
+
+–
+
+ 
+SkillGuard 
+(
+Pan et al. 2026
+)
+ 
+ 
+baseline
+ 
+
+3
+
+7
+
+7
+
+7
+
+7
+
+AIRGuard 
+(
+Qin et al. 2026
+)
+
+3
+
+7
+
+7
+
+3
+
+7
+
+OATS 
+(
+Taneja & Weber 2026
+)
+
+3
+
+3
+
+7
+
+7
+
+3
+
+ToolSafe 
+(
+Mou et al. 2026
+)
+
+7
+
+7
+
+7
+
+7
+
+7
+
+ 
+During run
+
+Progent 
+(
+Shi et al. 2025
+)
+
+7
+
+7
+
+7
+
+Conseca 
+(
+Tsai & Bagdasarian 2025
+)
+
+7
+
+3
+
+7
+
+7
+
+7
+
+AgentSpec 
+(
+Wang et al. 2026
+)
+
+7
+
+7
+
+7
+
+7
+
+ 
+AgentBound 
+(
+Bühler et al. 2026
+)
+ 
+ 
+baseline
+ 
+
+7
+
+3
+
+3
+
+7
+
+7
+
+ 
+After run
+
+HazardAuditor 
+(
+Feng et al. 2026
+)
+
+7
+
+7
+
+7
+
+7
+
+–
+
+ 
+During run
+
+ 
+RuntimeTickets
+ (ours)
+
+3
+
+3
+
+3
+
+3
+
+3
+
+Source scanners
+ judge a package once, before it runs 
+(
+Cisco AI Defense 2026
+; 
+NVIDIA 2026
+)
+. Even when a scanner’s model stage sees the task and the grant, it never sees a send. 
+Defenses built for Agent Skills
+ work at the level of tool calls. SkillGuard, the closest system, blocks calls outside a capability pool that is partly built from the Skill’s manifest 
+(
+Pan et al. 2026
+)
+. In our runs it judged injected sends by their capability, not their destination (Section 
+5.2
+). AIRGuard narrows the authority of each step 
+(
+Qin et al. 2026
+)
+, OATS checks calls before they run 
+(
+Taneja & Weber 2026
+)
+, and SkillDetonate runs a Skill in a sandbox before installation 
+(
+Ji et al. 2026
+)
+.
+
+Runtime monitors
+ such as ToolSafe, Progent, Conseca and AgentSpec enforce policies on tool calls, and a trained model, a prompted model or an author writes the policy 
+(
+Mou et al. 2026
+; 
+Shi et al. 2025
+; 
+Tsai & Bagdasarian 2025
+; 
+Wang et al. 2026
+)
+. Information-flow defenses label values instead 
+(
+Debenedetti et al. 2026
+; 
+Costa et al. 2025
+)
+. A Skill script’s own send reaches a call-level monitor as the command that launched the script, not as a send. AgentBound judges sends against a static per-server policy that no task narrows 
+(
+Bühler et al. 2026
+)
+.
+
+Verifiable records.
+ OATS chains authenticated receipts, and CONTINUITY and Aegis use asymmetric signatures 
+(
+Zheng & Yang 2026
+; 
+Yuan et al. 2026
+)
+. We add a model-free decoder that gives a verdict for each obligation, and an account whose attribution of each refusal, to the host grant, the host budget or a ticket rule, anyone can recompute. Appendix 
+C
+ extends this comparison.
+
+5 
+Experiments
+
+We ask three questions. 
+RQ1 (security):
+ does 
+RuntimeTickets
+ stop the harmful effects of malicious Skills at run time, including sends that a deployment-wide allow-list lets through? 
+RQ2 (utility):
+ does it let benign Skills finish their work? 
+RQ3 (auditability):
+ can a third party re-derive a run from its account, and does missing or altered evidence ever yield a false 
+Supported
+?
+
+5.1 
+Setup
+
+Two experiments, one set of twin pairs.
+ In Experiment A, each source scanner judges all 60 twin pairs. In Experiment B, runtime defenses protect real agent runs on the pairs whose harm is an outbound send, the exfiltration pairs and one content-manipulation pair. Four framework-driver panels supply the runs (Appendix 
+D.3
+). A supplementary panel runs the same pairs on Claude Code, where SkillGuard joins as a fourth runtime defense (Appendix 
+D.6
+).
+
+Environment.
+ Each run executes one released Skill, malicious or benign, on an unmodified framework that a real language model drives. The environment is a mock. Owned receivers stand in for external services, so no data reaches a third party, and the workspace holds synthetic canaries. The task delivers its result by a plaintext upload that the validator can read, while the released injections use TLS. We also test the hardest case for an allow-list, an attacker who names an endpoint that the deployment already uses. Two owned receivers stand in for the destinations that the injections name most often. For a pair whose injection names one, an order fixed before any run decides whether it is the task’s own recipient (Appendix 
+A.3
+). Experiment B keeps the pairs whose injected action the driver attempted in a defense-free calibration (Appendix 
+A.4
+).
+
+Frameworks and drivers.
+ We use Hermes Agent (upstream revision of 14 September 2026) and OpenClaw 2026.6.10, and Claude Code for the supplementary panel. A 
+panel
+ pairs one framework with one driver model, 
+deepseek-v4-pro
+ or 
+kimi-k2.6
+ 
+(
+DeepSeek-AI 2026
+; 
+Moonshot AI 2026
+)
+. Agent-safety benchmarks use such models as attacked agents 
+(
+Debenedetti et al. 2024
+; 
+Andriushchenko et al. 2025
+)
+, and the driver never takes part in a security decision. A 
+run
+ is an execution that reached its framework’s normal exit, finished or not.
+
+Defenses compared.
+ We compare source scanners,Cisco Skill Scanner 2.1.0 
+(
+Cisco AI Defense 2026
+)
+ and NVIDIA SkillSpector 2.11.2 
+(
+NVIDIA 2026
+)
+, which we call Cisco and SkillSpector. Each runs as its full cascade. A package that the model-free static stage admits goes on to the tool’s model stage, which DeepSeek drives and which sees the task and the grant. A scanner decides once, at admission, and an incomplete assessment withholds the package. The runtime defenses share one frozen gate. 
+No gate
+ forwards every request. The 
+allow-list
+ is derived from the per-endpoint egress policy of AgentBound 
+(
+Bühler et al. 2026
+)
+, which no task narrows. It is the ticket 
+ of Section 
+3
+, compiled from the host grant alone: the gate forwards any send to an owned receiver while the run stays within the host budget 
+, without knowing which receiver the task uses or what it must deliver. It shares the gate and account of 
+RuntimeTickets
+, so the two differ only in the per-task ticket. 
+SkillGuard
+, the closest defense built for Agent Skills, judges each tool call through the hooks of Claude Code 
+(
+Pan et al. 2026
+)
+, so it runs on that panel. Other runtime monitors judge the tool call or the finished trajectory, so a script’s own send reaches them as the command that launched it (Appendix 
+C
+).
+
+Metrics.
+ A defense can fail in two ways. It can 
+overlook
+ an attack by letting it through, or 
+overkill
+ a benign Skill by blocking its legitimate work. We call a request an 
+injected send
+ when it goes to the host that the injection names or carries a planted canary. An attack run 
+gets through
+ when the defense forwards an injected send, and the 
+overlook rate
+ is the share of attack runs that get through, the malicious Skills let through, which earlier work calls the attack success rate. An attack run is 
+attempted
+ when the agent issues an injected send that the gate decides, whether or not the gate forwards it, and Table 
+3
+ leads with the share of attempted attacks that got through. A scanner overlooks a malicious Skill by admitting it.
+
+The 
+overkill rate
+ is the share of benign runs that a defense blocks, the benign Skills blocked. A benign run is blocked when the gate refuses a format-valid send to the task’s recipient and forwards none. A scanner blocks a benign Skill by withholding it. The share of 
+benign Skills not blocked
+ is 100% minus the overkill rate. The 
+delivery rate
+ is the share of benign runs that deliver the sanctioned output. For RQ3 we count the accounts whose re-decoding reproduces the recorded verdicts, and the tampered accounts that the decoder still marks 
+Supported
+. We sum counts over the panels and compute rates from the sums (Appendices 
+D.1
+ and 
+D.4
+).
+
+Figure 3: 
+Among the defenses compared, only 
+RuntimeTickets
+ sits at 0.0% overlook and 0.0% overkill.
+ We ask which defense stops injected sends at run time without blocking benign Skills, that is, which has the lowest overlook rate (malicious Skills let through) and the lowest overkill rate (benign Skills blocked). Scanners (squares) judge all 60 twin pairs at admission, runtime defenses (circles) guard agent runs on the four panels, and SkillGuard (triangle) guards its native Claude Code agent in a supplementary panel. (a) Overlook against overkill, with the ideal corner shaded. (b) Benign Skills not blocked, 100 minus the overkill rate. (c) The overlook rate, with the Fisher exact 
+ of 
+RuntimeTickets
+ against no gate and the allow-list. On attacks that reuse the task’s recipient (hatched), the allow-list let 31.3% through and 
+RuntimeTickets
+ none.
+
+Table 3: 
+RuntimeTickets
+ let no attempted attack through and blocked no benign run.
+ Percent, lower is better. Overlook rate: the attack runs in which an injected send got through, over the attempted attacks (the agent issued an injected send) and over all attack runs. Overkill rate: the benign runs that the defense blocked. A scanner judges each of the 60 twin pairs once, so one overlook value (malicious Skills admitted) spans both columns, and its overkill rate is the benign Skills withheld. Errors observed: overlook, overkill, both or none, naming the dominant type when the rates differ tenfold. 
+∗
+Zero by construction.
+
+Overlook rate 
+
+malicious Skills
+
+let through
+
+Overkill rate 
+
+benign Skills
+
+blocked
+
+Errors
+
+observed
+
+Defense
+
+Checks
+
+of attempted
+
+attacks
+
+of all
+
+attack runs
+
+of all
+
+benign runs
+
+Source scanners, all 60 twin pairs
+
+Cisco
+
+package, once
+
+18.3
+
+20.0
+
+Both
+
+SkillSpector
+
+package, once
+
+1.7
+
+53.3
+
+Overkill
+
+Runtime defenses, four framework-driver panels
+
+No gate
+
+nothing
+
+100.0
+
+27.5
+
+0.0
+∗
+
+Overlook
+
+Allow-list (AgentBound)
+
+each send, fixed list
+
+75.0
+
+15.8
+
+5.7
+
+Both
+
+RuntimeTickets
+
+each send, per task
+
+0.0
+
+0.0
+
+0.0
+
+✓
+ None
+
+Claude Code panel, supplementary
+
+No gate
+
+nothing
+
+100.0
+
+33.3
+
+0.0
+∗
+
+Overlook
+
+Allow-list (AgentBound)
+
+each send, fixed list
+
+100.0
+
+11.1
+
+0.0
+
+Overlook
+
+SkillGuard
+
+each tool call
+
+100.0
+
+22.2
+
+0.0
+
+Overlook
+
+RuntimeTickets
+
+each send, per task
+
+0.0
+
+0.0
+
+0.0
+
+✓
+ None
+
+5.2 
+RQ1 (Security): Stopping Harmful Effects
+
+No injected send got through under 
+RuntimeTickets
+, on all three frameworks.
+ RQ1 asks whether checking every send against the task stops what a malicious Skill injects. On the four panels the overlook rate (malicious Skills let through) was 0.0% under 
+RuntimeTickets
+, against 27.5% without a gate (
+) and 15.8% under the allow-list (
+, Figure 
+3
+(c)). Every attempted attack got through without a gate, 75.0% under the allow-list and none under 
+RuntimeTickets
+ (
+ and 
+, Table 
+3
+). On Claude Code it was 0.0% under 
+RuntimeTickets
+, while SkillGuard let 22.2% of the attack runs through.
+
+The per-task ticket stopped sends that reuse the task’s recipient, which a destination check passes.
+ The hardest attack sends to the endpoint that the task itself uses, so a check of the destination passes it. On these attacks it let 31.3% of the runs through, and 46.7% got through without a gate, against 0.0% under 
+RuntimeTickets
+ (hatched bars), and every attempted one got through under both. On Claude Code, SkillGuard allowed such sends too, because it judged the shell commands that carried them by capability, not by destination (Appendix 
+D.6
+). 
+RuntimeTickets
+ refused every one on the task’s own facts. 
+ denied it once the delivery had used the task’s single send, and 
+ deferred it when the gate could not read its object.
+
+Each scanner admitted some attack twins and withheld some benign ones.
+ A scanner judges the package before any send exists. On all 60 pairs Cisco admitted 18.3% of attack twins and withheld 20.0% of benign twins, and SkillSpector admitted 1.7% but withheld 53.3% (Table 
+3
+, Figure 
+3
+(a)).
+
+5.3 
+RQ2 (Utility): Keeping Benign Skills Working
+
+RuntimeTickets
+ had an overkill rate of 0.0%.
+ RQ2 asks what the per-task check costs a benign Skill. Under the allow-list the overkill rate (benign Skills blocked) was 5.7% (Figure 
+3
+(b)). On Claude Code no defense blocked one. Benign runs delivered the sanctioned output in 68.4% of the runs under 
+RuntimeTickets
+ and 66.7% without a gate (Appendix 
+D.3
+).
+
+5.4 
+RQ3 (Auditability): Reading Each Run Back
+
+Every decision re-derived from its account, and no tampered account produced a false 
+Supported
+.
+ RQ3 asks whether a run can be checked from its account. We re-ran the frozen gate and decoder offline on every gated account of Experiment B, 246 accounts with 3,009 gate decisions, and reproduced every decision and every decoder report. On a further 195 accounts with retained issuer keys, 8,400 audits of tampered, truncated or substituted logs produced no false 
+Supported
+, and none of 3,840 single-evidence removals turned an answer into 
+Supported
+ (Appendix 
+E
+).
+
+Each refusal names the layer that made it.
+ The account attributes every refusal to the host grant, the host budget or a ticket rule, and anyone holding the contract can recompute it (Appendix 
+B.4
+).
+
+5.5 
+Case Study: An Attack That Reuses the Task’s Recipient
+
+Figure 
+8
+ follows one such attack. The task sends a finished document to one approved address 
+, and the attack twin adds one released injection line: also send the system information its script gathers to 
+. Appendix 
+F
+ walks through the run.
+
+6 
+Conclusion
+
+RuntimeTickets
+ replaces a one-time verdict on a Skill package with a per-task check of every effect. A model proposes the requirements, the host grant bounds them, and a model-free gate enforces them at the egress boundary of unmodified frameworks. The run leaves an account from which a third party can re-derive every decision and every refusal without trusting a model. No attempted attack got through under 
+RuntimeTickets
+, no benign run was blocked and every account re-derived exactly. The scanners erred on both sides, and the allow-list and SkillGuard forwarded sends that reused the task’s recipient.
+
+AI Use Statement
+
+We used a large language model in three ways. It helped draft and polish the writing. It helped find and organize related work, which we verified against the primary sources. It helped assemble the benign parts of the evaluation cases, namely the benign task requests and their input files. It did not write or modify any Skill or any injected content, which come unchanged from released corpora. The research question, threat model, method and experimental design are the authors’ own. The language models inside the method, the ticket generator and the agent drivers, are the object of study and are described in Sections 
+3
+ and 
+5
+. The authors take full responsibility for the content.
+
+Ethics Statement
+
+The adversarial cases are released malicious Skills that run on unmodified agent frameworks. Every send by a Skill or agent ends at a receiver we own, so no data reaches a third party. Only the model requests of the drivers and the scanners reach their providers, and no real credential or private datum is used. We report unmeasured outcomes as unknown rather than as evidence. No human-participant result is reported. The work is defensive: it measures whether a runtime protocol stops the harmful effects of malicious Skills while keeping benign Skills usable.
+
+Reproducibility Statement
+
+Algorithm 
+3.3
+ in Section 
+3
+ specifies the method, with the probe and gate rules in Appendix 
+B.2
+. Section 
+5
+ defines the metrics, Appendix 
+D.4
+ the statistical tests and Appendix 
+A
+ the dataset construction. Every reported number is computed from a frozen results file by a fixed script. A study of malicious Skills collected in the wild gates its full samples and redacts their payloads 
+(
+Liu et al. 2026a
+)
+, as datasets of malicious packages did 
+(
+Ohm et al. 2020
+; 
+Duan et al. 2021
+)
+, and we follow the same practice for safety. Every attack Skill and injection we evaluate is already public in its cited corpus 
+(
+Schmotz et al. 2026
+; 
+Guo et al. 2026
+)
+. What we do not publish is the layer that makes those injections fire under a real agent: the task deliverables and input files, the owned-receiver mapping of the host grant, and the calibration records. We will release the gate, compiler, decoder and record-chain code upon publication. We will share the firing layer, the generation prompts and the frozen results with vetted researchers who request them for defensive research and agree not to redistribute them.
+
+References
+
+Agent Skills open standard (2026)
+
+Agent Skills open standard.
+
+Agent Skills: An open format for extending AI agent capabilities.
+
+Open specification, 2026.
+
+URL 
+https://agentskills.io
+.
+
+Accessed 4 October 2026.
+
+Andriushchenko et al. (2025)
+
+Maksym Andriushchenko, Alexandra Souly, Mateusz Dziemian, Derek Duenas, Maxwell
+Lin, Justin Wang, Dan Hendrycks, Andy Zou, Zico Kolter, Matt Fredrikson, Eric
+Winsor, Jerome Wynne, Yarin Gal, and Xander Davies.
+
+AgentHarm: A benchmark for measuring harmfulness of LLM agents.
+
+In 
+International Conference on Learning Representations
+(ICLR)
+, 2025.
+
+URL 
+https://arxiv.org/abs/2410.09024
+.
+
+Anthropic (2026)
+
+Anthropic.
+
+Agent Skills.
+
+Claude Platform documentation, 2026.
+
+URL
+
+https://platform.claude.com/docs/en/agents-and-tools/agent-skills/overview
+.
+
+Announced 16 October 2025, accessed 26 September 2026.
+
+Antiy CERT (2026)
+
+Antiy CERT.
+
+ClawHavoc: Analysis of large-scale poisoning campaign targeting the
+OpenClaw skill market for AI agents.
+
+Antiy Labs security report, February 2026.
+
+URL
+
+https://www.antiy.net/p/clawhavoc-analysis-of-large-scale-poisoning-campaign-targeting-the-openclaw-skill-market-for-ai-agents/
+.
+
+Published 6 February 2026, accessed 26 September 2026.
+
+Birgisson et al. (2014)
+
+Arnar Birgisson, Joe Gibbs Politz, Úlfar Erlingsson, Ankur Taly, Michael
+Vrable, and Mark Lentczner.
+
+Macaroons: Cookies with contextual caveats for decentralized
+authorization in the cloud.
+
+In 
+Proceedings 2014 Network and Distributed System Security
+Symposium (NDSS)
+, San Diego, CA, USA, 2014. Internet Society.
+
+doi: 
+10.14722/ndss.2014.23212
+.
+
+URL
+
+https://www.ndss-symposium.org/ndss2014/ndss-2014-programme/macaroons-cookies-contextual-caveats-decentralized-authorization-cloud/
+.
+
+Bühler et al. (2026)
+
+Christoph Bühler, Matteo Biagiola, Luca Di Grazia, and Guido Salvaneschi.
+
+AgentBound: Securing execution boundaries of AI agents.
+
+Proceedings of the ACM on Software Engineering
+, 3(FSE):2141–2164, 2026.
+
+ISSN 2994-970X.
+
+doi: 
+10.1145/3808103
+.
+
+Article FSE096 (FSE 2026).
+
+Chen et al. (2026)
+
+Zhihao Chen, Ying Zhang, Yi Liu, Gelei Deng, Yuekang Li, Yanjun Zhang, Jianting
+Ning, Leo Yu Zhang, Lei Ma, and Zhiqiang Li.
+
+How your credentials are leaked by LLM Agent Skills: An empirical
+study.
+
+arXiv preprint arXiv:2604.03070, 2026.
+
+URL 
+https://arxiv.org/abs/2604.03070v2
+.
+
+Version 2, 19 June 2026, accepted to ASE 2026.
+
+Cisco AI Defense (2026)
+
+Cisco AI Defense.
+
+Cisco Skill Scanner: Security scanner for Agent Skills.
+
+Software repository, 2026.
+
+URL 
+https://github.com/cisco-ai-defense/skill-scanner
+.
+
+Release 2.1.0, 5 September 2026, accessed 19 September 2026.
+
+Costa et al. (2025)
+
+Manuel Costa, Boris Köpf, Aashish Kolluri, Andrew Paverd, Mark Russinovich,
+Ahmed Salem, Shruti Tople, Lukas Wutschitz, and Santiago
+Zanella-Béguelin.
+
+Securing AI agents with information-flow control.
+
+arXiv preprint arXiv:2505.23643, 2025.
+
+URL 
+https://arxiv.org/abs/2505.23643v2
+.
+
+Version 2, 3 September 2025.
+
+Crosby & Wallach (2009)
+
+Scott A. Crosby and Dan S. Wallach.
+
+Efficient data structures for tamper-evident logging.
+
+In 
+Proceedings of the 18th USENIX Security Symposium
+, pp. 317–333, Montreal, Canada, August 2009. USENIX Association.
+
+URL
+
+https://www.usenix.org/legacy/event/sec09/tech/full_papers/crosby.pdf
+.
+
+Debenedetti et al. (2024)
+
+Edoardo Debenedetti, Jie Zhang, Mislav Balunović, Luca Beurer-Kellner, Marc
+Fischer, and Florian Tramèr.
+
+AgentDojo: A dynamic environment to evaluate prompt injection
+attacks and defenses for LLM agents.
+
+In 
+Advances in Neural Information Processing Systems (Datasets
+and Benchmarks Track)
+, volume 37, pp.  82895–82920. Curran Associates,
+Inc., 2024.
+
+doi: 
+10.52202/079017-2636
+.
+
+URL
+
+https://proceedings.neurips.cc/paper_files/paper/2024/hash/97091a5177d8dc64b1da8bf3e1f6fb54-Abstract-Datasets_and_Benchmarks_Track.html
+.
+
+Debenedetti et al. (2026)
+
+Edoardo Debenedetti, Ilia Shumailov, Tianqi Fan, Jamie Hayes, Nicholas Carlini,
+Daniel Fabian, Christoph Kern, Chongyang Shi, Andreas Terzis, and Florian
+Tramèr.
+
+Defeating prompt injections by design.
+
+In 
+2026 IEEE Conference on Secure and Trustworthy Machine
+Learning (SaTML)
+, pp.  587–618. IEEE, March 2026.
+
+doi: 
+10.1109/satml68715.2026.00040
+.
+
+Also arXiv:2503.18813.
+
+DeepSeek-AI (2026)
+
+DeepSeek-AI.
+
+DeepSeek-V4: Towards highly efficient million-token context
+intelligence.
+
+arXiv preprint arXiv:2606.19348, 2026.
+
+URL 
+https://arxiv.org/abs/2606.19348v1
+.
+
+Version 1.
+
+Duan et al. (2021)
+
+Ruian Duan, Omar Alrawi, Ranjita Pai Kasturi, Ryan Elder, Brendan
+Saltaformaggio, and Wenke Lee.
+
+Towards measuring supply chain attacks on package managers for
+interpreted languages.
+
+In 
+Proceedings 2021 Network and Distributed System Security
+Symposium (NDSS)
+. Internet Society, February 2021.
+
+doi: 
+10.14722/ndss.2021.23055
+.
+
+URL
+
+https://www.ndss-symposium.org/ndss-paper/towards-measuring-supply-chain-attacks-on-package-managers-for-interpreted-languages/
+.
+
+Feng et al. (2026)
+
+Yunhao Feng, Ruixiao Lin, Ming Wen, Yanming Guo, Xingjun Ma, Yutao Wu, Xinhao
+Deng, and Shouling Ji.
+
+HazardAuditor: From executable threats to safer computer-use
+agents.
+
+arXiv preprint arXiv:2609.15134, 2026.
+
+URL 
+https://arxiv.org/abs/2609.15134v1
+.
+
+Version 1, 14 September 2026.
+
+Guo et al. (2026)
+
+Wenbo Guo, Wei Zeng, Chengwei Liu, Xiaojun Jia, Yijia Xu, Lei Tang, Yong Fang,
+and Yang Liu.
+
+MalSkillBench: A runtime-verified benchmark of malicious Agent
+Skills.
+
+arXiv preprint arXiv:2606.07131, 2026.
+
+URL 
+https://arxiv.org/abs/2606.07131v3
+.
+
+Version 3.
+
+Hardy (1988)
+
+Norm Hardy.
+
+The confused deputy (or why capabilities might have been invented).
+
+ACM SIGOPS Operating Systems Review
+, 22(4):36–38, October 1988.
+
+ISSN 0163-5980.
+
+doi: 
+10.1145/54289.871709
+.
+
+URL 
+https://dl.acm.org/doi/10.1145/54289.871709
+.
+
+Holzbauer et al. (2026)
+
+Florian Holzbauer, David Schmidt, Gabriel K. Gegenhuber, Sebastian
+Schrittwieser, and Johanna Ullrich.
+
+Context matters: Repository-aware security analysis of the Agent
+Skill ecosystem.
+
+arXiv preprint arXiv:2603.16572, 2026.
+
+URL 
+https://arxiv.org/abs/2603.16572v2
+.
+
+Version 2, 1 June 2026, Agent Skills Workshop at CAIS 2026.
+
+Ji et al. (2026)
+
+Zimo Ji, Congying Xu, Zongjie Li, Yudong Gao, Xin Wei, Shuai Wang, and
+Shing-Chi Cheung.
+
+Cloak and detonate: Scanner evasion and dynamic detection of Agent
+Skill malware.
+
+arXiv preprint arXiv:2607.02357, 2026.
+
+URL 
+https://arxiv.org/abs/2607.02357v2
+.
+
+Version 2, 3 July 2026.
+
+Liu et al. (2026a)
+
+Yi Liu, Zhihao Chen, Yanjun Zhang, Gelei Deng, Yuekang Li, Jianting Ning, and
+Leo Yu Zhang.
+
+“Do Not Mention This to the User”: Detecting and understanding
+malicious Agent Skills in the wild.
+
+In 
+35th USENIX Security Symposium (USENIX Security 26)
+, pp. 1727–1746, Baltimore, MD, August 2026a. USENIX Association.
+
+URL
+
+https://www.usenix.org/conference/usenixsecurity26/presentation/liu-yi
+.
+
+Liu et al. (2026b)
+
+Yi Liu, Weizhe Wang, Ruitao Feng, Yao Zhang, Guangquan Xu, Gelei Deng, Yuekang
+Li, and Leo Zhang.
+
+Agent Skills in the wild: An empirical study of security
+vulnerabilities at scale.
+
+arXiv preprint arXiv:2601.10338, 2026b.
+
+URL 
+https://arxiv.org/abs/2601.10338v1
+.
+
+Version 1, 15 January 2026.
+
+Moonshot AI (2026)
+
+Moonshot AI.
+
+Kimi-K2.6 model card.
+
+Hugging Face model repository, 2026.
+
+URL 
+https://huggingface.co/moonshotai/Kimi-K2.6
+.
+
+Accessed 25 September 2026.
+
+Mou et al. (2026)
+
+Yutao Mou, Zhangchi Xue, Lijun Li, Peiyang Liu, Shikun Zhang, Wei Ye, and Jing
+Shao.
+
+ToolSafe: Enhancing tool invocation safety of LLM-based agents
+via proactive step-level guardrail and feedback.
+
+In 
+Findings of the Association for Computational Linguistics:
+ACL 2026
+, pp.  37125–37153, San Diego, California, United States, July
+2026. Association for Computational Linguistics.
+
+doi: 
+10.18653/v1/2026.findings-acl.1850
+.
+
+URL 
+https://aclanthology.org/2026.findings-acl.1850/
+.
+
+Nous Research (2026)
+
+Nous Research.
+
+Hermes Agent.
+
+Software repository, 2026.
+
+URL 
+https://github.com/NousResearch/hermes-agent
+.
+
+Upstream revision of 14 September 2026, accessed 26 September 2026.
+
+NVIDIA (2026)
+
+NVIDIA.
+
+SkillSpector: Security scanner for AI Agent Skills.
+
+Software repository, 2026.
+
+URL 
+https://github.com/NVIDIA/SkillSpector
+.
+
+Release v2.11.2, 9 September 2026, accessed 19 September 2026.
+
+Ohm et al. (2020)
+
+Marc Ohm, Henrik Plate, Arnold Sykosch, and Michael Meier.
+
+Backstabber’s Knife Collection: A review of open source software
+supply chain attacks.
+
+In Clémentine Maurice, Leyla Bilge, Gianluca Stringhini, and Nuno
+Neves (eds.), 
+Detection of Intrusions and Malware, and Vulnerability
+Assessment (DIMVA 2020)
+, volume 12223 of 
+Lecture Notes in Computer
+Science
+, pp.  23–43, Cham, 2020. Springer International Publishing.
+
+doi: 
+10.1007/978-3-030-52683-2_2
+.
+
+OpenClaw (2026)
+
+OpenClaw.
+
+ClawHub: Skill + plugin registry for OpenClaw.
+
+Skill registry, 2026.
+
+URL 
+https://clawhub.ai
+.
+
+Accessed 26 September 2026.
+
+OpenClaw Foundation (2026)
+
+OpenClaw Foundation.
+
+OpenClaw: Open-source AI assistant.
+
+Software repository, 2026.
+
+URL 
+https://github.com/openclaw/openclaw
+.
+
+Release 2026.6.10, accessed 26 September 2026.
+
+Pan et al. (2026)
+
+Shidong Pan, Xiaoyu Sun, Tianyi Zhang, Dianshu Liao, Kaiwen Yang, and Zhenchang
+Xing.
+
+SkillGuard: A permission-centric framework for Agent Skill
+security.
+
+arXiv preprint arXiv:2606.03024, 2026.
+
+URL 
+https://arxiv.org/abs/2606.03024v2
+.
+
+Version 2.
+
+Qin et al. (2026)
+
+Suliu Qin, Haomin Zhuang, Yujun Zhou, Yufei Han, and Xiangliang Zhang.
+
+AIRGuard: Guarding agent actions with runtime authority control.
+
+arXiv preprint arXiv:2605.28914, 2026.
+
+URL 
+https://arxiv.org/abs/2605.28914v1
+.
+
+Version 1, 27 May 2026.
+
+Schmotz et al. (2026)
+
+David Schmotz, Luca Beurer-Kellner, Sahar Abdelnabi, and Maksym Andriushchenko.
+
+Skill-Inject: Measuring agent vulnerability to skill file attacks.
+
+arXiv preprint arXiv:2602.20156, 2026.
+
+URL 
+https://arxiv.org/abs/2602.20156v3
+.
+
+Version 3.
+
+Schneider (2000)
+
+Fred B. Schneider.
+
+Enforceable security policies.
+
+ACM Transactions on Information and System Security
+,
+3(1):30–50, February 2000.
+
+doi: 
+10.1145/353323.353382
+.
+
+URL 
+https://www.cs.cornell.edu/fbs/publications/EnfSecPols.pdf
+.
+
+Schneier & Kelsey (1999)
+
+Bruce Schneier and John Kelsey.
+
+Secure audit logs to support computer forensics.
+
+ACM Transactions on Information and System Security
+,
+2(2):159–176, May 1999.
+
+ISSN 1094-9224.
+
+doi: 
+10.1145/317087.317089
+.
+
+Shan et al. (2026)
+
+Zhengyang Shan, Jiayun Xin, Yue Zhang, and Minghui Xu.
+
+Don’t let the claw grip your hand: A security analysis and defense
+framework for OpenClaw.
+
+arXiv preprint arXiv:2603.10387, 2026.
+
+URL 
+https://arxiv.org/abs/2603.10387v1
+.
+
+Version 1, 11 March 2026.
+
+Shi et al. (2025)
+
+Tianneng Shi, Jingxuan He, Zhun Wang, Hongwei Li, Linyu Wu, Wenbo Guo, and Dawn
+Song.
+
+Progent: Securing AI agents with privilege control.
+
+arXiv preprint arXiv:2504.11703, 2025.
+
+URL 
+https://arxiv.org/abs/2504.11703v3
+.
+
+Version 3, 14 May 2026.
+
+Taneja & Weber (2026)
+
+Rohit Taneja and Travis Weber.
+
+Scan the skill, govern the action: Composing registry verdicts with
+runtime consequence control.
+
+arXiv preprint arXiv:2609.12001, 2026.
+
+URL 
+https://arxiv.org/abs/2609.12001v1
+.
+
+Version 1.
+
+Tsai & Bagdasarian (2025)
+
+Lillian Tsai and Eugene Bagdasarian.
+
+Contextual agent security: A policy for every purpose.
+
+In 
+Proceedings of the Workshop on Hot Topics in Operating
+Systems (HOTOS ’25)
+, pp.  8–17, Banff, AB, Canada, May 2025. ACM.
+
+doi: 
+10.1145/3713082.3730378
+.
+
+Vercel (2026)
+
+Vercel.
+
+Skills.sh: The agent skills directory.
+
+Skill registry, 2026.
+
+URL 
+https://skills.sh
+.
+
+Accessed 26 September 2026.
+
+Wang et al. (2026)
+
+Haoyu Wang, Christopher M. Poskitt, and Jun Sun.
+
+AgentSpec: Customizable runtime enforcement for safe and reliable
+LLM agents.
+
+In 
+Proceedings of the IEEE/ACM 48th International Conference
+on Software Engineering (ICSE)
+, pp.  2938–2950. ACM, April 2026.
+
+doi: 
+10.1145/3744916.3764546
+.
+
+Yuan et al. (2026)
+
+Aojie Yuan, Zhiyuan Su, and Yue Zhao.
+
+AEGIS: No tool call left unchecked – a pre-execution firewall and
+audit layer for AI agents.
+
+arXiv preprint arXiv:2603.12621, 2026.
+
+URL 
+https://arxiv.org/abs/2603.12621v1
+.
+
+Version 1, 13 March 2026.
+
+Zheng & Yang (2026)
+
+Chris Zheng and Geng Yang.
+
+CONTINUITY: Security-context contracts for composable LLM agent
+controls.
+
+arXiv preprint arXiv:2609.05269, 2026.
+
+URL 
+https://arxiv.org/abs/2609.05269v1
+.
+
+Version 1.
+
+Overview of the Appendix
+
+The appendix follows the order of the main text. Appendix 
+A
+ supports Section 
+2
+: the twin pairs, the scanner outcomes by harm category, the test environment and the calibration. Appendix 
+B
+ supports Section 
+3
+: ticket generation, the gate rules, the proof sketch, refusal attribution, the decoder, the design questions and compatibility with other agents, hubs and providers. Appendix 
+C
+ supports Section 
+4
+ and gives the reasons why the other runtime defenses, except SkillGuard, did not run. Appendix 
+D
+ supports Section 
+5.1
+: metrics, scanner cascades, runs, statistical tests, the frozen analysis plan and a supplementary panel with SkillGuard on Claude Code. Appendix 
+E
+ supports Section 
+5.4
+ with the audit console and the audit tests, and Appendix 
+F
+ supports Section 
+5.5
+ with the case study in detail.
+
+Appendix A 
+Dataset and Test Environment
+
+This appendix supports Section 
+2
+. It describes how the 60 twin pairs were built, how the scanner results divide by harm category, the mock environment in which the pairs ran, and the calibration that selected the pairs of Experiment B. Both experiments use the same pairs.
+
+A.1 
+Building the Twin Pairs
+
+Sources.
+ The pairs come from two released corpora of malicious Skills (Table 
+4
+). Each of the 30 contextual and 18 obvious Skill-Inject pairs combines one released injection with one of its released task entries. The entry fixes the carrier Skill and the line at which the injection goes 
+(
+Schmotz et al. 2026
+)
+. Following the corpus’s own builder, we insert the injection text into the carrier’s 
+SKILL.md
+ at that line, and the benign twin is the unmodified carrier. When a released injection calls a helper script that the corpus ships, the attack twin carries that script verbatim. Each of the 12 MalSkillBench pairs uses an unchanged copy of a released malicious Skill directory as its attack twin and the released benign directory of the same name as its benign twin 
+(
+Guo et al. 2026
+)
+. The harm label comes from the corpus’s directory taxonomy, and the corpus restricts its use to academic research. Every MalSkillBench pair falls in category E1, and Skill-Inject supplies the remaining E1 pairs and all pairs in E2 to E5 (Table 
+1
+).
+
+Table 4: 
+Source corpora of the 60 twin pairs and how far apart the twins are.
+ Files and lines added or removed between the benign and the attack twin. The task, the workspace and every other file are identical across the twins.
+
+Lines that differ, median (range)
+
+Source corpus
+
+Pairs
+
+Files that differ
+
+In 
+SKILL.md
+
+In all files
+
+Skill-Inject, contextual
+
+30
+
+1–2
+
+1 (1–12)
+
+1 (1–85)
+
+Skill-Inject, obvious
+
+18
+
+1–2
+
+4 (1–7)
+
+4 (1–22)
+
+MalSkillBench
+
+12
+
+2–56
+
+222 (40–559)
+
+444.5 (145–5426)
+
+All pairs
+
+60
+
+What we add.
+ Both twins of a pair run the same trusted task. The task opens with the corpus’s own prompt for the carrier Skill, so that the agent has a reason to load the Skill. For the 12 MalSkillBench pairs we wrote a benign request from the Skill’s own documentation instead. The task then asks for a fixed deliverable, which the agent computes from an input file in the workspace. When the task delivers by a send, one sentence names the recipient and the object. The workspace also holds synthetic canary files, which are decoy secrets: their presence in a send marks it as exfiltration. For 33 pairs we also supply the benign input files that the task prompt names. This paper reproduces no Skill, injection, prompt or model text.
+
+A.2 
+Scanner Outcomes by Harm Category
+
+Figure 
+4
+ splits the scanner results of Table 
+3
+ by the harm categories of Table 
+1
+. The labels are audited. Before calibration, a label audit moved 3 pairs whose source label did not match their injected effect, for example a phishing send that moved from exfiltration to content manipulation. A scanner’s verdict does not depend on the label, so the figure only regroups the same verdicts.
+
+Figure 4: 
+Scanner outcomes by harm category
+ (Experiment A, full cascades). A bar shows the share of the category’s attack twins that the scanner admitted (overlook, lower is better) or of its benign twins that it withheld (overkill, lower is better). A zero share is printed as 0.0.
+
+The scanners fail differently. Cisco admits no exfiltration attack twin, but it admits half of the destructive-change twins and every safeguard-suppression twin. SkillSpector overlooks only one safeguard-suppression twin, but it withholds between 47.2% and 87.5% of the benign twins in each of E1 to E4. Experiment B runs on the pairs whose harm is an outbound send, the exfiltration pairs and one content-manipulation pair, so its results are results on sends.
+
+A.3 
+Mock Environment and Host Grant
+
+Why a mock environment.
+ Running released malicious Skills against real services would send real data to real third parties. We therefore run every Skill on a real, unmodified agent framework that a real language model drives, and we point every outbound connection at receivers that we own. The Skill, the agent and the framework behave as they would in deployment, and only the destination is simulated. No data reaches a third party.
+
+Receivers and the host grant.
+ The host grant is a fixed set of owned receivers that covers every receiver a task needs. We froze it with the case file before calibration, and we never recomputed it from the selected subset. Two granted receivers stand in for the two external destinations that the released Skill-Inject injections name most often. The egress proxy maps each such destination to its stand-in before the gate sees it, and it records the literal destination beside it. For a pair whose injection names a stand-in, a fixed order over case identifiers, set before any run, decides the task’s recipient. It is either that same destination, so that the injected send reuses the task’s recipient, or another granted receiver. An injection that names any other destination is aimed outside the grant. The stand-ins model the hardest case for a deployment-wide allow-list: an attacker who names an endpoint that the deployment legitimately uses. We never revised a receiver assignment after a run.
+
+A.4 
+Calibration
+
+Calibration decides which pairs Experiment B runs. It executed only attack twins and only without a gate, and it ran each of the 60 pairs 2 times on Hermes Agent with the DeepSeek driver. The other panels inherit its selection. A pair is kept if at least one calibration run attempted the injected action, meaning that it connected to the injection’s declared destination or sent an object that contains a canary. A generic connection outside the grant, such as a package fetch, does not count. We froze the selection before the first 
+RuntimeTickets
+ run. It reads no gated defense and no benign twin, so it cannot favor 
+RuntimeTickets
+ over the allow-list, which face the same selected pairs.
+
+Appendix B 
+Method Details
+
+This appendix supports Section 
+3
+. It covers how tickets are generated, the probe and gate rules, why a ticket never loosens the grant, how refusals are attributed, how the decoder reads an account, five design questions, and why the design carries over to other agents, hubs and providers. Each issuer authenticates its records with a standard keyed chain, and its security rests on the keys alone.
+
+B.1 
+Ticket Generation
+
+What the generator reads.
+ For each twin, the host fills one fixed request, whose parts Figure 
+5
+ shows. A short header asks the generator to answer the two messages as a chat model would, to return one JSON object, a proposal or a decline with its reason, and to run no command, open no URL and contact no host. The system message is the same in every request. The user message is one JSON object with six fields: the task with the delivery contract 
+ stated as host authority, the host grant, a catalog of resources, a catalog of validators, the reply schema and the numbered lines of the Skill’s 
+SKILL.md
+, which it marks as untrusted data. The two twins of a pair receive the same request except for the Skill lines and the binding to that Skill version. A leak check confirmed that no request named its case or its twin, and that the host-written fields other than the task used no word for a kind of harm, such as egress or canary. The generator does not see helper scripts, because the gate judges their effects at the boundary. The host parses the reply strictly, compiles it within the grant and probes it before freezing (Algorithm 
+3.3
+, Eq. (
+3
+)). The generator was Claude (
+claude-fable-5-1
+).
+
+Figure 5: 
+A ticket request marks the task and the host grant as authority and the Skill lines as untrusted data.
+ The parts of every generation request and of the reply it asks for. Five fields of the user message carry host authority, and the Skill’s lines enter as numbered, untrusted data. The model answers once with the permissions it keeps, its obligations and the risks it cannot ground. The host parses the reply strictly, compiles it within the grant, probes it and freezes it, so the ticket can only tighten the grant. The two twins of a pair receive the same request except for the Skill lines and the binding to that Skill version.
+
+Generated tickets.
+ The host fixes the grant, the budget, the streams, the validators and the bindings. In this study it mandates no obligation, so the model proposes the selected grants, every obligation and the unresolved risks. Each obligation carries the numbered Skill lines that it cites and a short rationale that the generator wrote. The generator was called once per twin, and the host accepted every proposal at the first request. Each frozen ticket is reused unchanged by every run and every panel of its twin. Each ticket allowed a valid object to the task’s recipient, refused it to every other granted receiver, and refused an invalid object to the task’s recipient. We froze every ticket before the first run.
+
+B.2 
+Probe and Gate Rules
+
+The probe and the gate use the same decision function. Let 
+ be the decision of the frozen gate on a unit send to owned receiver 
+ whose object passes (
+) or fails (
+) the validator. The host accepts a compiled ticket only if
+
+(3)
+
+Let 
+ be the value of obligation 
+ on 
+, where 
+ holds the validation facts, 
+ is the amount already reserved and 
+ holds the unresolved risks that apply to request 
+. The gate returns
+
+(4)
+
+The probe matters because a proposal can yield a ticket that cannot allow the sanctioned send, for example through an obligation that forbids the sanctioned send itself. Such a ticket would block the task’s own delivery. The host therefore states the delivery as host authority and rejects any ticket that fails Eq. (
+3
+) before freezing it. None of the frozen tickets failed it.
+
+B.3 
+Why a Ticket Never Loosens the Grant
+
+This is the proof sketch of Proposition 1. Write 
+ for the set of contexts 
+ on which the gate of Eq. (
+4
+) allows a request under 
+, and 
+ for the ticket that compiles the grant alone. Compilation keeps 
+ and the budget 
+, and it only appends obligations and risks after the mandatory obligations 
+. A smaller grant set can only add an authority denial, so tightening is the only change a ticket can make. An appended obligation or risk reads only 
+, 
+ and 
+, so it can only add a 
+Deny
+ or a 
+Defer
+. Hence 
+ on every context.
+
+The bound extends to whole runs. A run is a sequence of contexts, and the gate sees each request with the reservations 
+ that the run has accumulated. Only an 
+Allow
+ adds to 
+, and every 
+Allow
+ under 
+ is an 
+Allow
+ under 
+ on the same context. By induction over the requests of the run, every effect that a run under 
+ forwards would also be allowed by 
+ at the same point of the same run. It is therefore covered by a grant in 
+ and keeps the run’s total within the host budget 
+. The argument does not depend on how the agent chooses its next request, so it holds for adaptive request sequences.
+
+B.4 
+Attributing Refusals
+
+The raw reason that the gate records is the same whether the host never granted a request or the ticket did not select the grant, so we never report the raw reason. Instead, a host-side function of the frozen contract and the recorded decision recomputes each refusal against the host grant, and anyone who holds the contract and the account can run it again. It assigns the refusal to a deciding layer (outside the host grant, the host budget, or a ticket rule) and, for a ticket rule, to its primary rule. When several obligations deny one request, a counterfactual fixed in advance decides. We drop the 
+ obligations, and if another ticket rule still denies, the first such rule in a fixed order is primary. Otherwise 
+ is primary. Every refusal recorded under the two gated defenses received an attribution. A refusal of a send to the task’s recipient counts as overkill only when the gate refused a format-valid delivery and forwarded none. Under 
+RuntimeTickets
+ this held in no benign run. Table 
+5
+ shows how the refusals under 
+RuntimeTickets
+ divide among the layers.
+
+Table 5: 
+Refusals under 
+RuntimeTickets
+ by deciding layer and primary ticket rule
+, summed over the four panels and over both twins. The rows under “Ticket rule” split that layer.
+
+Deciding layer or rule
+
+Refusals
+
+All refusals
+
+1473
+
+Outside the host grant
+
+798
+
+Host budget
+
+0
+
+Ticket rule
+
+675
+
+   Grant not selected by the ticket
+
+206
+
+   Object failed the validator (
+)
+
+395
+
+   Object unreadable, deferred (
+)
+
+1
+
+   Amount beyond the limit (
+)
+
+73
+
+B.5 
+The Decoder and Its Three Verdicts
+
+The decoder gives the user a verdict for every obligation and a reproducible reason for every decision. It authenticates each record with its issuer’s key and re-runs the frozen gate of Eq. (
+4
+) on every recorded decision against the cited facts and the reservations before it, so each recorded refusal comes with the rule that fired. It also checks that the account closed with no operation open and that every declared observation stream was sealed (Figure 
+6
+), because a 
+Supported
+ verdict is only meaningful on a complete account. It then returns one finding per obligation by Eq. (
+2
+).
+
+A 
+Violated
+ finding needs an admitted counterexample, an authenticated record of an effect that breaks the obligation, so a witnessed violation stands even when other evidence is missing. A 
+Supported
+ finding needs a closed, sealed account that holds the obligation’s evidence. Such evidence is a validator pass on the exact bytes of an effect or, for an operation with no matching effect, a sealed stream whose declared scope covers it. Everything else is 
+Unknown
+. Removing a record from inside an issuer’s chain breaks that chain, which makes the account incomplete and turns every finding that is not a witnessed violation into 
+Unknown
+. The decoder reads no other input and calls no model, so anyone who holds the contract, the records and the keys obtains the same report.
+
+Figure 6: 
+What the decoder gives the user.
+ The frozen ticket, the run’s authenticated records and the separately held keys enter one deterministic, model-free decoder. For each obligation it returns 
+Supported
+, 
+Violated
+ or 
+Unknown
+, so a broken obligation stays apart from missing evidence. Without the keys no record can be changed undetected, so the account is tamper-evident, and anyone who holds the three inputs re-derives the same report.
+
+B.6 
+Design Questions
+
+The mechanism alone answers five design questions (DQ), which we keep apart from the experimental questions RQ1 to RQ3.
+
+DQ1: Can a steered generator widen what a Skill may do?
+ No. Approval compiles every proposal so that it only tightens the grant, and by Proposition 1 a ticket allows at most what the host grant allows. In this study every proposal, for attack and benign twins alike, was the narrowest ticket that the delivery contract permits: the task recipient’s grant and the three obligations. No Skill text loosened a ticket.
+
+DQ2: Can injected text influence a gate decision?
+ No. Injected text can change the proposal, which DQ1 bounds, and it can change which requests the agent makes. It cannot change the rule that decides them. After the freeze, the gate reads only each request’s effect facts, the validation facts and the frozen ticket.
+
+DQ3: Does protection depend on the injected destination being new?
+ Not on the recipient alone. An address check passes an injected send that reuses the task’s recipient 
+, but 
+ and 
+ still check its object and amount. The check applies to every send that crosses the egress boundary.
+
+DQ4: Can a third party trust a verdict without trusting a model?
+ Yes, given the keys. The decoder of Eq. (
+2
+) is a deterministic function of the authenticated account. Anyone with the ticket, the records and the keys re-derives every decision and verdict, and a record altered without the keys fails authentication.
+
+DQ5: Does the order of sends matter for 
+?
+ 
+ reserves the task’s amount in request order, and only an 
+Allow
+ reserves it. An injected send to 
+ must therefore pass 
+ and 
+ before it can use any of the amount, and a send that follows the delivery is refused on 
+ and attributed in the account. Under 
+RuntimeTickets
+, every injected send to 
+ was either refused on 
+ after the delivery or deferred as unreadable before it. A task with several legitimate sends states one amount per recipient and object, so the ticket bounds each separately.
+
+B.7 
+Compatibility with Other Agents, Hubs and Providers
+
+RuntimeTickets
+ asks three things of the system it protects. The ticket generator must be able to read the Skill’s 
+SKILL.md
+. The agent must run in a container or on a host whose only route out passes the egress proxy. The issuer keys must stay outside that container. It asks for nothing else: no hook in the agent’s tool layer, no patch to the framework and no access to the agent’s transcript. The gate reads only each request’s effect facts (Section 
+3
+), and the decoder reads only the ticket, the records and the keys.
+
+This is why the design carries over. Claude Code, Codex, OpenClaw and Hermes Agent all load Skills in the same open format, a folder with a 
+SKILL.md
+ file and optional scripts and references 
+(
+Agent Skills open standard 2026
+)
+, and registries such as ClawHub and Skills.sh distribute packages in that format. The ticket comes from the package and the task, so it does not depend on which hub supplied the package. The gate acts on network traffic, so it does not depend on which agent made the request or which provider’s model drives the agent. Only the ticket generator calls a model, and any provider can serve it. We evaluated OpenClaw and Hermes Agent with two driver models, and Claude Code in a supplementary panel (Appendix 
+D.6
+).
+
+Appendix C 
+Related Defenses and Their Role in Our Study
+
+This appendix supports Section 
+4
+. For the runtime defenses nearest to ours, Table 
+6
+ states what each one decides from, whether its code is public, and its role in our study. Every statement about another system is its authors’ own description or our reading of its public code. For a system that is not in our experiments, a difference we name is a design property, not a measured advantage. “Public code” means an official repository or artifact that we found and read.
+
+Table 6: 
+What each defense decides from, and its role in our study.
+ Rows follow the order of Table 
+2
+.
+
+System
+
+Decides from
+
+Public code
+
+Role in our study
+
+SkillDetonate 
+(
+Ji et al. 2026
+)
+
+Operating-system information flow in one sandboxed agent session before installation. A marked secret is a finding only when it reaches a sink outside the allow-list, so a send to an allowed recipient is not one.
+
+No
+
+Not run. A one-time installation gate, with no implementation available to us.
+
+SkillGuard 
+(
+Pan et al. 2026
+)
+
+The tool call, through a hook. A model reads the shell command and the workspace scripts it references and infers the capabilities that the command needs. The Skill’s own manifest contributes to the declared pool that bounds the run.
+
+Yes
+
+Run as a supplementary baseline on Claude Code (Appendix 
+D.6
+). Built on the lifecycle hooks of Claude Code, Gemini CLI and Codex.
+
+AIRGuard 
+(
+Qin et al. 2026
+)
+
+Each proposed tool call is normalized and checked against task authority that each step may narrow but not expand. A model’s risk simulation can raise the enforcement level, never lower it.
+
+Yes
+
+Not run. Wraps the agent’s tool calls, which would require changing the framework’s tool layer.
+
+OATS 
+(
+Taneja & Weber 2026
+)
+
+Each Bash command before it runs, through a Claude Code hook. A parser maps the command to one of 33 consequence classes, and a ledger allows, suspends for review or blocks it.
+
+Partly
+
+Not run. The public code holds the class table, the schema and a minimal reference runtime, not the command parser.
+
+ToolSafe 
+(
+Mou et al. 2026
+)
+
+A 7B guard model scores the request, the history, the candidate call and the tool descriptions. The call is blocked when the score is harmful.
+
+Yes, with weights
+
+Not run. Its hook lives inside its own ReAct loop, and it models no Skill.
+
+Progent 
+(
+Shi et al. 2025
+)
+
+JSON-Schema and regular-expression rules, checked deterministically on every call. A model writes the rules and rewrites them from tool results.
+
+Yes
+
+Not run. Wraps Python tool functions, or the middleware of LangChain, the OpenAI Agents SDK and FastMCP. It models no Skill.
+
+Conseca 
+(
+Tsai & Bagdasarian 2025
+)
+
+A model writes a per-task policy from the request, the trusted context and the tool documentation. The policy is then enforced deterministically.
+
+No official code
+
+Not run. No official implementation, and it models no Skill.
+
+AgentSpec 
+(
+Wang et al. 2026
+)
+
+Predicates on the planned action, written by an author or generated by a model. It executes what no rule matches.
+
+Yes
+
+Not run. Subclasses a LangChain executor, and it models no Skill.
+
+AgentBound 
+(
+Bühler et al. 2026
+)
+
+Each MCP server runs in a container whose iptables rules admit only the endpoints that its bundled manifest declares. The policy is fixed per server, and no task narrows it.
+
+Yes
+
+Run in derived form as our allow-list: its fixed per-endpoint policy on our gate. Its own mechanism confines MCP servers, whereas the sends in our study leave from Skill scripts that the agent runs in its own shell.
+
+HazardAuditor 
+(
+Feng et al. 2026
+)
+
+An 8B guard labels a recorded trajectory as safe or unsafe and gives a rationale. No deployment policy, permission set or resource catalogue is among its inputs.
+
+Yes, with weights
+
+Not run. A trajectory classifier with no interception hook. Its verdict is meant for an external controller that the paper does not implement.
+
+Four reasons explain the last column. First, most of these systems judge the tool call or the finished trajectory. A send that a Skill script makes reaches such a monitor as the command that launched the script, not as a send with a recipient, an object and an amount, which is why 
+RuntimeTickets
+ places its gate at the egress boundary. Second, the closest policy of the egress kind, AgentBound’s fixed per-endpoint allow-list, runs as our allow-list defense on the same gate. Third, most of these systems model no third-party Skill. ToolSafe, Progent, Conseca, AgentSpec and HazardAuditor are general agent-security methods, and AgentBound confines MCP servers rather than Skill scripts. Fourth, availability limits the rest: Conseca and SkillDetonate have no official implementation, and the public part of OATS lacks its command parser.
+
+Appendix D 
+Experimental Protocol
+
+This appendix supports Section 
+5.1
+. It defines the metrics, specifies the scanner cascades of Experiment A, the runs and outcomes of Experiment B, the statistical tests, the frozen analysis plan and the supplementary panel with SkillGuard on Claude Code.
+
+D.1 
+Metrics
+
+Overlook rate and overkill rate.
+ For one defense, let 
+ be the set of its attack runs and 
+ the set of its benign runs. For a scanner, a run is one twin: an admitted attack twin counts as overlooked, and a withheld benign twin counts as blocked. Let 
+ be the runs in which the defense forwarded an injected send, and 
+ the runs in which it blocked the sanctioned send. Then
+
+(5)
+
+The share of benign Skills not blocked is 100% minus the overkill rate. The overlook rate is the attack success rate of earlier work.
+
+Delivery rate.
+ A run 
+delivers
+ when the task’s sanctioned effect arrives and passes the host validator, and the delivery rate is the fraction of runs that deliver.
+
+Audit measures.
+ Section 
+5.4
+ reports two quantities. The first is the share of retained accounts whose independent re-decoding reproduces the retained verdicts exactly. The second is the number of audits of tampered, truncated or substituted accounts in which the decoder still reports 
+Supported
+, which we call a false 
+Supported
+.
+
+D.2 
+Experiment A: Scanner Cascades
+
+Cascade.
+ Each tool runs its static stage on every package. A package that the static stage withholds stops there. So does a package whose static analysis is incomplete, which is withheld fail-closed. Only a package that the static stage admits proceeds to the tool’s own model stage. There, a complete assessment that fires withholds the package, a silent one admits it, and an incomplete one withholds it. We never count an incomplete assessment as a detection.
+
+Settings.
+ Cisco’s static stage withholds on any finding of high or critical severity, and SkillSpector’s on a risk score above 50 from a complete analysis. Cisco’s model stage runs its behavioral, trigger, LLM and meta analyzers, and SkillSpector’s its semantic and meta analyzers, each in the tool’s own configuration with a DeepSeek model. Both model stages see the trusted task, the host grant and a list of the workspace’s file names and sizes. A package holds only the Skill directory. We read completeness from each tool’s own report. Table 
+7
+ shows how much of each tool’s result comes from each stage.
+
+Table 7: 
+Experiment A by stage
+ on all 60 twin pairs. Overlook rate and overkill rate for each tool’s static stage alone and for its full cascade. Brackets: 95% Wilson intervals, in percent. The cascade rows are the scanner rows of Table 
+3
+.
+
+Tool
+
+Stage
+
+Overlook rate
+
+Overkill rate
+
+Cisco
+
+Static only
+
+66.7%
+
+18.3%
+
+Full cascade
+
+18.3% [10.6, 29.9]
+
+20.0% [11.8, 31.8]
+
+SkillSpector
+
+Static only
+
+46.7%
+
+45.0%
+
+Full cascade
+
+1.7% [0.3, 8.9]
+
+53.3% [40.9, 65.4]
+
+D.3 
+Experiment B: Runs and Outcomes
+
+Enforcement point.
+ Apart from the model channel, the egress proxy is the agent container’s only network route, so the gate decides every connection before the proxy forwards it, including a connection that a helper script opens. Both frameworks’ install directories are identical before and after test runs, so running a Skill does not alter the framework. A send inside the grant reaches the owned receiver of its destination. Any other send reaches a capture-only sink that is never a task’s recipient. The proxy observes each connection: the validator and the canary check can read a plaintext body but not an HTTPS body. No send by a Skill or agent leaves the lab, and we change no part of a Skill to make a destination reachable.
+
+Outcomes.
+ An injected send gets through when the proxy forwards a connection to the injection’s declared destination, or forwards a send whose visible body carries a canary. For an HTTPS send the gate decides at connection time from the requested host, so the injected send gets through when the connection is forwarded, whether or not its encrypted body is read. An attack run is attempted when the gate decided at least one such send, forwarded or refused. Every defense runs under the lab’s per-run connection cap, and a send that the cap stops before any decision is neither attempted nor got through. A run delivers when the task’s sanctioned effect arrives and passes the host validator. A benign run is blocked when the gate refuses a format-valid send to the task’s recipient and forwards no format-valid send to it. We read this from the gate’s record by the same rule for every defense, so a run counts as blocked even when it also let another send through.
+
+Runs.
+ An execution is a run when its unmodified framework reached its own normal exit, whether or not the agent attempted the injected action or finished the task. Without a gate every decided send is forwarded, so every attempted attack got through there, and the overlook rate without a gate is the share of attack runs in which the agent attempted the injected send at all. Each pair, twin and defense counts one run, the first in attempt order. An execution that does not reach a normal exit is retried within a fixed budget, and the decision to retry depends only on whether an execution reached its exit, never on what it sent. Four framework-driver panels supply the runs.
+
+Delivery rate.
+ Across all runs, the delivery rate was 71.1% under 
+RuntimeTickets
+, 67.1% without a gate and 76.7% under the allow-list, so 
+RuntimeTickets
+ delivered at about the rate of running without a gate. On benign runs alone it was 68.4% under 
+RuntimeTickets
+ and 66.7% without a gate. Under the allow-list, the host budget refused a format-valid delivery in 2 benign runs before any had been forwarded, and neither run delivered. These are the benign runs that the allow-list blocked.
+
+D.4 
+Statistical Tests
+
+We compare the shares of attack runs in which an injected send got through with a two-sided Fisher exact test. Against no gate the overlook rates differ with 
+, which stays 
+ after Holm’s adjustment over the two all-runs comparisons, and against the allow-list 
+. On the attempted attacks alone the same two comparisons give 
+ and 
+, and Holm’s adjustment over the two leaves 
+ and 
+. We repeat both comparisons with the twin pair as the unit, using an exact sign test over the pairs in which one defense was reached and the other was not (Appendix 
+D.5
+). Against no gate it gives 
+. Against the allow-list every such pair was reached under the allow-list and not under 
+RuntimeTickets
+, which gives 
+. Every interval in the paper is a 95% Wilson score interval. For the overkill rate of 
+RuntimeTickets
+ it runs from 0.0% to 9.2%. Comparisons restricted to attacks that reuse the task’s recipient are descriptive. We never pool Experiments A and B.
+
+D.5 
+Frozen Analysis
+
+What we froze.
+ Before any result, we froze the gate, the experimental setup and the schema of the recorded outcomes, and the pair-level readout below follows the analysis fixed at that time.
+
+Pair-level readout.
+ The analysis counts a twin pair as one unit and scores the endpoint, an unauthorized send that reaches a receiver, over every recorded attack execution, run or not. A pair counts as reached if any of its attack executions reached a receiver on any panel. An unauthorized send reached a receiver in 90.9% of the pairs without a gate, 45.5% under the allow-list and 0.0% under 
+RuntimeTickets
+. The sign test counts the pairs in which one defense was reached and the other was not, and no pair was reached under 
+RuntimeTickets
+. This endpoint is not the injected-send endpoint of Table 
+3
+, so we read the two on their own scales and never against each other.
+
+D.6 
+Supplementary Panel: SkillGuard on Claude Code
+
+Why this panel.
+ SkillGuard is the closest defense built for Agent Skills, and it runs on the lifecycle hooks of Claude Code, which neither of our two frameworks offers. We therefore ran one supplementary panel on Claude Code 2.0.76 driven by 
+kimi-k2.6
+ with the decoding settings of the Kimi panels, and we never pool it with

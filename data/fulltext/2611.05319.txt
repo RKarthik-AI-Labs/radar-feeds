@@ -1,0 +1,4556 @@
+HARP: Training-Free Dual-Profile Agentic Communication for LLM-Based Recommendation
+https://arxiv.org/abs/2611.05319
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+Harp
+: Training-Free Dual-Profile Agentic Communication for LLM-Based Recommendation
+
+Zhen Tao
+
+Affiliation: 
+Harbin Institute of Technology, Shenzhen
+
+Affiliation: 
+Great Bay University
+
+Email: 
+25b951132@stu.hit.edu.cn
+
+  
+
+Xun Zhou
+
+Affiliation: 
+Harbin Institute of Technology, Shenzhen
+
+Affiliation: 
+Shenzhen Loop Area Institute
+
+Email: 
+zhouxun2023@hit.edu.cn
+
+  
+
+Xuhui Chen
+
+Affiliation: 
+Harbin Institute of Technology, Shenzhen
+
+Email: 
+25b951013@stu.hit.edu.cn
+
+  
+
+Ziyue Qiao
+
+Affiliation: 
+Great Bay University
+
+Email: 
+ziyuejoe@gmail.com
+
+  
+
+Qingqiang Sun
+
+Affiliation: 
+Great Bay University
+
+Email: 
+qqsun@gbu.edu.cn
+
+Abstract
+
+In LLM-based recommendation, 
+memory
+ effectively plays the role of a user-level agent, typically built on top of a memory-augmented backbone. Yet under this paradigm users and items remain asymmetric participants: only the user is given a structured profile; that profile is consumed inside a bandwidth-limited reranker prompt; and it is frozen after warmup. Starting from this observation, we recast LLM-based recommendation as an 
+agentic-communication
+ process in four stages: 
+Build
+ a self-description, 
+Transmit
+ it along the collaborative graph, 
+Understand
+ the other side, and 
+Sync
+ it from the next interaction. Analysing the dominant memory-augmented paradigm through this formulation, we identify three open communication challenges that current pipelines leave unaddressed: the item side never produces a comparable self-description (one-sided 
+Build
+); profile-level signals are routed only into a bandwidth-limited reranker prompt rather than into the retrieval stage where they would not compete for context tokens (prompt-trapped 
+Understand
+); and the user’s description is frozen after warmup with no principled update rule (absent 
+Sync
+).
+We instantiate the missing stages as 
+Harp
+ (
+H
+omophily-aware 
+A
+gentic 
+R
+ecommendation via dual 
+P
+rofiles
+), a training-free, three-operator addition to a frozen LLM backbone: a rule-extracted symmetric item profile (zero extra LLM calls), a channel-decomposable profile-level homophily 
+ consumed at retrieval time rather than inside the reranker prompt, and a single-pass reflective update realising 
+in-context
+ profile evolution without any gradient step. On four public benchmarks (Yelp, Books, MovieTV, Goodreads), 
+Harp
+ lifts Hit@1 over the strongest published baseline by 
+–
+, with family-wise Holm-corrected 
+ on every dataset. Ablations and a per-case attribution study show that the operators contribute complementary gains, with the retrieval-side gate as the main source; we also report the trade-off introduced by the reflective pass. Our contribution is a unified formulation of agentic communication for LLM-based recommendation, together with a training-free three-operator instantiation on top of it.
+
+†
+†
+footnotetext: 
+∗
+Corresponding author.
+
+1 
+Introduction
+
+Figure 1: 
+Harp
+ at a glance. A user with a niche query in a half-dialogue session, compared with the full dialogue restored by 
+Harp
+. HARP integrates three training-free innovations: Dual Profile (§
+3.2
+), Homophily Gate (§
+3.3
+), and Reflection (§
+3.4
+).
+
+Large language models (LLMs) are becoming the central reasoning engine of next-generation recommender systems 
+Wu et al. (2024)
+; 
+Geng et al. (2022)
+; 
+Liu et al. (2023)
+; 
+Zhang et al. (2025a)
+. In the most representative 
+agentic recommendation
+ paradigm 
+Zhang et al. (2024)
+; 
+Xu et al. (2025)
+; 
+Chen et al. (2026)
+; 
+Tang et al. (2026)
+, a user is modelled as an LLM agent with persistent memory, and personalised recommendations are produced by routing collaborative-neighbour memories into a reranker prompt. Yet this paradigm provides only a partial answer: the user side is equipped with memory while the item side has no structured profile aligned with the user’s; the user profile is consumed solely inside a bandwidth-limited reranker prompt; and the profile built at warmup is not revised from recommendation outcomes afterwards. We recast LLM-based recommendation as a four-stage agentic-communication process between user and item agents (
+Build
+–
+Transmit
+–
+Understand
+–
+Sync
+), and show that the dominant paradigm implements only a partial version of it, leaving three communication challenges open (Figure 
+1
+).
+
+The four-stage framing and a motivating observation.
+
+The stages 
+Build
+–
+Transmit
+–
+Understand
+–
+Sync
+ borrow directly from heterogeneous message passing on graphs 
+Hu et al. (2020)
+; 
+Schlichtkrull et al. (2018)
+ and from the classical study of homophily on social networks 
+McPherson et al. (2001)
+. The decomposition plays a 
+dual
+ role: as an 
+analytical tool
+ that asks which of the four stages a given pipeline implements and how well, and as a 
+generative scaffold
+ that prescribes the operator to add once a missing stage is identified. The four-stage view is thus an analytical framework for diagnosing a pipeline, not a model in itself. Recommender systems have passed through three architectural generations (collaborative filtering 
+Koren et al. (2009)
+; 
+Sarwar et al. (2001)
+, graph neural networks 
+He et al. (2020)
+; 
+Veličković et al. (2017)
+, and the recent agentic paradigm 
+Wu et al. (2024)
+), yet the collaborative signal pervading all three is indexed by interaction 
+overlap
+ rather than description-level compatibility, hence size-blind: whenever two agents’ description sets differ sharply in breadth, raw interaction-overlap similarity inflates the match for reasons of degree rather than relevance, and the pre-rerank candidate list inherits that inflation. An agentic communication pipeline therefore needs a profile-level, 
+asymmetric
+ coverage measure read from the query side’s vantage, which is the role the channel-decomposable homophily 
+ of §
+3.2
+ plays once the item side is also allowed to speak.
+
+Three communication challenges and three operators.
+
+Applied to the memory-augmented family on four public benchmarks (Yelp, Amazon Books, MovieTV, Goodreads), this analysis identifies three open challenges where the communication falls silent. 
+(Challenge 1) Asymmetric 
+Build
+.
+ The user side carries a multi-field profile while the item side has no profile in the same schema. 
+(Challenge 2) Bandwidth-trapped 
+Understand
+.
+ Concatenating the user profile into the reranker does not move ranking accuracy: by the time the reranker is called, its context is fixed and the context budget is dominated by the memory block; 
+Understand
+ is the stage where profile-level signal must enter 
+before
+ the reranker is called. 
+(Challenge 3) Absent 
+Sync
+.
+ Profiles built at warmup are not calibrated against the feedback that warmup itself produces.
+
+Each challenge is addressed by a primitive already validated elsewhere, composed without retraining. 
+Against Challenge 1
+, a structured-JSON user profile, in the spirit of agent-maintained profiles in prior agentic recommenders 
+Zhang et al. (2024)
+, is used on the user side, and a schema-aligned item profile is introduced via rule extraction at no extra LLM cost. 
+Against Challenge 2
+, the collaborative retrieval score is re-weighted by a profile homophily that generalises the scalar edge-homophily ratio 
+Zhu et al. (2020)
+ to a sum over semantic channels; homophily is used here as an analytical quantity, not as an optimisation target. 
+Against Challenge 3
+, a single Chain-of-Thought reflective pass 
+Wei et al. (2022)
+; 
+Shinn et al. (2023)
+; 
+Madaan et al. (2023)
+ optionally guarded by a conservative critic is added, realising 
+in-context evolution
+ of the user profile without any gradient update, a 
+self-evolving
+-agent primitive in the sense of the recent survey 
+Gao et al. (2025)
+. The composition is 
+Harp
+ (
+H
+omophily-aware 
+A
+gentic 
+R
+ecommendation via dual 
+P
+rofiles
+), a training-free addition to a frozen LLM backbone that operates entirely through the 
+LLM-as-agent
+ interaction loop; its novelty lies in the systematic identification of these three primitives as the complementary response to the three challenges within the memory-augmented agentic family, each separable in ablation (§
+4
+).
+
+Our main contributions are as follows:
+
+•
+
+Formulation.
+ An 
+agentic-communication
+ formulation that models LLM-based recommendation as a four-stage process 
+Build
+–
+Transmit
+–
+Understand
+–
+Sync
+ and, used analytically, surfaces the three communication gaps that the dominant memory-augmented agentic paradigm leaves open.
+
+•
+
+Method.
+ 
+Harp
+, a three-operator training-free addition to a frozen LLM backbone: a rule-extracted symmetric item profile, a channel-decomposable homophily-gated retrieval, and a single-pass reflective update, each aligned with one of the three gaps.
+
+•
+
+Design rationale.
+ Three design disciplines that predict where operator-level gains should appear: the channel-decomposability of profile-level homophily, the retrieval-vs-prompt design rationale, and the one-pass conservative update.
+
+•
+
+Empirical evaluation.
+ On four public benchmarks, 
+Harp
+ achieves state-of-the-art on every metric, lifting Hit@1 by 
+–
+ over the strongest published baseline; ablations and per-case traces further confirm the effectiveness and complementarity of each operator.
+
+2 
+Related Work
+
+LLM-based agentic recommenders.
+
+The agentic paradigm represents users as LLM-managed stateful memories 
+Zhang et al. (2024)
+; 
+Xu et al. (2025)
+; 
+Tang et al. (2026)
+; 
+Huang et al. (2025)
+, yielding a chronology from stateless vanilla LLM 
+Liu et al. (2023)
+, static per-user memory 
+Huang et al. (2025)
+; 
+Xu et al. (2025)
+, dynamic self-reflective memory 
+Zhang et al. (2024)
+; 
+Xu et al. (2025)
+; 
+Tang et al. (2026)
+, to a dynamic memory graph managed by a lightweight LM 
+Chen et al. (2026)
+. Within this line, RecMind 
+Wang et al. (2024)
+ augments user agents with tool-calling for external knowledge, and RecAgent 
+Wang et al. (2025)
+ simulates realistic user behaviour with LLM-driven decision loops. Related work also improves modality representations for recommendation 
+Tang et al. (2025)
+, uses LLMs to understand user text in conversational recommenders 
+Yuan et al. (2026)
+, and generates semantic item identifiers for cross-domain recommendation 
+Hu et al. (2026)
+. A parallel infrastructure thread provides pluggable agentic memory backends: A-MEM 
+Xu et al. (2026)
+ proposes structured agentic memory for LLM agents, H-Mem 
+Ye et al. (2026)
+ introduces hybrid multi-dimensional memory for long-context conversations, and a recent task-aware retrieval thread 
+Tao et al. (2026)
+ makes the retrieval step itself context-adaptive. 
+Harp
+ differs by lifting 
+both
+ sides to profile level and consuming the resulting homophily at retrieval time rather than inside a reranker prompt.
+
+Homophily in networks and recommender systems.
+
+Homophily, the principle that similarity breeds connection 
+McPherson et al. (2001)
+; 
+Lazarsfeld (1954)
+, has been studied inside GNNs 
+Zhu et al. (2020)
+; 
+Ma et al. (2021)
+; 
+Platonov et al. (2023)
+; 
+Luan et al. (2023)
+; 
+Zheng et al. (2026)
+ where message passing degrades on heterophilous graphs, and graph contrastive and fairness-aware learning likewise exploit neighbourhood structure 
+Sun et al. (2025)
+; 
+Sun et al. (2024)
+; 
+Li et al. (2026)
+; classical CF 
+Koren et al. (2009)
+; 
+Sarwar et al. (2001)
+; 
+He et al. (2017)
+; 
+He et al. (2020)
+; 
+Wang et al. (2019)
+ implicitly relies on homophily at the interaction level. Recent analyses sharpen the picture: 
+Platonov et al. (2023)
+ challenge existing heterophily benchmarks, 
+Luan et al. (2023)
+ characterise when homophily helps node classification, and 
+Zheng et al. (2026)
+ survey heterophily-aware GNN designs. These works, including the cross-type homophily of heterogeneous graphs 
+Tao et al. (2025)
+, operate on 
+interaction-level
+ or 
+class-label
+ homophily; 
+Harp
+ differs by defining 
+ at the 
+profile
+ level: agent-authored, agent-mutable, and additively decomposable over four semantic channels (Remark 
+1
+).
+
+Self-evolving agents and agentic RAG.
+
+Recent work shows LLM agents can self-improve via in-context rewrites 
+Gao et al. (2025)
+; 
+Zhang et al. (2026)
+; 
+Wang et al. (2023)
+; 
+Shinn et al. (2023)
+; 
+Madaan et al. (2023)
+ or make retrieval decisions adaptively 
+Singh et al. (2025)
+; 
+Asai et al. (2024)
+; 
+Jiang et al. (2023)
+. Voyager 
+Wang et al. (2023)
+ accumulates reusable skills in Minecraft, ChatDev 
+Qian et al. (2024)
+ organises software tasks as multi-agent role-play dialogues, and Self-RAG 
+Asai et al. (2024)
+ trains the model to decide when and what to retrieve. In the agentic-context-engineering view 
+Zhang et al. (2026)
+, the agent’s prompt itself becomes an evolvable artefact, a perspective 
+Harp
+ instantiates for recommendation profiles. 
+Harp
+ differs by applying an acceptance check (Eq. 
+10
+) to profile evolution and routing the homophily signal to the retrieval stage rather than the generation stage.
+
+Detailed discussion of all adjacent threads is deferred to Appendix 
+A
+.
+
+3 
+The 
+Harp
+ Method
+
+This section develops 
+Harp
+ in four steps: §
+3.1
+ fixes the recommendation pipeline and notation; §
+3.2
+–§
+3.4
+ introduce the three operators that separate 
+Harp
+ from a one-sided agentic backbone; §
+3.5
+ aligns each operator with the structural challenge its ablation re-introduces. Full notation, complete pseudocode, complexity analysis and dataset-level extractor details are deferred to Appendix 
+E.1
+–
+E.10
+.
+
+Figure 2: 
+Harp
+ pipeline overview. 
+Upper
+: story strip illustrating the flow of a user’s query across the entire pipeline. 
+Lower
+: block-exploded technical view with input/output annotations and equation references.
+
+3.1 
+Problem Setup and Preliminaries
+
+Two-stage agentic recommendation and the core design.
+
+We follow the standard two-stage setup in current agentic recommenders 
+Zhang et al. (2024)
+; 
+Xu et al. (2025)
+; 
+Tang et al. (2026)
+. Let 
+ denote the user and item sets, 
+ user 
+’s interaction history, 
+ the evaluation instruction, and 
+ the one-shot 
+-nearest user and item neighbour sets of 
+. For user 
+, a retriever selects 
+ collaborative neighbours 
+ (Eq. 
+1
+); a frozen LLM reranker selects the top-1 prediction from the candidate list 
+ given by the evaluation protocol (Eq. 
+2
+):
+
+(1)
+
+(2)
+
+where 
+ is a memory block aggregated along the selected neighbours 
+ and 
+ is an optional user profile. On top of this shared backbone, 
+Harp
+ introduces a layer of 
+channel-level understanding
+ 
+above
+ memory: both user and item carry a structured profile whose four channel fields 
+ are aligned over the channel set 
+, whose per-channel fields are phrase sets disjoint by construction (R1–R4 in §
+3.2
+; Table 
+1
+). This aligned schema lets user–item matching decompose into separately measurable semantic channels, and turns 
+profile-level homophily
+ (Eq. 
+6
+) into an explicit quantity used for retrieval-side gating and post-warmup reflective rewriting. The prevailing memory-augmented family corresponds to the special case in which three restrictions are simultaneously imposed (
+absent item profile, profile injected only via prompt, profile never updated
+); the three operators in §
+3.2
+–§
+3.4
+ lift these in turn. Three operational constraints run through the section: 
+(C1)
+ the reranker prompt has finite token budget 
+, so any content in the 
+ slot trades against 
+; 
+(C2)
+ the backbone LLM is frozen; 
+(C3)
+ each user receives at most one accepted reflective-update trajectory (applied at end of warmup; the trajectory may itself consist of 
+ reflection calls at different history offsets, with 
+ in main experiments). A full notation table is in Appendix 
+E.1
+.
+
+3.2 
+Build
+ Operator: Symmetric Structured Profiles
+
+Two-sided builder.
+
+The user profile is produced by a single LLM call over 
+ under a fixed JSON-schema prompt 
+:
+
+(3)
+
+where the three bands are relative positions in the history, newest to oldest: recent interactions keep full detail (title, categories, rating, city, first review sentence), medium ones are compressed to category and city statistics, and distant ones to the domain boundaries they touch, with an Ebbinghaus-style temporal weight 
+ per observation 
+ (
+ normalised age, 
+ forgetting rate, 
+ floor); the banding realises this weight under a fixed prompt budget while keeping long-range coverage. The seven-field JSON schema is designed for this paper, following the idea of agent-maintained user profiles in prior agentic recommenders 
+Zhang et al. (2024)
+; only the four 
+channel
+ fields in Table 
+1
+ participate in the homophily computation (Eq. 
+6
+). The item side is obtained via rule extraction, with zero LLM calls:
+
+(4)
+
+targeting the same channel-aligned schema, which keeps item-side profiling feasible at 
+–
+. 
+ is formalised as a 
+deterministic, zero-LLM
+ shallow semantic parser, fully parametrised by a dataset-level ontology map 
+ and domain phrase lexicon 
+, executed in four rules R1–R4 (ontology projection, lexicon-guided encoding, quality-signal induction, channel-exclusivity projection) that route metadata and reviews into the four pairwise-disjoint channel fields; per-rule definitions, per-dataset lexicons, and coverage statistics are in Appendix 
+E.10
+.
+
+Table 1: 
+Four-channel correspondence between user and item profiles.
+
+Channel 
+
+User field
+ 
+
+Item field
+ 
+
+preference
+
+interests
+
+serves
+
+quality
+
+quality_bar
+
+quality_signal
+
+context
+
+context
+
+context
+
+audience
+
+behavior
+
+audience
+
+Profile-level homophily as a similarity score.
+
+For the phrase-set channels 
+preference
+ and 
+audience
+, the similarity between two phrase sets 
+ is
+
+(5)
+
+with 
+ (neutral) when 
+ or 
+ is empty. The 
+asymmetric normalisation
+ is deliberate: fixing the denominator on the 
+query side
+ (
+) makes Eq. 
+5
+ read “how much of what 
+ claims is actually echoed by 
+”; the relevance perspective is anchored to the querying user, and a broader-vocabulary item cannot gain extra credit by mere size. The 
+quality
+ and 
+context
+ channels, whose fields are not phrase sets, use channel-specific fallback implementations (Appendix 
+E.10
+). All three forms participate uniformly in Eq. 
+6
+, and profile-level homophily is defined as a channel-wise weighted average:
+
+(6)
+
+where 
+ are non-negative channel weights with 
+; the 
+preference
+ channel usually takes half of the weight or more and the other three share the rest evenly; the weights are adjustable hyperparameters that are 
+not
+ tuned against any downstream metric. When profiles degenerate to a single class label, 
+ reduces to the same-class indicator of an edge, whose average over all edges is the edge-homophily ratio of 
+Zhu et al. (2020)
+; 
+ is thus a natural generalisation of the graph-homophily concept to the 
+multi-channel, multi-granularity semantic
+ setting. In 
+Harp
+, 
+ plays the dual role of 
+diagnostic quantity
+ and 
+retrieval-side prior
+, not an end-to-end optimisation target.
+
+Remark 1
+ 
+(Channel decomposability: algebraic basis for separable ablations)
+.
+
+Pairwise disjointness of channels (guaranteed by R4) together with the linear aggregation of Eq. 
+6
+ imply: replacing channel 
+’s phrase sets 
+ while holding other channels fixed changes 
+ by exactly 
+, with no cross-channel coupling. This equates “per-channel ablation” with “additive perturbation of the aggregate 
+”, so changes in 
+ can be attributed additively to individual channels. Full proof in Appendix 
+C.1
+.
+
+3.3 
+Understand
+ Operator: Homophily-Gated Retrieval
+
+Homophily-gated neighbour score.
+
+Classical collaborative retrieval propagates preference signals via 
+behavioural similarity
+ on 
+, implicitly assuming “behavioural neighbours are preference neighbours.” This assumption fails in sparse, heterogeneous settings via 
+cross-category misleading neighbours
+. We use the profile-level homophily 
+ from §
+3.2
+ as a 
+semantic prior
+ to re-weight the behavioural signal. Introducing a monotone homophily gate 
+ (
+ the homophily floor), we obtain the gated neighbour score
+
+(7)
+
+where 
+ is an item neighbour of 
+ and 
+ ensures that collaborative signal is not fully zeroed when 
+. The gated quantity is the 
+cross-type
+ profile homophily 
+ (cf. 
+Tao et al. (2025)
+): when the channel set degenerates to a single class label, 
+ is the same-class indicator of the edge, the per-edge quantity behind the edge-homophily ratio of 
+Zhu et al. (2020)
+; the multiplicative gate itself is our design. 
+ is a 
+monotone bounded
+ transform of 
+, so order-preservation guarantees the gate does not distort the channel-induced ordering; at 
+ or 
+ it degenerates to a pure behavioural retriever. We treat user–user edges (
+ via symmetric phrase overlap on the 
+preference
+ channel) and user–item edges as two instances of the same 
+Understand
+ operator, with independent floors (main experiments: 
+) acting on disjoint neighbour subsets.
+
+Where in the pipeline should the profile be consumed?
+
+A non-trivial design choice is whether profile signal should enter via 
+retrieval-side candidate reshaping
+ or 
+reranker-side context injection
+. The two are 
+not
+ information-equivalent: the former changes 
+which neighbours
+ inform the reranker, the latter changes the 
+evidence
+ it relies on. We argue the former is strictly preferable here for two reasons. 
+Budget
+ (induced by C1): the reranker’s context token budget 
+ is hard; once 
+ is saturated, every token added to the 
+ slot displaces 
+, so prompt-side injection is effectively a 
+zero-sum substitution
+ between “profile evidence” and “collaborative memory”. 
+Mechanism
+: under C2 (frozen LLM), the reranker cannot learn to balance the two sources, and its input is already fixed by the retrieved candidates; with misleading candidates, even the optimal profile context cannot reliably promote 
+. Placing the profile at the retrieval side lets it act on the 
+recoverable stage
+. We record this intuition formally as Remark 
+2
+ in Appendix 
+C.3
+; Table 
+3
+ in §
+4
+ provides the empirical comparison (the two routes are labelled 
+CH
+ and 
+RI
+ in the ablation).
+
+3.4 
+Sync
+ Operator: Reflective Update
+
+Warmup record and reflective proposal.
+
+Under C2 (frozen backbone), the model cannot absorb user feedback via gradient flow; but each user 
+’s interaction history 
+ naturally constitutes a 
+self-replayable
+ sequence. We use the 
+ entries preceding the test item as a warmup window (
+ in main experiments), running the full retrieve-and-rerank pipeline on this window under the current 
+ and repurposing 
+ as a 
+per-user self-supervised signal
+:
+
+(8)
+
+The hit set characterises effective profile coverage; the miss set pinpoints systematic blind spots. Conditioned on 
+, a single LLM reflection call uses a structured Chain-of-Thought template 
+Wei et al. (2022)
+ to propose a candidate profile update:
+
+(9)
+
+This call fires only once per user, builds 
+ when the user has no profile yet, and does not touch other pipeline components.
+
+Critic gate.
+
+Because chain-of-thought reasoning can be unfaithful 
+Sun et al. (2026)
+, an 
+acceptance gate
+ can optionally be imposed atop the reflection: the critic receives the old profile 
+, the proposed 
+, and the warmup record 
+, returning a binary decision 
+:
+
+(10)
+
+The critic is a conservative safeguard: it keeps the old profile when the proposal is clearly less supported by the warmup cases, which prevents the reflective rewrite from pulling the user profile away from 
+. We use a 
+zero-extra-LLM
+ critic, a deterministic check of how well the proposed profile covers the warmup target items, so the gate’s marginal cost over 
+ is negligible (Appendix 
+E.6
+). Each user sees only one pass of Eq. 
+10
+ (C3): additional passes would multiply the LLM cost while reusing the same warmup record 
+.
+
+3.5 
+Operator Separability and Ablation Predictions
+
+The three operators of §
+3.2
+–§
+3.4
+ are designed to be 
+separable
+: each addresses one structural challenge that its ablation re-introduces. 
+Vocabulary mismatch
+ (addressed by §
+3.2
+): when the item has no profile (
+), there is no second vocabulary to align against; 
+Channel capture
+ (addressed by §
+3.3
+): prompt-injected 
+ competes with 
+ for the reranker budget 
+ (C1), so any profile-content gain is capped by the collaborative-memory space yielded; 
+Communicative drift
+ (addressed by §
+3.4
+): profiles written at warmup are not calibrated against warmup feedback, and the update of Eq. 
+10
+ performs this calibration once. Full pseudocode, per-case traces, and complexity analysis are in Appendix 
+E.2
+, 
+E.5
+ and 
+E.7
+; each row of the main ablation (§
+4
+, Table 
+3
+) is labelled by the challenge it isolates, so the whole table can be read as a test of the three operators’ separability.
+
+4 
+Experiments
+
+4.1 
+Experimental Setup
+
+Datasets and baselines.
+
+We evaluate on four InstructRec 
+Xu et al. (2025)
+ benchmarks: 
+Amazon Books
+ (7.4K users, 120.9K items; abbreviated 
+Books
+), 
+Goodreads
+ (11.7K / 57.4K), 
+MovieTV
+ (5.6K / 29.0K), 
+Yelp
+ (3.0K / 31.6K), using the original splits and natural-language user instructions. Baselines span three families: traditional recommenders (LightGCN 
+He et al. (2020)
+, SASRec 
+Kang and McAuley (2018)
+, P5 
+Geng et al. (2022)
+); single-sided LLM/agentic methods (Vanilla LLM 
+Liu et al. (2023)
+, iAgent 
+Xu et al. (2025)
+, AgentCF 
+Zhang et al. (2024)
+, RecBot 
+Tang et al. (2026)
+, i
+2
+Agent 
+Xu et al. (2025)
+); and memory-augmented agentic methods, whose strongest published representative on these splits is MemRec 
+Chen et al. (2026)
+. All baseline numbers are imported from the originating papers (
+†
+ in Table 
+2
+); per-dataset characteristics and baseline details are in Appendix 
+B.1
+ and 
+B.2
+.
+
+Harp
+ configuration.
+
+Harp
+ is instantiated on a frozen 
+gpt-4o-mini
+ backbone and runs a single round of profile warmup per user. The 
+Understand
+ operator uses homophily floors 
+ on user–item edges and 
+ on user–user edges, with a preference-dominant channel weighting 
+. The 
+Sync
+ operator runs 
+ reflective pass per user (conditioned on the second-to-last interaction) optionally filtered by the critic. The retrieval budget 
+ is chosen on a development split from 
+ and fixed at 
+ for all main-table numbers. Hit@1 improvements are tested by per-dataset one-sided binomial tests with Wilson 95% CIs (Appendix 
+D.1
+); the cross-dataset joint null is controlled by Holm–Bonferroni at family-wise 
+; ladder transitions use exact paired McNemar. Our code is available at https://github.com/Jove-Zhen/HARP.
+
+4.2 
+Main Results
+
+Table 2: 
+Main results on four benchmarks. Bold 
+ best, underline 
+ second best; 
+†
+ = from original paper. “Rel. Improv.” = relative improvement over the strongest published baseline. All H@1 improvements 
+ (Holm–Bonferroni corrected).
+
+Books
+
+Goodreads
+
+Paradigm
+
+Model
+
+H@1
+
+H@3
+
+N@3
+
+H@5
+
+N@5
+
+H@1
+
+H@3
+
+N@3
+
+H@5
+
+N@5
+
+Trad.
+
+LightGCN
+†
+
+.175
+
+.326
+
+.260
+
+.570
+
+.359
+
+.250
+
+.588
+
+.443
+
+.790
+
+.526
+
+SASRec
+†
+
+.091
+
+.283
+
+.200
+
+.485
+
+.282
+
+.132
+
+.352
+
+.258
+
+.541
+
+.335
+
+P5
+†
+
+.219
+
+.361
+
+.299
+
+.527
+
+.367
+
+.157
+
+.323
+
+.251
+
+.506
+
+.326
+
+Agent (match)
+
+Vanilla LLM
+†
+
+.314
+
+.562
+
+.453
+
+.727
+
+.523
+
+.286
+
+.466
+
+.395
+
+.739
+
+.504
+
+iAgent
+†
+
+.393
+
+.556
+
+.486
+
+.691
+
+.541
+
+.262
+
+.495
+
+.395
+
+.659
+
+.463
+
+RecBot
+†
+
+.398
+
+.549
+
+.485
+
+.679
+
+.538
+
+.271
+
+.475
+
+.388
+
+.650
+
+.459
+
+AgentCF
+†
+
+.346
+
+.606
+
+.496
+
+.740
+
+.551
+
+.295
+
+.591
+
+.465
+
+.773
+
+.540
+
+i
+2
+Agent
+†
+
+.445
+
+.652
+
+.565
+
+.771
+
+.614
+
+.310
+
+.608
+
+.483
+
+.768
+
+.548
+
+Mem.-aug.
+
+MemRec
+†
+
+.512
+
+.692
+
+.615
+
+.801
+
+.660
+
+.400
+
+.666
+
+.554
+
+.805
+
+.611
+
+Comm.
+
+Harp
+
+.547
+
+.720
+
+.647
+
+.819
+
+.688
+
+.469
+
+.715
+
+.612
+
+.847
+
+.664
+
+Rel. Improv.
+
++6.9%
+
++4.2%
+
++5.2%
+
++2.2%
+
++4.2%
+
++17.2%
+
++7.4%
+
++10.4%
+
++5.2%
+
++8.6%
+
+MovieTV
+
+Yelp
+
+Paradigm
+
+Model
+
+H@1
+
+H@3
+
+N@3
+
+H@5
+
+N@5
+
+H@1
+
+H@3
+
+N@3
+
+H@5
+
+N@5
+
+Trad.
+
+LightGCN
+†
+
+.348
+
+.564
+
+.474
+
+.688
+
+.524
+
+.344
+
+.566
+
+.472
+
+.755
+
+.549
+
+SASRec
+†
+
+.340
+
+.523
+
+.447
+
+.638
+
+.494
+
+.231
+
+.431
+
+.346
+
+.560
+
+.398
+
+P5
+†
+
+.170
+
+.321
+
+.255
+
+.501
+
+.329
+
+.144
+
+.321
+
+.244
+
+.522
+
+.479
+
+Agent (match)
+
+Vanilla LLM
+†
+
+.405
+
+.776
+
+.610
+
+.860
+
+.645
+
+.169
+
+.528
+
+.370
+
+.686
+
+.436
+
+iAgent
+†
+
+.425
+
+.617
+
+.536
+
+.742
+
+.587
+
+.400
+
+.601
+
+.515
+
+.730
+
+.568
+
+RecBot
+†
+
+.437
+
+.611
+
+.538
+
+.731
+
+.587
+
+.401
+
+.600
+
+.516
+
+.717
+
+.564
+
+AgentCF
+†
+
+.391
+
+.669
+
+.552
+
+.786
+
+.601
+
+.193
+
+.437
+
+.333
+
+.637
+
+.415
+
+i
+2
+Agent
+†
+
+.491
+
+.723
+
+.626
+
+.822
+
+.667
+
+.421
+
+.645
+
+.552
+
+.765
+
+.601
+
+Mem.-aug.
+
+MemRec
+†
+
+.588
+
+.782
+
+.701
+
+.882
+
+.742
+
+.487
+
+.691
+
+.605
+
+.791
+
+.646
+
+Comm.
+
+Harp
+
+.645
+
+.838
+
+.758
+
+.917
+
+.790
+
+.604
+
+.790
+
+.712
+
+.865
+
+.743
+
+Rel. Improv.
+
++9.7%
+
++7.2%
+
++8.1%
+
++4.0%
+
++6.5%
+
++24.0%
+
++14.3%
+
++17.7%
+
++9.4%
+
++15.0%
+
+Table 
+2
+ reports the complete results. 
+Harp
+ consistently outperforms all baselines on every dataset and every metric. Three patterns are worth noting. 
+First
+, the dominance holds across all three baseline families: Hit@1 over the strongest traditional baseline is 
+–
+, over the strongest single-sided agent i
+2
+Agent it is 
+/
+/
+/
+ on Books/Goodreads/MovieTV/Yelp, and over the strongest memory-augmented baseline MemRec it ranges from 
+ (Books) to 
+ (Yelp). 
+Second
+, the gain is largest on Yelp and Goodreads (
+ / 
+), consistent with 
+Harp
+’s profile-based re-weighting of neighbours exactly where the collaborative-only signal is weakest. 
+Third
+, the relative gain over MemRec shrinks monotonically with 
+ (e.g. Yelp 
+ at Hit@
+), indicating that 
+Harp
+ promotes the ground truth 
+into
+ the top-1 slot rather than merely reshuffling an already-correct pool. On the full test splits, the Wilson 95% CI lower bound of 
+Harp
+’s Hit@1 strictly dominates the MemRec point estimate with margins 
+ pp on Books/Goodreads/MovieTV/Yelp; per-dataset one-sided binomial 
+ and Holm–Bonferroni adjusted 
+ (Appendix 
+D.1
+).
+
+4.3 
+Ablation: Which Components of 
+Harp
+ Carry the Gain?
+
+To systematically attribute contributions, we define five ablation configurations sharing the same frozen backbone and differing only in “which 
+Harp
+ components are enabled”: 
+Memory
+ (
+; no gating, no reflection); 
+Monologue
+ (user profile 
+ injected into the reranker prompt only); 
+Dialogue
+ (both 
+ enabled, homophily gating 
+ used on retrieval; 
+no
+ prompt injection, 
+no
+ reflection); 
+Consult
+ (both profiles but 
+retrieval-side gate disabled
+; a direct “retrieval-side vs. prompt-side” contrast against 
+Dialogue
+); 
+Harp
+ (full pipeline: both profiles, retrieval-side gate, prompt injection, one-pass reflection). Table 
+3
+ reports the ablation on the 
+-user Yelp subsplit; Figure 
+3
+ replicates the same five rungs across all four benchmarks.
+
+Table 3: 
+Harp
+ ablation (Yelp subsplit). CH = retrieval-side homophily gate; RI = reranker prompt injection; Sync = reflection.
+
+Config
+
+CH
+
+RI
+
+Sync
+
+H@1
+
+H@3
+
+H@5
+
+N@3
+
+N@5
+
+Memory
+
+.580
+
+.761
+
+.855
+
+.683
+
+.722
+
+Monologue
+
+✓
+
+✓
+
+.578
+
+.738
+
+.824
+
+.671
+
+.707
+
+Consult
+
+✓
+
+✓
+
+✓
+
+.580
+
+.750
+
+.842
+
+.678
+
+.716
+
+Dialogue
+
+✓
+
+✓
+
+✓
+
+.635
+
+.804
+
+.888
+
+.728
+
+.763
+
+Harp
+
+✓
+
+✓
+
+✓
+
+✓
+
+✓
+
+.643
+
+.808
+
+.889
+
+.734
+
+.767
+
+Three key findings.
+
+(1) The retrieval-side gate is the primary source of gain:
+ 
+Monologue
+Dialogue
+ jumps H@1 by 
+ pp; prompt-side injection alone (
+Consult
+ vs. 
+Memory
+) does not move H@1. 
+(2) The gain needs the profiles to enter the gate:
+ 
+Monologue
+ (user profile only) and 
+Consult
+ (both profiles, no gate) stay at 
+–
+, the same as 
+Memory
+; only 
+Dialogue
+, which uses both profiles in the retrieval-side gate, improves. 
+(3) Prompt injection and 
+Sync
+ add a small residual:
+ 
+Dialogue
+Harp
+ adds 
+ pp H@1 for the two together (prompt injection alone does not move H@1). Paired McNemar (Appendix 
+D.6
+) confirms 
+Monologue
+Dialogue
+ (
+) and 
+Consult
+Harp
+ (
+) are significant, 
+Memory
+Monologue
+ lies within sampling noise (
+), and 
+Dialogue
+Consult
+ is significantly negative (
+ pp, 
+), which supports consuming the profile on the retrieval side.
+
+Do the ablation conclusions hold across datasets?
+
+Figure 
+3
+ shows the five-rung ladder on all four benchmarks (matched 
+-user subsplits) for three representative metrics: Hit@1, Hit@3, and NDCG@3. The conclusion is robust: 
+Monologue
+ 
+ 
+Memory
+, 
+Consult
+ 
+ 
+Memory
+, 
+Dialogue
+ 
+ 
+Monologue
+ is the largest single-rung jump on Yelp, MovieTV and Books, and the 
+Dialogue
+Harp
+ residual (injection and 
+Sync
+ together) is positive on Yelp/MovieTV/Goodreads (
+ pp Hit@1) and slightly negative on Books (
+ pp). Net Hit@1 gains over 
+Memory
+: 
+ pp (Yelp/MovieTV/Books/Goodreads); a per-user repair-source decomposition (Appendix 
+D.3
+) confirms that the majority of L0-miss
+L4-hit transitions are already present at the 
+Dialogue
+ stage, attributing the primary engine of improvement to the retrieval-side gate. The four-metric ladder line plots are in Appendix Figure 
+5
+.
+
+Figure 3: 
+Five-rung ablation ladder (four benchmarks, matched 
+-user subsplits). (a) Hit@1; (b) Hit@3; (c) NDCG@3. Red numbers = total gain (pp) over 
+Memory
+.
+
+Repair sources and the Sync trade-off.
+
+To further understand the mechanism behind the gains, we perform a per-user outcome-transition decomposition on three deep-analysis subsplits (Yelp/MovieTV/Books, each 
+ users): each user is tagged by the triple 
+ indicating hit/miss under 
+Memory
+, 
+Dialogue
+, and 
+Harp
+. The net repair counts over 
+Memory
+ are 
+ users (
+ pp), with the ratio of retrieval-gate repairs (Dial-rep) to 
+Dialogue
+Harp
+ repairs (Sync-rep, injection and 
+Sync
+ together) stable at 
+ (Yelp), 
+ (MovieTV), 
+ (Books). This confirms that the 
+Dialogue
+-stage homophily gate is the 
+primary engine
+ of improvement, with the 
+Dialogue
+Harp
+ step (injection and 
+Sync
+) providing marginal gains on the sub-population that 
+Dialogue
+ alone cannot reach. Notably, this step also introduces a small number of regression events (
+ pp on Books), reflecting a trade-off between conservatism and coverage; three qualitative case studies in Appendix 
+E.5
+ examine it. Furthermore, the Pearson correlation between a profile-length proxy and per-user gain is 
+, confirming that reflection reshapes the profile’s 
+composition
+ rather than its length.
+
+5 
+Conclusion
+
+We recast LLM-based recommendation from an 
+agentic-communication
+ perspective in which user and item agents exchange structured self-descriptions along a four-stage process (
+Build
+–
+Transmit
+–
+Understand
+–
+Sync
+), use the formulation analytically on the dominant memory-augmented agentic paradigm to identify three open communication challenges (asymmetric 
+Build
+, bandwidth-trapped 
+Understand
+, and absent 
+Sync
+), and introduce 
+Harp
+, a three-operator training-free instantiation on a frozen LLM backbone: a symmetric item profile (
+Build
+), a channel-decomposable homophily-gated retrieval (
+Understand
+), and a single-pass reflective update (
+Sync
+). On four public benchmarks, 
+Harp
+ lifts Hit@1 by 
+–
+ over the strongest published baseline, and ablations further confirm that operator-level gains align with the three challenges.
+
+References
+
+Asai 
+et al.
+ (2024)
+
+A. Asai, Z. Wu, Y. Wang, A. Sil, and H. Hajishirzi
+
+Self-rag: learning to retrieve, generate, and critique through self-reflection
+.
+
+In 
+International conference on learning representations
+,
+
+Vol. 
+2024
+, 
+pp. 9112–9141
+.
+
+Cited by: 
+Appendix A
+,
+
+§2
+.
+
+Bao 
+et al.
+ (2025)
+
+K. Bao, J. Zhang, W. Wang, Y. Zhang, Z. Yang, Y. Luo, C. Chen, F. Feng, and Q. Tian
+
+A bi-step grounding paradigm for large language models in recommendation systems
+.
+
+ACM Transactions on Recommender Systems
+ 
+3
+ (
+4
+), 
+pp. 1–27
+.
+
+Cited by: 
+Appendix A
+.
+
+Bao 
+et al.
+ (2023)
+
+K. Bao, J. Zhang, Y. Zhang, W. Wang, F. Feng, and X. He
+
+Tallrec: an effective and efficient tuning framework to align large language model with recommendation
+.
+
+In 
+Proceedings of the 17th ACM conference on recommender systems
+,
+
+pp. 1007–1014
+.
+
+Cited by: 
+Appendix A
+.
+
+Chen 
+et al.
+ (2026)
+
+W. Chen, Y. Zhao, J. Huang, Z. Ye, M. Ju, T. Zhao, N. Shah, L. Chen, and Y. Zhang
+
+Memrec: collaborative memory-augmented agentic recommender system
+.
+
+In 
+Proceedings of the 64th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)
+,
+
+pp. 44515–44544
+.
+
+Cited by: 
+1st item
+,
+
+§1
+,
+
+§2
+,
+
+§4.1
+.
+
+Du 
+et al.
+ (2023)
+
+Y. Du, S. Li, A. Torralba, J. B. Tenenbaum, and I. Mordatch
+
+Improving factuality and reasoning in language models through multiagent debate
+.
+
+arXiv preprint arXiv:2305.14325
+.
+
+Cited by: 
+Appendix A
+.
+
+Foerster 
+et al.
+ (2016)
+
+J. Foerster, I. A. Assael, N. De Freitas, and S. Whiteson
+
+Learning to communicate with deep multi-agent reinforcement learning
+.
+
+Advances in neural information processing systems
+ 
+29
+.
+
+Cited by: 
+Appendix A
+.
+
+Friedman 
+et al.
+ (2023)
+
+L. Friedman, S. Ahuja, D. Allen, Z. Tan, H. Sidahmed, C. Long, J. Xie, G. Schubiner, A. Patel, H. Lara, 
+et al.
+
+Leveraging large language models in conversational recommender systems
+.
+
+arXiv preprint arXiv:2305.07961
+.
+
+Cited by: 
+Appendix A
+.
+
+Gao 
+et al.
+ (2025)
+
+H. Gao, J. Geng, W. Hua, M. Hu, X. Juan, H. Liu, S. Liu, J. Qiu, X. Qi, Y. Wu, 
+et al.
+
+A survey of self-evolving agents: what, when, how, and where to evolve on the path to artificial super intelligence
+.
+
+arXiv preprint arXiv:2507.21046
+.
+
+Cited by: 
+Appendix A
+,
+
+§1
+,
+
+§2
+.
+
+Geng 
+et al.
+ (2022)
+
+S. Geng, S. Liu, Z. Fu, Y. Ge, and Y. Zhang
+
+Recommendation as language processing (rlp): a unified pretrain, personalized prompt & predict paradigm (p5)
+.
+
+In 
+Proceedings of the 16th ACM conference on recommender systems
+,
+
+pp. 299–315
+.
+
+Cited by: 
+3rd item
+,
+
+§1
+,
+
+§4.1
+.
+
+He 
+et al.
+ (2020)
+
+X. He, K. Deng, X. Wang, Y. Li, Y. Zhang, and M. Wang
+
+Lightgcn: simplifying and powering graph convolution network for recommendation
+.
+
+In 
+Proceedings of the 43rd International ACM SIGIR conference on research and development in Information Retrieval
+,
+
+pp. 639–648
+.
+
+Cited by: 
+1st item
+,
+
+§1
+,
+
+§2
+,
+
+§4.1
+.
+
+He 
+et al.
+ (2017)
+
+X. He, L. Liao, H. Zhang, L. Nie, X. Hu, and T. Chua
+
+Neural collaborative filtering
+.
+
+In 
+Proceedings of the 26th international conference on world wide web
+,
+
+pp. 173–182
+.
+
+Cited by: 
+§2
+.
+
+Hong 
+et al.
+ (2024)
+
+S. Hong, M. Zhuge, J. Chen, X. Zheng, Y. Cheng, J. Wang, C. Zhang, S. Yau, Z. Lin, L. Zhou, 
+et al.
+
+MetaGPT: meta programming for a multi-agent collaborative framework
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Vol. 
+2024
+, 
+pp. 23247–23275
+.
+
+Cited by: 
+Appendix A
+.
+
+Hu 
+et al.
+ (2026)
+
+P. Hu, W. Lu, and J. Wang
+
+From ids to semantics: a generative framework for cross-domain recommendation with adaptive semantic tokenization
+.
+
+In 
+Proceedings of the AAAI Conference on Artificial Intelligence
+,
+
+Vol. 
+40
+, 
+pp. 14874–14882
+.
+
+Cited by: 
+§2
+.
+
+Hu 
+et al.
+ (2020)
+
+Z. Hu, Y. Dong, K. Wang, and Y. Sun
+
+Heterogeneous graph transformer
+.
+
+In 
+Proceedings of the web conference 2020
+,
+
+pp. 2704–2710
+.
+
+Cited by: 
+Appendix A
+,
+
+§1
+.
+
+Huang 
+et al.
+ (2025)
+
+X. Huang, J. Lian, Y. Lei, J. Yao, D. Lian, and X. Xie
+
+Recommender ai agent: integrating large language models for interactive recommendations
+.
+
+ACM Transactions on Information Systems
+ 
+43
+ (
+4
+), 
+pp. 1–33
+.
+
+Cited by: 
+Appendix A
+,
+
+§2
+.
+
+Jiang 
+et al.
+ (2023)
+
+Z. Jiang, F. F. Xu, L. Gao, Z. Sun, Q. Liu, J. Dwivedi-Yu, Y. Yang, J. Callan, and G. Neubig
+
+Active retrieval augmented generation
+.
+
+In 
+Proceedings of the 2023 conference on empirical methods in natural language processing
+,
+
+pp. 7969–7992
+.
+
+Cited by: 
+Appendix A
+,
+
+§2
+.
+
+Kang and McAuley (2018)
+
+W. Kang and J. McAuley
+
+Self-attentive sequential recommendation
+.
+
+In 
+2018 IEEE international conference on data mining (ICDM)
+,
+
+pp. 197–206
+.
+
+Cited by: 
+2nd item
+,
+
+§4.1
+.
+
+Kim 
+et al.
+ (2024)
+
+S. Kim, H. Kang, S. Choi, D. Kim, M. Yang, and C. Park
+
+Large language models meet collaborative filtering: an efficient all-round llm-based recommender system
+.
+
+In 
+Proceedings of the 30th ACM SIGKDD conference on knowledge discovery and data mining
+,
+
+pp. 1395–1406
+.
+
+Cited by: 
+Appendix A
+.
+
+Koren 
+et al.
+ (2009)
+
+Y. Koren, R. Bell, and C. Volinsky
+
+Matrix factorization techniques for recommender systems
+.
+
+Computer
+ 
+42
+ (
+8
+), 
+pp. 30–37
+.
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+Lazaridou 
+et al.
+ (2016)
+
+A. Lazaridou, A. Peysakhovich, and M. Baroni
+
+Multi-agent cooperation and the emergence of (natural) language
+.
+
+arXiv preprint arXiv:1612.07182
+.
+
+Cited by: 
+Appendix A
+.
+
+Lazarsfeld (1954)
+
+P. F. Lazarsfeld
+
+Friendship as a social process: a substantive and methodological analysis
+.
+
+Freedom and control in modern society
+ 
+18
+ (
+1
+), 
+pp. 18
+.
+
+Cited by: 
+§2
+.
+
+Li 
+et al.
+ (2026)
+
+F. Li, X. Wang, D. Cheng, Y. Zhang, W. Zhang, and X. Lin
+
+Fairness-aware hypergraph self-supervised learning with sampling-efficient signals
+.
+
+IEEE Transactions on Knowledge and Data Engineering
+.
+
+Cited by: 
+§2
+.
+
+Li 
+et al.
+ (2023)
+
+G. Li, H. Hammoud, H. Itani, D. Khizbullin, and B. Ghanem
+
+Camel: communicative agents for” mind” exploration of large language model society
+.
+
+Advances in neural information processing systems
+ 
+36
+, 
+pp. 51991–52008
+.
+
+Cited by: 
+Appendix A
+.
+
+Liao 
+et al.
+ (2024)
+
+J. Liao, S. Li, Z. Yang, J. Wu, Y. Yuan, X. Wang, and X. He
+
+Llara: large language-recommendation assistant
+.
+
+In 
+Proceedings of the 47th international ACM SIGIR conference on research and development in information retrieval
+,
+
+pp. 1785–1795
+.
+
+Cited by: 
+Appendix A
+.
+
+Liu 
+et al.
+ (2023)
+
+J. Liu, C. Liu, P. Zhou, R. Lv, K. Zhou, and Y. Zhang
+
+Is chatgpt a good recommender? a preliminary study
+.
+
+arXiv preprint arXiv:2304.10149
+.
+
+Cited by: 
+1st item
+,
+
+§1
+,
+
+§2
+,
+
+§4.1
+.
+
+Liu 
+et al.
+ (2024)
+
+Q. Liu, N. Chen, T. Sakai, and X. Wu
+
+Once: boosting content-based recommendation with both open-and closed-source large language models
+.
+
+In 
+Proceedings of the 17th ACM international conference on web search and data mining
+,
+
+pp. 452–461
+.
+
+Cited by: 
+Appendix A
+.
+
+Luan 
+et al.
+ (2023)
+
+S. Luan, C. Hua, M. Xu, Q. Lu, J. Zhu, X. Chang, J. Fu, J. Leskovec, and D. Precup
+
+When do graph neural networks help with node classification? investigating the homophily principle on node distinguishability
+.
+
+Advances in Neural Information Processing Systems
+ 
+36
+, 
+pp. 28748–28760
+.
+
+Cited by: 
+§2
+.
+
+Ma 
+et al.
+ (2021)
+
+Y. Ma, X. Liu, N. Shah, and J. Tang
+
+Is homophily a necessity for graph neural networks?
+.
+
+arXiv preprint arXiv:2106.06134
+.
+
+Cited by: 
+§2
+.
+
+Madaan 
+et al.
+ (2023)
+
+A. Madaan, N. Tandon, P. Gupta, S. Hallinan, L. Gao, S. Wiegreffe, U. Alon, N. Dziri, S. Prabhumoye, Y. Yang, 
+et al.
+
+Self-refine: iterative refinement with self-feedback
+.
+
+Advances in neural information processing systems
+ 
+36
+, 
+pp. 46534–46594
+.
+
+Cited by: 
+Appendix A
+,
+
+§1
+,
+
+§2
+.
+
+McPherson 
+et al.
+ (2001)
+
+M. McPherson, L. Smith-Lovin, and J. M. Cook
+
+Birds of a feather: homophily in social networks
+.
+
+Annual review of sociology
+ 
+27
+ (
+1
+), 
+pp. 415–444
+.
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+Mordatch and Abbeel (2018)
+
+I. Mordatch and P. Abbeel
+
+Emergence of grounded compositional language in multi-agent populations
+.
+
+In 
+Proceedings of the AAAI conference on artificial intelligence
+,
+
+Vol. 
+32
+.
+
+Cited by: 
+Appendix A
+.
+
+Ni 
+et al.
+ (2019)
+
+J. Ni, J. Li, and J. McAuley
+
+Justifying recommendations using distantly-labeled reviews and fine-grained aspects
+.
+
+In 
+Proceedings of the 2019 conference on empirical methods in natural language processing and the 9th international joint conference on natural language processing (EMNLP-IJCNLP)
+,
+
+pp. 188–197
+.
+
+Cited by: 
+§B.1
+,
+
+§B.1
+.
+
+Platonov 
+et al.
+ (2023)
+
+O. Platonov, D. Kuznedelev, M. Diskin, A. Babenko, and L. Prokhorenkova
+
+A critical look at the evaluation of gnns under heterophily: are we really making progress?
+.
+
+arXiv preprint arXiv:2302.11640
+.
+
+Cited by: 
+§2
+.
+
+Qian 
+et al.
+ (2024)
+
+C. Qian, W. Liu, H. Liu, N. Chen, Y. Dang, J. Li, C. Yang, W. Chen, Y. Su, X. Cong, 
+et al.
+
+Chatdev: communicative agents for software development
+.
+
+In 
+Proceedings of the 62nd annual meeting of the association for computational linguistics (volume 1: Long papers)
+,
+
+pp. 15174–15186
+.
+
+Cited by: 
+§2
+.
+
+Rasmussen 
+et al.
+ (2025)
+
+P. Rasmussen, P. Paliychuk, T. Beauvais, J. Ryan, and D. Chalef
+
+Zep: a temporal knowledge graph architecture for agent memory
+.
+
+arXiv preprint arXiv:2501.13956
+.
+
+Cited by: 
+Appendix A
+.
+
+Ren 
+et al.
+ (2020)
+
+Y. Ren, S. Guo, M. Labeau, S. B. Cohen, and S. Kirby
+
+Compositional languages emerge in a neural iterated learning model
+.
+
+arXiv preprint arXiv:2002.01365
+.
+
+Cited by: 
+Appendix A
+.
+
+Sarwar 
+et al.
+ (2001)
+
+B. Sarwar, G. Karypis, J. Konstan, and J. Riedl
+
+Item-based collaborative filtering recommendation algorithms
+.
+
+In 
+Proceedings of the 10th international conference on World Wide Web
+,
+
+pp. 285–295
+.
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+Schlichtkrull 
+et al.
+ (2018)
+
+M. Schlichtkrull, T. N. Kipf, P. Bloem, R. Van Den Berg, I. Titov, and M. Welling
+
+Modeling relational data with graph convolutional networks
+.
+
+In 
+European semantic web conference
+,
+
+pp. 593–607
+.
+
+Cited by: 
+Appendix A
+,
+
+§1
+.
+
+Shinn 
+et al.
+ (2023)
+
+N. Shinn, F. Cassano, A. Gopinath, K. Narasimhan, and S. Yao
+
+Reflexion: language agents with verbal reinforcement learning
+.
+
+Advances in neural information processing systems
+ 
+36
+, 
+pp. 8634–8652
+.
+
+Cited by: 
+Appendix A
+,
+
+§1
+,
+
+§2
+.
+
+Singh 
+et al.
+ (2025)
+
+A. Singh, A. Ehtesham, S. Kumar, T. T. Khoei, and A. V. Vasilakos
+
+Agentic retrieval-augmented generation: a survey on agentic rag
+.
+
+arXiv preprint arXiv:2501.09136
+.
+
+Cited by: 
+Appendix A
+,
+
+§2
+.
+
+Sun 
+et al.
+ (2025)
+
+Q. Sun, C. Chen, Z. Qiao, X. Zheng, and K. Wang
+
+Single-view graph contrastive learning with soft neighborhood awareness
+.
+
+In 
+Proceedings of the AAAI Conference on Artificial Intelligence
+,
+
+Vol. 
+39
+, 
+pp. 20708–20716
+.
+
+Cited by: 
+§2
+.
+
+Sun 
+et al.
+ (2024)
+
+Q. Sun, K. Wang, W. Zhang, P. Cheng, and X. Lin
+
+Interdependence-adaptive mutual information maximization for graph contrastive learning
+.
+
+IEEE Transactions on Knowledge and Data Engineering
+ 
+36
+ (
+12
+), 
+pp. 8556–8567
+.
+
+Cited by: 
+§2
+.
+
+Sun 
+et al.
+ (2026)
+
+Y. Sun, A. Zuo, H. Xie, W. Gao, M. Gong, and J. Ma
+
+Fact-e: causality-inspired evaluation for trustworthy chain-of-thought reasoning
+.
+
+In 
+Findings of the Association for Computational Linguistics: ACL 2026
+,
+
+pp. 20275–20293
+.
+
+Cited by: 
+§3.4
+.
+
+Tang 
+et al.
+ (2025)
+
+G. Tang, J. Wang, X. Gan, B. Lu, Z. Zhao, L. Fu, X. Wang, and C. Zhou
+
+R2mr: review and rewrite modality for recommendation
+.
+
+In 
+Proceedings of the 31st ACM SIGKDD Conference on Knowledge Discovery and Data Mining V. 1
+,
+
+pp. 1337–1348
+.
+
+Cited by: 
+§2
+.
+
+Tang 
+et al.
+ (2026)
+
+J. Tang, W. Chen, Y. Luo, X. Xi, Y. Chao, D. Chen, Z. Gao, Y. Li, F. Sun, X. Feng, 
+et al.
+
+Interactive recommendation agent with active user commands
+.
+
+In 
+Proceedings of the 32nd ACM SIGKDD Conference on Knowledge Discovery and Data Mining V. 2
+,
+
+pp. 4580–4591
+.
+
+Cited by: 
+Appendix A
+,
+
+5th item
+,
+
+§1
+,
+
+§2
+,
+
+§3.1
+,
+
+§4.1
+.
+
+Tao 
+et al.
+ (2026)
+
+Z. Tao, X. Jiang, Q. Feng, H. Zhang, L. Du, Y. Fang, H. Miao, B. Xie, and Q. Sun
+
+Task-aware retrieval augmentation for dynamic recommendation
+.
+
+In 
+Proceedings of the AAAI Conference on Artificial Intelligence
+,
+
+Vol. 
+40
+, 
+pp. 15779–15787
+.
+
+Cited by: 
+Appendix A
+,
+
+§2
+.
+
+Tao 
+et al.
+ (2025)
+
+Z. Tao, Z. Qiao, C. Chen, Z. Yang, L. Du, and Q. Sun
+
+On the cross-type homophily of heterogeneous graphs: understanding and unleashing
+.
+
+In 
+Proceedings of the 34th ACM International Conference on Information and Knowledge Management
+,
+
+pp. 2842–2852
+.
+
+Cited by: 
+§2
+,
+
+§3.3
+.
+
+Veličković 
+et al.
+ (2017)
+
+P. Veličković, G. Cucurull, A. Casanova, A. Romero, P. Lio, and Y. Bengio
+
+Graph attention networks
+.
+
+arXiv preprint arXiv:1710.10903
+.
+
+Cited by: 
+§1
+.
+
+Wan 
+et al.
+ (2019)
+
+M. Wan, R. Misra, N. Nakashole, and J. McAuley
+
+Fine-grained spoiler detection from large-scale review corpora
+.
+
+In 
+Proceedings of the 57th Annual Meeting of the Association for Computational Linguistics
+,
+
+pp. 2605–2610
+.
+
+Cited by: 
+§B.1
+.
+
+Wang 
+et al.
+ (2023)
+
+G. Wang, Y. Xie, Y. Jiang, A. Mandlekar, C. Xiao, Y. Zhu, L. Fan, and A. Anandkumar
+
+Voyager: an open-ended embodied agent with large language models
+.
+
+arXiv preprint arXiv:2305.16291
+.
+
+Cited by: 
+Appendix A
+,
+
+§2
+.
+
+Wang 
+et al.
+ (2025)
+
+L. Wang, J. Zhang, H. Yang, Z. Chen, J. Tang, Z. Zhang, X. Chen, Y. Lin, H. Sun, R. Song, 
+et al.
+
+User behavior simulation with large language model-based agents
+.
+
+ACM Transactions on Information Systems
+ 
+43
+ (
+2
+), 
+pp. 1–37
+.
+
+Cited by: 
+Appendix A
+,
+
+§2
+.
+
+Wang 
+et al.
+ (2019)
+
+X. Wang, X. He, M. Wang, F. Feng, and T. Chua
+
+Neural graph collaborative filtering
+.
+
+In 
+Proceedings of the 42nd international ACM SIGIR conference on Research and development in Information Retrieval
+,
+
+pp. 165–174
+.
+
+Cited by: 
+§2
+.
+
+Wang 
+et al.
+ (2024)
+
+Y. Wang, Z. Jiang, Z. Chen, F. Yang, Y. Zhou, E. Cho, X. Fan, Y. Lu, X. Huang, and Y. Yang
+
+Recmind: large language model powered agent for recommendation
+.
+
+In 
+Findings of the Association for Computational Linguistics: NAACL 2024
+,
+
+pp. 4351–4364
+.
+
+Cited by: 
+Appendix A
+,
+
+§2
+.
+
+Wei 
+et al.
+ (2022)
+
+J. Wei, X. Wang, D. Schuurmans, M. Bosma, F. Xia, E. Chi, Q. V. Le, D. Zhou, 
+et al.
+
+Chain-of-thought prompting elicits reasoning in large language models
+.
+
+Advances in neural information processing systems
+ 
+35
+, 
+pp. 24824–24837
+.
+
+Cited by: 
+§1
+,
+
+§3.4
+.
+
+Wei 
+et al.
+ (2024)
+
+W. Wei, X. Ren, J. Tang, Q. Wang, L. Su, S. Cheng, J. Wang, D. Yin, and C. Huang
+
+Llmrec: large language models with graph augmentation for recommendation
+.
+
+In 
+Proceedings of the 17th ACM international conference on web search and data mining
+,
+
+pp. 806–815
+.
+
+Cited by: 
+Appendix A
+.
+
+Wu 
+et al.
+ (2024)
+
+L. Wu, Z. Zheng, Z. Qiu, H. Wang, H. Gu, T. Shen, C. Qin, C. Zhu, H. Zhu, Q. Liu, 
+et al.
+
+A survey on large language models for recommendation
+.
+
+World Wide Web
+ 
+27
+ (
+5
+), 
+pp. 60
+.
+
+Cited by: 
+Appendix A
+,
+
+§1
+,
+
+§1
+.
+
+Xu 
+et al.
+ (2026)
+
+W. Xu, Z. Liang, K. Mei, H. Gao, J. Tan, and Y. Zhang
+
+A-mem: agentic memory for llm agents
+.
+
+Advances in Neural Information Processing Systems
+ 
+38
+, 
+pp. 17577–17604
+.
+
+Cited by: 
+Appendix A
+,
+
+§2
+.
+
+Xu 
+et al.
+ (2025)
+
+W. Xu, Y. Shi, Z. Liang, X. Ning, K. Mei, K. Wang, X. Zhu, M. Xu, and Y. Zhang
+
+Iagent: llm agent as a shield between user and recommender systems
+.
+
+In 
+Findings of the Association for Computational Linguistics: ACL 2025
+,
+
+pp. 18056–18084
+.
+
+Cited by: 
+Appendix A
+,
+
+2nd item
+,
+
+3rd item
+,
+
+§B.1
+,
+
+§1
+,
+
+§2
+,
+
+§3.1
+,
+
+§4.1
+.
+
+Yan 
+et al.
+ (2026)
+
+S. Yan, X. Yang, Z. Huang, E. Nie, Z. Ding, Z. Li, X. Ma, J. Bi, K. Kersting, J. Z. Pan, 
+et al.
+
+Memory-r1: enhancing large language model agents to manage and utilize memories via reinforcement learning
+.
+
+In 
+Proceedings of the 64th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)
+,
+
+pp. 12805–12825
+.
+
+Cited by: 
+Appendix A
+.
+
+Ye 
+et al.
+ (2026)
+
+Z. Ye, J. Huang, W. Chen, and Y. Zhang
+
+H-mem: hybrid multi-dimensional memory management for long-context conversational agents
+.
+
+In 
+Proceedings of the 19th Conference of the European Chapter of the Association for Computational Linguistics (Volume 1: Long Papers)
+,
+
+pp. 7756–7775
+.
+
+Cited by: 
+Appendix A
+,
+
+§2
+.
+
+Yuan 
+et al.
+ (2026)
+
+W. Yuan, S. Qiao, T. Chen, Q. V. H. Nguyen, Z. Huang, and H. Yin
+
+Integrating vision-centric text understanding for conversational recommender systems
+.
+
+arXiv preprint arXiv:2601.13505
+.
+
+Cited by: 
+§2
+.
+
+Zhang 
+et al.
+ (2025a)
+
+J. Zhang, J. Yu, Z. Wang, W. Yuan, T. Chen, Q. V. H. Nguyen, B. Cui, and H. Yin
+
+Towards reasoning-aware recommender systems: a survey in the llm era
+.
+
+Cited by: 
+§1
+.
+
+Zhang 
+et al.
+ (2024)
+
+J. Zhang, Y. Hou, R. Xie, W. Sun, J. McAuley, W. X. Zhao, L. Lin, and J. Wen
+
+Agentcf: collaborative learning with autonomous language agents for recommender systems
+.
+
+In 
+Proceedings of the ACM Web Conference 2024
+,
+
+pp. 3679–3689
+.
+
+Cited by: 
+Appendix A
+,
+
+4th item
+,
+
+§1
+,
+
+§1
+,
+
+§2
+,
+
+§3.1
+,
+
+§3.2
+,
+
+§4.1
+.
+
+Zhang 
+et al.
+ (2026)
+
+Q. Zhang, C. Hu, S. Upasani, B. Ma, F. Hong, V. Kamanuru, J. Rainton, C. Wu, M. Ji, H. Li, 
+et al.
+
+Agentic context engineering: evolving contexts for self-improving language models
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Vol. 
+2026
+, 
+pp. 86069–86100
+.
+
+Cited by: 
+Appendix A
+,
+
+§2
+.
+
+Zhang 
+et al.
+ (2025b)
+
+Y. Zhang, F. Feng, J. Zhang, K. Bao, Q. Wang, and X. He
+
+Collm: integrating collaborative embeddings into large language models for recommendation
+.
+
+IEEE Transactions on Knowledge and Data Engineering
+ 
+37
+ (
+5
+), 
+pp. 2329–2340
+.
+
+Cited by: 
+Appendix A
+.
+
+Zheng 
+et al.
+ (2026)
+
+X. Zheng, Y. Wang, Y. Liu, M. Li, M. Zhang, D. Jin, P. S. Yu, and S. Pan
+
+Graph neural networks for graphs with heterophily: a survey
+.
+
+IEEE Transactions on Knowledge and Data Engineering
+.
+
+Cited by: 
+§2
+.
+
+Zhu 
+et al.
+ (2020)
+
+J. Zhu, Y. Yan, L. Zhao, M. Heimann, L. Akoglu, and D. Koutra
+
+Beyond homophily in graph neural networks: current limitations and effective designs
+.
+
+Advances in neural information processing systems
+ 
+33
+, 
+pp. 7793–7804
+.
+
+Cited by: 
+Appendix A
+,
+
+§C.1
+,
+
+§1
+,
+
+§2
+,
+
+§3.2
+,
+
+§3.3
+.
+
+Zhu 
+et al.
+ (2023)
+
+X. Zhu, Y. Chen, H. Tian, C. Tao, W. Su, C. Yang, G. Huang, B. Li, L. Lu, X. Wang, 
+et al.
+
+Ghost in the minecraft: generally capable agents for open-world environments via large language models with text-based knowledge and memory
+.
+
+arXiv preprint arXiv:2305.17144
+.
+
+Cited by: 
+Appendix A
+.
+
+Appendix A 
+Extended Related Work
+
+Multi-agent communication and skill-based self-improvement.
+
+A rich literature studies how artificial agents develop communication protocols 
+Foerster et al. [2016]
+, 
+Lazaridou et al. [2016]
+, 
+Mordatch and Abbeel [2018]
+, 
+Ren et al. [2020]
+, and recent work extends this to LLM-based agents communicating in natural language 
+Li et al. [2023]
+, 
+Hong et al. [2024]
+, 
+Du et al. [2023]
+, typically in multi-round dialogues. A parallel line shows that LLM agents can accumulate reusable skills through experience 
+Wang et al. [2023]
+, 
+Zhu et al. [2023]
+, 
+Madaan et al. [2023]
+, 
+Shinn et al. [2023]
+: Voyager builds a skill library in Minecraft, GITM decomposes tasks into learnable skills, and self-refine approaches demonstrate iterative LLM self-improvement. 
+Harp
+ uses both lenses orthogonally: user and item agents exchange one-shot structured messages measured by ranking accuracy rather than dialogue fluency, and the reflective update operates on the agent’s 
+profile
+ under a acceptance rule (Eq. 
+10
+) rather than accumulating a skill library. The reranker-prompt bandwidth constraint (C1 in §
+3.1
+) and the channel decomposability of Remark 
+1
+ matter most in this one-shot, high-throughput setting.
+
+LLM-based agents for recommendation (detailed thread).
+
+A growing body treats recommendation as an LLM-agent task 
+Zhang et al. [2024]
+, 
+Huang et al. [2025]
+, 
+Wang et al. [2024]
+, 
+Friedman et al. [2023]
+, 
+Xu et al. [2025]
+, 
+Tang et al. [2026]
+: AgentCF 
+Zhang et al. [2024]
+ pioneers the user/item-as-agent formulation with free-text memories on both sides, but neither side carries a structured, channel-aligned profile; InteRecAgent 
+Huang et al. [2025]
+ introduces tool-augmented user agents; iAgent 
+Xu et al. [2025]
+ keeps a static per-user profile with no reflective update; i
+2
+Agent 
+Xu et al. [2025]
+ adds a per-user reflection loop but 
+without
+ an acceptance rule, so every proposed revision is applied; RecBot 
+Tang et al. [2026]
+ supports session-level dynamic memory; RecAgent 
+Wang et al. [2025]
+ simulates user behaviour. Relative to this line, three design choices in 
+Harp
+ are jointly novel: (i) a structured profile on the 
+item
+ side with the same four-channel schema as the user side (no prior work gives the item agent a structured, channel-aligned profile), (ii) a homophily signal consumed during 
+retrieval
+ rather than inside the reranker prompt, and (iii) an acceptance check on the reflective update (self-reflective predecessors apply every proposed revision). A parallel line develops general agentic memory architectures beyond recommendation (A-MEM 
+Xu et al. [2026]
+, Memory-R1 
+Yan et al. [2026]
+, Zep 
+Rasmussen et al. [2025]
+, H-Mem 
+Ye et al. [2026]
+) offering infrastructure pluggable at the 
+Transmit
+ stage; a recent dynamic-graph thread 
+Tao et al. [2026]
+ makes retrieval augmentation itself task-aware, conceptually close to our 
+Understand
+ routing.
+
+Tuning- and grounding-based LLM recommendation.
+
+A parallel line tunes or grounds the LLM against the recommendation objective rather than operating it as an agent: TALLRec 
+Bao et al. [2023]
+, CoLLM 
+Zhang et al. [2025b]
+, LLaRA 
+Liao et al. [2024]
+, BIGRec 
+Bao et al. [2025]
+, A-LLMRec 
+Kim et al. [2024]
+, LLMRec 
+Wei et al. [2024]
+, and ONCE 
+Liu et al. [2024]
+; surveys 
+Wu et al. [2024]
+ place these on a spectrum of 
+what
+ in the LLM is adapted. 
+Harp
+ is complementary and sits at the 
+interaction-loop
+ end: it keeps the LLM frozen, leaves the collaborative signal in place, and restructures 
+how
+ user and item agents exchange profiles along the pipeline; it can in principle be layered on top of any of these backbones. The retrieval-vs-prompt rationale of §
+3.3
+ is motivated by adaptive retrieval in retrieval-augmented generation 
+Asai et al. [2024]
+, 
+Jiang et al. [2023]
+, where evidence is selected before generation; its support in our setting is the ablation of §
+4
+.
+
+Relation to adjacent LLM-agent currents.
+
+Three concurrent LLM-agent currents intersect with 
+Harp
+ without overlapping its main contribution: the 
+self-evolving-agent
+ line 
+Gao et al. [2025]
+, 
+Zhang et al. [2026]
+ (replacing fine-tuning with in-context rewrites; our 
+Sync
+ is one such primitive but we do not claim a new mechanism), the 
+agentic-context-engineering
+ view 
+Zhang et al. [2026]
+ (our dual-profile schema, Table 
+1
+, is a user/item-symmetric realisation specific to recommendation), and 
+agentic RAG
+ 
+Singh et al. [2025]
+ (our homophily-gated score, Eq. 
+7
+, is a retrieval decision gated by a profile-level homophily rather than a learned policy). Channel-wise decomposition of graph homophily itself is not new: multi-relational GNNs 
+Schlichtkrull et al. [2018]
+, 
+Hu et al. [2020]
+ and per-class edge-homophily 
+Zhu et al. [2020]
+ already exploit the idea at the interaction / class-label level. Relative to those threads, 
+Harp
+ lifts the decomposition to the 
+profile
+ level (agent-authored, agent-mutable), and the three-challenge analysis of the four-stage Build–Transmit–Understand–Sync formulation is the contribution specific to agentic recommendation.
+
+Appendix B 
+Experimental Setup Details
+
+B.1 
+Dataset Details
+
+We evaluate on four public datasets widely used in recommendation research, used under their original terms of use for research, encompassing diverse domains such as e-commerce, social reading, entertainment, and local services. As stated in §
+4
+, we adopt the versions of these datasets augmented with natural-language user instructions from 
+InstructRec
+ 
+Xu et al. [2025]
+. The original data sources and their characteristics are summarised below.
+
+Books.
+
+Derived from the 
+Amazon review dataset
+ 
+Ni et al. [2019]
+, this subset focuses on book recommendations. It is characterised by extremely sparse interactions and a very large item space; user preferences in this domain are typically stable and highly content-driven, centred on specific genres, authors, or themes.
+
+Goodreads.
+
+Collected from the 
+Goodreads
+ social book-cataloguing website 
+Wan et al. [2019]
+, this dataset is comparatively dense. It features strong community interactions and rich metadata about books, including series information, and users often exhibit series-aware reading behaviours and are influenced by social signals.
+
+MovieTV.
+
+Also originating from the 
+Amazon review dataset
+ 
+Ni et al. [2019]
+, this dataset covers movies and TV shows. The domain is marked by volatile user preferences often influenced by immediate context or trending content; while metadata such as genre and cast are important, item recency frequently plays a critical role in user decision-making.
+
+Yelp.
+
+Sourced from the 
+Yelp Dataset
+, this dataset consists of reviews for local businesses such as restaurants and services. It is characterised by strong categorical constraints (e.g., cuisine type) and by the critical importance of attributes like price range and location; user preferences are often highly context-dependent.
+
+B.2 
+Baseline Details
+
+This appendix provides detailed descriptions of the baseline models used in our comparative evaluation in §
+4
+. Following the categorisation in the main text, we group the baselines into three families.
+
+(I) Traditional recommenders.
+
+These models mostly represent the pre-LLM paradigm (P5 being the exception), in which historical information is encoded as dense latent vectors without explicit semantic memory.
+
+•
+
+LightGCN
+ 
+He et al. [2020]
+: a graph-collaborative-filtering model that simplifies the GCN design by removing feature transformation and nonlinear activation, learning user/item embeddings via linear propagation on the user–item interaction graph.
+
+•
+
+SASRec
+ 
+Kang and McAuley [2018]
+: a self-attentive sequential recommender that models the entire user sequence to capture long-term and dynamic dependencies over the history.
+
+•
+
+P5
+ 
+Geng et al. [2022]
+: a unified framework that formulates recommendation tasks as sequence-to-sequence language modelling over a pre-trained T5 backbone, representing users and items as sequence tokens within personalised prompts.
+
+(II) Single-sided LLM / agentic methods.
+
+These approaches operate on raw interaction histories or static profiles without maintaining a persistent, structured, and evolving semantic memory.
+
+•
+
+Vanilla LLM
+ 
+Liu et al. [2023]
+: direct zero-shot prompting of an instruction-tuned LLM (
+gpt-4o-mini
+ in our protocol), in which the user’s history is serialised into a natural-language context and the LLM selects from the candidate list; a baseline measuring the LLM’s inherent capability without any memory design.
+
+•
+
+iAgent
+ 
+Xu et al. [2025]
+: an LLM agent with a static per-user profile constructed from historical interactions and descriptive data; the profile is fed into the LLM as context but does not adapt over time after the initial construction.
+
+•
+
+i
+2
+Agent
+ 
+Xu et al. [2025]
+: an extension of 
+iAgent
+ that adds a self-reflection mechanism, allowing the agent to refine its internal state after recommendations, with reflections confined to the individual agent’s experience with a specific user.
+
+•
+
+AgentCF
+ 
+Zhang et al. [2024]
+: an agent-based collaborative-filtering framework in which user- and item-agents interact autonomously and update their own preferences/characteristics, with memory updates localised to the interacting agents.
+
+•
+
+RecBot
+ 
+Tang et al. [2026]
+: a conversational recommender in which an LLM maintains a dynamic dialogue history and updates user-preference estimates during multi-turn sessions; dynamics are bounded to the current session.
+
+(III) Memory-augmented agentic methods.
+
+•
+
+MemRec
+ 
+Chen et al. [2026]
+: the strongest published memory-augmented agentic recommender on these InstructRec splits, and our primary end-to-end baseline.
+
+B.3 
+Reproducibility Configuration
+
+Section 
+4
+ and Appendix 
+E.3
+ specify the LLM endpoint, dataset splits, rule-extractor artefacts, hyperparameters and significance protocol. Code is available at 
+https://github.com/Jove-Zhen/HARP
+. This subsection covers two additional operational concerns.
+
+Critic configuration.
+
+The critic of Eq. 
+10
+ produces a binary {accept, reject} decision per user. It is a conservative, optional component (§
+3.4
+).
+
+Per-user randomness control.
+
+We use a single seed (
+seed=42
+) throughout the paper for user sampling and candidate construction. LLM decoding and parallel execution may still cause small run-to-run variation.
+
+We formally collect the statements and proofs invoked throughout the
+main text. Appendix 
+C.1
+ proves
+Remark 
+1
+ (channel decomposability of the profile-level
+homophily) in full, with all intermediate steps made explicit.
+Appendix 
+C.2
+ states and proves
+Lemma 
+1
+ (channel-ablation identity), a direct
+consequence that underwrites the per-channel contribution decomposition
+reported in Appendix 
+D.3
+.
+Appendix 
+C.3
+ records the retrieval-vs-prompt
+design rationale of §
+3.3
+ as a non-formal remark;
+the rationale is tested directly by the table-level measurements of
+§
+4
+ (Table 
+3
+) rather than lifted
+to a theorem.
+
+Appendix C 
+Proofs
+
+C.1 
+Proof of Remark 
+1
+ (Channel Decomposability)
+
+Setup.
+
+Let 
+ be the finite set of semantic channels
+(Table 
+1
+) and represent each profile 
+ as a typed
+tuple 
+ of per-channel phrase sets,
+with non-negative channel weights 
+,
+
+ (Appendix 
+E.3
+). Let
+
+ denote the per-channel soft overlap
+(
+preference
+/
+audience
+ channels: phrase-coverage ratio;
+
+quality
+/
+context
+ channels: bounded rule-based
+indicators in 
+; see Appendix 
+E.10
+), and
+write 
+ as in Eq. 
+6
+.
+
+Claim and proof.
+
+By step R4 of §
+3.2
+, every surface phrase is routed to
+
+at most one
+ channel, so each 
+ is a function of
+the channel-
+ projections alone. Combined with the linear weighted
+sum, 
+ for every 
+,
+and the Hessian of the map
+
+ vanishes; hence
+perturbing any subset 
+ of channels to
+
+ shifts 
+ by exactly
+
+, with no cross-channel coupling.
+
+Scope.
+
+This is a decomposability property 
+of 
+ itself
+, not
+of the reranker’s downstream decision. It underwrites per-channel
+inspection of the homophily quantity; how channels combine through the
+reranker to affect Hit@1 is an empirical object studied in
+§
+4
+. The boundary case 
+ with
+
+ reduced to 
+ reduces to the
+per-edge same-class indicator, whose average over edges is the scalar edge-homophily ratio
+
+ of 
+Zhu et al. [2020]
+.
+
+C.2 
+Lemma 
+1
+ (Channel-Ablation Identity)
+
+Lemma 1
+ 
+(Channel-ablation identity)
+.
+
+For any subset 
+ of channels, let
+
+ denote the homophily computed with
+
+ for every 
+. Then
+
+(11)
+
+and the drop is strictly positive whenever there exists 
+ with
+
+ and 
+.
+
+Proof.
+
+Direct consequence of Appendix 
+C.1
+; strict
+positivity follows because each summand in the sum is non-negative.
+
+Scope.
+
+The identity is a statement about 
+, not about Hit@1:
+the per-channel quantities 
+ sum exactly back to
+
+, but how they translate into changes in reranker-level
+Hit@1 depends on the reranker’s response function and is measured
+empirically in §
+4
+.
+
+C.3 
+Retrieval–Prompt Design Rationale
+
+Remark 2
+ 
+(Retrieval–prompt design rationale)
+.
+
+Under a fixed reranker context budget 
+ and a frozen LLM backbone
+(constraints (C1)–(C2) of §
+3.1
+), injecting the user
+profile 
+ on the retrieval side (Eq. 
+7
+) is
+preferable to injecting it on the reranker-prompt side
+(Eq. 
+2
+), for two reasons:
+
+•
+
+Budget competition.
+ Once the budget is saturated, every prompt-side profile token trades against a token of the collaborative-memory block
+
+, which is the most information-dense block in
+the prompt; prompt-side injection is therefore a zero-sum trade
+rather than a free addition.
+
+•
+
+Irreversibility.
+ The reranker reads only the
+memories of the candidates admitted at retrieval time; once
+misleading candidates fill 
+, prompt-side
+profile information cannot replace them.
+
+We treat this as a 
+design rationale
+ rather than a theorem: its
+direction-of-change is consistent with our data
+(Table 
+3
+: retrieval-side 
+ pp vs. prompt-side
+
+ pp on 
+-user Yelp), but its magnitude is a property
+of the specific dataset/backbone and is not claimed to extrapolate.
+
+We turn from derivations to the empirical measurements that accompany
+the methodology of §
+3
+.
+
+Reading map for this part.
+
+The subsections below do not report novel findings in isolation;
+each instead answers one class of potential objection to the main
+
+Harp
+ results. Concretely:
+
+•
+
+Main-table significance
+ (Appendix 
+D.1
+)
+asks whether the 
+Harp
+-over-MemRec Hit@1 gap could be sampling
+noise. Using full-test-split Wilson 95% CIs and a one-sided
+binomial test, the answer is 
+no, 
+ on every
+benchmark
+.
+
+•
+
+Repair source decomposition
+
+(Appendix 
+D.3
+) asks, within the aggregate
+
+Harp
+-over-
+Memory
+ gain, how much comes from Pillar 2
+(retrieval-side gating) versus Pillar 3 (the 
+Dialogue
+Harp
+ step, i.e. prompt injection and reflective update together). We
+attribute every “Memory miss 
+ 
+Harp
+ hit” event to exactly
+one pillar; the answer: 
+–
+ from Pillar 2, the
+remainder from Pillar 3
+.
+
+•
+
+Empirical Dialogue-channel identifiability
+
+(Appendix 
+D.4
+) asks whether the
+
+Harp
+’s Dialogue channel is just a relabelled Monologue. This
+complements Remark 
+1
+, which separates the two
+channels 
+by definition
+ but does not guarantee they produce
+
+empirically
+ distinct ranking distributions. Three paired
+frequentist tests show that 
+Dialogue and Monologue help
+different users
+ (Dialogue-only improvements 
+ vs. Monologue-only 
+) and that 
+their rank distributions are
+permutation-significantly distinguishable
+.
+
+•
+
+Conservative update
+ (Appendix 
+D.5
+)
+asks why Sync is retained when its net gain is small
+(
+–
+ pp, 
+ pp on Books), and how the conservative
+rule of Eq. 
+10
+ limits its regressions.
+
+•
+
+Pairwise McNemar
+ (Appendix 
+D.6
+)
+asks whether each step along the ablation ladder
+Memory
+Monologue
+Dialogue
+Consult
+Harp
+ is
+individually significant. The paired McNemar 
+-values confirm:
+
+every step except Memory
+Monologue is significant at
+
+; Memory
+Monologue’s non-significance is itself
+the designed negative control for Pillar 2 (injecting the profile
+into the prompt alone does not help).
+
+In short, they cover the headline numbers, the mechanism attribution, the channel independence, the reason for retaining Sync, and the per-step significance, respectively.
+
+Appendix D 
+Empirical Support
+
+D.1 
+Main-Table Significance: 
+Harp
+ vs. MemRec
+
+Since MemRec’s per-user traces are not publicly released, we treat
+MemRec’s reported H@1 as a fixed point estimate and compute a one-sided
+binomial test for 
+ on each
+dataset’s full test split. Table 
+4
+ reports,
+for each of the four benchmarks: the number of evaluated users 
+, the
+number of H@1 hits read from our eval traces, the resulting Wilson
+95% CI for 
+, MemRec’s published H@1, and the one-sided
+
+-value. The Wilson 95% CI lower bound strictly dominates MemRec’s
+point estimate on every dataset.
+
+Table 4: 
+Harp
+ vs. MemRec, per-dataset binomial test on the full test split. 
+ and hits are computed from our evaluation on the full InstructRec test splits; MemRec numbers are from the MemRec paper’s Tables 2–3.
+
+Dataset
+
+hits
+
+Harp
+ H@1
+
+Wilson 95% CI
+
+MemRec
+
+-value
+
+Books
+
+7,377
+
+4,034
+
+0.5468
+
+0.5117
+
+Goodreads
+
+11,734
+
+5,498
+
+0.4686
+
+0.3997
+
+MovieTV
+
+5,649
+
+3,641
+
+0.6445
+
+0.5882
+
+Yelp
+
+2,950
+
+1,782
+
+0.6041
+
+0.487
+
+D.2 
+Additional Visualisations for Main Results and the Ablation Ladder
+
+Figure 
+4
+ renders the 20 (dataset 
+ metric) cells of Table 
+2
+ as per-metric radar charts; Figure 
+5
+ visualises the five-rung ladder of Figure 
+3
+ as line plots. Both figures are visual complements to the main-text figures; the numeric values match exactly.
+
+Figure 4: 
+Per-metric radar visualisation of the main results. Each subplot is one metric (H@1, H@3, N@3, H@5, N@5); the four vertices correspond to the four benchmarks; each polygon is one method. 
+Harp
+ (red, bold) is the outermost polygon at every vertex of every metric; MemRec (dark blue, up-triangle) is the closest competitor per benchmark but lies strictly inside 
+Harp
+.
+
+Figure 5: 
+Cross-dataset five-rung ladder on four metrics (H@1, H@3, N@3, N@5). Each subplot is one metric; each line within a subplot is one dataset (Yelp in red diamonds). The 
+Monologue
+Dialogue
+ transition is the largest single-rung jump on Yelp, MovieTV and Books; the 
+Consult
+ rung falls back near 
+Memory
+; 
+Harp
+ adds a small residual from prompt injection and 
+Sync
+ (positive on Yelp/MovieTV/Goodreads, slightly negative on Books). The ordering is stable across all four metrics.
+
+D.3 
+Repair Source Decomposition
+
+This appendix attributes the 
+Harp
+-over-
+Memory
+ repairs
+(L0 miss 
+ L4 hit) to their responsible pillar. On each of the
+three matched 
+-user deep-analysis subsplits (Yelp, MovieTV,
+Books), every user is labelled by three 0/1 indicators (Hit@1 under
+L0 
+Memory
+, L2 
+Dialogue
+ and L4 
+Harp
+); based on the
+triple 
+ we partition repair events into two classes:
+
+•
+
+Dial-rep
+ (
+): users already flipped by the
+retrieval-side homophily gate, with the 
+Dialogue
+Harp
+ step required only to “not break” the outcome; credited to Pillar 2.
+
+•
+
+Sync-rep
+ (
+): users still missed under 
+Dialogue
+ and recovered after the 
+Dialogue
+Harp
+ step (injection and reflection together).
+
+Figure 
+6
+ reports the counts and proportions on
+the three matched 
+-user subsplits.
+
+Structural signature of the repair attribution.
+
+On every benchmark, 
+Pillar 2 accounts for the majority
+of repair events
+ (
+–
+):
+Yelp 
+, MovieTV 
+, Books 
+.
+Pillar 3 (injection and reflection) contributes a smaller incremental share on the sub-population of users
+whom 
+Dialogue
+ still misses. This structural signature holds
+across three datasets of very different character, indicating that the
+mechanism attribution does not depend on a particular dataset or
+difficulty regime.
+
+Figure 6: 
+Repair source decomposition: each 
+Harp
+-over-
+Memory
+ repair is attributed to Pillar 2 (Dial-rep) or Pillar 3 (Sync-rep). Dark green = Pillar 2, light green = Pillar 3; the right-hand annotation gives the total number of repairs and Pillar 2’s share.
+
+Per-channel contribution decomposition (Yelp).
+
+Lemma 
+1
+ establishes that 
+ itself is additively decomposable over the four channels; however, the move from “decomposition at the 
+ level” to “attribution at the Hit@1 level” is empirical rather than guaranteed by the lemma. As an observational split of the 
+ pp 
+Monologue
+Dialogue
+ Hit@1 lift on Yelp under the default preference-dominant weights, we measure per-channel Hit@1 deltas of 
+ pp (
+preference
+), 
+ pp (
+quality
+), 
+ pp (
+context
+), 
+ pp (
+audience
+), summing to 
+ pp. We report these as 
+per-channel measurements
+ rather than a strict causal decomposition, which would require four independent leave-one-out ablations that we did not run. The 
+preference
+-dominated pattern (
+ pp, over half of the total) is corroborated by a channel-dissection analysis of 
+ extracted preference phrases on Yelp: clusters dominated by concrete cuisine/category nouns achieve per-user Hit@1 
+, while clusters dominated by vague sentiment/location words reach only 
+. We do not generalise this observational split to the other three benchmarks; it is an illustrative Yelp-only measurement, not a general cross-dataset claim.
+
+D.4 
+Empirical Dialogue Channel Identifiability
+
+The question this section addresses.
+
+Remark 
+1
+ separates the Monologue channel (the user
+profile injected via the reranker prompt as a one-way broadcast) from
+the Dialogue channel (the same profile injected via the homophily gate
+into retrieval scoring) 
+by definition
+. Definition-level
+distinguishability, however, does not entail 
+empirical
+
+distinguishability: if the two channels produced near-identical
+ranking distributions under the shared LLM backbone and reranker, the
+agentic-communication framing of 
+Harp
+ would risk reducing to a
+naming convention. On the 
+-user Yelp deep-analysis subsplit
+we therefore test the null of distributional equivalence
+
+,
+and provide three complementary pieces of evidence against 
+.
+
+Data and quantities.
+
+For the same 
+ users, let
+
+denote the ranks of the ground-truth item under Memory, Monologue and
+Dialogue respectively (
+ means Hit@1; right-censored 
+ if
+the item is absent from the retrieval pool). The three runs share
+the same user ordering and the same retrieval pool, so all
+comparisons below are 
+paired
+. Each test falsifies 
+ from a
+different angle (
+marginal ranking
+, 
+per-user outcome
+,
+
+joint-distribution separability
+), and each alone suffices to
+reject 
+; jointly, they rule out any empirical identification of
+Monologue with Dialogue.
+
+(E1)
+
+Stratified paired rank test (marginal-ranking angle).
+
+Stratify the 
+ users into four quantile-based strata on
+
+; within each stratum with 
+ compute a paired
+Wilcoxon signed-rank 
+-score on 
+,
+and combine the stratum-wise 
+’s via Stouffer’s method with weights
+
+. This controls for baseline
+difficulty and tests whether Dialogue systematically out-ranks
+Monologue at 
+equal difficulty
+.
+
+(E2)
+
+Improvement-set asymmetry (per-user-outcome angle).
+
+Relative to Memory, label each user with two 
+ flags: 
+
+“Monologue improves Hit@1 over Memory” and 
+ “Dialogue
+improves Hit@1 over Memory”. Apply an exact two-sided binomial test
+to the discordant counts 
+ vs. 
+.
+Under 
+ the two counts should be approximately equal; a
+significant asymmetry implies the two channels 
+help different
+users
+.
+
+(E3)
+
+Two-sample separability (joint-distribution angle).
+
+Concatenate 
+ and 
+ into a
+
+-sample dataset labelled by channel of origin; train a
+5-fold class-balanced logistic regression with three features
+
+ to predict the channel label, and
+take balanced accuracy as the test statistic. Significance is
+assessed against a 
+-permutation label-shuffle null using the
+add-one estimator 
+. Under
+
+ any classifier’s balanced accuracy concentrates near 
+;
+above-chance accuracy directly falsifies distributional equivalence.
+
+Results.
+
+All three tests survive a Bonferroni correction at the strict
+
+ threshold.
+
+Test
+
+Statistic
+
+-value
+
+Effect
+
+E1 Stouffer-Wilcoxon (4 strata)
+
+pooled over 
+
+E2 Exact binomial McNemar
+
+, ratio 
+
+Dial-only improves 
+ Mono-only
+
+E3 Two-sample separability
+
+bal-acc 
+
+vs null 
+
+Interpretation.
+
+E1 (
+) rejects, at matched baseline difficulty,
+the equality of marginal rank distributions. E2 (
+) shows that the set of users improved by Dialogue (over
+Memory) and the set improved by Monologue (over Memory) are highly
+non-overlapping (
+ vs. 
+),
+so the two channels help substantively different subsets of users.
+E3 (
+, bal-acc 
+) shows that even from a
+single rank value and its Memory-difficulty context, a classifier
+recovers the source channel at an accuracy that is small but
+permutation-significantly above chance (null std 
+); the small
+effect size is expected since the two channels share the same LLM
+backbone and reranker and differ only in per-user ranking structure,
+but the permutation significance is already sufficient to reject
+distributional equivalence. The three angles yield complementary,
+concordant evidence jointly rejecting 
+.
+
+Conclusion.
+
+Dialogue is not a re-wording of Monologue: the channel leaves a
+per-user identifiable signature in the ranking trajectory. This
+empirical identifiability is a necessary prerequisite for the
+four-stage Build–Transmit–Understand–Sync agentic-communication
+framing of §
+3
+, and distinguishes 
+Harp
+ from
+a prompt-engineering baseline.
+
+D.5 
+Conservative Profile Update
+
+The 
+Dialogue
+Harp
+ residual of Table 
+3
+ (prompt injection and 
+Sync
+ together) is the 
+net
+ of individual-level Sync-helps and Sync-hurts cases (Appendix 
+E.5
+, Case 1; Table 
+8
+). The rule of Eq. 
+10
+ is deliberately conservative: because it is judged from a single warmup case, it keeps the previous profile whenever a proposed rewrite is clearly less supported by that case, trading a little coverage for fewer regressions.
+
+The remaining sections are pragmatic reference material: the full
+pseudocode of the 
+Harp
+ pipeline, hyperparameter tables, sensitivity
+notes, per-bottleneck audit details, qualitative case studies, and
+trace-schema documentation.
+
+D.6 
+Pairwise McNemar Tests
+
+The question this section addresses.
+
+The main table reports aggregate Hit@1 gaps such as
+
+Monologue
+Dialogue
+ 
+ pp. Such gaps could
+in principle be driven by sampling noise, particularly when the two
+configurations are evaluated on highly correlated per-user outcomes.
+To upgrade the claim “each ablation step is non-accidental” to a
+statistical conclusion, we report exact paired McNemar tests of
+per-user Hit@1 between adjacent configurations on the 
+-user
+Yelp deep-analysis subsplit (Table 
+5
+).
+
+Statistic and null.
+
+For two configurations 
+ and 
+, let 
+ be the number of users
+for whom “
+ hits and 
+ misses” and 
+ the number of users for
+whom “
+ misses and 
+ hits” (the two discordant cells of the
+paired contingency). The McNemar null is
+
+, i.e. “the Hit@1 differences between 
+ and 
+ arise
+from equi-probable two-way flips”; the 
+-value is the exact
+two-sided binomial probability of observing 
+ or more
+extreme asymme
