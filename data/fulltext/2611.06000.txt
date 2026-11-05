@@ -1,0 +1,4688 @@
+Intra-Architecture Source Attribution for Stable Diffusion: A New Task with Benchmark Dataset and Baseline
+https://arxiv.org/abs/2611.06000
+License: CC zero (redistribution permitted)
+(source: arXiv html)
+
+
+
+Intra-Architecture Source Attribution for Stable Diffusion:
+
+A New Task with Benchmark Dataset and Baseline
+
+Ashutosh Dayal
+
+  
+
+Mallika Garg
+
+  
+
+Debashis Sen
+
+Affiliation: 
+Indian Institute of Technology Kharagpur, INDIA
+
+Affiliation: 
+ashutoshdayal@kgpian.iitkgp.ac.in, mallika@ec.iitr.ac.in, dsen@ece.iitkgp.ac.in
+
+Abstract
+
+Designing systems that attribute a generated image to its source model has lately become a major area of AI research. Most existing datasets and systems related to image source attribution are targeted towards the detection of architectural signature of the source models. Distinct from this, focusing on stable diffusion, we introduce a novel task, 
+IntrAA-SD
+, 
+Intr
+a-
+A
+rchitecture source 
+A
+ttribution for 
+S
+table 
+D
+iffusion, where the source models to be differentiated share the same architectural backbone and differ only due to fine-tuning. The proposed task aligns with the emergence of fine-tuned generators having the same architecture, like Juggernaut XL and RealVis XL which are fine-tuned versions of Stable Diffusion XL (SDXL). We provide a first-of-its-kind 
+K-image benchmark dataset containing images generated from different fine-tunes of SDXL, along with in-domain and out-of-distribution prompts. We also provide a baseline framework for IntrAA-SD, which leverages a style-conditioned Mixture-of-Expert network. It uses a frozen CLIP backbone to capture the image style and gate the MoE, which processes fine-tunes’ trace features from a high-resolution LoRA-adapted DINOv2 network. The fine-tuned models used, the prompting strategies considered, and the formation details employed in the novel dataset are elaborated. Our baseline intra-architecture source attribution method is evaluated in terms of attribution accuracy on our dataset, and ablation studies are also performed. Code and dataset is available 
+here
+.
+
+1 
+Introduction
+
+Recent developments in generative AI has led to the availability of many open-weight text-to-image foundational models and their numerous fine-tuned versions. Therefore, attribution of image generations, not only to a specific architectural model but also to its particular fine-tuned version, is required for proper crediting and to identify misuse 
+[
+33
+]
+.
+Although source attribution systems and related datasets are available that aim to link a generated image to an architectural model, the advent of fine-tuned generators has made reliable source attribution to specific fine-tunes difficult under the existing frameworks 
+[
+1
+]
+.
+
+Branching off from the task of detecting whether an image is fake or not 
+[
+48
+]
+, the field of source attribution emerged for identifying the specific models that generated the given images 
+[
+52
+]
+ with the goal to facilitate intellectual property protection 
+[
+55
+]
+.
+Recently, diffusion-based generators such as DALL-E 
+[
+4
+]
+, Midjourney 
+[
+29
+]
+, Imagen 
+[
+39
+]
+ and the Stable Diffusion 
+[
+36
+]
+ family have made high-quality synthetic image generation widely accessible, and hence, source attribution for diffusion-based generative models have since been investigated. Such architecture-level source attribution considers the classification of images from generator models that have significantly different architectures and generation pipelines 
+[
+54
+, 
+15
+, 
+52
+, 
+41
+, 
+6
+, 
+17
+, 
+14
+, 
+51
+]
+, like DALL-E 3 and Midjourney v6. However, models like Stable Diffusion XL (SDXL) 
+[
+32
+]
+
+have a multitude of fine-tuned versions, which have been effectively used to generate images of various kinds, ranging from anime art to photorealistic portraits. The existing frameworks of designing systems for source attribution by detecting architectural signatures with the help of training on datasets of images created using different diffusion-based generators are neither intended nor suited for attributing the generation to such specific fine-tunes.
+
+M1
+
+M2
+
+M3
+
+M4
+
+M5
+
+M6
+
+M7
+
+M8
+
+M9
+
+M10
+
+P1
+
+P2
+
+Figure 1
+: 
+Sample images from our 
+IntrAA-SD benchmark
+ dataset generated using identical prompts by SDXL fine-tunes represented by M1: SDXL Base, M2: Juggernaut, M3: RealVis, M4: DreamShaper, M5: Animagine, M6: Counterfeit, M7: ZavyChroma, M8: Copax, M9: Proteus, M10: AAM Anime. P1: “
+volcanic landscape with lava flow
+”,
+P2: “
+electric car charging at a station
+”. Despite sharing the same backbone, each fine-tune produces outputs with subtle visual distinctness with some pairs (like M2 & M3) more similar than others. Note: We use M1-M10 to denote the corresponding fine-tuned models throughout the paper.
+
+Therefore, “intra-architecture” source attribution is required, where the target would be to identify fine-tunes of the same architectural base model, which is a fundamentally different task from architecture-level source attribution. An intra-architecture source attribution system should be designed to be capable of classifying images from differently fine-tuned models having the same architecture and pipeline, like the Juggernaut XL 
+[
+38
+]
+ and RealVis XL 
+[
+53
+]
+ fine-tunes of SDXL.
+But, as 
+[
+3
+, 
+52
+, 
+41
+]
+ indicate, such an intra-architecture attribution using generic deep learning-based classifiers would be harder, as fine-tuning does not significantly alter the weights involved 
+[
+37
+]
+, and obviously, the backbone remains the same.
+Classifiers trained on images generated from such fine-tunes are prone to the influence of content and style, making the learning to distinguish between the subtle traces of the fine-tunes weak 
+[
+1
+]
+. When tested, they may fail, particularly when out-of-distribution prompts are used for generation, where the image style may no longer match those used during training 
+[
+3
+]
+.
+
+In this paper, we introduce a novel task, 
+IntrAA-SD
+, intra-architecture source attribution for stable diffusion, where the source of the images generated from different fine-tunes of stable diffusion are to be identified. To this end, we compile a novel 
+K-image benchmark dataset containing images generated from 
+ different fine-tunes of the SDXL, along with in-domain (ID) and out-of-distribution (OOD) prompts. To the best of our knowledge, this is the first benchmark dataset for attribution within a single architecture family of fine-tuned models, and we focus on SDXL fine-tunes given their popularity. Fig. 
+1
+ displays representative samples from our benchmark dataset, showing the subtle visual differences across different fine-tunes of a base model given identical prompts. We discuss the fine-tuned models used, elaborate the prompting strategies considered, and provide details about the image collection to form the dataset.
+
+We also propose an initial baseline framework of intra-architecture attribution for the SDXL fine-tunes, which is designed to utilize a style-conditioned Mixture-of-Experts (SC-MoE) network. It uses a frozen CLIP backbone 
+[
+34
+]
+ to capture image style that is used to gate a set of expert networks, where each expert processes model trace features of the fine-tunes from a LoRA 
+[
+19
+]
+-adapted DINOv2 
+[
+31
+]
+ operating at its native resolution. While DINOv2 is self-supervised with no use of text, making its features naturally suited for image structure representation 
+[
+5
+]
+, LoRA refines the features for the source attribution task with the potential to emphasize the fine-tune traces. The gating of mixture-of-experts using style information from the CLIP backbone allows the trace features to be different for differently styled images. At the end, a classification is performed based on a concatenated feature representing both style and fine tune traces to achieve the intra-architecture source attribution. We rigorously evaluate the proposed baseline framework on our novel benchmark dataset in terms of attribution accuracy, and ablation studies are performed to investigate the effectiveness of its components.
+
+To summarize, our key contributions are:
+
+•
+
+We introduce a novel 
+Intr
+a-
+A
+rchitecture 
+A
+ttribution for 
+S
+table 
+D
+iffusion (
+IntrAA-SD
+) task of identifying the specific fine-tuned model that generated a given image, among fine-tunes that share the same model architecture.
+
+•
+
+To facilitate the 
+IntrAA-SD
+ task, we provide the novel 
+IntrAA-SD benchmark
+ (ISDB) dataset of images generated using different fine-tunes of Stable Diffusion XL and various categories of prompts.
+
+•
+
+We propose an initial baseline, the 
+IntrAA-SD framework
+, utilizing style-conditioned MoE, CLIP and LoRA-adapted DINOv2 for performing the 
+IntrAA-SD
+ task.
+
+2 
+Related Work
+
+Although, to the best of our knowledge, there is no existing contribution specifically related to intra-architecture source attribution, we discuss several modern architecture-level source attribution techniques briefly below.
+
+Table 1
+: 
+The Stable Diffusion XL (SDXL) fine-tunes used to generate our IntrAA-SD benchmark dataset.
+
+Styles
+
+Models
+
+Photorealistic
+
+SDXL Base 1.0 
+[
+32
+]
+, Juggernaut XL 
+[
+38
+]
+, RealVis XL 
+[
+40
+]
+, DreamShaper XL 
+[
+28
+]
+
+Anime
+
+Animagine XL 
+[
+22
+]
+, CounterfeitXL 
+[
+16
+]
+, AAM XL Anime 
+[
+27
+]
+
+Stylized
+
+ZavyChromaXL 
+[
+44
+]
+, CopaxTimelessXL 
+[
+43
+]
+, ProteusXL 
+[
+8
+]
+
+2.1 
+Fake Image Detection and Attribution
+
+Early work on fake image detection and source attribution includes detection of CNN-based generation, which shows that different architectures, datasets, and training methods leave detectable fingerprints in the generated images 
+[
+48
+]
+. A similar observation has been reported in the context of attributing images generated by generative adversarial networks (GANs), where the presence of rigid checkerboard artifacts created by the up-sampling layers (transposed convolutional layers) 
+[
+15
+]
+ was leveraged.
+Up-scaling operations alter the high-frequency spectrum of images 
+[
+20
+]
+ and generative models often produce spectral patterns that do not match real data 
+[
+10
+]
+, making the detection effective in the frequency domain. Thus, GAN based generation was found to be detectable by leveraging frequency domain spectral distortions 
+[
+11
+]
+.
+
+Later, in 
+[
+17
+]
+, along with fake images from GANs, images generated from diffusion models were also identified and discriminated. A CLIP-based detector was used in 
+[
+7
+]
+ as it supports high generalizability, which is a key requirement for synthetic image detectors. Further, efforts have been made to minimize semantic bias by utilizing the frequency domain for the detection of diffusion-based image generations 
+[
+35
+, 
+2
+]
+. It was demonstrated in 
+[
+35
+]
+ that unexpected convolutional traces remained in the high-frequency spectrum of images from diffusion models that use U-Net architectures.
+
+2.2 
+Source Attribution of Diffusion Models
+
+In the era of diffusion models, the focus has shifted from merely detecting fake images or attributing them to a broad class of generative models (like GAN, Diffusion, etc.), to examining the residual traces left by the diffusion process itself, enabling architecture-level source attribution 
+[
+12
+]
+. It was shown in 
+[
+6
+]
+ that diffusion models that uses different backbones (like Latent Diffusion, GLIDE, etc.) produce different spectral signatures based on the particulars of the noise scheduler and the up-sampler utilized in the generative process.
+
+The current leading methods for diffusion source attribution can be broadly organized into three categories, semantic analysis-based, spatial extraction-based and reconstruction-based.
+
+Semantic Based:
+ Standard methods 
+[
+30
+, 
+7
+]
+ in this category primarily use frozen CLIP embeddings 
+[
+30
+]
+ to identify and delineate semantic inconsistencies often found in synthetic images generated from different diffusion models. However, these methods have been found to be prone to overfitting, which in certain cases make CLIP-based classification detect styles rather than model fingerprints 
+[
+3
+]
+, making them ill-suited to detect fine-tuned sources.
+
+Spatial Based:
+ Methods in this category like DE-FAKE 
+[
+41
+]
+, use standard CNN backbones and cross-attention maps for diffusion source attribution and work well for classifying different generators such as Stable Diffusion, Midjourney, etc. These methods are also susceptible to false attribution when fine-tuned diffusion models are encountered, as they usually do not possess the required capacity to capture the subtle differences 
+[
+3
+]
+.
+
+Reconstruction Based:
+
+This recent category of methods like the Diffusion Reconstruction Error (DIRE) method 
+[
+49
+]
+ attempts diffusion model attribution by measuring the difference between the image at hand and its reconstructed counterpart, which is obtained by running forward diffusion using the image and then executing the pretrained reverse diffusion generation. A down-side to approaches like DIRE as an attribution technique is their resource-intensive nature, as rerun of the diffusion process is required. Use of DIRE for distinguishing images from fine-tuned diffusion models remains unexplored.
+
+Until now, investigations on source attribution of diffusion models have been limited to architecture-level, like distinguishing Stable Diffusion (SD) v1.4 from Stable Diffusion (SD) v2.0. As mentioned earlier, such attribution techniques neither intend to distinguish fine-tunes of architecturally identical diffusion models nor many of them are suited for the same. Thus, the rapid growth of open-weight diffusion models naturally leads to the emergence of the intra-architecture source attribution problem, where the goal is to detect the nearly indistinguishable structural traces to delineate a fine-tune of the same architectural model from the other fine-tunes.
+
+3 
+Novel Dataset: The IntrAA-SD Benchmark
+
+We build 
+IntrAA-SD Benchmark
+ (ISDB) dataset in order to facilitate the attribution of a generated image to one of the fine-tunes of open-weight Stable Diffusion XL (SDXL) having the same architectural backbone, and to subsequently design such an intra-architecture source attribution baseline and evaluate it. We consider in-domain (ID) and out-of-distribution (OOD) prompts for the testing.
+
+Table 2
+: 
+In-Domain (ID) prompt categories in our ISDB dataset with example prompts.
+
+#
+
+Category
+
+Example Prompt
+
+Real-World Content (8 categories)
+
+1
+
+Portraits & Faces
+
+“
+close up portrait of a young woman with freckles, natural light
+”
+
+2
+
+Landscapes & Nature
+
+“
+mountain range at sunrise with fog in the valley, golden light
+”
+
+3
+
+Architecture & Interiors
+
+“
+gothic cathedral interior with stained glass windows, light beams
+”
+
+4
+
+Animals & Wildlife
+
+“
+tiger walking through shallow water, jungle background, 8k detail
+”
+
+5
+
+Food & Objects
+
+“
+bowl of ramen with egg, nori, chopsticks, steam rising
+”
+
+6
+
+Vehicles & Scenes
+
+“
+red sports car on a mountain road, motion blur
+”
+
+7
+
+Fantasy & Sci-Fi
+
+“
+dragon flying over a medieval castle, fire breath, dark clouds
+”
+
+8
+
+Abstract & Artistic
+
+“
+oil painting of a stormy sea, thick impasto brushstrokes
+”
+
+Generative Stress Tests (7 categories)
+
+9
+
+Texture
+
+“
+woven fabric extreme close up, individual threads visible
+”
+
+10
+
+Geometric & Repetitive
+
+“
+infinite mirror tunnel, repeating reflections
+”
+
+11
+
+Infeasible & Indeterminate
+
+“
+Penrose triangle rendered as a real 3D object
+”
+
+12
+
+Fluids & Particles
+
+“
+milk drop splash crown forming, high speed macro
+”
+
+13
+
+Lighting Extremes
+
+“
+single candle flame in complete darkness, warm glow
+”
+
+14
+
+Text & Signals
+
+“
+chalkboard filled with mathematical equations
+”
+
+15
+
+Noisy & Malicious
+
+“
+television static, random pixels, no coherent pattern
+”
+
+3.1 
+Generative Models Considered
+
+For intra-architecture source attribution, we generate images using 
+ SDXL fine-tunes from Hugging Face 
+[
+50
+]
+ spanning photorealistic, anime, and stylized categories as given in Table 
+1
+. This selection is done to include both challenging pairs in terms of attribution whose outputs are nearly indistinguishable to humans like Juggernaut XL vs. RealVis XL (refer to Fig. 
+1
+), and stylistically divergent pairs that primarily differ in visual style like Animagine XL vs. RealVis XL.
+
+3.2 
+In & Out-of-Domain Prompting Strategies
+
+Table 3
+: 
+Out-of-Distribution (OOD) prompt categories in our ISDB dataset with example prompts.
+
+#
+
+Category
+
+Example Prompt
+
+Adversarial Strategies (7 categories)
+
+1
+
+Cross-Domain
+
+“
+studio portrait, soft lighting, 85mm lens
+” 
+ fed to Animagine XL; “
+flat anime character, cel shading
+” 
+ fed to RealVis XL
+
+2
+
+Void Prompts
+
+“
+pure white background, nothing else”; “complete darkness, empty frame
+”
+
+3
+
+Nested Representation
+
+“
+a photograph of a charcoal sketch pinned to a cork board
+”; “
+a watercolor painting lying on a wooden desk
+”
+
+4
+
+Text-Heavy
+
+“
+a handwritten letter on aged parchment, cursive text filling the page
+”
+
+5
+
+Hands & Anatomy
+
+“
+a pianist playing a grand piano, fingers on keys, concert hall
+”
+
+6
+
+Reflections & Glass
+
+“
+raindrops on a car window with blurred city lights, bokeh, night
+”
+
+7
+
+High-Frequency Patterns
+
+“
+brick wall with every individual brick visible
+”; “
+woven fabric macro, individual threads
+”
+
+Domain-Shift (11 categories)
+
+8
+
+Diverse Cultural
+
+“
+a colorful Indian Holi festival, powder clouds, joyful people
+”
+
+9
+
+Medical & Scientific
+
+“
+a microscope view of cells dividing, stained tissue sample
+”
+
+10
+
+Historical & Vintage
+
+“
+a daguerreotype style portrait, early photography aesthetic
+”
+
+11
+
+Underwater & Aquatic
+
+“
+a diver exploring a sunken shipwreck, flashlight beam, deep blue
+”
+
+12
+
+Sports & Action
+
+“
+a basketball player dunking, arena lights, freeze frame
+”
+
+13
+
+Fashion & Textile
+
+“
+haute couture dress on a runway, dramatic lighting
+”
+
+14
+
+Mythology & Folklore
+
+“
+a Japanese kitsune spirit in a misty bamboo forest
+”
+
+15
+
+Industrial & Decay
+
+“
+a derelict shopping mall, broken escalators, overgrown plants
+”
+
+16
+
+Unusual Perspectives
+
+“
+fisheye lens view of a skate park, extreme wide angle distortion
+”
+
+17
+
+Weather & Atmospheric
+
+“
+a tornado funnel cloud touching down on farmland, debris
+”
+
+18
+
+Edge Cases
+
+“
+a completely white image with a barely visible gray shape
+”
+
+Subtle Domain-Shift (2 categories)
+
+19
+
+Lighting Condition
+
+“
+harsh midday sun, deep black shadows on white architecture
+”
+
+20
+
+Surreal & Impossible
+
+“
+an impossible staircase like MC Escher, paradox geometry
+”
+
+Figure 2
+: 
+Our IntrAA-SD Baseline Framework. A frozen CLIP backbone captures the image style (Sec. 
+4.1
+) to compute gating weights across 
+ experts. A LoRA-adapted DINOv2 backbone extracts the fine-tunes’ related patterns fed into experts (Sec. 
+4.2
+). The expert outputs are combined via style-conditioned Mixture-of-Experts (Sec. 
+4.3
+) and concatenated with the style context for the attribution (Sec. 
+4.4
+).
+
+We created two prompt sets, in-domain (ID) and out-of-distribution (OOD) for testing, and different prompts from the ID set are used to train the SDXL fine-tunes.
+
+The ID set contains 300 prompts spread across 15 categories as shown in Table 
+2
+. Eight of these categories cover standard real-world content such as portraits, landscapes, architecture, animals and food. The remaining seven are particularly challenging in terms of generation, which involves image generation with repetitive textures and geometric patterns, extreme lighting, noise, etc. 
+[
+6
+]
+. Some such categories under the type of generative stress test listed in Table 
+2
+ are elaborated in the 
+supplementary
+.
+
+The OOD set contains 200 prompts across 20 categories as listed in Table 
+3
+. These categories fall under adversarial strategies and domain shift ones. In the latter, a couple of categories represent subtle domain shift, where the prompts are similar to a few in the ID set but demand quite different generations.
+Adversarial strategies contain categories such as cross-domain prompting, void prompts, nested representations, etc. Due to its adversarial nature, the cross-domain prompting category is mentioned here and not under domain shift strategy. In cross-domain prompting category, photorealistic prompts are fed to anime-focused models like Animagine XL, and conversely, cartoon and illustration prompts to photorealistic models like RealVis XL. This makes it difficult for a intra-architecture source attribution technique to classify, as the generated images could be quite different than those on which the attribution model is trained.
+
+A couple more categories under adversarial strategies listed in Table 
+3
+ are elaborated in the 
+supplementary
+.
+The other OOD prompt categories like cultural scenes, medical and scientific imagery, historical styles, underwater environments, sports and fashion are mentioned under domain-shift, as they are in general not adversarial in nature. Their use to generate images different from those generated using ID prompts is straightforward.
+
+3.3 
+Dataset Details
+
+Our 
+ISDB
+ dataset consists of 
+K images, evenly split across 
+ classes (
+K ID & 
+K OOD images per class), with each class representing generation from an SDXL fine-tune. Every image is generated with 
+ resolution using the Hugging Face Diffusers library 
+[
+47
+]
+. We have used the DPM
+++
+ SDE Karras scheduler 
+[
+26
+, 
+21
+]
+ with 25 denoising steps, a classifier-free guidance (CFG) scale of 7.0 
+[
+18
+]
+, and a fixed negative prompt to suppress common artifacts. All outputs are saved at 95% JPEG quality to simulate real-world dissemination conditions, since most images encountered in the wild have gone through at least one round of lossy compression 
+[
+48
+]
+. The ID set comprises 
+ images per model of 15 prompt categories, while the OOD set adds 
+ images per model from 20 prompt categories. We split the ID set into 80/20 train and test partitions using stratified sampling with a fixed random state, ensuring no prompt overlap between splits. The OOD set is entirely used only for evaluation. ID and OOD set images are rendered with 40 and 10 deterministic seeds (to random number generator), respectively, to ensure diversity while maintaining reproducibility.
+
+4 
+Initial Intra-architecture Source Attribution Baseline: The IntrAA-SD Framework
+
+We propose the first baseline, our IntrAA-SD framework, for intra-architecture source attribution of Stable Diffusion XL (SDXL) fine-tunes. The key idea in our framework is to decouple the style understanding from the fine-tune trace analysis, and utilize both judiciously. As illustrated in Fig. 
+2
+, the framework has four components, a frozen CLIP backbone 
+[
+34
+]
+ that captures the visual style of the input, a LoRA-adapted DINOv2 backbone 
+[
+31
+]
+ that extracts fine-tune trace related features at its native pixel resolution, a style-conditioned Mixture-of-Experts (MoE) 
+[
+13
+]
+ where CLIP-derived style information gates the trace features through specialized experts, and finally, a classifier that acts on a fused feature content to give the final logits. Our framework takes generated images as inputs at 
+ resolution, with random crop employed during training and five crop test-time augmentation during testing.
+
+4.1 
+Visual Style Extraction
+
+A common aspect that may hinder intra-architecture attribution is that classifiers would learn the predominant image style rather than the subtle traces left by the generator 
+[
+3
+]
+. For instance, a model trained on our dataset might learn to associate anime-style output with Animagine XL, as the training images generated by it would mostly be anime. As evident from Table 
+1
+, while style can help distinguish some fine-tunes from others, it alone may not be sufficient to pinpoint a fine-tuned generator in general. Dependence on style alone could result in failure, particularly in OOD cases such as when we feed a photorealistic prompt to Animagine XL. To address this, we intend to ensure that subtle fine-tune traces are leveraged along with style for intra-architecture source attribution.
+
+For extracting the style features (
+) from a given image, we use a frozen CLIP ViT-L/14 
+[
+34
+]
+. As CLIP was trained on a large-scale dataset of image-text pairs, it has learned rich representations of visual style and composition 
+[
+34
+]
+. So, it would capture the same from the input images. More details on this are shared in the 
+supplementary
+.
+
+4.2 
+Fine-tune Trace Feature Extraction
+
+For extracting features representing fine-tune traces in image structure, we choose a frozen DINOv2 ViT-L/14 
+[
+31
+]
+ followed by a trainable Low-Rank Adaptation (LoRA) 
+[
+19
+]
+. Unlike CLIP, DINOv2 is self-supervised and do not involve text. So, the pretrained DINOv2 has learned rich representations of visual structure, texture and content 
+[
+5
+]
+. Working at its native high resolution 
+[
+31
+]
+, DINOv2 has the capability to represent image details 
+[
+35
+, 
+6
+]
+. Then, to consider only the features relevant to intra-architecture source attribution using our framework, trainable LoRA is adopted. LoRA therefore emphasizes only fine-tuned generator relevant features distilling them from the image structure and content representations in its low-rank representation.
+We represent the fine-tune trace features obtain from LoRA-adapted DINOv2 as a vector 
+, where 
+.
+
+4.3 
+Style-Conditioned Mixture of Experts
+
+Differently styled generated images may contain structurally different generator signatures 
+[
+48
+, 
+15
+]
+. Therefore, rather than relying on a single classifier to implicitly handle this variation, we consider a style-conditioned gating driven Mixture-of-Experts (SC-MoE) architecture before classification.
+We adopt an MoE architecture 
+[
+42
+, 
+13
+]
+ with a cross-modal gating
+of model trace features from LoRA-adapted DINOv2. The gating decision, which dictates how much each expert contributes to the final output, is determined by a gating network working on the style feature vector 
+ from CLIP. The gating weights are computed in the gating network as
+
+, where 
+ 
+[
+42
+]
+ with 
+ being the number of experts.
+Every expert 
+ is a two-layer MLP with output dimension,
+
+, and their outputs are combined using the weights, 
+, to get the fused vector 
+.
+
+4.4 
+Classification for Intra-architecture Source Attribution
+
+To leverage both the fine-tune trace and style information from the image, we concatenate the clearly separated SC-MoE fused trace features 
+ and style features 
+
+to form a joint representation 
+ that carries both fine-tuned model signature and image style context.
+
+Specifically, the fused SC-MoE output 
+ (
+) is concatenated with the CLIP style vector 
+ (
+) as:
+
+This 2048-dimensional vector is then passed through a linear layer with the weight matrix 
+ and bias 
+. The training of the entire system is done predominantly using the standard cross-entropy loss 
+ over 
+ classes (number of fine-tuned generators considered).
+The overall training objective is:
+
+(1)
+
+where 
+ is a hyperparameter to adjust the weightage of load-balancing loss, 
+,
+which is designed to make the model use all the experts in the MoE more equally 
+[
+42
+]
+. When our 
+ISDB
+ dataset is considered, we have 
+. Thus, by providing the classifier both the model trace information and the style context, we enable it to learn generator separation based on different model trace signatures for different styles.
+
+Table 4
+: 
+Intra-architecture source attribution accuracies (%) of our 
+IntrAA-SD
+ baseline framework on our ISDB dataset, for the test images generated with In-Domain (ID) and Out-of-Distribution (OOD) prompts.
+
+Source Model
+
+ID
+
+OOD
+
+SDXL Base (M1)
+
+99.42
+
+91.50
+
+Juggernaut XL (M2)
+
+99.79
+
+70.50
+
+RealVis XL (M3)
+
+98.67
+
+82.50
+
+DreamShaper XL (M4)
+
+99.83
+
+99.00
+
+Animagine XL (M5)
+
+99.92
+
+98.00
+
+CounterfeitXL (M6)
+
+98.29
+
+98.00
+
+ZavyChromaXL (M7)
+
+99.67
+
+74.00
+
+CopaxTimelessXL (M8)
+
+97.88
+
+90.00
+
+ProteusXL (M9)
+
+98.58
+
+90.50
+
+AAM XL Anime (M10)
+
+98.21
+
+91.50
+
+Overall
+
+99.03
+
+88.55
+
+5 
+Experiments
+
+As we have introduced the new task of intra-architecture source attribution in this paper with a novel benchmark dataset and a baseline technique, we evaluate the baseline technique on the ISDB dataset in this section and perform its empirical ablation study. Due to space constraints here, we report additional experiments, and investigate the applicability of existing architecture-level attribution models for intra-architecture attribution in the 
+supplementary
+.
+
+5.1 
+Training Strategy
+
+The 
+IntrAA-SD
+ baseline framework is trained for 30 epochs on the in-domain (ID) training set of our ISDB dataset employing AdamW 
+[
+25
+]
+ and cosine annealing with warm restarts 
+[
+24
+]
+. The LoRA parameters use a learning rate of 
+, while the MoE and classification heads use 
+. We also use label smoothing (
+) 
+[
+45
+]
+. For augmentation, we apply MixUp (
+) 
+[
+57
+]
+ and CutMix (
+) 
+[
+56
+]
+ with a probability 
+. Random cropping is used for training, and FiveCrop Test Time Augmentation is applied at inference.
+
+5.2 
+Attribution Results for ID and OOD Prompts
+
+Table 
+4
+ presents the results of our 
+IntrAA-SD
+ framework considering images generated in our ISDB dataset from all the 
+ fine-tuned source models using in-domain (ID) and out-of-distribution (OOD) testing prompts, showing the per-class (source) accuracies.
+Our method achieves an average of 99.03% accuracy on the ID test set case and 88.55% on OOD case. We refer to the results in Table 
+4
+ further in the 
+supplementary
+ for more discussion.
+
+5.3 
+Ablation Studies on 
+IntrAA-SD
+ framework
+
+5.3.1 
+Core Modules
+
+In Table 
+5
+, we report an ablation study of our baseline intra-architecture attribution method using our ISDB dataset’s ID test set, to note the significance of its components.
+
+Gating strategy.
+
+As seen in Table 
+5
+, the equal weighting case (A1), where the gating network is entirely removed and equal-weighted average of all the experts is considered, yields 98.40% accuracy. The DINOv2 driven variant (A2), where features from frozen DINOv2 (not trained with text) are used in the gating network to determine routing weights, produces almost a similar accuracy of 98.42%.
+However, when use consider the use of style features from frozen CLIP in our 
+IntrAA-SD
+ framework to drive the gating network, the highest accuracy of 99.03% is achieved.
+This observation demonstrates that marginal benefit is achieved by specifically designing the extraction of style features and using it for gating the Mixture-of-Experts (MoE) network.
+
+Table 5
+: 
+IntrAA-SD
+ Ablation: significance of components. All variants use LoRA r=16, 518px, 4 experts (unless removed).
+
+Components
+
+Variants
+
+Acc %
+
+Gating
+
+A1: Equal weighting (no gating)
+
+98.40
+
+strategy
+
+A2: Structure-based gating (DINOv2 
+ gate)
+
+98.42
+
+Style concat
+
+A3: No style concatenation (after MoE) before classification
+
+98.21
+
+Style or
+
+A4: Image Style-only (Frozen CLIP + linear head)
+
+87.59
+
+trace feature
+
+A5: Source trace-only (LoRA DINOv2 + linear head)
+
+98.52
+
+All
+
+IntrAA-SD
+ framework
+
+99.03
+
+Table 6
+: 
+Ablation on Hyperparameters. Ours: 
+IntrAA-SD
+ baseline intra-architecture source attribution framework
+
+Variants
+
+Acc (%)
+
+Variants
+
+Acc (%)
+
+Model trace extractor
+
+Frozen DINOv2
+
+93.01
+
+Input resolution
+
+96.75
+
+LoRA 
+
+98.50
+
+98.41
+
+LoRA 
+ (Ours)
+
+99.03
+
+ (Ours)
+
+99.03
+
+Number of experts
+
+1 (no MoE)
+
+98.77
+
+Inference input
+
+2
+
+98.84
+
+Center Crop
+
+98.23
+
+4 (Ours)
+
+99.03
+
+Five Crop TTA (Ours)
+
+99.03
+
+8
+
+98.88
+
+Style feature concatenation.
+
+From Table 
+5
+, we infer that the concatenation of style features 
+ with fused fine-tuned model trace features 
+ from the MoE helps our 
+IntrAA-SD
+ framework to achieve 99.03% accuracy, while if the concatenation is not performed (A3) and only 
+ is fed into the classifier, the accuracy drops to 98.21%.
+
+Style & source trace.
+
+We attempt to classify the generated input images for detecting the fine-tuned source model using only the style features from the frozen CLIP without using any MoE network (A4). This yields a poor 87.59% accuracy as seen in Table 
+5
+. This is expected, as from our discussion in Section 
+4.1
+, we know that style features may not be sufficient on its own for intra-architecture attribution. In contrast, when we attempt the same using only the fine-tune trace features from the frozen DINOv2 and LoRA removing the MoE network (A5), a much improved 98.52% accuracy is obtained. This shows that the frozen DINOv2 with LoRA indeed provides features relevant to intra-architecture attribution. When both the source trace features to drive the MoE and the style features primarily to gate the MoE are used in our 
+IntrAA-SD
+ framework, we achieve the best performance with an accuracy of 99.03%.
+
+5.3.2 
+Hyperparameter Choices
+
+We also study the impact of hyperparameter and inference choices, and the related performance is listed in Table 
+6
+.
+
+Fine-tune model trace feature extractor.
+
+In Table 
+6
+, we see that if a completely frozen DINOv2 alone is used to extract intra-architecture attribution relevant features, only 93.01% accuracy is obtained. However, injecting trainable LoRA matrices improves the performance substantially achieving 98.5% and 99.03% accuracies for ranks (r) 4 and 16, respectively. This suggests that LoRA indeed effectively distills model trace features from the image structure represented by DINOv2 as discussed in Section 
+4.2
+.
+
+Number of experts in MoE.
+
+We experimented by changing the number of experts in MoE in our framework. As seen from Table 
+6
+, a slight increase in accuracy from 98.77% to 99.03% is observed when four experts are used instead of one, which represents the case of no MoE. Although the effect of MoE on the performance may not be that significant, we stick with the four experts case to keep the fraction of gain attained.
+
+Resolution and inference.
+ In Table 
+6
+, we see that the use of 
+ resolution inputs gives the
+best accuracy of 99.03% among the listed resolutions. The higher accuracy at higher resolution is expected as model trace signatures embedded in spatial details would be more accurately represented. Further, we see that five crop test-time augmentation (TTA) provides an improved accuracy over single center crop during inference.
+
+Load-balancing loss weightage.
+ In Table 
+7
+, when a load-balancing loss is employed in the loss function of Equation (
+1
+) with a small weight of 
+, the best accuracy of 99.03% is attained, and hence, it is used in our baseline.
+
+Table 7
+: 
+Ablation on the loss function (
+) parameter 
+
+0.0 (No balancing)
+
+0.001
+
+0.01
+
+0.05
+
+Acc (%)
+
+98.78
+
+99.03
+
+98.72
+
+98.70
+
+5.4 
+Fine-tunes’ Trace Feature Space Visualization
+
+We project the 1024-d 
+ model trace features onto two dimensions using t-SNE, as shown in Fig. 
+3
+.
+As can be seen, images from the fine-tuned SDXL models such as Animagine, Counterfeit, AAM and DreamShaper are represented as compact clusters well-separated from the others. Some fine-tunes like Proteus appear reasonably separable, but the few others do not appear so in the 2-d plot. However, as we have seen earlier, the fine-tune trace feature representation in our baseline model actually achieves more than 99% source attribution accuracy, which suggests that most of the fine-tunes must be reasonably well-separated in the 
+ dimensional feature space.
+
+Figure 3
+: 
+t-SNE visualization of model trace feature embeddings.
+
+6 
+Conclusion
+
+Identifying the precise source of images produced by fine-tuned generators, which share the same architectural backbone with other fine-tunes, is non-trivial and essentially a separate task than the existing architecture-level source attribution. In this regard, we introduced a novel task, 
+IntrAA-SD
+, Intra-Architecture source Attribution for Stable Diffusion, provided a first-of-its-kind 
+K-image benchmark dataset (IntrAA-SD Benchmark - ISDB), and proposed the initial baseline framework (IntrAA-SD framework) to perform the Intra-architecture attribution of fine-tunes. Our ISDB dataset is formed considering 
+ Stable Diffusion XL fine-tunes, and both in-domain (ID) and out-of-distribution (OOD) prompts. Our baseline approach leverages style-conditioned Mixture-of-Experts (MoE), pretrained CLIP and LoRA-adapted DINOv2.
+
+The baseline IntrAA-SD framework is trained and tested on our ISDB dataset. Elaborate ablation studies are also performed on the framework components, hyperparameters and the loss function, which reveal the significance of certain design choices. While our baseline approach achieves a high attribution accuracy of 99.03% accuracy for the ID test images of our dataset, it does reasonably well with 88.55% accuracy for the OOD test images. These performances are reasonably higher than those achieved by training the existing architecture-level source attribution models in our ISDB dataset, as those models are not designed for intra-architecture source attribution. These findings suggest that there is immense scope for future investigations targeting development of intra-architecture source attribution models and compilation of more relevant datasets, picking up from our contribution.
+
+References
+
+[1]
+
+I. Amerini, M. Barni, S. Battiato, P. Bestagini, G. Boato, V. Bruni, R. Caldelli, F. De Natale, R. De Nicola, L. Guarnera, 
+et al.
+ (2025)
+
+Deepfake media forensics: status and future challenges
+.
+
+Journal of Imaging
+ 
+11
+ (
+3
+), 
+pp. 73
+.
+
+Cited by: 
+§1
+,
+
+§1
+.
+
+[2]
+
+Q. Bammey
+ (2024)
+
+Synthbuster: towards detection of diffusion model generated images
+.
+
+IEEE Open Journal of Signal Processing
+ 
+5
+, 
+pp. 1–9
+.
+
+Cited by: 
+§2.1
+.
+
+[3]
+
+G. Bertazzini, D. Baracchi, D. Shullani, I. Echizen, and A. Piva
+ (2025)
+
+DRAGON: a large-scale dataset of realistic images generated by diffusion models
+.
+
+arXiv preprint arXiv:2505.11257
+.
+
+Cited by: 
+§1
+,
+
+§2.2
+,
+
+§2.2
+,
+
+§4.1
+.
+
+[4]
+
+J. Betker, G. Goh, L. Jing, T. Brooks, J. Wang, L. Li, L. Ouyang, J. Zhuang, J. Lee, Y. Guo, 
+et al.
+ (2023)
+
+Improving image generation with better captions
+.
+
+Computer Science. https://cdn. openai. com/papers/dall-e-3. pdf
+ 
+2
+ (
+3
+), 
+pp. 8
+.
+
+Cited by: 
+§1
+.
+
+[5]
+
+M. Caron, H. Touvron, I. Misra, H. Jégou, J. Mairal, P. Bojanowski, and A. Joulin
+ (2021)
+
+Emerging properties in self-supervised vision transformers
+.
+
+In 
+IEEE/CVF International Conference on Computer Vision
+,
+
+pp. 9650–9660
+.
+
+Cited by: 
+§1
+,
+
+§4.2
+.
+
+[6]
+
+R. Corvi, D. Cozzolino, G. Zingarini, G. Poggi, K. Nagano, and L. Verdoliva
+ (2023)
+
+On the detection of synthetic images generated by diffusion models
+.
+
+In 
+ICASSP 2023-2023 IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP)
+,
+
+pp. 1–5
+.
+
+Cited by: 
+§1
+,
+
+§2.2
+,
+
+§3.2
+,
+
+§4.2
+,
+
+§1.1
+.
+
+[7]
+
+D. Cozzolino, G. Poggi, R. Corvi, M. Nießner, and L. Verdoliva
+ (2024)
+
+Raising the bar of AI-generated image detection with CLIP
+.
+
+In 
+IEEE/CVF Conference on Computer Vision and Pattern Recognition
+,
+
+pp. 4356–4366
+.
+
+Cited by: 
+§2.1
+,
+
+§2.2
+.
+
+[8]
+
+dataautogpt3
+ (2024)
+
+Proteus v0.4
+.
+
+Note: 
+https://huggingface.co/dataautogpt3/ProteusV0.4
+
+Cited by: 
+Table 1
+.
+
+[9]
+
+J. Deng, W. Dong, R. Socher, L. Li, K. Li, and L. Fei-Fei
+ (2009)
+
+Imagenet: a large-scale hierarchical image database
+.
+
+In 
+2009 IEEE conference on computer vision and pattern recognition
+,
+
+pp. 248–255
+.
+
+Cited by: 
+§4.2
+.
+
+[10]
+
+R. Durall, M. Keuper, and J. Keuper
+ (2020)
+
+Watch your up-convolution: CNN based generative deep neural networks are failing to reproduce spectral distributions
+.
+
+In 
+IEEE/CVF conference on computer vision and pattern recognition
+,
+
+pp. 7890–7899
+.
+
+Cited by: 
+§2.1
+.
+
+[11]
+
+T. Dzanic, K. Shah, and F. Witherden
+ (2020)
+
+Fourier spectrum discrepancies in deep network generated images
+.
+
+Advances in neural information processing systems
+ 
+33
+, 
+pp. 3022–3032
+.
+
+Cited by: 
+§2.1
+.
+
+[12]
+
+D. C. Epstein, I. Jain, O. Wang, and R. Zhang
+ (2023)
+
+Online detection of AI-generated images
+.
+
+In 
+IEEE/CVF international conference on computer vision
+,
+
+pp. 382–392
+.
+
+Cited by: 
+§2.2
+.
+
+[13]
+
+W. Fedus, B. Zoph, and N. Shazeer
+ (2022)
+
+Switch transformers: scaling to trillion parameter models with simple and efficient sparsity
+.
+
+Journal of Machine Learning Research
+ 
+23
+ (
+120
+), 
+pp. 1–39
+.
+
+Cited by: 
+§4.3
+,
+
+§4
+.
+
+[14]
+
+J. Fei, Y. Dai, X. Zhou, Z. Xia, and A. Piva
+ (2026)
+
+Enabling supervised learning of generative signatures for generalized AI-generated images detection
+.
+
+In 
+IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)
+,
+
+pp. 14084–14094
+.
+
+Cited by: 
+§1
+.
+
+[15]
+
+J. Frank, T. Eisenhofer, L. Schönherr, A. Fischer, D. Kolossa, and T. Holz
+ (2020)
+
+Leveraging frequency analysis for deep fake image recognition
+.
+
+In 
+International conference on machine learning
+,
+
+pp. 3247–3258
+.
+
+Cited by: 
+§1
+,
+
+§2.1
+,
+
+§4.3
+,
+
+1st item
+,
+
+Table 1
+,
+
+Table 1
+.
+
+[16]
+
+gsdf
+ (2024)
+
+CounterfeitXL
+.
+
+Note: 
+https://huggingface.co/gsdf/CounterfeitXL
+
+Cited by: 
+Table 1
+.
+
+[17]
+
+L. Guarnera, O. Giudice, and S. Battiato
+ (2024)
+
+Mastering deepfake detection: a cutting-edge approach to distinguish gan and diffusion-model images
+.
+
+ACM Transactions on Multimedia Computing, Communications and Applications
+ 
+20
+ (
+11
+), 
+pp. 1–24
+.
+
+Cited by: 
+§1
+,
+
+§2.1
+.
+
+[18]
+
+J. Ho and T. Salimans
+ (2021)
+
+Classifier-free diffusion guidance
+.
+
+In 
+NeurIPS Workshop on Deep Generative Models and Downstream Applications
+,
+
+Cited by: 
+§3.3
+.
+
+[19]
+
+E. J. Hu, Y. Shen, P. Wallis, Z. Allen-Zhu, Y. Li, S. Wang, L. Wang, and W. Chen
+ (2022)
+
+LoRA: low-rank adaptation of large language models
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Cited by: 
+§1
+,
+
+§4.2
+.
+
+[20]
+
+A. K. Jain
+ (1989)
+
+Fundamentals of digital image processing
+.
+
+ 
+Prentice-Hall, Inc.
+.
+
+Cited by: 
+§2.1
+.
+
+[21]
+
+T. Karras, M. Aittala, T. Aila, and S. Laine
+ (2022)
+
+Elucidating the design space of diffusion-based generative models
+.
+
+Advances in Neural Information Processing Systems
+ 
+35
+.
+
+Cited by: 
+§3.3
+.
+
+[22]
+
+C. Lab
+ (2024)
+
+Animagine xl 3.1
+.
+
+Note: 
+https://huggingface.co/cagliostrolab/animagine-xl-3.1
+
+Cited by: 
+Table 1
+.
+
+[23]
+
+T. Lin, M. Maire, S. Belongie, J. Hays, P. Perona, D. Ramanan, P. Dollár, and C. L. Zitnick
+ (2014)
+
+Microsoft coco: common objects in context
+.
+
+In 
+European conference on computer vision
+,
+
+pp. 740–755
+.
+
+Cited by: 
+§4.2
+.
+
+[24]
+
+I. Loshchilov and F. Hutter
+ (2017)
+
+SGDR: stochastic gradient descent with warm restarts
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Cited by: 
+§5.1
+.
+
+[25]
+
+I. Loshchilov and F. Hutter
+ (2019)
+
+Decoupled weight decay regularization
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Cited by: 
+§5.1
+.
+
+[26]
+
+C. Lu, Y. Zhou, F. Bao, J. Chen, C. Li, and J. Zhu
+ (2022)
+
+DPM-solver++: fast solver for guided sampling of diffusion probabilistic models
+.
+
+arXiv preprint arXiv:2211.01095
+.
+
+Cited by: 
+§3.3
+.
+
+[27]
+
+Lykon
+ (2024)
+
+AAM xl animemix
+.
+
+Note: 
+https://huggingface.co/Lykon/AAM_XL_AnimeMix
+
+Cited by: 
+Table 1
+.
+
+[28]
+
+Lykon
+ (2024)
+
+DreamShaper xl v2 turbo
+.
+
+Note: 
+https://huggingface.co/Lykon/DreamShaper-xl-v2-turbo
+
+Cited by: 
+Table 1
+.
+
+[29]
+
+Midjourney, Inc.
+ (2026)
+
+Midjourney
+.
+
+Note: 
+https://github.com/midjourney
+GitHub repository, accessed Jun. 26, 2026
+
+Cited by: 
+§1
+.
+
+[30]
+
+U. Ojha, Y. Li, and Y. J. Lee
+ (2023)
+
+Towards universal fake image detectors that generalize across generative models
+.
+
+In 
+IEEE/CVF Conference on Computer Vision and Pattern Recognition
+,
+
+pp. 24480–24489
+.
+
+Cited by: 
+§2.2
+,
+
+2nd item
+,
+
+Table 1
+,
+
+Table 1
+.
+
+[31]
+
+M. Oquab T. Darcet 
+et al.
+ (2024)
+
+DINOv2: learning robust visual features without supervision
+.
+
+Transactions on Machine Learning Research
+.
+
+External Links: 
+ISSN 2835-8856
+
+Cited by: 
+§1
+,
+
+§4.2
+,
+
+§4
+.
+
+[32]
+
+D. Podell, Z. English, K. Lacey, A. Blattmann, T. Dockhorn, J. Müller, J. Penna, and R. Rombach
+ (2024)
+
+SDXL: improving latent diffusion models for high-resolution image synthesis
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Cited by: 
+§1
+,
+
+Table 1
+,
+
+2nd item
+.
+
+[33]
+
+Y. Qu, X. Shen, X. He, M. Backes, S. Zannettou, and Y. Zhang
+ (2023)
+
+Unsafe diffusion: on the generation of unsafe images and hateful memes from text-to-image models
+.
+
+In 
+ACM CCS
+,
+
+Cited by: 
+§1
+.
+
+[34]
+
+A. Radford, J. W. Kim, C. Hallacy, A. Ramesh, G. Goh, S. Agarwal, G. Sastry, A. Askell, P. Mishkin, J. Clark, 
+et al.
+ (2021)
+
+Learning transferable visual models from natural language supervision
+.
+
+In 
+International conference on machine learning
+,
+
+pp. 8748–8763
+.
+
+Cited by: 
+§1
+,
+
+§4.1
+,
+
+§4
+,
+
+§2
+.
+
+[35]
+
+J. Ricker, S. Damm, T. Holz, and A. Fischer
+ (2024)
+
+Towards the detection of diffusion model deepfakes
+.
+
+In 
+International Joint Conference on Computer Vision, Imaging and Computer Graphics Theory and Applications, VISIGRAPP
+,
+
+pp. 446–457
+.
+
+Cited by: 
+§2.1
+,
+
+§4.2
+.
+
+[36]
+
+R. Rombach, A. Blattmann, D. Lorenz, P. Esser, and B. Ommer
+ (2022)
+
+High-resolution image synthesis with latent diffusion models
+.
+
+In 
+IEEE/CVF conference on computer vision and pattern recognition
+,
+
+pp. 10684–10695
+.
+
+Cited by: 
+§1
+,
+
+1st item
+.
+
+[37]
+
+N. Ruiz, Y. Li, V. Jampani, Y. Pritch, M. Rubinstein, and K. Aberman
+ (2023)
+
+Dreambooth: fine tuning text-to-image diffusion models for subject-driven generation
+.
+
+In 
+IEEE/CVF conference on computer vision and pattern recognition
+,
+
+pp. 22500–22510
+.
+
+Cited by: 
+§1
+.
+
+[38]
+
+RunDiffusion
+ (2024)
+
+Juggernaut xl v9
+.
+
+Note: 
+https://huggingface.co/RunDiffusion/Juggernaut-XL-v9
+
+Cited by: 
+§1
+,
+
+Table 1
+.
+
+[39]
+
+C. Saharia, W. Chan, S. Saxena, L. Li, J. Whang, E. L. Denton, K. Ghasemipour, R. Gontijo Lopes, B. Karagol Ayan, T. Salimans, 
+et al.
+ (2022)
+
+Photorealistic text-to-image diffusion models with deep language understanding
+.
+
+Advances in neural information processing systems
+ 
+35
+, 
+pp. 36479–36494
+.
+
+Cited by: 
+§1
+,
+
+2nd item
+.
+
+[40]
+
+SG161222
+ (2024)
+
+RealVisXL v4.0
+.
+
+Note: 
+https://huggingface.co/SG161222/RealVisXL_V4.0
+
+Cited by: 
+Table 1
+.
+
+[41]
+
+Z. Sha, Z. Li, N. Yu, and Y. Zhang
+ (2023)
+
+DE-FAKE: detection and attribution of fake images generated by text-to-image generation models
+.
+
+In 
+ACM SIGSAC conference on computer and communications security
+,
+
+pp. 3418–3432
+.
+
+Cited by: 
+§1
+,
+
+§1
+,
+
+§2.2
+,
+
+Table 1
+,
+
+Table 1
+.
+
+[42]
+
+N. Shazeer, A. Mirhoseini, K. Maziarz, A. Davis, Q. Le, G. Hinton, and J. Dean
+ (2017)
+
+Outrageously large neural networks: the sparsely-gated mixture-of-experts layer
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Cited by: 
+§4.3
+,
+
+§4.4
+.
+
+[43]
+
+stablediffusionapi
+ (2024)
+
+Copax timelessxl sdxl 1.0
+.
+
+Note: 
+https://huggingface.co/stablediffusionapi/copax-timelessxl-sdxl10
+
+Cited by: 
+Table 1
+.
+
+[44]
+
+stablediffusionapi
+ (2024)
+
+ZavyChromaXL
+.
+
+Note: 
+https://huggingface.co/stablediffusionapi/zavychromaxl
+
+Cited by: 
+Table 1
+.
+
+[45]
+
+C. Szegedy, V. Vanhoucke, S. Ioffe, J. Shlens, and Z. Wojna
+ (2016)
+
+Rethinking the inception architecture for computer vision
+.
+
+In 
+IEEE conference on computer vision and pattern recognition
+,
+
+pp. 2818–2826
+.
+
+Cited by: 
+§5.1
+.
+
+[46]
+
+C. Tan, Y. Zhao, S. Wei, G. Gu, and Y. Wei
+ (2023)
+
+Learning on gradients: generalized artifacts representation for gan-generated images detection
+.
+
+In 
+IEEE/CVF Conference on Computer Vision and Pattern Recognition
+,
+
+pp. 12105–12114
+.
+
+Cited by: 
+Table 1
+,
+
+Table 1
+.
+
+[47]
+
+P. von Platen, S. Patil, A. Lozhkov, P. Cuenca, N. Lambert, K. Rasul, M. Davaadorj, and T. Wolf
+ (2022)
+
+Diffusers: state-of-the-art diffusion models
+.
+
+Note: 
+https://github.com/huggingface/diffusers
+
+Cited by: 
+§3.3
+.
+
+[48]
+
+S. Wang, O. Wang, R. Zhang, A. Owens, and A. A. Efros
+ (2020)
+
+CNN-generated images are surprisingly easy to spot… for now
+.
+
+In 
+IEEE/CVF conference on computer vision and pattern recognition
+,
+
+pp. 8695–8704
+.
+
+Cited by: 
+§1
+,
+
+§2.1
+,
+
+§3.3
+,
+
+§4.3
+,
+
+Table 1
+,
+
+Table 1
+.
+
+[49]
+
+Z. Wang, J. Bao, W. Zhou, W. Wang, H. Hu, H. Chen, and H. Li
+ (2023)
+
+DIRE for diffusion-generated image detection
+.
+
+In 
+IEEE/CVF International Conference on Computer Vision
+,
+
+pp. 22445–22455
+.
+
+Cited by: 
+§2.2
+,
+
+3rd item
+.
+
+[50]
+
+T. Wolf, L. Debut, V. Sanh, J. Chaumond, C. Delangue, A. Moi, P. Cistac, T. Rault, Q. Lhoest, and A. Rush
+ (2020)
+
+Transformers: state-of-the-art natural language processing
+.
+
+In 
+2020 Conference on Empirical Methods in Natural Language Processing: System Demonstrations
+,
+
+pp. 38–45
+.
+
+Cited by: 
+§3.1
+.
+
+[51]
+
+Z. Yan, J. Wang, P. Jin, K. Zhang, C. Liu, S. Chen, T. Yao, S. Ding, B. Wu, and L. Yuan
+ (2025)
+
+Orthogonal subspace decomposition for generalizable AI-generated image detection
+.
+
+In 
+International Conference on Machine Learning
+,
+
+pp. 70268–70288
+.
+
+Cited by: 
+§1
+.
+
+[52]
+
+T. Yang, Z. Huang, J. Cao, L. Li, and X. Li
+ (2022)
+
+Deepfake network architecture attribution
+.
+
+In 
+AAAI Conference on Artificial Intelligence
+,
+
+Vol. 
+36
+, 
+pp. 4662–4670
+.
+
+Cited by: 
+§1
+,
+
+§1
+.
+
+[53]
+
+Yntec
+ (2024)
+
+Realistic stock photo 3
+.
+
+Note: 
+https://huggingface.co/Yntec/realisticStockPhoto3
+Stable Diffusion model. Accessed: Feb. 28, 2026
+
+Cited by: 
+§1
+.
+
+[54]
+
+N. Yu, L. S. Davis, and M. Fritz
+ (2019)
+
+Attributing fake images to GANS: learning and analyzing GAN fingerprints
+.
+
+In 
+IEEE/CVF international conference on computer vision
+,
+
+pp. 7556–7566
+.
+
+Cited by: 
+§1
+.
+
+[55]
+
+N. Yu, V. Skripniuk, S. Abdelnabi, and M. Fritz
+ (2021)
+
+Artificial fingerprinting for generative models: rooting deepfake attribution in training data
+.
+
+In 
+IEEE/CVF International conference on computer vision
+,
+
+pp. 14448–14457
+.
+
+Cited by: 
+§1
+.
+
+[56]
+
+S. Yun, D. Han, S. J. Oh, S. Chun, J. Choe, and Y. Yoo
+ (2019)
+
+CutMix: regularization strategy to train strong classifiers with localizable features
+.
+
+In 
+IEEE/CVF international conference on computer vision
+,
+
+pp. 6023–6032
+.
+
+Cited by: 
+§5.1
+.
+
+[57]
+
+H. Zhang, M. Cisse, Y. N. Dauphin, and D. Lopez-Paz
+ (2018)
+
+Mixup: beyond empirical risk minimization
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Cited by: 
+§5.1
+.
+
+Intra-Architecture Source Attribution for Stable Diffusion:
+
+A New Task with Benchmark Dataset and Baseline
+
+— Supplementary Document —
+
+We provide the following important details about our contribution in this supplementary document:
+
+•
+
+Continuing from Section 3.2 in the 
+main paper
+, we describe a few more 
+IntrAA-SD
+ benchmark (ISDB) dataset In-domain (ID) and out-of-distribution (OOD) prompt categories in Section 
+1
+ here.
+
+•
+
+Continuing from Section 4.1 in the 
+main paper
+, we provide a visualization to analyze the style feature extraction using CLIP in Section 
+2
+ here.
+
+•
+
+Continuing from Section 5.2 in the 
+main paper
+, in Section 
+3
+ here, we discuss the intra-architecture source attribution results of some existing architecture-level source attribution methods when trained and tested in our ISDB dataset.
+
+•
+
+In addition to the above, we dive into more experimental analysis of our 
+IntrAA-SD
+ intra-architecture source attribution baseline framework in Section 
+4
+ here.
+
+1 
+Certain Prompt Categories of Our ISDB Dataset
+
+Table 1
+: 
+Intra-architecture source attribution accuracy (%) on our 
+ISDB
+ test set. Models -
+M1: SDXL Base, M2: Juggernaut, M3: RealVis, M4: DreamShaper, M5: Animagine, M6: Counterfeit, M7: ZavyChroma, M8: Copax,
+M9: Proteus, M10: AAM Anime. 
+∗
+ Ours
+ is the only algorithm (& the first) in the list which is designed for intra-architecture source attribution. All others listed are existing architecture-level source attribution methods.
+
+Method
+
+M1
+
+M2
+
+M3
+
+M4
+
+M5
+
+M6
+
+M7
+
+M8
+
+M9
+
+M10
+
+Overall
+
+ID
+
+Spec 
+[
+15
+]
+
+18.13
+
+12.96
+
+11.86
+
+46.45
+
+40.83
+
+36.51
+
+9.31
+
+20.49
+
+32.01
+
+21.32
+
+24.99
+
+UnivFD 
+[
+30
+]
+
+24.46
+
+27.79
+
+30.32
+
+70.52
+
+76.47
+
+29.73
+
+33.85
+
+35.62
+
+56.71
+
+61.41
+
+44.69
+
+DE-FAKE 
+[
+41
+]
+
+62.96
+
+65.37
+
+61.32
+
+89.58
+
+93.91
+
+76.24
+
+62.28
+
+67.97
+
+87.87
+
+86.22
+
+75.37
+
+NPR 
+[
+46
+]
+
+88.27
+
+85.53
+
+86.78
+
+97.97
+
+96.56
+
+94.03
+
+86.51
+
+89.81
+
+94.42
+
+95.08
+
+91.50
+
+CNNDetect 
+[
+48
+]
+
+87.26
+
+83.93
+
+88.96
+
+98.32
+
+98.40
+
+95.38
+
+87.01
+
+90.27
+
+96.34
+
+96.28
+
+92.21
+
+Ours
+∗
+
+99.42
+
+99.79
+
+98.67
+
+99.83
+
+99.92
+
+98.29
+
+99.67
+
+97.88
+
+98.58
+
+98.21
+
+99.03
+
+OOD
+
+Spec 
+[
+15
+]
+
+11.50
+
+11.70
+
+12.40
+
+55.00
+
+36.90
+
+31.10
+
+11.50
+
+16.20
+
+31.40
+
+14.40
+
+23.21
+
+UnivFD 
+[
+30
+]
+
+20.60
+
+22.00
+
+26.50
+
+78.10
+
+74.80
+
+25.60
+
+27.40
+
+32.20
+
+61.70
+
+59.00
+
+42.79
+
+DE-FAKE 
+[
+41
+]
+
+41.20
+
+34.00
+
+34.90
+
+78.00
+
+83.80
+
+36.10
+
+31.80
+
+45.40
+
+68.30
+
+65.30
+
+51.88
+
+CNNDetect 
+[
+48
+]
+
+70.30
+
+47.30
+
+61.90
+
+94.40
+
+92.10
+
+76.30
+
+45.70
+
+66.60
+
+86.60
+
+78.20
+
+71.94
+
+NPR 
+[
+46
+]
+
+75.20
+
+53.60
+
+61.90
+
+95.10
+
+92.00
+
+79.60
+
+54.20
+
+71.10
+
+83.80
+
+81.90
+
+74.84
+
+Ours
+∗
+
+91.50
+
+70.50
+
+82.50
+
+99.00
+
+98.00
+
+98.00
+
+74.00
+
+90.00
+
+90.50
+
+91.50
+
+88.55
+
+1.1 
+In-Domain (ID) Generative Stress Test Prompts
+
+We have considered 
+ prompt categories in the ID set of our ISDB dataset that are designed to push the fine-tuned diffusion generators to their limits, both during training and inference. As in such situations the generative models are more likely to introduce pronounced generator-specific signatures in the images generated 
+[
+6
+]
+, they represent favorable cases for attribution methods. We discuss a few such generative stress test categories below.
+
+•
+
+Texture and Geometric & Repetitive:
+ Generating textures or repetitive patterns, which often represent high spatial frequencies, challenges generator decoders, especially their spatial up-sampling layers 
+[
+36
+]
+. Different generator fine-tuning processes alter how the fine-tuned models handle aliasing, causing them to produce distinct frequency-domain model-related signatures within the generated image regions 
+[
+15
+]
+.
+
+•
+
+Text & Signals:
+ Rendering coherent text or a signal plot often leads to failure for the Stable Diffusion XL (SDXL) base model 
+[
+32
+, 
+39
+]
+. Fine-tunes try to overcome this weakness by aggressively introducing structural corrections particularly to improve synthetic text generation. However, such attempts often leave model-specific traces in the generated areas containing characters, symbols or plots.
+
+•
+
+Noise & Malicious:
+ Such prompts provide minimal scope for semantic conditioning. So, without a meaningful object to render, the generator usually relies heavily on its underlying structural prior, which leaves its imprint in the generated image that aids source isolation without much interference from any visual content 
+[
+49
+]
+.
+
+1.2 
+Out-Of-Distribution (OOD) Adversarial Prompts
+
+We have considered 
+ prompt categories in the OOD set of our ISDB dataset that are adversarial in nature to the fine-tuned generative models. The images thus generated tests the source attribution systems, as they must posses the capability of ignoring the uncharacteristic image style generated to a large extent in favor of model signature.
+
+•
+
+Void Prompts:
+ Prompts such as “
+Pure white background, nothing else
+” or “
+Complete darkness, empty frame
+” demand generation of images with no content. The models are usually not well trained for such generation, and hence, can produce arbitrarily-styled images with model signature camouflaged in them.
+
+•
+
+Nested Representations:
+ Prompts such as “
+A photograph of an oil painting displayed on a modern gallery wall
+” requires the generator to transition abruptly between distinct image types often producing anomalous /unseen distortions at boundaries, where model signature may be contained 
+[
+30
+]
+.
+
+Figure 1
+: 
+t-SNE projection of frozen CLIP ViT-L/14 features of input images generated using a suitable shared prompt across all 10 SDXL fine-tunes.
+
+2 
+Style Capture using Pretrained CLIP
+
+In Section 4.1 of the 
+main paper
+, we state that frozen CLIP 
+[
+34
+]
+ would be able to capture visual style representative features from the input image.
+To empirically verify this property on our ISDB dataset, we visualize the t-SNE projection of the frozen CLIP features extracted from all the 10 SDXL fine-tunes using the same single prompt suitable for all in Fig. 
+1
+. So, for an input image 
+, we take a 
+ crop and resize it to 
+ for CLIP, which produces a style representation feature 
+ where 
+. The t-SNE plot in the figure shows the projection of 
+ for the input image as a point. As can be seen, the anime-styled images generated from fine-tuned SDXL anime image generators Animagine (M5), Counterfeit (M6) and AAM Anime (M10) are reasonably separated from the images generated by stylized (M7, M8, M9) and photorealistic (M1, M2, M3, M4) fine-tuned generators derived from SDXL (see Table 1 in the 
+main paper
+ for the style categories of the SDXL fine tunes considered). The stylized and photorealitic generated images are somewhat separated with former mostly occupying the bottom & middle, and the latter occupying the middle & top-right parts of the plot. Therefore, although we visualize the 1024-d vectors in an optimized 2-d view, we still find some impression of separation between them in terms of image style.
+
+3 
+Intra-architecture Attribution Results
+
+Table 2
+: 
+Mean Mixture of Expert (MoE) gating weights (%) per model, grouped & averaged by style type.
+
+Experts
+
+Photorealistic
+
+Stylized
+
+Anime
+
+M4
+
+M2
+
+M1
+
+M3
+
+avg.
+
+M8
+
+M7
+
+M9
+
+avg.
+
+M6
+
+M10
+
+M5
+
+avg.
+
+Expert 1
+
+35.5
+
+36.7
+
+37.1
+
+37.6
+
+36.7
+
+37.2
+
+36.6
+
+34.9
+
+36.2
+
+33.5
+
+28.1
+
+15.8
+
+25.8
+
+Expert 2
+
+24.9
+
+24.8
+
+23.0
+
+25.2
+
+24.5
+
+26.3
+
+26.8
+
+27.2
+
+26.8
+
+27.2
+
+29.2
+
+27.4
+
+27.9
+
+Expert 3
+
+23.7
+
+21.6
+
+23.6
+
+21.2
+
+22.5
+
+18.8
+
+19.5
+
+19.6
+
+19.3
+
+17.8
+
+17.4
+
+13.3
+
+16.2
+
+Expert 4
+
+15.9
+
+16.9
+
+16.2
+
+16.1
+
+16.3
+
+17.7
+
+17.1
+
+18.3
+
+17.7
+
+21.6
+
+25.3
+
+43.6
+
+30.2
+
+Table 3
+: 
+Cross-Dataset Performance of Our 
+IntrAA-SD
+ baseline
+
+Training Set
+
+Test Set Accuracy%
+
+ISDB-ID
+
+ImageNet
+
+COCO
+
+ImageNet
+
+80.59
+
+98.35
+
+96.47
+
+COCO
+
+76.16
+
+90.31
+
+98.91
+
+ISDB-ID (Ours)
+
+99.03
+
+84.58
+
+85.95
+
+Table 4
+: 
+Confusion Matrix related to performance of our 
+IntrAA-Diff
+ on ISDB-ODD set. Photorealistic: 
+M1-4
+, Stylized: 
+M7-9
+, Anime: 
+M5-6, M10
+.
+
+True 
+ / Pred 
+
+M1
+
+M2
+
+M3
+
+M4
+
+M5
+
+M6
+
+M7
+
+M8
+
+M9
+
+M10
+
+M1 (SDXL Base)
+
+923
+
+3
+
+2
+
+0
+
+1
+
+5
+
+11
+
+46
+
+5
+
+4
+
+M2 (Juggernaut)
+
+22
+
+708
+
+149
+
+8
+
+0
+
+14
+
+49
+
+28
+
+16
+
+6
+
+M3 (RealVis)
+
+16
+
+87
+
+816
+
+4
+
+0
+
+12
+
+35
+
+18
+
+9
+
+3
+
+M4 (DreamShaper)
+
+0
+
+5
+
+0
+
+985
+
+0
+
+0
+
+4
+
+0
+
+1
+
+5
+
+M5 (Animagine)
+
+4
+
+0
+
+0
+
+0
+
+984
+
+1
+
+3
+
+0
+
+0
+
+8
+
+M6 (Counterfeit)
+
+1
+
+3
+
+0
+
+1
+
+2
+
+978
+
+5
+
+0
+
+3
+
+7
+
+M7 (ZavyChroma)
+
+57
+
+45
+
+43
+
+4
+
+1
+
+15
+
+742
+
+50
+
+25
+
+18
+
+M8 (Copax)
+
+51
+
+3
+
+4
+
+2
+
+0
+
+6
+
+20
+
+908
+
+4
+
+2
+
+M9 (Proteus)
+
+8
+
+16
+
+12
+
+3
+
+5
+
+1
+
+7
+
+8
+
+940
+
+0
+
+M10 (AAM Anime)
+
+6
+
+1
+
+0
+
+5
+
+8
+
+7
+
+24
+
+10
+
+0
+
+939
+
+Table 
+1
+ lists the intra-architecture source attribution results obtained for our 
+IntrAA-SD
+ baseline framework on our ISDB dataset, which is also reported in Table 4 of the 
+main paper
+. However, in Table 
+1
+ here, the performance of five other well-known recent methods, which are designed to perform architecture-level source attribution including diffusion-based generators, are reported.
+As shown in the table, when existing architectural-level source attribution models are trained on our training set, the best average accuracies achieved on our test set are 92.21% and 74.84% for ID and OOD cases, respectively. Their performance remains substantially below our intra-architecture source attribution baseline, which is specifically designed for intra-architecture attribution. This suggests that the development of dedicated intra-architecture attribution techniques is necessary continuing from our baseline framework, particularly to improve generalization on the OOD test set of the ISDB dataset.
+
+4 
+Additional Experiments
+
+4.1 
+Mixture of Experts (MoE) Gating Weights
+
+Table 
+2
+ reports the mean MoE gating weights for each expert per fine-tuned model, and the average over the models for a particular style-type is also provided. As can be seen, the Experts 1-4 respectively contribute on an average around 37%, 25%, 23%, and 16% for the photorealistic models, whereas they in that order contribute on an average 36%, 27%, 19%, & 18%, and 26%, 28%, 16%, & 30% for the stylized and Anime models, respectively. Therefore, the distribution of the average contributions by the four experts change with the style-type of the models. This signifies that differently-styled generated images might have structurally different source model signatures as stated in Section 4.3 of the 
+main paper
+, which can be captured by learning different distribution of weighting multiple experts for computing model trace features.
+
+4.2 
+Cross-dataset Intra-Architecture Attribution Performance
+
+Datasets like ImageNet 
+[
+9
+]
+ and COCO 
+[
+23
+]
+, which contain captions along with images, have primarily been used for object /image recognition purpose. Here, we study the appropriateness of using such datasets to train intra-architecture source attribution models instead of using specially curated image & prompt set like the ID set in ISDB dataset (ISDB-ID), and also perform cross-dataset performance analys of our 
+IntrAA-SD
+ baseline approach for intra-architecture attribution.
+
+So, we first prepare two datasets from the 
+ SDXL fine-tuned models using the image-caption pairs from ImageNet and COCO datasets for training two variants of our 
+IntrAA-SD
+ baseline approach. The first dataset includes 12,000 images per fine-tuned model generated using ImageNet captions as prompts, and the second has 12,000 images per fine-tuned model generated using the COCO captions. We split the each set into 80/20 train and test partitions using stratified sampling with a fixed random state, ensuring no prompt overlap between splits. We test our ISDB-ID trained 
+IntrAA-SD
+ baseline on these datasets. We also test our 
+IntrAA-SD
+ baseline variants, which are trained from scratch on the two training sets formed from ImageNet and COCO datasets, on our ISDB-ID test set.
+
+Figure 2
+: 
+Significant changes (Red: increase, Blue: decrease) at patch-level feature norm after LoRA adaptation of DINOv2 for images from four different fine-tuned models.
+
+The results of the cross-dataset experiment is shown in Table 
+3
+. As can be seen, when the training and testing of our 
+IntrAA-SD
+ baseline are done on the same dataset, the performance achieved is quite high, irrespective of the datasets. However, the performance drops to different extents in the different cases when the the training and testing are done on different datasets. If the training and testing are done on ImageNet and COCO, one or the other, the performance achieved is still above 
+, which signifies the similarity of two datasets derived from them. If the training is done on ImageNet or COCO derived datasets, and the testing on our ISDB-ID test set, the performance barely touches 
+. Whereas when the training is done on our ISDB-ID train set, and the testing on ImageNet or COCO, the performance manages to reach around 
+.
+
+These observations suggests that the cross-dataset performance of our 
+IntrAA-SD
+ baseline is just satisfactory leaving scope for future improvement. Further, another important finding is that training on our ISDB-ID train set imbibes our baseline approach with slightly better generalization capability achieving around 
+ accuracy boost. This highlights the importance of such specially curated datasets for intra-architecture source attribution.
+
+4.3 
+Confusion Matrix of 
+IntrAA-SD
+ baseline on OOD set in ISDB dataset
+
+From Table 4 in the 
+main paper
+, we see that our 
+IntrAA-SD
+ baseline trained on our ISDB-ID training set achieves 88.55% attribution accuracy on the OOD test set of the ISDB dataset (ISDB-OOD).
+We further examine here the related confusion matrix in Table 
+4
+. A salient observation from the matrix is that images generated from a majority of the photorealistic and stylized image generators are prone to be misclassified as from the SDXL-Base source. This is understandable as SDXL-Base is categorized under photorealistic generator producing images with styles closer to other photorealistic and stylized category fine-tunes rather than the anime category ones. In fact, images from the fine-tune ZavyChroma (M7) in the stylized category has got misclassified as obtained from three of the four photorealistic fine-tunes. Another key observation is that slightly higher (around 
+) misclassifications has occurred just between photorealistic fine-tunes Juggernaut (M2) and RealVis (M3), as they produce images with very similar visual styles. The above findings point to paths for designing improved intra-architecture attribution methods in future.
+
+4.4 
+Effect of LoRA on Feature Representations
+
+As mentioned in Section 4.2 of the 
+main paper
+, our 
+IntAA-SD
+ baseline model contains a LoRA-adapted DinoV2 to extract fine-tuned model’s trace features from the input image. To visualize the DINOv2’s internal representation modification by LoRA adaptation, we compute the 
+ norm of each patch token from the final transformer layer for both frozen DINOv2 and LoRA-adapted DINOv2. For each of the 
+ spatial patches (
+ vector), we measure the relative change 
+ and mark only the patches in the top 25
+th
+ percentile of 
+ for visualization in Fig. 
+2
+. Among those, positive 
+ patches are shown in red, which can be seen is mostly concentrated on smooth and less-textured regions. The negative 
+ patches are shown in blue, which we see appear in all regions including salient regions like faces, knots, and edges &corners. Such observations are found to be consistent across images from the different fine-tuned generators. Therefore, LoRA seems to increase (red patches) the magnitude of the features in the smooth, low-texture patches, indicating more likelihood of discernible model signature presence in these regions. Analogously, it also suppresses (blue patches) the magnitude of features at a variety of regions which include salient ones, where model signature might be well-camouflaged in general.
+
+References
+
+[1]
+
+I. Amerini, M. Barni, S. Battiato, P. Bestagini, G. Boato, V. Bruni, R. Caldelli, F. De Natale, R. De Nicola, L. Guarnera, 
+et al.
+ (2025)
+
+Deepfake media forensics: status and future challenges
+.
+
+Journal of Imaging
+ 
+11
+ (
+3
+), 
+pp. 73
+.
+
+Cited by: 
+§1
+,
+
+§1
+.
+
+[2]
+
+Q. Bammey
+ (2024)
+
+Synthbuster: towards detection of diffusion model generated images
+.
+
+IEEE Open Journal of Signal Processing
+ 
+5
+, 
+pp. 1–9
+.
+
+Cited by: 
+§2.1
+.
+
+[3]
+
+G. Bertazzini, D. Baracchi, D. Shullani, I. Echizen, and A. Piva
+ (2025)
+
+DRAGON: a large-scale dataset of realistic images generated by diffusion models
+.
+
+arXiv preprint arXiv:2505.11257
+.
+
+Cited by: 
+§1
+,
+
+§2.2
+,
+
+§2.2
+,
+
+§4.1
+.
+
+[4]
+
+J. Betker, G. Goh, L. Jing, T. Brooks, J. Wang, L. Li, L. Ouyang, J. Zhuang, J. Lee, Y. Guo, 
+et al.
+ (2023)
+
+Improving image generation with better captions
+.
+
+Computer Science. https://cdn. openai. com/papers/dall-e-3. pdf
+ 
+2
+ (
+3
+), 
+pp. 8
+.
+
+Cited by: 
+§1
+.
+
+[5]
+
+M. Caron, H. Touvron, I. Misra, H. Jégou, J. Mairal, P. Bojanowski, and A. Joulin
+ (2021)
+
+Emerging properties in self-supervised vision transformers
+.
+
+In 
+IEEE/CVF International Conference on Computer Vision
+,
+
+pp. 9650–9660
+.
+
+Cited by: 
+§1
+,
+
+§4.2
+.
+
+[6]
+
+R. Corvi, D. Cozzolino, G. Zingarini, G. Poggi, K. Nagano, and L. Verdoliva
+ (2023)
+
+On the detection of synthetic images generated by diffusion models
+.
+
+In 
+ICASSP 2023-2023 IEEE International Conference on Acoustics, Speech and Signal Processing (ICASSP)
+,
+
+pp. 1–5
+.
+
+Cited by: 
+§1
+,
+
+§2.2
+,
+
+§3.2
+,
+
+§4.2
+,
+
+§1.1
+.
+
+[7]
+
+D. Cozzolino, G. Poggi, R. Corvi, M. Nießner, and L. Verdoliva
+ (2024)
+
+Raising the bar of AI-generated image detection with CLIP
+.
+
+In 
+IEEE/CVF Conference on Computer Vision and Pattern Recognition
+,
+
+pp. 4356–4366
+.
+
+Cited by: 
+§2.1
+,
+
+§2.2
+.
+
+[8]
+
+dataautogpt3
+ (2024)
+
+Proteus v0.4
+.
+
+Note: 
+https://huggingface.co/dataautogpt3/ProteusV0.4
+
+Cited by: 
+Table 1
+.
+
+[9]
+
+J. Deng, W. Dong, R. Socher, L. Li, K. Li, and L. Fei-Fei
+ (2009)
+
+Imagenet: a large-scale hierarchical image database
+.
+
+In 
+2009 IEEE conference on computer vision and pattern recognition
+,
+
+pp. 248–255
+.
+
+Cited by: 
+§4.2
+.
+
+[10]
+
+R. Durall, M. Keuper, and J. Keuper
+ (2020)
+
+Watch your up-convolution: CNN based generative deep neural networks are failing to reproduce spectral distributions
+.
+
+In 
+IEEE/CVF conference on computer vision and pattern recognition
+,
+
+pp. 7890–7899
+.
+
+Cited by: 
+§2.1
+.
+
+[11]
+
+T. Dzanic, K. Shah, and F. Witherden
+ (2020)
+
+Fourier spectrum discrepancies in deep network generated images
+.
+
+Advances in neural information processing systems
+ 
+33
+, 
+pp. 3022–3032
+.
+
+Cited by: 
+§2.1
+.
+
+[12]
+
+D. C. Epstein, I. Jain, O. Wang, and R. Zhang
+ (2023)
+
+Online detection of AI-generated images
+.
+
+In 
+IEEE/CVF international conference on computer vision
+,
+
+pp. 382–392
+.
+
+Cited by: 
+§2.2
+.
+
+[13]
+
+W. Fedus, B. Zoph, and N. Shazeer
+ (2022)
+
+Switch transformers: scaling to trillion parameter models with simple and efficient sparsity
+.
+
+Journal of Machine Learning Research
+ 
+23
+ (
+120
+), 
+pp. 1–39
+.
+
+Cited by: 
+§4.3
+,
+
+§4
+.
+
+[14]
+
+J. Fei, Y. Dai, X. Zhou, Z. Xia, and A. Piva
+ (2026)
+
+Enabling supervised learning of generative signatures for generalized AI-generated images detection
+.
+
+In 
+IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)
+,
+
+pp. 14084–14094
+.
+
+Cited by: 
+§1
+.
+
+[15]
+
+J. Frank, T. Eisenhofer, L. Schönherr, A. Fischer, D. Kolossa, and T. Holz
+ (2020)
+
+Leveraging frequency analysis for deep fake image recognition
+.
+
+In 
+International conference on machine learning
+,
+
+pp. 3247–3258
+.
+
+Cited by: 
+§1
+,
+
+§2.1
+,
+
+§4.3
+,
+
+1st item
+,
+
+Table 1
+,
+
+Table 1
+.
+
+[16]
+
+gsdf
+ (2024)
+
+CounterfeitXL
+.
+
+Note: 
+https://huggingface.co/gsdf/CounterfeitXL
+
+Cited by: 
+Table 1
+.
+
+[17]
+
+L. Guarnera, O. Giudice, and S. Battiato
+ (2024)
+
+Mastering deepfake detection: a cutting-edge approach to distinguish gan and diffusion-model images
+.
+
+ACM Transactions on Multimedia Computing, Communications and Applications
+ 
+20
+ (
+11
+), 
+pp. 1–24
+.
+
+Cited by: 
+§1
+,
+
+§2.1
+.
+
+[18]
+
+J. Ho and T. Salimans
+ (2021)
+
+Classifier-free diffusion guidance
+.
+
+In 
+NeurIPS Workshop on Deep Generative Models and Downstream Applications
+,
+
+Cited by: 
+§3.3
+.
+
+[19]
+
+E. J. Hu, Y. Shen, P. Wallis, Z. Allen-Zhu, Y. Li, S. Wang, L. Wang, and W. Chen
+ (2022)
+
+LoRA: low-rank adaptation of large language models
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Cited by: 
+§1
+,
+
+§4.2
+.
+
+[20]
+
+A. K. Jain
+ (1989)
+
+Fundamentals of digital image processing
+.
+
+ 
+Prentice-Hall, Inc.
+.
+
+Cited by: 
+§2.1
+.
+
+[21]
+
+T. Karras, M. Aittala, T. Aila, and S. Laine
+ (2022)
+
+Elucidating the design space of diffusion-based generative models
+.
+
+Advances in Neural Information Processing Systems
+ 
+35
+.
+
+Cited by: 
+§3.3
+.
+
+[22]
+
+C. Lab
+ (2024)
+
+Animagine xl 3.1
+.
+
+Note: 
+https://huggingface.co/cagliostrolab/animagine-xl-3.1
+
+Cited by: 
+Table 1
+.
+
+[23]
+
+T. Lin, M. Maire, S. Belongie, J. Hays, P. Perona, D. Ramanan, P. Dollár, and C. L. Zitnick
+ (2014)
+
+Microsoft coco: common objects in context
+.
+
+In 
+European conference on computer vision
+,
+
+pp. 740–755
+.
+
+Cited by: 
+§4.2
+.
+
+[24]
+
+I. Loshchilov and F. Hutter
+ (2017)
+
+SGDR: stochastic gradient descent with warm restarts
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Cited by: 
+§5.1
+.
+
+[25]
+
+I. Loshchilov and F. Hutter
+ (2019)
+
+Decoupled weight decay regularization
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Cited by: 
+§5.1
+.
+
+[26]
+
+C. Lu, Y. Zhou, F. Bao, J. Chen, C. Li, and J. Zhu
+ (2022)
+
+DPM-solver++: fast solver for guided sampling of diffusion probabilistic models
+.
+
+arXiv preprint arXiv:2211.01095
+.
+
+Cited by: 
+§3.3
+.
+
+[27]
+
+Lykon
+ (2024)
+
+AAM xl animemix
+.
+
+Note: 
+https://huggingface.co/Lykon/AAM_XL_AnimeMix
+
+Cited by: 
+Table 1
+.
+
+[28]
+
+Lykon
+ (2024)
+
+DreamShaper xl v2 turbo
+.
+
+Note: 
+https://huggingface.co/Lykon/DreamShaper-xl-v2-turbo
+
+Cited by: 
+Table 1
+.
+
+[29]
+
+Midjourney, Inc.
+ (2026)
+
+Midjourney
+.
+
+Note: 
+https://github.com/midjourney
+GitHub repository, accessed Jun. 26, 2026
+
+Cited by: 
+§1
+.
+
+[30]
+
+U. Ojha, Y. Li, and Y. J. Lee
+ (2023)
+
+Towards universal fake image detectors that generalize across generative models
+.
+
+In 
+IEEE/CVF Conference on Computer Vision and Pattern Recognition
+,
+
+pp. 24480–24489
+.
+
+Cited by: 
+§2.2
+,
+
+2nd item
+,
+
+Table 1
+,
+
+Table 1
+.
+
+[31]
+
+M. Oquab T. Darcet 
+et al.
+ (2024)
+
+DINOv2: learning robust visual features without supervision
+.
+
+Transactions on Machine Learning Research
+.
+
+External Links: 
+ISSN 2835-8856
+
+Cited by: 
+§1
+,
+
+§4.2
+,
+
+§4
+.
+
+[32]
+
+D. Podell, Z. English, K. Lacey, A. Blattmann, T. Dockhorn, J. Müller, J. Penna, and R. Rombach
+ (2024)
+
+SDXL: improving latent diffusion models for high-resolution image synthesis
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Cited by: 
+§1
+,
+
+Table 1
+,
+
+2nd item
+.
+
+[33]
+
+Y. Qu, X. Shen, X. He, M. Backes, S. Zannettou, and Y. Zhang
+ (2023)
+
+Unsafe diffusion: on the generation of unsafe images and hateful memes from text-to-image models
+.
+
+In 
+ACM CCS
+,
+
+Cited by: 
+§1
+.
+
+[34]
+
+A. Radford, J. W. Kim, C. Hallacy, A. Ramesh, G. Goh, S. Agarwal, G. Sastry, A. Askell, P. Mishkin, J. Clark, 
+et al.
+ (2021)
+
+Learning transferable visual models from natural language supervision
+.
+
+In 
+International conference on machine learning
+,
+
+pp. 8748–8763
+.
+
+Cited by: 
+§1
+,
+
+§4.1
+,
+
+§4
+,
+
+§2
+.
+
+[35]
+
+J. Ricker, S. Damm, T. Holz, and A. Fischer
+ (2024)
+
+Towards the detection of diffusion model deepfakes
+.
+
+In 
+International Joint Conference on Computer Vision, Imaging and Computer Graphics Theory and Applications, VISIGRAPP
+,
+
+pp. 446–457
+.
+
+Cited by: 
+§2.1
+,
+
+§4.2
+.
+
+[36]
+
+R. Rombach, A. Blattmann, D. Lorenz, P. Esser, and B. Ommer
+ (2022)
+
+High-resolution image synthesis with latent diffusion models
+.
+
+In 
+IEEE/CVF conference on computer vision and pattern recognition
+,
+
+pp. 10684–10695
+.
+
+Cited by: 
+§1
+,
+
+1st item
+.
+
+[37]
+
+N. Ruiz, Y. Li, V. Jampani, Y. Pritch, M. Rubinstein, and K. Aberman
+ (2023)
+
+Dreambooth: fine tuning text-to-image diffusion models for subject-driven generation
+.
+
+In 
+IEEE/CVF conference on computer vision and pattern recognition
+,
+
+pp. 22500–22510
+.
+
+Cited by: 
+§1
+.
+
+[38]
+
+RunDiffusion
+ (2024)
+
+Juggernaut xl v9
+.
+
+Note: 
+https://huggingface.co/RunDiffusion/Juggernaut-XL-v9
+
+Cited by: 
+§1
+,
+
+Table 1
+.
+
+[39]
+
+C. Saharia, W. Chan, S. Saxena, L. Li, J. Whang, E. L. Denton, K. Ghasemipour, R. Gontijo Lopes, B. Karagol Ayan, T. Salimans, 
+et al.
+ (2022)
+
+Photorealistic text-to-image diffusion models with deep language understanding
+.
+
+Advances in neural information processing systems
+ 
+35
+, 
+pp. 36479–36494
+.
+
+Cited by: 
+§1
+,
+
+2nd item
+.
+
+[40]
+
+SG161222
+ (2024)
+
+RealVisXL v4.0
+.
+
+Note: 
+https://huggingface.co/SG161222/RealVisXL_V4.0
+
+Cited by: 
+Table 1
+.
+
+[41]
+
+Z. Sha, Z. Li, N. Yu, and Y. Zhang
+ (2023)
+
+DE-FAKE: detection and attribution of fake images generated by text-to-image generation models
+.
+
+In 
+ACM SIGSAC conference on computer and communications security
+,
+
+pp. 3418–3432
+.
+
+Cited by: 
+§1
+,
+
+§1
+,
+
+§2.2
+,
+
+Table 1
+,
+
+Table 1
+.
+
+[42]
+
+N. Shazeer, A. Mirhoseini, K. Maziarz, A. Davis, Q. Le, G. Hinton, and J. Dean
+ (2017)
+
+Outrageously large neural networks: the sparsely-gated mixture-of-experts layer
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Cited by: 
+§4.3
+,
+
+§4.4
+.
+
+[43]
+
+stablediffusionapi
+ (2024)
+
+Copax timelessxl sdxl 1.0
+.
+
+Note: 
+https://huggingface.co/stablediffusionapi/copax-timelessxl-sdxl10
+
+Cited by: 
+Table 1
+.
+
+[44]
+
+stablediffusionapi
+ (2024)
+
+ZavyChromaXL
+.
+
+Note: 
+https://huggingface.co/stablediffusionapi/zavychromaxl
+
+Cited by: 
+Table 1
+.
+
+[45]
+
+C. Szegedy, V. Vanhoucke, S. Ioffe, J. Shlens, and Z. Wojna
+ (2016)
+
+Rethinking the inception architecture for computer vision
+.
+
+In 
+IEEE conference on computer vision and pattern recognition
+,
+
+pp. 2818–2826
+.
+
+Cited by: 
+§5.1
+.
+
+[46]
+
+C. Tan, Y. Zhao, S. Wei, G. Gu, and Y. Wei
+ (2023)
+
+Learning on gradients: generalized artifacts representation for gan-generated images detection
+.
+
+In 
+IEEE/CVF Conference on Computer Vision and Pattern Recognition
+,
+
+pp. 12105–12114
+.
+
+Cited by: 
+Table 1
+,
+
+Table 1
+.
+
+[47]
+
+P. von Platen, S. Patil, A. Lozhkov, P. Cuenca, N. Lambert, K. Rasul, M. Davaadorj, and T. Wolf
+ (2022)
+
+Diffusers: state-of-the-art diffusion models
+.
+
+Note: 
+https://github.com/huggingface/diffusers
+
+Cited by: 
+§3.3
+.
+
+[48]
+
+S. Wang, O. Wang, R. Zhang, A. Owens, and A. A. Efros
+ (2020)
+
+CNN-generated images are surprisingly easy to spot… for now
+.
+
+In 
+IEEE/CVF conference on computer vision and pattern recognition
+,
+
+pp. 8695–8704
+.
+
+Cited by: 
+§1
+,
+
+§2.1
+,
+
+§3.3
+,
+
+§4.3
+,
+
+Table 1
+,
+
+Table 1
+.
+
+[49]
+
+Z. Wang, J. Bao, W. Zhou, W. Wang, H. Hu, H. Chen, and H. Li
+ (2023)
+
+DIRE for diffusion-generated image detection
+.
+
+In 
+IEEE/CVF International Conference on Computer Vision
+,
+
+pp. 22445–22455
+.
+
+Cited by: 
+§2.2
+,
+
+3rd item
+.
+
+[50]
+
+T. Wolf, L. Debut, V. Sanh, J. Chaumond, C. Delangue, A. Moi, P. Cistac, T. Rault, Q. Lhoest, and A. Rush
+ (2020)
+
+Transformers: state-of-the-art natural language processing
+.
+
+In 
+2020 Conference on Empirical Methods in Natural Language Processing: System Demonstrations
+,
+
+pp. 38–45
+.
+
+Cited by: 
+§3.1
+.
+
+[51]
+
+Z. Yan, J. Wang, P. Jin, K. Zhang, C. Liu, S. Chen, T. Yao, S. Ding, B. Wu, and L. Yuan
+ (2025)
+
+Orthogonal subspace decomposition for generalizable AI-generated image detection
+.
+
+In 
+International Conference on Machine Learning
+,
+
+pp. 70268–70288
+.
+
+Cited by: 
+§1
+.
+
+[52]
+
+T. Yang, Z. Huang, J. Cao, L. Li, and X. Li
+ (2022)
+
+Deepfake network architecture attribution
+.
+
+In 
+AAAI Conference on Artificial Intelligence
+,
+
+Vol. 
+36
+, 
+pp. 4662–4670
+.
+
+Cited by: 
+§1
+,
+
+§1
+.
+
+[53]
+
+Yntec
+ (2024)
+
+Realistic stock photo 3
+.
+
+Note: 
+https://huggingface.co/Yntec/realisticStockPhoto3
+Stable Diffusion model. Accessed: Feb. 28, 2026
+
+Cited by: 
+§1
+.
+
+[54]
+
+N. Yu, L. S. Davis, and M. Fritz
+ (2019)
+
+Attributing fake images to GANS: learning and analyzing GAN fingerprints
+.
+
+In 
+IEEE/CVF international conference on computer vision
+,
+
+pp. 7556–7566
+.
+
+Cited by: 
+§1
+.
+
+[55]
+
+N. Yu, V. Skripniuk, S. Abdelnabi, and M. Fritz
+ (2021)
+
+Artificial fingerprinting for generative models: rooting deepfake attribution in training data
+.
+
+In 
+IEEE/CVF International conference on computer vision
+,
+
+pp. 14448–14457
+.
+
+Cited by: 
+§1
+.
+
+[56]
+
+S. Yun, D. Han, S. J. Oh, S. Chun, J. Choe, and Y. Yoo
+ (2019)
+
+CutMix: regularization strategy to train strong classifiers with localizable features
+.
+
+In 
+IEEE/CVF international conference on computer vision
+,
+
+pp. 6023–6032
+.
+
+Cited by: 
+§5.1
+.
+
+[57]
+
+H. Zhang, M. Cisse, Y. N. Dauphin, and D. Lopez-Paz
+ (2018)
+
+Mixup: beyond empirical risk minimization
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Cited by: 
+§5.1
+.
+
