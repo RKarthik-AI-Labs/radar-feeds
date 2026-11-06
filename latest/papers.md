@@ -1,7 +1,7 @@
-# Paper candidates — 2026-11-05 (IST)
+# Paper candidates — 2026-11-06 (IST)
 
-Generated 2026-11-05 08:25 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
-Totals: 21 new topic matches · 14 other new cs.IR · 125 seen in earlier runs.
+Generated 2026-11-06 01:11 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Totals: 21 new topic matches · 14 other new cs.IR · 98 seen in earlier runs.
 Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
 
 ## New papers matching your topics (21), highest score first
@@ -220,21 +220,16 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Alternatives to Shallow Autoencoders for Collaborative Filtering — https://arxiv.org/abs/2611.06610
 - Balancing hierarchical representation and quantization: A performance trade-off in text embeddings — https://arxiv.org/abs/2611.06859
 
-## Already listed on an earlier day, still inside the look-back window (125)
+## Already listed on an earlier day, still inside the look-back window (98)
 - Characterizing Adversarial GEO via Implicit Brand Injection — https://arxiv.org/abs/2611.04005 (score 21)
 - IntentGEO: Intent-aware Generative Engine Optimization for Recommendation — https://arxiv.org/abs/2611.04225 (score 18)
-- Do GEO Gains Survive the Live Web? Evaluating In-the-Wild Visibility Gains of Generative Engine Optimization via LIVE-GEO — https://arxiv.org/abs/2611.01126 (score 15)
-- Building Weighted PubMed Citation Graphs at Scale: A Pipeline and an Audit of Edge-Similarity Features — https://arxiv.org/abs/2611.01044 (score 14)
 - From Tool State to Scientific Action: Auditing Decision Provenance in Biomedical Research Agents — https://arxiv.org/abs/2611.01527 (score 14)
 - FinForesight: A Diagnostic Backtesting Benchmark for Deep Research Systems in Financial Forecasting — https://arxiv.org/abs/2611.01621 (score 14)
-- When 200 OK Is Not an Answer: Silent Fetch Failures in Agentic Web Content Acquisition — https://arxiv.org/abs/2611.00884 (score 13)
 - The Web Doesn't Sit Still: Adversarial Self-Evolving Attacks on Search Agents — https://arxiv.org/abs/2611.03754 (score 13)
-- AdKnob: Ad Intensity Control and Labeling for LLM-Native Advertising — https://arxiv.org/abs/2611.00822 (score 12)
 - Learning to Adjudicate: Verifier-Guided Multi-Agent Reasoning for E-Commerce Relevance — https://arxiv.org/abs/2611.02758 (score 12)
 - $τ$-Rec-Books: A Disclosure-Controlled Benchmark for Requirement Elicitation in Agentic Recommender Systems — https://arxiv.org/abs/2611.04459 (score 12)
 - ScamWorld: An Interactive Environment for Evaluating Web Agents Against Online Fraud — https://arxiv.org/abs/2611.04879 (score 11)
 - StreamDuo: A Live Commentator and a Research Agent for Unseen Games — https://arxiv.org/abs/2611.01120 (score 10)
-- Designing Informative Actions: Action Construction for Long-Horizon Research Agents — https://arxiv.org/abs/2611.00773 (score 10)
 - Measuring User Success in Randomized Search Experiments: Interpreting Good Abandonment in Generative AI Search — https://arxiv.org/abs/2611.01582 (score 10)
 - EMBERS: Empirically Motivated Robustness Testing of Deep Research Systems via Defect-Guided Fuzzing — https://arxiv.org/abs/2611.03723 (score 10)
 - Same Trajectory, Different Knowledge: Information-State-Aware On-Policy Distillation for Search Agents — https://arxiv.org/abs/2611.01987 (score 10)
@@ -243,12 +238,7 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Can We Stop the Backtest Yet? Anytime-Valid Promotion Tests for Adaptive Financial Research Agents — https://arxiv.org/abs/2611.03384 (score 10)
 - MCP Tool Poisoning in Agentic AI Frameworks: A Cross-Framework Measurement Study — https://arxiv.org/abs/2611.03555 (score 10)
 - Selfrionette: A Fingertip Force-Input Controller for Continuous Full-Body Avatar Manipulation and Diverse Haptic Interactions — https://arxiv.org/abs/2611.03052 (score 9)
-- Mage-VL-Cowork: A Full Training Recipe to Learn Hybrid Computer Use From Evolved Harnesses — https://arxiv.org/abs/2610.40747 (score 8)
-- Where to Learn and How Far to Roll Out: Efficient Adaptive Training for GUI Agents — https://arxiv.org/abs/2610.39251 (score 8)
-- PhoneValue-Bench: A Multimodal Benchmark and Datasets for Consumer Smartphone Recommerce Valuation — https://arxiv.org/abs/2611.00791 (score 8)
-- Similarity-Weighted Leiden-CPM Clustering of a 7.4-Million-Node Biomedical Citation Graph: Weight Alignment, Scale, and Sparsity — https://arxiv.org/abs/2611.01049 (score 8)
-- Acceptance and Responsibility Attribution Toward Autonomous Ambulances Across Driving Conditions: A Preliminary Survey of Fire Service Personnel — https://arxiv.org/abs/2611.01132 (score 8)
-- Are Fake Citations a Form of Reward Hacking? A Pre-Registered Study of Post-Training and Citation Cues — https://arxiv.org/abs/2611.01313 (score 8)
+- Hybrid Computer Use: A Unified Programmatic, Semantic, and Visual Interface for General Agents — https://arxiv.org/abs/2610.41432 (score 8)
 - Don't Guess, Ask Wisely: Benchmarking and Training Proactive Elicitation in Open-Domain LLM Conversations — https://arxiv.org/abs/2611.01878 (score 8)
 - Interface Quilt: Modifying Applications with Computer Use Agents and Generative UI — https://arxiv.org/abs/2611.01891 (score 8)
 - One String to Rule Them All: Measuring Consent Under the IAB Global Privacy Platform — https://arxiv.org/abs/2611.02014 (score 8)
@@ -265,18 +255,12 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Reliability Stress Testing of RAG Retrieval under Query-Relevant Corpus Poisoning — https://arxiv.org/abs/2611.04264 (score 8)
 - SPADE: Spatiotemporal Preference Alignment and Diversity Enhancement for Local Search — https://arxiv.org/abs/2611.04662 (score 8)
 - Learning to Rank Explanations for Recommendation with Language Models — https://arxiv.org/abs/2611.04775 (score 8)
-- PACT: Defending Recommendation against Promotional News Rewriting via Attack-Diverse Score Consistency — https://arxiv.org/abs/2611.00972 (score 7)
-- Is That Clear? The Impacts of Clarifying Questions on Human-LLM Interaction — https://arxiv.org/abs/2611.01087 (score 7)
 - Sensitivity Inflation from Cross-Record Precision Routing in Private Quantized Fine-Tuning — https://arxiv.org/abs/2611.01411 (score 7)
 - RuntimeTickets: Source-Grounded Security Obligations for Agent Skills — https://arxiv.org/abs/2611.03772 (score 7)
 - From Benchmarks to Behaviors: A Framework for Auditing AI Agents — https://arxiv.org/abs/2611.03939 (score 7)
 - ReuseGR: Offline--Online Decoupled Generative Retrieval via Adaptive Prefix Reuse — https://arxiv.org/abs/2611.04259 (score 7)
 - Voluntary Servitude: Weaponized Safety Warning Mechanisms for Controlling AI Agents — https://arxiv.org/abs/2611.04393 (score 7)
 - Collaborative Search Meets Large Language Models: An Empirical Study — https://arxiv.org/abs/2611.04619 (score 7)
-- Reading Between the Chapters: A Graph-Free RAG Rebuilt With AI and Human Feedback — https://arxiv.org/abs/2611.00752 (score 6)
-- Numerical Embeddings for CTR Prediction: A Taxonomy, Unified Benchmark, and Open-Source FuxiCTR Extension — https://arxiv.org/abs/2611.01090 (score 6)
-- Pop Goes the Verifier: Phoneme-Targeted Data Poisoning of Voice Liveness Detection — https://arxiv.org/abs/2611.01095 (score 6)
-- Auriga Technical Report: A Task-Agnostic Agent Harness for Zero-Shot Embodied Manipulation — https://arxiv.org/abs/2611.01112 (score 6)
 - MemHarmBench: Evaluating Cross-Session Prompt Injection in Memory-Persistent AI Agents — https://arxiv.org/abs/2611.01700 (score 6)
 - Reddit Community Signals as a Supplementary Domain-Reputation Feature in Spam Classification: A Conservative Controlled Evaluation — https://arxiv.org/abs/2611.01813 (score 6)
 - EAGR: Evidence-Guided Adaptive Graph Retrieval — https://arxiv.org/abs/2611.01910 (score 6)
@@ -295,9 +279,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - The Devil is in the Context: Nine Dimensions of Prompt Injection Attacks — https://arxiv.org/abs/2611.04672 (score 6)
 - Right Tool, Wrong Parameters: Defending LLM Agents Against Parameter Poisoning — https://arxiv.org/abs/2611.04673 (score 6)
 - When Category Means Move: A Paired-Support Audit of Recommendation Logs with Random Insertions — https://arxiv.org/abs/2611.05006 (score 6)
-- DuSE-Bench: Benchmarking Joint Reasoning over Evolving Dialogue and Documents — https://arxiv.org/abs/2611.00755 (score 4)
-- Improving Ads Ranking Models with Auxiliary Supervision: Techniques and Insights — https://arxiv.org/abs/2611.01280 (score 4)
-- Dynamic Click Destinations: Personalizing Post Ad-Click Landing Experiences — https://arxiv.org/abs/2611.01287 (score 4)
 - EvoRec: A Unified Self-Evolving Agentic Recommender with Dynamic Reflection Trees — https://arxiv.org/abs/2611.01977 (score 4)
 - Multi-criteria Rating and Review based Recommendation Model — https://arxiv.org/abs/2611.02019 (score 4)
 - DualEvolve: Dual-Level Self-Evolution of Mechanism and Orchestration for Recommendation — https://arxiv.org/abs/2611.04439 (score 4)
@@ -305,7 +286,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Auditing Multi-Proxy Explanations of Web User Preferences: Identification Boundaries and Abstention — https://arxiv.org/abs/2611.04997 (score 4)
 - JHiMA-WebRL: A Joint Hierarchical Multi-Agent Reinforcement Learning Framework for Long-Horizon Web Tasks — https://arxiv.org/abs/2611.05263 (score 4)
 - HARP: Training-Free Dual-Profile Agentic Communication for LLM-Based Recommendation — https://arxiv.org/abs/2611.05319 (score 4)
-- HiPaper: A Human-AI Collaborative System for Academic Literature Triage and Scholarly Sensemaking — https://arxiv.org/abs/2611.00762 (score 3)
 - CST: Lightweight Risk Triage with Source-Grounded Evidence for Web Discussions — https://arxiv.org/abs/2611.01710 (score 3)
 - Adversarial Robustness of Retrieval-Based Fact-Checking: Detecting and Mitigating Evidence Contamination — https://arxiv.org/abs/2611.02139 (score 3)
 - Enhancing Stock Market Information Retrieval with Retrieval-Augmented Generation — https://arxiv.org/abs/2611.03747 (score 2)
