@@ -1,0 +1,1319 @@
+CacheGraft: Enhancing Retrieval-Augmented Generation via Latent-Space Document Enrichment
+https://arxiv.org/abs/2611.07393
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+CacheGraft: Enhancing Retrieval-Augmented Generation 
+
+via Latent-Space Document Enrichment
+
+Conference: 
+Workshop on Knowledge-Enhanced Information Retrieval; November 2026; Rome, Italy
+KEIR Workshop @ CIKM 2026
+CCS: 
+Information systems Information retrieval
+
+Vihan Lakshman
+
+Affiliation: 
+MIT CSAIL
+, 
+Cambridge, USA
+
+email: 
+vihan@mit.edu
+
+, 
+
+Peter Baile Chen
+
+Affiliation: 
+MIT CSAIL
+, 
+Cambridge, USA
+
+email: 
+peterbc@mit.edu
+
+, 
+
+Zhuohan Gu
+
+email: 
+zgu15@mit.edu
+
+Affiliation: 
+MIT CSAIL
+, 
+Cambridge, USA
+
+ and 
+
+Michael Cafarella
+
+Affiliation: 
+MIT CSAIL
+, 
+Cambridge, USA
+
+email: 
+michjc@csail.mit.edu
+
+Abstract.
+
+Recent work in machine learning has demonstrated that transformer-based language model agents can communicate state not only through text, but also directly in latent space via key-value (KV) caches. In this paper, we argue that such cache-to-cache translation can provide utility beyond the original motivating application of real-time agent communication and can instead be utilized for retrieval-augmented generation (RAG). Building on the Cache-to-Cache (C2C) fusion framework, our proposed system CacheGraft encodes each corpus passage offline into a fused KV cache representation between a larger sharer model (4B parameters in our experiments) and a smaller receiver model (0.6B parameters) such that this cache can be injected into the receiver at query time with no need for the larger model. Across five QA benchmarks and two independent locally-run judges, CacheGraft improves answer quality over the text-only receiver baseline in 29 out of 30 comparisons, of which 17 of the 30 are statistically significant. Notably, these gains are zero-shot with respect to the fuser, which was never trained on retrieval data. These initial results suggest that latent-space document enrichment may be a promising avenue for enhancing the performance of RAG systems, particularly in compute-constrained settings where it is only feasible to deploy a small model at inference time.
+
+Keywords: 
+retrieval-augmented generation, KV caching, model collaboration, cache translation
+
+1. 
+Introduction
+
+sharer (4B)
+receiver (0.6B)
+passage 
+fuser
+fused KV
+cache
+persist
+receiver (0.6B)
+question 
+answer
+ as text
+load
+ as KV
+Phase 1 — offline, once per passage
+Phase 2 — online, per query
+
+Figure 1. 
+The sharer and fuser run only offline, once per corpus passage, with no
+knowledge of any query. The fused KV cache is the only artifact that crosses the
+offline/online boundary: at query time the receiver loads it and decodes alone,
+reading the passage 
+ in latent space and the question 
+ as text.
+
+Recent breakthroughs in the machine learning community 
+(
+Fu et al., 2026
+; 
+Dery et al., 2026
+; 
+Rossi et al., 2026
+)
+ have demonstrated that transformer-based large language model (LLM) agents can communicate information between one another not only through the standard medium of text, but also in 
+latent space
+ by translating the key-value (KV) cache from a 
+sender
+ model to a 
+receiver
+ model’s internal vector space. Notably, this translation, typically accomplished by learning a separate adapter model, is feasible even if the two models have a differing number of weights and layers 
+(
+Fu et al., 2026
+; 
+Dery et al., 2026
+; 
+Rossi et al., 2026
+)
+.
+
+The overarching motivation driving this effort in KV cache translation is the vision of heterogeneous LLMs collaborating in a real-time multi-agent system by passing state via KV cache vectors as opposed to raw text. By operating in latent space, KV cache translation offers the promise of improving both the 
+quality
+ of multi-agent computation, since KV caches constitute richer conceptual representations of information in an LLM’s native language, and the 
+performance
+ of such systems by eliminating the model’s initial step of converting a textual input into KV vectors.
+
+The central observation behind this paper is that KV cache translation can be useful beyond the original motivating goal of real-time multi-agent LLM communication. To that end, we introduce the CacheGraft framework applying the KV cache translation paradigm for retrieval-augmented generation (RAG) where an LLM marshals knowledge from an external corpus to enhance its context before generating a response. Applying KV cache translation to RAG is not immediately obvious because typical RAG deployments often consist of a single LLM; it is unclear where cross-model cache translation even comes into the picture. Our key insight is that we can leverage KV cache translation during the 
+offline indexing
+ phase of RAG pipelines by enriching the representation of a document through fusing the KV cache of a larger model (that cannot be deployed at query time) with the cache of a smaller model that does run online. Thus, the larger model serves as a de facto teacher and guides the smaller receiver model to better “read" the contents of the documents.
+
+Unlike multi-agent communication, the offline phase of a RAG pipeline is not latency-critical, making the overhead of KV cache fusion more palatable than in the real-time communication setting. Moreover, this offline phase may enable using more powerful, but computationally expensive LLM models for indexing. These insights drive the development of our CacheGraft framework. In summary, we make the following contributions in this paper:
+
+•
+
+Conceptual Insight:
+ To our knowledge, this work is the first to make the observation that KV cache translation can be leveraged in applications outside of the canonical motivating example of real-time agent-to-agent communication. In particular, we demonstrate that the Cache-to-Cache (C2C) fusion technique 
+(
+Fu et al., 2026
+)
+ can lead to improved generation quality in retrieval-augmented generation (RAG) settings.
+
+•
+
+Proof-of-Concept Evaluation:
+ We instantiate CacheGraft using an off-the-shelf pretrained KV cache fusion model published by the C2C team
+1
+1
+
+1
+
+https://huggingface.co/nics-efc/C2C_Fuser
+ that fuses the KV cache of Qwen3-4B-Base model with the cache from a Qwen3-0.6B model into the latter’s KV space. We evaluate our proposed system
+2
+2
+
+2
+
+                  
+                  
+                  
+                Our code is available at 
+https://github.com/vihan-lakshman/CacheGraft
+ on five knowledge-intensive RAG question-answering benchmarks which differ from the original C2C evaluation benchmarks which largely focus on reasoning tasks. Interestingly, CacheGraft achieves these gains using a cache fusion model that was not explicitly trained for these retrieval applications.
+
+•
+
+Long-Term Research Vision:
+ In addition to our proof-of-concept experiment results, we argue that KV cache fusion for RAG applications is a rich and understudied area and we highlight several open research problems for the community.
+
+2. 
+Related Work
+
+Our work in this paper sits at the confluence of three research threads in machine learning and information retrieval that were previously disconnected. First is the aforementioned line of work on KV cache translation 
+(
+Fu et al., 2026
+; 
+Dery et al., 2026
+; 
+Rossi et al., 2026
+)
+ including the C2C framework 
+(
+Fu et al., 2026
+)
+ we directly use in our experiments. We focus on using C2C in our evaluation of CacheGraft because, to our knowledge, it has demonstrated efficacy with the largest gap between the sharer and receiver models (4B to 0.6B parameters) and thus constitutes the most scalable translation method to date.
+
+Secondly, on the RAG front, a number of works have proposed precomputing and storing a model’s KV cache representation of documents and using the cache, not the raw text, at query time to reduce latency by eliminating the step of converting text into KV values 
+(
+Lu et al., 2025
+; 
+Chen et al., 2026
+; 
+Yao et al., 2025
+; 
+Ma et al., 2025
+)
+. However, these methods all use the KV cache of a single model and do not consider enriching the cache representation with signal from an additional, more powerful LLM, which differentiates our approach in this paper.
+
+Finally, multiple research efforts have also examined the problem of 
+document enrichment
+, namely preprocessing the text in a corpus to be more amenable to RAG applications 
+(
+Chen et al., 2025
+; 
+O’Nuallain et al., 2026
+; 
+Uzan et al., 2026
+; 
+Lei et al., 2026
+)
+. CacheGraft can also be viewed as a document enrichment strategy, but in latent space as opposed to at the textual level.
+
+3. 
+Background: Cache-to-Cache (C2C)
+
+In this section, we briefly review the details of the C2C framework 
+(
+Fu et al., 2026
+)
+ as CacheGraft repurposes this same fusion model for offline document enrichment. In short, C2C enables a 
+sharer
+ LLM to pass
+contextual understanding to a 
+receiver
+ LLM directly in latent space, by fusing the sharer’s key-value (KV) cache into the receiver’s. Both
+underlying models remain frozen; the only trained component is a lightweight
+per-layer 
+fuser
+ network. More formally, let 
+ denote the input token sequence (in our
+setting, the RAG prompt; see Section 
+4
+). The sequence is
+tokenized independently by each model. Both frozen models then prefill on the same input: the receiver
+produces its per-layer KV cache 
+ for layers
+
+, and the sharer produces its cache
+
+ for its own layers 
+. The text input is consumed twice, once by each
+model’s prefill.
+
+Because the two models may differ in depth, a layer-mapping strategy
+
+ assigns to each receiver layer 
+ a sharer layer
+
+; C2C adopts 
+terminal alignment
+, pairing final layers
+first and proceeding backward. A per-layer fuser 
+ then produces the fused cache:
+
+(1)
+
+The fused cache 
+ lives entirely in the
+receiver’s KV space, has the same sequence length 
+ as the input (no extra
+token positions are introduced), and 
+replaces
+ the receiver’s original
+prompt cache.
+
+At inference time, the receiver performs text generation alone. With generated prefix
+
+ and the receiver’s ordinary
+self-produced cache 
+ over that prefix, the next token
+is predicted as
+
+(2)
+
+where 
+ denotes sequence-wise concatenation. After fusion, the sharer
+plays no further role: newly generated tokens append receiver-native cache
+entries behind the fused prompt cache exactly as in standard autoregressive
+decoding.
+
+Two properties of this construction are essential for the RAG setting in CacheGraft. First, the fused cache is a self-contained artifact: Equation 
+2
+
+requires only 
+ and the receiver, not the sharer
+or the fuser. Second, with causal attention, the fused entries at a given
+position depend only on tokens at earlier positions. Together these
+properties allow the fusion step of Equation 
+1
+ to be moved
+offline entirely, computed once per document without knowledge of any query.
+
+One limitation of the C2C framework in the interactive multi-agent setting is that it requires running a forward pass of the text input 
+ through 
+both
+ the sharer and receiver model, which limits the total possible amount of latency savings. A major goal of subsequent work in KV cache translation, such as Latent Cache Flow 
+(
+Rossi et al., 2026
+)
+, is to eliminate this shortcoming. However, in the RAG setting, this fusion approach is not a notable hindrance since the cache enrichment step happens offline and not at query time.
+
+Table 1. 
+Performance of CacheGraft in comparison to using only the 0.6B receiver model and only the 4B sharer model across two LLM judges and the contains metric, which measures if the correct answer is included in the output text. CacheGraft improvements over the receiver-only baseline are marked in bold. 
+ reports CacheGraft minus Receiver-Only for each metric.
+
+phi-4
+
+Gemma
+
+contains
+
+Dataset
+
+Setting
+
+Top-1 Recall
+
+Receiver-Only
+
+CacheGraft
+
+Sharer-Only
+
+Receiver-Only
+
+CacheGraft
+
+Sharer-Only
+
+Receiver-Only
+
+CacheGraft
+
+Sharer-Only
+
+AdversarialQA
+
+retrieved
+
+416
+
+59.4
+
+30.8
+
+36.8
+
+41.8
+
+34.9
+
+38.9
+
+48.3
+
+24.5
+
+30.3
+
+33.7
+
+oracle
+
+—
+
+42.1
+
+49.3
+
+59.1
+
+44.2
+
+51.4
+
+63.9
+
+33.9
+
+42.5
+
+48.3
+
+SQuAD
+
+retrieved
+
+800
+
+68.1
+
+51.8
+
+59.6
+
+66.4
+
+59.2
+
+62.5
+
+70.8
+
+48.6
+
+55.5
+
+61.1
+
+oracle
+
+—
+
+73.0
+
+79.4
+
+86.5
+
+78.6
+
+81.8
+
+89.4
+
+69.9
+
+76.9
+
+81.2
+
+CovidQA
+
+retrieved
+
+800
+
+53.2
+
+33.1
+
+36.9
+
+41.9
+
+50.8
+
+53.8
+
+59.8
+
+21.0
+
+22.6
+
+24.4
+
+oracle
+
+—
+
+53.7
+
+59.1
+
+61.1
+
+71.7
+
+76.9
+
+80.0
+
+32.6
+
+35.4
+
+37.2
+
+TriviaQA
+
+retrieved
+
+800
+
+54.3
+
+38.1
+
+41.6
+
+57.8
+
+49.2
+
+52.4
+
+74.1
+
+45.9
+
+48.9
+
+65.5
+
+oracle
+
+—
+
+50.8
+
+54.0
+
+70.1
+
+62.9
+
+63.4
+
+85.0
+
+61.0
+
+62.8
+
+81.5
+
+QASPER
+
+retrieved
+
+583
+
+36.2
+
+15.3
+
+15.7
+
+17.2
+
+35.9
+
+33.9
+
+35.5
+
+17.7
+
+18.8
+
+18.2
+
+oracle
+
+—
+
+34.7
+
+37.5
+
+37.9
+
+57.4
+
+60.8
+
+59.2
+
+32.7
+
+39.0
+
+34.8
+
+∗
+ 
+, exact two-sided paired McNemar over questions.
+
+4. 
+CacheGraft: Adapting C2C for RAG
+
+We now describe the details of our CacheGraft system. As a matter of notation, we will denote a RAG prompt by 
+ which is a concatenation of a fixed preamble 
+ (also known as a system prompt), a retrieved document 
+, and the question 
+. We focus our attention on knowledge-intensive question-answering applications that require a factual answer typically not found in the model’s own weights.
+
+With causal attention, both models’ pre-fusion cache entries at
+positions 
+ are independent of any token at position 
+; the projector acts
+position-wise and layer-wise on those entries; and the fusion of 
+ does not depend
+on 
+. Hence computing 
+ in one pass and computing 
+ alone yield identical KV over
+
+. As a consequence, for top-1 retrieval with a fixed preamble, the document always occupies the same
+position range, so no RoPE re-rotation 
+(
+Chen et al., 2026
+)
+ is needed. We leave extending our framework to support top-
+ retrieval for 
+ using techniques such as TurboRag finetuning 
+(
+Lu et al., 2025
+)
+ or CacheBlend 
+(
+Yao et al., 2025
+)
+ for future work.
+
+Figure 
+1
+ depicts the full CacheGraft pipeline. Offline, for each passage, we prefill 
+ with fusion enabled and
+persist the receiver-space KV, keyed by a content hash. We also maintain an additional vector database index of document embeddings. Online, we identify the most relevant document to the query based on embedding similarity and load that document’s fused KV cache into the
+
+base
+ receiver and decode the question. Crucially, we do not need anything from the sharer or the cache projection fuser model on the query path.
+
+5. 
+Experiments
+
+5.1. 
+Experimental Setup
+
+We conduct all experiments on a single NVIDIA A100-40GB GPU and use standard greedy decoding at inference time.
+
+Models.
+
+In all reported experiments, we use Qwen3-0.6B 
+(
+Yang et al., 2025
+)
+ as our receiver and Qwen3-4B-Base 
+(
+Yang et al., 2025
+)
+ as the sharer, with the released C2C projector for that pair. The projector is trained on general chat distillation and never sees
+retrieval data, so every result is zero-shot with respect to fuser training.
+
+Data.
+
+We utilize five standard knowledge-intensive question answering benchmarks for our RAG evaluation: SQuAD v1.1 
+(
+Rajpurkar et al., 2016
+)
+, AdversarialQA 
+(
+Bartolo et al., 2020
+)
+,
+CovidQA 
+(
+Möller et al., 2020
+)
+, QASPER 
+(
+Dasigi et al., 2021
+)
+ and
+TriviaQA 
+(
+Joshi et al., 2017
+)
+. For search, we use bge-small 
+(
+Xiao et al., 2023
+)
+ embeddings to perform dense top-1 retrieval. For evaluation, we retain one question per gold passage. We also run our experiments under 
+retrieved
+ and 
+oracle
+ (perfect-retrieval) conditions to understand the impact of search quality on the overall RAG performance.
+
+Metrics.
+
+We utilize the LLM-as-judge mechanism 
+(
+Zheng et al., 2023
+)
+ as our primary evaluation metric. We evaluate all RAG outputs using two judges, both locally-run open-weight models scored on raw
+unmodified generations: 
+phi-4
+ 
+(
+Abdin et al., 2024
+)
+ and
+
+Gemma-2-9B
+ 
+(
+Team et al., 2024
+)
+. We also report 
+contains
+ which measures whether the generated answer contains the gold ground truth answer included in the test dataset. We also compute statistical significance measures using the exact two-sided paired McNemar test over the set of evaluation questions. We do not rely on traditional RAG metrics such as Exact Match (EM) and F1 score because we observed that the generated answers from fused KV caches tend to be more verbose (illustrated in Table 
+2
+) which hurts performance on these token-centric metrics.
+
+5.2. 
+Results
+
+Table 2. 
+Example outputs of CacheGraft and the receiver-only Text-RAG baseline.
+The last two rows are failure cases: in each, CacheGraft answers with a different span of the same passage. 
+
+Over how many species of trees can be found in the Saxon Garden? 
+(gold: 100)
+
+text-RAG
+:  15.5 
+
+CacheGraft
+:  100 
+
+Where was the Continental Edison Company located? 
+(gold: France)
+
+text-RAG
+:  New York City. 
+
+CacheGraft
+:  The Continental Edison Company was located in France. 
+
+Who did Rollo sign the treaty of Saint-Clair-sur-Epte with? 
+(gold: King Charles III)
+
+text-RAG
+:  Rollo. 
+
+CacheGraft
+:  Rollo signed the treaty of Saint-Clair-sur-Epte with King Charles III of West Francia. 
+
+Where were missing patents later found? 
+(gold: patent archives)
+
+text-RAG
+:  The missing patents were later found in patent archives. 
+
+CacheGraft
+:  The missing patents were found in the United States, Britain, and Canada. 
+
+Whose writings were widely quoted by the Third Reich? 
+(gold: Luther)
+
+text-RAG
+:  Luther’s writings were widely quoted by the Third Reich. 
+
+CacheGraft
+:  The writings of Heinrich Himmler were widely quoted by the Third Reich. 
+
+As shown in Table 
+1
+, we find that delivering the passage as a projected KV cache improves over using the receiver with raw text on nearly every metric across every benchmark by up to 8 percentage points, with the exception of QASPER, which shows similarly clear gains with an oracle retriever but a disagreement between the two judges when using top-1 embedding-based search.
+
+In Table 
+3
+, we observe that QASPER has the smallest gap between the sharer and receiver RAG quality which explains the more mixed results from cache fusion: there is limited headroom for the sharer to lift the receiver. Overall, Table 3 suggests two preconditions for CacheGraft to provide value on knowledge-intensive RAG tasks: the sharer must have headroom over the receiver, and the documents must supply factual signal the sharer can exploit.
+
+We also include select examples of CacheGraft’s successes and failures on the SQuAD dataset in Table 
+2
+. We observe that cache fusion can indeed steer the receiver model towards relevant portions of the passage in several cases, but also makes mistakes. We also note that the outputs from CacheGraft tend to be more verbose than both the receiver and sharer models which also limits CacheGraft’s total latency gains as shown in Table 
+4
+. Nevertheless, Table  
+4
+ still illustrates an advantage for CacheGraft in terms of GPU memory consumption. We posit that the increased verbosity of CacheGraft’s fused KV cache can be mitigated by explicitly training for retrieval tasks, which we highlight as another direction for future work.
+
+Table 3. 
+Relationship between CacheGraft’s gains and the opportunity for improvement, all computed in the oracle-retrieval setting. Headroom is Sharer-Only minus Receiver-Only under contains. Answer-in-doc is the sharer’s 
+contains
+ improvement when given the gold passage versus answering closed-book (no passage). Gain is CacheGraft’s improvement over Receiver-Only under the phi-4 judge.
+
+Dataset
+
+Headroom
+
+Answer-in-doc
+
+Gain
+
+AdversarialQA
+
+SQuAD
+
+CovidQA
+
+TriviaQA
+
+QASPER
+
+Table 4. 
+Query-time cost, batch size 1, greedy decoding with 24 maximum new tokens, warm,
+over 100 SQuAD questions on one A100-40GB.
+
+System
+
+Latency (ms)
+
+GPU Memory (GB)
+
+# Tokens
+
+Receiver text-RAG (0.6B)
+
+CacheGraft (0.6B + Cache)
+
+1.27
+
+Sharer text-RAG (4B)
+
+6. 
+Limitations and Open Problems
+
+6.1. 
+Limitations
+
+The primary practical limitation of our proposal is storage since we must store the KV cache for every document which can consume orders of magnitude more space than raw text (on the order of a terabyte for 100K documents, absent any optimizations). This problem is inherited from prior works that propose to precompute the KV caches for retrieval such as TurboRAG 
+(
+Lu et al., 2025
+)
+, Block Attention 
+(
+Ma et al., 2025
+)
+, and CAG 
+(
+Chan et al., 2025
+)
+ and can be mitigated with KV cache compression techniques 
+(
+Shi et al., 2024
+)
+ that are complementary to our work. Another limitation of our present study is that we focus on retrieving a single document and only consider a single C2C fuser model in our evaluations. Extending our system to support top-
+ retrieval and additional models is another promising direction for future work.
+
+6.2. 
+Open Problems
+
+The results in this paper present a proof of concept demonstration of KV cache fusion to enhance RAG applications and open many directions for future research in this domain. Below, we highlight two particularly interesting directions:
+
+(1)
+
+Training custom fuser models tailored for RAG:
+ As mentioned previously, we consider a single off-the-shelf C2C fuser model that was not targeted for retrieval tasks. Could we improve the performance of CacheGraft by training a fuser model with retrieval-specific training objectives and datasets? How far can we scale the gap between the sharer and receiver model before cache fusion fails? Could we even train the fuser to be more compressible to augment standard KV cache compression techniques?
+
+(2)
+
+Combining with textual document enrichment:
+ Prior work such as EnrichIndex 
+(
+Chen et al., 2025
+)
+ and AutoIndex 
+(
+O’Nuallain et al., 2026
+)
+ propose to modify document text to improve RAG performance. How does text-level document enrichment interplay with the latent space strategy of our method? Is there a text enrichment method that enhances KV cache translation beyond simply using the raw documents?
+
+7. 
+Conclusion
+
+Thus far, the idea of translating the KV cache from one LLM to another possibly very different model has been applied exclusively to communicating state in real-time multi-agent systems. The key insight at the heart of this paper is that the same idea can be repurposed for RAG by applying KV cache translation on documents offline between a larger sharer model and a smaller receiver to enhance the receiver’s online answer quality. In fact, we argue that RAG might be an even 
+better
+ fit for the Cache-to-Cache fusion paradigm because running forward passes through both the sharer and receiver model (as C2C requires) is a negligible cost for offline document indexing, but may be limiting in real-time inference settings. We operationalize this insight in the form of CacheGraft, a prototype RAG system that utilizes C2C fusion to enrich a small receiver model’s KV cache representation with signal from a larger model that does not run at query time. Our initial evaluation extends C2C to zero-shot knowledge-intensive question answering tasks not present in fuser training where we find that CacheGraft consistently improves generation quality over the receiver-only text baseline on datasets where the larger sharer model has headroom to transfer. Perhaps surprisingly, these positive results on question-answering come from using an off-the-shelf pre-trained C2C fuser model that was not tuned for retrieval in any respect. Our findings also raise a number of interesting questions for future work, which we outline in Section 
+6.2
+, that we hope will drive further work on latent-space document enrichment for RAG applications.
+
+References
+
+[1]
+
+M. Abdin, J. Aneja, H. Behl, S. Bubeck, R. Eldan, S. Gunasekar, M. Harrison, R. J. Hewett, M. Javaheripi, P. Kauffmann, 
+et al.
+ (2024)
+
+Phi-4 technical report
+.
+
+arXiv preprint arXiv:2412.08905
+.
+
+Cited by: 
+§5.1
+.
+
+[2]
+
+M. Bartolo, A. Roberts, J. Welbl, S. Riedel, and P. Stenetorp
+ (2020)
+
+Beat the ai: investigating adversarial human annotation for reading comprehension
+.
+
+Transactions of the Association for Computational Linguistics
+ 
+8
+, 
+pp. 662–678
+.
+
+Cited by: 
+§5.1
+.
+
+[3]
+
+B. J. Chan, C. Chen, J. Cheng, and H. Huang
+ (2025)
+
+Don’t do rag: when cache-augmented generation is all you need for knowledge tasks
+.
+
+In 
+Companion proceedings of the ACM on web conference 2025
+,
+
+pp. 893–897
+.
+
+Cited by: 
+§6.1
+.
+
+[4]
+
+P. B. Chen, T. Wolfson, M. Cafarella, and D. Roth
+ (2025)
+
+Enrichindex: using llms to enrich retrieval indices offline
+.
+
+arXiv preprint arXiv:2504.03598
+.
+
+Cited by: 
+§2
+,
+
+item 2
+.
+
+[5]
+
+P. B. Chen, Y. Zhang, D. Roth, S. Madden, J. Andreas, and M. Cafarella
+ (2026)
+
+Log-augmented generation: scaling test-time reasoning with reusable computation
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Vol. 
+2026
+, 
+pp. 3339–3358
+.
+
+Cited by: 
+§2
+,
+
+§4
+.
+
+[6]
+
+P. Dasigi, K. Lo, I. Beltagy, A. Cohan, N. A. Smith, and M. Gardner
+ (2021)
+
+A dataset of information-seeking questions and answers anchored in research papers
+.
+
+In 
+Proceedings of the 2021 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies
+,
+
+pp. 4599–4610
+.
+
+Cited by: 
+§5.1
+.
+
+[7]
+
+L. M. Dery, Z. Yahav, H. Prior, Q. Feng, J. Shen, and A. Szlam
+ (2026)
+
+Latent space communication via kv cache alignment
+.
+
+arXiv preprint arXiv:2601.06123
+.
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+[8]
+
+T. Fu, Z. Min, H. Zhang, J. Yan, G. Dai, W. Ouyang, and Y. Wang
+ (2026)
+
+Cache-to-cache: direct semantic communication between large language models
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Vol. 
+2026
+, 
+pp. 43130–43158
+.
+
+Cited by: 
+1st item
+,
+
+§1
+,
+
+§2
+,
+
+§3
+.
+
+[9]
+
+M. Joshi, E. Choi, D. S. Weld, and L. Zettlemoyer
+ (2017)
+
+Triviaqa: a large scale distantly supervised challenge dataset for reading comprehension
+.
+
+In 
+Proceedings of the 55th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)
+,
+
+pp. 1601–1611
+.
+
+Cited by: 
+§5.1
+.
+
+[10]
+
+Y. Lei, N. Lipka, Z. Qi, U. Sahu, K. Goswami, F. Dernoncourt, R. A. Rossi, and Y. Wang
+ (2026)
+
+RL-index: reinforcement learning for retrieval index reasoning
+.
+
+arXiv preprint arXiv:2606.16316
+.
+
+Cited by: 
+§2
+.
+
+[11]
+
+S. Lu, H. Wang, Y. Rong, Z. Chen, and Y. Tang
+ (2025)
+
+Turborag: accelerating retrieval-augmented generation with precomputed kv caches for chunked text
+.
+
+In 
+Proceedings of the 2025 Conference on Empirical Methods in Natural Language Processing
+,
+
+pp. 6599–6612
+.
+
+Cited by: 
+§2
+,
+
+§4
+,
+
+§6.1
+.
+
+[12]
+
+D. Ma, Y. Wang, and T. Lan
+ (2025)
+
+Block-attention for efficient prefilling
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Vol. 
+2025
+, 
+pp. 63774–63788
+.
+
+Cited by: 
+§2
+,
+
+§6.1
+.
+
+[13]
+
+T. Möller, A. Reina, R. Jayakumar, and M. Pietsch
+ (2020)
+
+COVID-qa: a question answering dataset for covid-19
+.
+
+In 
+Proceedings of the 1st Workshop on NLP for COVID-19 at ACL 2020
+,
+
+Cited by: 
+§5.1
+.
+
+[14]
+
+S. O’Nuallain, N. Rajkumar, R. Narayanasamy, H. Jiang, S. Chaudhari, and A. Drozdov
+ (2026)
+
+AutoIndex: learning representation programs for retrieval
+.
+
+arXiv preprint arXiv:2607.18603
+.
+
+Cited by: 
+§2
+,
+
+item 2
+.
+
+[15]
+
+P. Rajpurkar, J. Zhang, K. Lopyrev, and P. Liang
+ (2016)
+
+Squad: 100,000+ questions for machine comprehension of text
+.
+
+In 
+Proceedings of the 2016 conference on empirical methods in natural language processing
+,
+
+pp. 2383–2392
+.
+
+Cited by: 
+§5.1
+.
+
+[16]
+
+M. Rossi, P. Raghunath, and E. Wu
+ (2026)
+
+Latent cache flow: model-to-model communication without text
+.
+
+arXiv preprint arXiv:2605.22863
+.
+
+Cited by: 
+§1
+,
+
+§2
+,
+
+§3
+.
+
+[17]
+
+L. Shi, H. Zhang, Y. Yao, Z. Li, and H. Zhao
+ (2024)
+
+Keep the cost down: a review on methods to optimize llm’s kv-cache consumption
+.
+
+arXiv preprint arXiv:2407.18003
+.
+
+Cited by: 
+§6.1
+.
+
+[18]
+
+G. Team, M. Riviere, S. Pathak, P. G. Sessa, C. Hardin, S. Bhupatiraju, L. Hussenot, T. Mesnard, B. Shahriari, A. Ramé, 
+et al.
+ (2024)
+
+Gemma 2: improving open language models at a practical size
+.
+
+arXiv preprint arXiv:2408.00118
+.
+
+Cited by: 
+§5.1
+.
+
+[19]
+
+O. Uzan, R. Polonsky, D. Kiela, and C. Potts
+ (2026)
+
+Document optimization for black-box retrieval via reinforcement learning
+.
+
+arXiv preprint arXiv:2604.05087
+.
+
+Cited by: 
+§2
+.
+
+[20]
+
+S. Xiao, Z. Liu, P. Zhang, and N. Muennighoff
+ (2023)
+
+C-pack: packaged resources to advance general chinese embedding
+.
+
+External Links: 
+2309.07597
+
+Cited by: 
+§5.1
+.
+
+[21]
+
+A. Yang, A. Li, B. Yang, B. Zhang, B. Hui, B. Zheng, B. Yu, C. Gao, C. Huang, C. Lv, 
+et al.
+ (2025)
+
+Qwen3 technical report
+.
+
+arXiv preprint arXiv:2505.09388
+.
+
+Cited by: 
+§5.1
+.
+
+[22]
+
+J. Yao, H. Li, Y. Liu, S. Ray, Y. Cheng, Q. Zhang, K. Du, S. Lu, and J. Jiang
+ (2025)
+
+Cacheblend: fast large language model serving for rag with cached knowledge fusion
+.
+
+In 
+Proceedings of the twentieth European conference on computer systems
+,
+
+pp. 94–109
+.
+
+Cited by: 
+§2
+,
+
+§4
+.
+
+[23]
+
+L. Zheng, W. Chiang, Y. Sheng, S. Zhuang, Z. Wu, Y. Zhuang, Z. Lin, Z. Li, D. Li, E. Xing, 
+et al.
+ (2023)
+
+Judging llm-as-a-judge with mt-bench and chatbot arena
+.
+
+Advances in neural information processing systems
+ 
+36
+, 
+pp. 46595–46623
+.
+
+Cited by: 
+§5.1
+.
+

@@ -1,0 +1,930 @@
+Dynamic Watermarking and Action-Conditioned Latent Dynamics for Secure Vision-Based Controllers
+https://arxiv.org/abs/2611.07403
+License: CC by (redistribution permitted)
+(source: arXiv pdf)
+
+Dynamic Watermarking and Action-Conditioned Latent Dynamics for
+Secure Vision-Based Controllers
+Aditya Parameshwaran1, Navid Aftabi 2, Abhishek Hanchate 3,
+Satish T. S. Bukkapatnam 3, Dan Li 2 and Yue Wang1∗
+Abstract— Replay attacks are difficult to detect in vision-
+based control systems because previously recorded observations
+can remain plausible while the physical system follows a
+different trajectory. This paper develops an adaptive dynamic-
+watermarking framework for detecting replay attacks against
+vision-based controllers. A private Gaussian watermark is
+added to the nominal control input, and a control input-
+conditioned latent dynamics network (LDN) predicts the cor-
+responding evolution in a compact latent space learned from
+image observations. Attack evidence is obtained from the
+discrepancy between the predicted latent response and the
+latent representation of the received image observation. A
+reinforcement learning policy adjusts the watermark covariance
+using the latent state and detector confidence, thereby balancing
+attack detectability, watermark energy, and control distortion.
+A Lagrangian penalty on task-specific safety costs is included
+during training to limit the adverse effect of the excitation. The
+framework is evaluated on a vision-guided UR5 manipulation
+task in which the robot reaches a target while avoiding a moving
+human arm under nominal and replay-attacked observations.
+I. INTRODUCTION
+Vision-based neural controllers are powerful in cluttered,
+human-robot settings, but their sensing channel is vulnerable
+to replay attacks: an adversary can replace the current image
+stream with previously recorded observations that remain
+visually plausible. In safety-critical tasks, such attacks can
+conceal a physical deviation while the robot continues to
+act on stale visual feedback. Dynamic watermarking (DWM)
+addresses this by injecting a private excitation into the
+control input and checking whether the current measurements
+contain the corresponding response [1], [2]. Existing methods
+typically form this consistency check from known state-space
+dynamics and low-dimensional measurements [3], [4]. That
+assumption does not directly apply to a black-box neural
+controller where the observations can be high-dimensional
+images with unknown dynamics. We address this gap with
+a control input-conditioned latent dynamics network (LDN)
+that predicts the evolution of image representations in a
+compact visual latent space, enabling watermark-response
+residuals to be formed without requiring an explicit analytical
+model of the image dynamics [5], [6].
+∗ Corresponding Author
+1Department of Mechanical Engineering, Clemson University,
+Clemson, SC 29634 , USA.aparame@clemson.edu,
+yue6@clemson.edu
+2Department of Industrial and Systems Engineering, University
+of Washington, Seattle, W A 98195 USAaftabi@uw.edu;
+dli27@uw.edu
+3 Wm Michael Barnes ’64 Department of Industrial and Systems
+Engineering, Texas A&M University, College Station, TX 77843 USA
+abhishek.hanchate@tamu.edu; satish@tamu.edu
+We condition the LDN on a privately watermarked control
+input and compare its predicted latent response with the
+latent representation of the received observation. The result-
+ing latent space residual provides replay evidence, while a
+learned DWM policy adapts the watermark covariance to
+balance detectability, actuation effort, and task performance.
+The framework thereby combines latent dynamics prediction,
+adaptive watermarking, and supervisory fallback in a single
+vision-based replay-defense architecture as seen in Figure 1.
+Our contributions are summarized as follows:
+1) We detect replay attacks by verifying a private
+DWM signal through predictions from a control input-
+conditioned LDN.
+2) We characterize how replay-induced watermark mis-
+match alters the MCUSUM detector statistic and de-
+velop a Bayesian belief update that quantifies online
+detection confidence and serves as a compact input to
+the DWM policy.
+3) We train the DWM policy with a Lagrangian penalty
+on robot–human separation violations and evaluate
+supervisory stopping under replay. We demonstrate
+the framework in a simulated human-robot task where
+misleading visual feedback can lead to unsafe motion.
+II. RELATEDWORK
+A. Replay Attacks and Dynamic Watermarking
+Replay attacks are particularly challenging because prere-
+corded measurements can remain plausible after the physical
+system has diverged, concealing unsafe behavior. Similar
+threats arise in visual verification systems, where replayed
+images can mislead face age verification [7], and detection
+methods combine spatial and temporal features to identify
+video replay attacks [8]. Dynamic watermarking (DWM)
+helps detect replay attacks by injecting a private random
+excitation and checking whether the measurements reflect
+the system’s response to the current control input [1].
+Prerecorded measurements that remain plausible will fail
+this response test and thus reveal the attack’s occurrence.
+This principle was then formalized with innovation-based
+detector statistics for linear time-invariant and time-varying
+systems [2], [3], and later extended to sequential detection
+rules that balance information gain and control cost [4].
+These methods provide the theoretical foundation for replay
+detection, but their residuals are generally derived from
+explicit plant and observation models with low-dimensional
+measurements. For a black-box neural controller operating
+arXiv:2611.07403v1  [cs.RO]  5 Nov 2026
+Fig. 1. Overview of the proposed framework. (a) The live observationx t−H is provided to the vision-based controller policyF, which predicts the
+control inputu t−H. In parallel, an encoder mapsx t−H to the latent statez t−H. The latent state, together with the detector confidencec j, is provided
+to the DWM policy to select the covarianceΣ t−H, from which the private watermarkϕ t−H is sampled. The watermark and control input are combined
+to form the watermarked control input¯u t−H, which is applied to the plant. (b) When a replay attack occurs, the encoder maps the received replayed
+observations to latent states[z ′
+t−H+1, . . . , z′
+t]. These are compared with the predicted latent states[˜z t−H+1|t−H , . . . ,˜zt|t−H]to obtain the residual
+windowr j, defined in (8). The MCUSUM detector processes this window, and the resulting evidence updates the attack confidencec j through (18). When
+attack evidence persists, the supervisor switches to the damped-stop controller and appliesu ds
+t as specified in (7).
+directly on images, neither an analytical transition model
+nor a tractable image-space measurement model is readily
+available. Our approach replaces that requirement with a
+learned control input-conditioned latent dynamics model,
+allowing the private watermark response to be tested directly
+from visual observations.
+The excitation must also be selected without unnecessarily
+degrading control performance. Nahaet al.choose a station-
+ary watermark variance by trading off information gain and
+control cost, while DynaMark learns a time-varying Gaussian
+policy using the operating condition and Bayesian detector
+confidence [9]. Our work retains this detector-dependent
+adaptation but evaluates dynamical consistency using learned
+image representations instead of low-dimensional state es-
+timates. We further add a task-specific safety cost and a
+supervisory fallback to an observation-independent controller
+when the attack confidence exceeds a threshold.
+B. Latent Dynamics Models for Visual Control
+In visual control, latent dynamics models provide a com-
+pact representation in which action-conditioned dynamics
+can be rolled forward over multiple steps. PlaNet uses
+learned latent dynamics for online planning from pixels [10],
+while Dreamer learns behavior through imagined latent tra-
+jectories [11]; DayDreamer demonstrates the use of world
+models for learning directly on physical robots [6]. TD-
+MPC further shows how task-oriented latent dynamics can
+support short-horizon trajectory optimization for continuous
+control [12]. Building on this line of work, our LDN au-
+toregressively predicts future image-derived latents, feeding
+each predicted latent and the next privately watermarked
+control input into the subsequent prediction. We compare this
+predicted trajectory with latents encoded from subsequently
+received images; their discrepancy supplies replay evidence
+to the detector. The detector confidence and current latent
+state then inform adaptive watermark selection.
+III. METHODOLOGY
+A. Problem Setup
+Consider an image-based neural network controllerF:
+X ×Rdp →R du, wherex t ∈ X ⊆Rdx is the image
+observation andx prop
+t ∈R dp is a trusted proprioceptive
+measurement. The nominal control command is
+ut =F(x t, xprop
+t ), u t ∈R du.(1)
+An encoderE:X →R dz maps each received image to a
+compact latent representation:
+zt =E(x t), z t ∈R dz ,(2)
+whered z ≪d x. The dimensionsd x,d p,d z, andd u denote
+the image, proprioceptive, latent, and control dimensions,
+respectively.
+Physical watermarking injects a private random signalϕ t
+into the nominal control input, producing
+¯ut =u t +ϕ t.(3)
+We treatϕ t as a private signal sampled online from a
+Gaussian distribution whose covarianceΣ t is selected dy-
+namically at runtime. While existing approaches commonly
+employ a fixed static watermark distribution [1], [2], [4], we
+use an adaptive dynamic-watermarking strategy inspired by
+DynaMark [9]. The DynaMark policy and its RL formulation
+are described in Section III-C. Under honest sensing, the
+observation received after applying¯ut contains the physical
+response to the current private realizationϕ t. A replayed
+observation was generated under a different, earlier control
+input and watermark realization, so it generally lacks the
+response associated with the currentϕ t. The detector tests
+this mismatch by predicting the latent response to the control
+input that was actually applied and comparing that prediction
+with the latent encoding of the subsequently received image.
+At each step, the watermark is sampled asϕ t = Σ 1/2
+t ξt,
+where the drawsξ t ∼ N(0, Idu)are independent andΣ t
+is selected before drawingξ t. The historical watermarkϕ ′
+t
+associated with a replayed image was generated using an
+earlier draw and may have a different covariance.
+Let the latent dynamics network be
+L:R dz ×R du →R dz ,(4)
+whereL(z t,¯ut)predicts the next latent statez t+1|t from
+the current latent state and watermarked control input ap-
+plied duringtandt+ 1. Over a prediction horizonH,
+letL (H) denote the recursive rollout of the same LDN
+under the applied control input sequence. Specifically, the
+rollout is initialized with˜z t−H|t−H =z t−H and satisfies
+˜zt−H+h|t−H =L
+ 
+˜zt−H+h−1|t−H ,¯ut−H+h−1
+
+forh=
+1, . . . , H. The corresponding stacked latent prediction is
+ezt : = vec
+ 
+˜zt−H+1|t−H , . . . ,˜zt|t−H
+
+=L (H)(zt−H,¯ut−H:t−1).(5)
+Here,˜zt−H+h|t−H is the latent prediction for discrete in-
+stantt−H+h, corresponding to physical time(t−H+h)∆t,
+made from the latent state available at instantt−H. At the
+window-completion timet, the detector has receivedz t and
+has stored the applied control input sequence¯u t−H:t−1. It
+can therefore complete the rollout initialized att−H.
+To protect the robot when attack evidence persists, we
+use a Simplex-style supervisor that switches from the water-
+marked RL controller to a trusted damped-stop controller. Let
+ct denote the detector confidence, letν t count consecutive
+detector updates for whichc t ≥c sw (and reset to zero
+otherwise), and letN p be the required persistence length.
+The supervisor mode isγ t :=I{ν t ≥N p}. At the switching
+instantt s, the fallback initializes its reference velocity from
+the trusted end-effector velocity measurement,v ds
+ts =v ee
+ts ,
+and then applies the discrete damping law
+vds
+t+1 = (I−∆tK d)v ds
+t , K d ≻0.(6)
+We chooseK d so thatρ(I−∆tK d)<1, whereρdenotes the
+spectral radius. This makes the reference velocity converge to
+zero. Because the nominal controller interface accepts target
+poses, the fallback converts the damped velocity reference
+into a compatible end-effector position target,u ds
+t =p ee
+t +
+∆t vds
+t , while holding the end-effector orientation fixed. The
+control input sent to the low-level controller is therefore
+ucmd
+t =
+(
+¯ut, γ t = 0,
+uds
+t , γ t = 1. (7)
+Thus, after detection the supervisor bypasses the RL target-
+pose control input and its watermark; it uses trusted pro-
+prioceptive feedback to generate target poses that bring the
+physical end-effector velocity to zero in a damped fashion.
+B. Replay-Attack Model and MCUSUM Detection and Belief
+a) Replay-Attack Model:Replay attacks seek to remain
+statistically consistent with nominal operation by replacing
+the current visual stream with previously recorded legiti-
+mate observations while the physical robot evolves under
+potentially manipulated control inputs [9]. We assume that
+the adversary has access to the sensing channels and can
+observe and replace the RGB-D observations received by the
+controller and detector. The adversary follows a two-stage
+strategy: first, it records a sufficiently long benign trajectory
+xt during closed-loop operation without active intervention;
+subsequently, it replays the recorded observations. Thus,
+during replay, the controller and detector receive the spoofed
+observationx ′
+t, whereas the physical robot receives the
+adversarial control inputF(x ′
+t) =u a
+t that is predicted by
+the control policy on spoofed observations. In the considered
+threat model, it is assumed that the adversary cannot directly
+observe or measure the secret dynamic-watermarking signal
+injected into the control channel, meaning their replayed
+observations fail to account for the real-time physical ex-
+citation.
+b) Multi-Horizon Latent Residual and MCUSUM De-
+tector:At each detector update, the latent dynamics net-
+work predicts anH-step trajectory conditioned on the
+current latent state and applied watermarked control. We
+consider disjoint prediction windows with strideH. Define
+the predicted and observed latent trajectories for window
+jas eztj := vec
+ 
+˜ztj−H+1|tj−H, . . . ,˜ztj|tj−H
+
+∈R Hdz
+andz tj := vec
+ 
+ztj−H+1, . . . , ztj
+
+∈R Hdz , respectively.
+Here,t j denotes the physical sample at which windowj
+is completed, such thatt j −t j−1 =H. The corresponding
+multi-horizon latent residual is
+rj :=z tj − eztj ∈R Hdz .(8)
+The nominal residual distribution is calibrated from nomi-
+nal trajectories. Letµ 0 andΣ 0 denote the calibrated residual
+mean and covariance, respectively, and letΣ 0 = ΓΓ⊤ be its
+Cholesky factorization. The standardized residual supplied to
+the detector is
+εεεj := Γ−1 (rj −µ 0).(9)
+Under nominal operation,εεεj ∼ N(0, IHdz ).
+To accumulate persistent deviations from this nom-
+inal model, we employ a multivariate cumulative-sum
+(MCUSUM) detector. Lets j−1 ∈R Hdz be the MCUSUM
+state memory ands 0 =0. For reference parameterq >0,
+the recursion is
+dj =s j−1 +εεεj,(10)
+sj =
+
+
+
+0,∥d j∥2 ≤q,
+1− q
+∥dj∥2
+
+dj,∥d j∥2 > q, (11)
+Yj =∥s j∥2,(12)
+Ij =1{Y j ≥k},(13)
+whered j is the pre-shrinkage detection evidence, combining
+the accumulated memorys j−1 with the current standardized
+residualεεεj. The quantityY j is the MCUSUM score,k >0
+is the alarm threshold, andI j ∈ {0,1}indicates threshold
+exceedance atj th detector update.
+LetH 0 denote nominal operation andH A denote an active
+replay attack. UnderH 0, define the nominal average run
+length (ARL 0) asARL 0 :=E
+
+inf{j≥1 :I j = 1}
+H0
+
+.
+Accordingly, the thresholdkis selected to attain a prescribed
+targetARL ⋆
+0. We useα:= 1/ARL ⋆
+0 as the corresponding
+nominal false-alarm frequency per detector update. Because
+detector windows are disjoint, the corresponding average
+time to false alarm isH·∆t·ARL ⋆
+0. For an attack beginning
+at physical sample timet a, detection occurs at the first
+post-onset detector updateJ d := inf{j:t j ≥t a, Ij = 1},
+and the detection delay is(t Jd −t a)∆t. BothARL 0 and
+the detection delay are first-passage quantities evaluated
+using the MCUSUM recursion and therefore account for the
+temporal dependence induced by its state memory.
+c) Residual Distribution under Attack:Consider a de-
+tector windowjthat lies entirely after the replay onset, such
+thatt j −H≥t a. UnderH A, the detector receives the
+previously recorded initial latent statez ′
+tj−H =E(x ′
+tj−H)
+and the recorded latent trajectoryz ′
+j, where primes identify
+samples from the recorded source segment aligned with the
+current detector window. The recorded trajectory was gener-
+ated under the historical applied watermarked-control input
+sequence¯u′
+tj−H:tj−1 =u ′
+tj−H:tj−1 +ϕ′
+tj−H:tj−1. Therefore,
+by (5), it satisfiesz ′
+j =L (H)(z′
+tj−H,¯u′
+tj−H:tj−1)+r′
+j, where
+r′
+j denotes the nominal prediction residual associated with
+the recorded source window. In contrast, the detector evalu-
+ates the replayed initial latent state using the watermarked-
+control input sequence actually applied during the current
+detector window,¯utj−H:tj−1 =u tj−H:tj−1 +ϕ tj−H:tj−1.
+Hence, the residual observed underH A is
+rA
+j :=z ′
+j −L (H)
+
+z′
+tj−H,¯utj−H:tj−1
+
+.(14)
+Because the LDN is conditioned on the applied
+watermarked-control input sequence, its prediction accounts
+for the modeled latent response to the recorded watermark
+realization. Therefore, the remaining nominal prediction
+residualsr j are prediction error and are independent of the
+particular watermark realization. Specifically, conditional on
+the locally matched operating regime and the watermark
+covariance sequences selected by the policy,r ′
+j follows the
+calibrated nominal residual distribution and is independent
+of the current and recorded watermark sequences. This
+assumption does not imply thatz ′
+j is independent of the
+recorded watermark. Rather, it assumes that their modeled
+dependence is captured byL (H).
+Lemma 1.Suppose thatL (H) is continuously differentiable
+with respect to its control-sequence input, the replayed
+source window is selected from a locally matched operating
+regime such thatu ′
+tj−H:tj−1 ≈u tj−H:tj−1, and the first-
+order linearization remainder is negligible. Furthermore,
+assume thatr ′
+j is independent ofϕ tj−H:tj−1 andϕ ′
+tj−H:tj−1.
+DefineB j :=∇ uL(H)(z,u)
+
+z=z′
+tj−H,u=¯utj−H:tj−1
+∈
+RHdz×Hdu.Then, to first order,
+rA
+j ≈r ′
+j +B j
+
+ϕ′
+tj−H:tj−1 −ϕ tj−H:tj−1
+
+,(15)
+and hencer A
+j
+approx.
+∼ N(µ 0,Σ A,j),whereΣ A,j = Σ 0 +
+Bj(Σ′
+j + Σj)B⊤
+j ,Σ j = blkdiag
+ 
+Σtj−H, . . . ,Σtj−1
+
+,and
+Σ′
+j = blkdiag
+
+Σ′
+tj−H, . . . ,Σ′
+tj−1
+
+.Consequently,ε εεA
+j :=
+Γ−1(rA
+j −µ 0)satisfiesε εεA
+j
+approx.
+∼ N(0,Ω A,j)
+ΩA,j =I Hdz + Γ−1Bj(Σ′
+j + Σj)B⊤
+j Γ−⊤.(16)
+Proof.Substituting the recorded latent trajectory into
+(14) givesr A
+j =r ′
+j +L (H)(z′
+tj−H,¯u′
+tj−H:tj−1)−
+L(H)(z′
+tj−H,¯utj−H:tj−1).A first-order expansion of
+L(H) with respect to the control-sequence input around
+(z′
+tj−H,¯utj−H:tj−1)yields
+rA
+j ≈r ′
+j +B j(¯u′
+tj−H:tj−1 −¯utj−H:tj−1)
+≈r ′
+j +B j(ϕ′
+tj−H:tj−1 −ϕ tj−H:tj−1),
+where the last approximation follows from
+u′
+tj−H:tj−1 ≈u tj−H:tj−1. Independence and
+Gaussianity give the corresponding block covariance
+forϕ ′
+tj−H:tj−1 −ϕ tj−H:tj−1, denoted byΣ ′
+j + Σ j.
+Therefore,r A
+j ∼ N
+ 
+µ0,Σ 0 +B j(Σ′
+j + Σj)B⊤
+j
+
+.
+Finally, applying the nominal standardization in (9) onr A
+j
+gives
+E[εεεA
+j ] = Γ−1  
+E[rA
+j ]−µ 0
+
+≈0,
+Cov(εεεA
+j ) = Γ−1ΣA,jΓ−⊤
+=I Hdz + Γ−1Bj(Σ′
+j + Σj)B⊤
+j Γ−⊤,
+whereΣ 0 = ΓΓ⊤ was used in the final equality. The proof
+is complete.
+d) MCUSUM Belief Characterization:We introduce
+the detection confidence
+cj := Pr (HA |d 1:j), c 0 := Pr(HA),(17)
+as the posterior probability of the replay-attack hypothesis
+given the MCUSUM evidence observed through detector up-
+datej. By (11) and (13),s j andI j are deterministic functions
+ofd j and therefore provide no additional information once
+d1:j is observed. UnderH A, the attacker selects an unknown
+onset timeτbefore the system trajectory is realized. Bayes’
+rule gives the sequential update [9]
+cj = cj−1κ1,j
+cj−1κ1,j + (1−c j−1)κ0,j
+,(18)
+whereκ 0,j :=f(d j |d 1:j−1,H0)andκ 1,j :=
+f(d j |d 1:j−1,HA)are the conditional likelihoods of the
+current detection-evidence vector under the nominal and
+replay-attack hypotheses, respectively.
+Because the replay attack may begin at any physical
+sample, defineA j :={τ≤t j −H},which is the event that
+detector windowjlies entirely after the attack onset. We
+represent onset uncertainty at window resolution by defining
+Qτ (j) := Pr(A j | HA), eQτ (j) := Pr (A j |d 1:j−1,HA),
+andQ +
+τ (j) := Pr (Aj |d 1:j,HA). ForQ τ (j−1)<1, define
+the onset hazard between consecutive fully attacked-window
+events as
+hτ (j) := Pr
+ 
+Aj |A c
+j−1,HA
+
+= Qτ (j)− Qτ (j−1)
+1− Qτ (j−1) .(19)
+Windows satisfyingt j −H < τ≤t j straddle the attack
+onset and are excluded from the subsequent analysis, which
+applies only to fully nominal or fully attacked windows.
+Theorem 1.Suppose the standardized-residual distributions
+in Lemma 1 hold, and conditional on the applicable regime,
+the current standardized residual is independent ofd1:j−1. In
+addition, assume that the onset time is fixed by the attacker
+before the system trajectory is realized, so that
+Pr
+ 
+Aj |A c
+j−1,d 1:j−1,HA
+
+=h τ (j).(20)
+Define
+f0,j :=ϕ Hdz (εεεj;0, IHdz ) =ϕ Hdz (dj;s j−1, IHdz ),
+fA,j :=ϕ Hdz (εεεj;0,Ω A,j) =ϕ Hdz (dj;s j−1,Ω A,j).
+Then, the onset probabilities and conditional likelihoods
+satisfy
+eQτ (j) =Q +
+τ (j−1) +
+
+1− Q+
+τ (j−1)
+
+hτ (j),(21)
+κ0,j =f 0,j,(22)
+κ1,j =
+h
+1− eQτ (j)
+i
+f0,j + eQτ (j)fA,j,(23)
+Q+
+τ (j) =
+eQτ (j)fA,j
+κ1,j
+.(24)
+Proof.Givend 1:j−1, the previous MCUSUM states j−1 is
+known. Moreover,ε εεj =d j −s j−1.For fixeds j−1, this
+transformation is a translation with unit Jacobian. Therefore,
+κ0,j =f(d j |d 1:j−1,H0)
+=f εεε (εεεj |d 1:j−1,H0)
+=ϕ Hdz (εεεj;0, IHdz ) =f 0,j,
+where the final equality follows from the conditional-
+independence assumption. This proves (22). Similarly,
+Lemma 1 gives
+f(d j |d 1:j−1, Aj,HA) =ϕ Hdz (εεεj;0,Ω A,j) =f A,j.(25)
+For a pre-onset window, the same argument under the
+nominal residual model gives
+f
+ 
+dj |d 1:j−1, Ac
+j,HA
+
+=f 0,j.(26)
+BecauseA j−1 ⊆A j, the eventA j is the disjoint unionA j =
+Aj−1 ∪
+ 
+Aj ∩A c
+j−1
+
+.Consequently,
+eQτ (j) = Pr (Aj |d 1:j−1,HA)
+= Pr (Aj−1 |d 1:j−1,HA)
++ Pr
+ 
+Aj ∩A c
+j−1 |d 1:j−1,HA
+
+=Q+
+τ (j−1)
++
+
+1− Q+
+τ (j−1)
+
+Pr
+ 
+Aj |A c
+j−1,d 1:j−1,HA
+
+=Q+
+τ (j−1) +
+
+1− Q+
+τ (j−1)
+
+hτ (j),
+which proves (21). Conditioning the attack-hypothesis like-
+lihood onA j gives
+κ1,j =f(d j |d 1:j−1,HA)
+=f
+ 
+dj |d 1:j−1, Ac
+j,HA
+
+Pr
+ 
+Ac
+j |d 1:j−1,HA
+
++f(d j |d 1:j−1, Aj,HA) Pr (Aj |d 1:j−1,HA)
+=
+h
+1− eQτ (j)
+i
+f0,j + eQτ (j)fA,j,
+where (25) and (26) were used. This proves (23). Finally,
+Bayes’ rule withinH A gives
+Q+
+τ (j) = Pr (Aj |d 1:j,HA)
+= f(d j |d 1:j−1, Aj,HA) Pr (Aj |d 1:j−1,HA)
+f(d j |d 1:j−1,HA)
+=
+eQτ (j)fA,j
+κ1,j
+,
+which proves (24).
+C. Adaptive Dynamic Watermarking via Reinforcement
+Learning
+DynaMark adapts the distribution of the private watermark
+without replacing the nominal image-based controllerF.
+We formulate its adaptive covariance selection as a Markov
+Decision Process (MDP) [13], [14]. At timet, the DynaMark
+information state is
+st := (zt, ut,Σ t−1, ct)∈ S,(27)
+wherez t andu t are the current latent state and control input
+respectively,Σ t−1 is the predicted DWM covariance at the
+previous step andc t ∈[0,1]is the detection confidence from
+the belief update in (18). The DynaMark policy is the map
+DM:S →S du
++ ,Σ t =DM(s t).(28)
+The selected covariance determinesϕ t ∼ N(0,Σt), which
+is the watermark signal added to the nominal control in-
+put through (3). The resulting observation is encoded and
+compared with the LDN prediction, producing new detector
+evidence and the subsequent confidence supplied back to
+DM.
+a) Action Space:The action is the positive semidefinite
+watermark covarianceΣ t. Its magnitude is bounded to limit
+the excitation applied to the nominal control:
+A(st) =
+n
+Σ∈S du
++ :∥Σ∥ F ≤Σ max
+o
+.(29)
+Here,Σ max >0is chosen according to the desired excitation
+level. Task-specific safety is incorporated through the reward
+rather than as an additional action-space constraint.
+b) Reward Function:The reward balances watermark
+expenditure, deviation from nominal behavior, detector con-
+fidence, and robot–human separation. Let˜z nom
+t+1 :=L(z t, ut)
+denote the predicted successor under the nominal control
+without watermarking, and letω 1, ω2, ω3 >0be design
+weights.
+The base watermarking reward is
+rwm
+t =−ω 1∥ϕt∥1 −ω 2∥˜znom
+t+1 −z t+1∥2
++ω 3|0.5−c t+1|.(30)
+The first term penalizes watermark magnitude, the second
+penalizes deviation from the predicted unwatermarked evo-
+lution, and the third rewards detector confidence away from
+0.5. DWM training includes both clean and replay-attacked
+episodes, exposing the policy to both operating conditions.
+The intended response is low attack confidence during clean
+operation and high confidence after replay onset. The confi-
+dence term encourages decisive beliefs, while the other terms
+limit the motion and excitation costs of watermarking. The
+reward uses the subsequent confidencec t+1 to evaluate the
+effect of the selected covariance.
+To incorporate safety into policy optimization, we define
+a safety metric (β t) specific to our use case (human-robot
+interaction), observed after applying¯ut
+βt+1 =∥P r,t+1 −P h,t+1∥2,(31)
+whereP r,t+1 andP h,t+1 denote the points on the robot
+end-effector and human-arm that are closest to one another,
+respectively. For a minimum desired separationβ min >0,
+define the nonnegative safety cost
+rsafe
+t = [βmin −β t+1]+,[a] + := max(0, a).(32)
+Here,a∈Ris a scalar argument of the positive-part operator
+[a]+. In (32),a=β min −β t+1 represents the separation
+shortfall, so the safety cost is positive only when the observed
+separation falls belowβ min. The reward used during policy
+optimization is then
+rλ
+t (st,Σ t) =r wm
+t −λ·r safe
+t , λ≥0.(33)
+Thus, the covariance bound is enforced through the action
+space, while separation violations are penalized during train-
+ing. The multiplierλsets the weight of the safety cost. As
+training progresses and the policy learns to reduce separation
+violations,λis reduced while remaining nonnegative.
+Fig. 2. Live plant observations and replayed controller observations
+IV. EXPERIMENTS
+A. Human-Robot Interactive Task Environment
+We evaluate a vision-guided robotic manipulator in Isaac
+Sim while it reaches a target and avoids a moving human
+arm. The controllerFreceives RGB-D observationx t ∈
+R120×160×4, joint positions and velocities, end-effector po-
+sition, and goal position formx prop
+t ∈R 18. The nominal con-
+trollerFoutputs a three-dimensional actionu t ∈[−1,1] 3.
+Figure 2 illustrates the live-versus-replay attacked visual
+discrepancy before and after the recorded replay onset. The
+policy controller runs at 30Hz, thus∆t≈0.033s.
+B. Latent Encoder and DWM Policy Training Setup
+We train a V-JEPA-inspired [15] encoder and action-
+conditioned LDN on clean nominal and watermarked RGB-
+D trajectories, excluding replay data with latent dimension
+dz = 64and LDN prediction horizonH= 4. WithFfrozen,
+we train the DWM policy using PPO [16] on both clean and
+replay-attacked episodes. The policy predicts a watermarking
+covarianceΣ t = diag(σ 2
+t ), such that0≤σ t,i ≤0.3ac-
+cording to (29). The objective balances detector confidence,
+excitation and motion costs, and the Lagrangian separation
+penalty. Latent residual windows(r j)are obtained from
+encoded RGB-D images (replay vs predicted), watermark
+covariances are selected by the trained PPO policy, and attack
+beliefs are updated using the likelihoods defined for (18).
+C. Replay Protocol and Detector Calibration
+In paired-fork rollouts, the target and source start from
+matched states; att a, the target receives the source RGB-D
+stream while its physical trajectory continues. DisjointH-
+step windows yield residualsr j ∈R Hdz from (8). Separate
+clean episodes estimate(µ 0,Σ 0)and calibratekagainst a
+prescribed nominal average run lengthARL 0. At each up-
+date, the LDN uses the current private control sequence and
+its Jacobian to form the replay covariance; the detector uses
+q= 0.5,c 0 = 0.01, and a geometric onset hazard of10 −3
+per window. Continuous likelihoods updatec j independently
+of the MCUSUM alarm. Calibration and evaluation episodes
+remain disjoint, and live ground truth is withheld from the
+detector.
+V. RESULTS
+A. Replay Detection and State Divergence
+Replay separates the received observations from the phys-
+ical plant, as illustrated in Figure. 2. Private watermarking
+TABLE I
+REPLAYDETECTION ANDSAFETYTEST(30EPISODES).
+Replay Detection
+Metric No WM Dynamic WM
+Clean Episode False Alarms 0/30 6/30
+Belief based Attack Detection 0/30 29/30
+Median detection delay (s) — 1.23
+Early Belief Crossing 0/30 1/30
+Safety under Replay with Watermarking
+Metric No Simplex Simplex
+Episodes below 3 cm 20/30 0/30
+Minimum clearance (m) 0.023 0.122
+Final clearance (m) 0.074 0.210
+Final mean speed (m/s) 0.140 0.003
+Fig. 3. Average(Top)Attack Belief,(Middle)Min Robot-Human separation
+(m), and(Bottom)End-effector speed (m/s) across 30 episodes. Replay
+begins at step 60. Blue denotes live observations, red denotes the replayed
+source observations received by the policy, and green denotes the live
+trajectory with Simplex stopping.
+tests whether that feedback contains the response to the
+current excitation. In Table I, 29 of 30 watermarked replay
+episodes crossed the belief threshold after onset without an
+earlier crossing, with median delay 1.23 s. The remaining
+episode crossed both before and after onset. Six clean water-
+marked episodes also crossed the belief threshold, indicating
+a specificity limitation rather than alarms rejected by belief
+accumulation. Without watermarking, none of the 30 replay
+episodes crossed the belief threshold, supporting the role of
+private excitation in this evaluation.
+B. Safety Benefits of Simplex Switching
+Detection alone does not prevent the robot from following
+misleading feedback. A separate test therefore evaluates
+Simplex switching (7) under replay with watermarking. From
+Figure 3, in the belief panel(Top), the red curve shows
+confidence from the replayed observation stream and the
+green curve shows confidence in the replay experiment with
+Simplex. In the Safety metric(Middle)and end effector speed
+plots(Bottom), blue describes the physical robot without
+Simplex, red describes the replayed source trajectory, and
+green describes the physical robot with Simplex. It is clear
+that the policy visible, replay attacked observations show the
+safety metric to be increasing, whereas in reality the true
+safety metric actually decreases caused by the attack. With
+Simplex active, the live robot maintains greater separation
+from the human arm and its end-effector speed approaches
+zero. The safety comparisons in Table I use the live physical
+trajectories, rather than the replayed source trajectory.
+Simplex switches to stopping when attack confidence
+exceeds0.9for the required persistence period. As shown
+in Figure. 3 and Table I, 20 of 30 episodes without Simplex
+entered the 3 cm proximity zone, compared with none with
+Simplex. The reported minimum clearance increased from
+0.023 to 0.122 m, and final speed decreased from 0.140
+to 0.003 m/s. These results show that the fallback reduces
+continued physical motion under misleading visual feedback.
+Of 30 switches, 28 followed attack onset and two occurred
+early. Watermarking supplies attack evidence, and Simplex
+uses that evidence to initiate a protective stop. A limitation
+remains that false attack detections can still interrupt the task
+and reduce performance.
+VI. CONCLUSION
+This paper combines private dynamic watermarking,
+action-conditioned latent dynamics, Bayesian attack confi-
+dence, and Simplex stopping for vision-based control. The
+detector compares latent predictions conditioned on the ap-
+plied watermarked commands with representations encoded
+from the received RGB-D images. A trained PPO policy
+selects the watermark covariance, while a Lagrangian sep-
+aration penalty discourages watermark choices that bring
+the robot too close to the human arm. The analysis derives
+an approximate replay-residual covariance and a sequential
+belief update under the stated modeling assumptions.
+Reach-avoid experiments evaluate this visual detector and
+trained watermark policy. Watermarking produced post-onset
+belief crossings without earlier crossings in 29 of 30 replay
+episodes, with a median delay of 1.23 s. Simplex stopping
+reduced episodes entering the 3 cm proximity zone from 20
+of 30 to none in the separate safety test. Six clean episodes
+crossed the belief threshold, and two switches in the safety
+test occurred before attack onset, showing that unnecessary
+intervention remains a limitation. These results demonstrate
+replay detection and reduced motion under misleading feed-
+back within the evaluated task; the training penalty and
+stopping response do not establish a formal safety guarantee.
+Future work will use neural network verification tools
+to develop formal safety guarantees, extend the framework
+to physical robot experiments with sensing and actuation
+delays, and improve latent dynamics prediction to reduce
+false alarms. Further evaluation will also consider continued
+human motion after the robot stops.
+ACKNOWLEDGMENTS
+The authors used OpenAI’s ChatGPT [17] throughout the
+manuscript to assist with writing, proofreading, and minor
+language edits for grammar, clarity, and readability. All
+images were devised by the authors, who also conducted the
+experiments and generated the plots. The authors reviewed
+and approved the final text and take full responsibility for
+the manuscript’s content and accuracy.
+REFERENCES
+[1] Y . Mo and B. Sinopoli, “Secure control against replay attacks,” in
+2009 47th Annual Allerton Conference on Communication, Control,
+and Computing, 2009, pp. 911–918.
+[2] B. Satchidanandan and P. R. Kumar, “Dynamic watermarking: Active
+defense of networked cyber-physical systems,”Proceedings of the
+IEEE, vol. 105, no. 2, pp. 219–240, 2017.
+[3] M. Porter, P. Hespanhol, A. Aswani, M. Johnson-Roberson, and
+R. Vasudevan, “Detecting generalized replay attacks via time-varying
+dynamic watermarking,”IEEE Transactions on Automatic Control,
+vol. 66, no. 8, pp. 3502–3517, 2021.
+[4] A. Naha, A. M. H. Teixeira, A. Ahl ´en, and S. Dey, “Sequential
+detection of replay attacks,”IEEE Transactions on Automatic Control,
+vol. 68, no. 3, pp. 1941–1948, 2023.
+[5] A. Parameshwaran and Y . Wang, “Scalable and interpretable
+verification of image-based neural network controllers for autonomous
+vehicles,” inProceedings of the ACM/IEEE 16th International
+Conference on Cyber-Physical Systems (ICCPS), 2025. [Online].
+Available: https://doi.org/10.1145/3716550.3722037
+[6] P. Wu, A. Escontrela, D. Hafner, P. Abbeel, and K. Goldberg, “Day-
+dreamer: World models for physical robot learning,” inProceedings
+of the Conference on Robot Learning, ser. Proceedings of Machine
+Learning Research, vol. 205. PMLR, 2023, pp. 2226–2240.
+[7] P. Korshunov, A. George, G. ¨Ozbulak, and S. Marcel, “Vulnerability
+of face age verification to replay attacks,” in2024 IEEE International
+Conference on Acoustics, Speech and Signal Processing (ICASSP),
+2024, pp. 4830–4834.
+[8] S. Khan, T. H. M. Siddique, M. S. Ibrahim, A. J. Siddiqui, and
+K. Huang, “Spatio-temporal deep learning for improved face presenta-
+tion attack detection,”Knowledge-Based Systems, vol. 311, p. 113059,
+2025.
+[9] N. Aftabi, A. Hanchate, S. T. S. Bukkapatnam, and D. Li, “Dynamark:
+A reinforcement learning framework for dynamic watermarking in
+industrial machine tool controllers,”IEEE Transactions on Automation
+Science and Engineering, vol. 23, pp. 13 658–13 676, 2026.
+[10] D. Hafner, T. Lillicrap, I. Fischer, R. Villegas, D. Ha, H. Lee, and
+J. Davidson, “Learning latent dynamics for planning from pixels,”
+inProceedings of the 36th International Conference on Machine
+Learning, ser. Proceedings of Machine Learning Research, vol. 97.
+PMLR, 2019, pp. 2555–2565.
+[11] D. Hafner, T. Lillicrap, J. Ba, and M. Norouzi, “Dream to control:
+Learning behaviors by latent imagination,” inInternational Conference
+on Learning Representations, 2020.
+[12] N. A. Hansen, H. Su, and X. Wang, “Temporal difference learning
+for model predictive control,” inProceedings of the 39th International
+Conference on Machine Learning, ser. Proceedings of Machine Learn-
+ing Research, vol. 162. PMLR, 2022, pp. 8387–8406.
+[13] M. L. Puterman,Markov Decision Processes: Discrete Stochastic
+Dynamic Programming, 1st ed. USA: John Wiley & Sons, Inc.,
+1994.
+[14] R. S. Sutton and A. G. Barto,Reinforcement Learning: An Introduc-
+tion. Cambridge, MA, USA: A Bradford Book, 2018.
+[15] M. Assranet al., “V-JEPA 2: Self-supervised video models enable
+understanding, prediction and planning,” 2025. [Online]. Available:
+https://arxiv.org/abs/2506.09985
+[16] J. Schulman, F. Wolski, P. Dhariwal, A. Radford, and O. Klimov,
+“Proximal policy optimization algorithms,”arXiv preprint
+arXiv:1707.06347, 2017.
+[17] OpenAI, “ChatGPT,” Online. Available: https://chatgpt.com, accessed:
+September 29, 2026.

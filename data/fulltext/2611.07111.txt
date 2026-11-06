@@ -1,0 +1,1975 @@
+Consistent yet Contextual: Learning Author-Level Mixtures of Style for Authorship Attribution
+https://arxiv.org/abs/2611.07111
+License: CC zero (redistribution permitted)
+(source: arXiv html)
+
+
+
+Consistent yet Contextual: Learning Author-Level Mixtures of Style for Authorship Attribution
+
+Omkar Yadav
+
+Affiliation: 
+University of Michigan
+
+Email: 
+oyadav@umich.edu
+
+  
+
+Michael Jiang
+
+Affiliation: 
+University of Michigan
+
+Email: 
+mjjiang@umich.edu
+
+  
+
+Kenan Alkiek
+
+Affiliation: 
+University of Michigan
+
+Email: 
+kalkiek@umich.edu
+
+  
+
+Jian Zhu
+
+Affiliation: 
+University of British Columbia
+
+Email: 
+jian.zhu@ubc.ca
+
+  
+
+David Jurgens
+
+Affiliation: 
+University of Michigan
+
+Email: 
+jurgens@umich.edu
+
+Abstract
+
+Approaches to authorship verification or attribution typically model the style of a document, asking whether two documents were likely written by the same author. While recent approaches have been performant, such approaches largely ignore modeling the authors themselves and how varied their style is. Here, we introduce multiple alternatives for modeling the author and demonstrate that allowing an author’s representation to capture multiple consistent but distinct writing styles yields significant performance improvements. Using our new authorship model, we then examine 
+when
+ an author writes in a way that is most idiomatic of their style across four scenarios: (i) variation in the size of their writing audiences, (ii) temporal distance from when the model was trained, (iii) the effect of preceding context, and (iv) the effect of genre norms on style. Across all four experiments, we demonstrate that authors vary substantially in how idiolectic their writing is. Our results have clear implications for both the modeling and data used for authorship verification and attribution, showing that authors need to be represented with their multiple styles and that some settings produce text that is much more informative about who wrote that text.
+
+1 
+Introduction
+
+Figure 1: 
+In authorship attribution, documents (above: circles) are embedded as style vectors. Most approaches attribute a new document (the empty circle) to the nearest neighbor or an author’s centroid (stars). However, these methods overlook that authors often employ multiple styles. For instance, the new document here is nearest the blue author, even though fuchsia is the likely true source. Here, we develop models designed to mitigate this stylistic complexity. 
+
+Many authors have a distinct writing style that is unique to them.
+Models for authorship attribution or verification attempt to identify who wrote a particular document by identifying this style, known as the author’s 
+idiolect
+ 
+(
+George, 1990
+)
+. Such models have proven useful for identifying who wrote historical documents 
+Holmes and Forsyth (1995)
+, identifying sockpuppet accounts 
+Solorio et al. (2013)
+; 
+Weerasinghe et al. (2022)
+, and identifying forged documents 
+Silva et al. (2024)
+. Commonly, computational approaches to authorship attribution
+1
+1
+
+1
+
+            
+            
+            
+          The task of authorship attribution identifies which of 
+ authors wrote the document and can be framed as either a classification or, more recently, a retrieval (ranking) based problem 
+(
+Stamatatos, 2009
+)
+. 
+ focus on the task of document representation, where models are trained to recover an author’s stylistic signature from the text. As a result, modern approaches frame the task as whether two documents are written by the same author 
+Tyo et al. (2022)
+, learning to represent documents by the same author so that they are nearby in the document space 
+Boenninghoff et al. (2019)
+; 
+Rivera-Soto et al. (2021)
+. Such models implicitly assume that authors are best modeled as documents, with the attribution task reduced to whether a new document’s representation is near the author’s other documents. However, such approaches ignore systematic variation and that an author’s own idiolect might naturally have multiple substyles, depending on context. Here, we approach attribution by learning a model of the author themselves—rather than just documents—to capture an author’s natural stylistic diversity.
+
+Authorship attribution and verification models have traditionally focused on identifying distinguishing and systematic stylistic differences in how an author writes documents 
+Stamatatos (2009)
+. In forensic linguistics, stylometry, and stylometrics, style is represented using function word frequencies or manually curated syntactic patterns 
+Garcia and Martin (2006)
+; 
+Brocardo et al. (2013)
+; 
+Tschuggnall and Specht (2014)
+. More recent work has focused on using contrastive learning methods to learn document representations where documents by the same author are located near each other 
+Boenninghoff et al. (2019)
+; 
+Fincke and Boschee (2024)
+. In general, approaches project a document into a latent style space and identify an author using the authorship of documents nearby in that space. However, as seen in Figure 
+1
+, such approaches can overlook the regularity and distribution of an author’s style, where a single author may have multiple distinct styles that can cause a document-level approach to misattribute authorship.
+
+Here, we aim to learn representations of authors that explicitly model any natural variation. Our study is motivated by this prior work in showing that authors are sensitive to context in how they communicate 
+Kestemont et al. (2018)
+; 
+Halvani et al. (2016)
+; 
+Sundararajan and Woodard (2018)
+, which strongly suggests that authors may have regular but dissimilar styles according to context. To study idiolectic variation, we learn models for 40K authors using 3M documents across four diverse corpora. Using four different models for authorship representation, we demonstrate that modeling the author leads to significant performance gains. Using our most accurate model of authorship, we then quantify how authors vary in their stylistic behavior in different contexts—i.e., when do authors write most like themselves? In four tests across audience, time, context, and genre, we demonstrate that authors reliably shift styles.
+
+Our work has the following contributions.
+First, we demonstrate that modeling the author’s systematic style variation yields a significant performance improvement, regardless of how a document’s style is represented.
+Second, downstream analyses demonstrate that context is critical for accurate attribution: (1) authors vary more in style when writing across diverse contexts, (2) in settings with strong genre norms, authors are most distinctive in contexts where they have more stylistic flexibility, (3) in most settings, an author’s style changes as they age, drifting from their earlier forms, and (4) surprisingly, in a negative result, authors do not shift their style when writing replies to another author. These results emphasize that the "where" of a text is essential to accurate attribution. All code will be released (CC-by-SA 4.0).
+
+2 
+Recognizing an Author’s Style
+
+This work touches on multiple branches of research in NLP and Linguistics, focusing on quantifying an author’s writing style.
+
+Idiolect
+
+Authorship attribution depends, in part, on an author having a distinct writing style, or idiolect. In forensic linguistics, the idiolect is viewed as multifaceted–not just word usage, but also includes features such as syntactic and discursive patterns 
+(
+Turell, 2011
+)
+, and is thought to be persistent over time. However, two polarized views of idiolect have been formalized in the linguistics literature 
+Barlow (2013)
+; 
+Barber and Garcia Ramirez (2021)
+. 
+Labov (2011)
+ argued that idiolects can be understood as a reflection of the grammar of the speech community. Under this view, all idiolects can be reduced to the different combinations of sociolects (regular variation associated with a community).
+
+A contrasting view holds that individual languages should be primary, such that sociolect emerges from the grouping of idiolects 
+Hudson (1996)
+. Yet, open questions remain as to how to characterize idiolect systematically— beyond dismissing it as idiosyncratic patterns—and how to separate idiolect from sociolect, if that distinction exists. While prior studies suggest that idiolect is stable over a short time period 
+Coulthard (2004)
+; 
+Barlow (2013)
+; 
+Mojedano Batel et al. (2024)
+, little is known about the temporal variation of idiolect over a longer period. Given the known influence of social conventions of genre and register on language use 
+(
+Bischoff et al., 2020
+, e.g.,)
+, to what degree do these conventions constrain the variation within idiolects 
+Barber and Garcia Ramirez (2021)
+? Understanding idiolect variations has practical implications for stylometry and forensic linguistics as well as for the ontology of language itself 
+Carden (1970)
+.
+
+Author Attribution Models
+
+Computational models of authorship attribution depend on some explicit or implicit representations of the style of a document 
+(
+Neal et al., 2017
+)
+. Early computational work was focused on explicit linguistic features that are highly interpretable, including function words 
+(
+Mosteller and Wallace, 1963
+; 
+Garcia and Martin, 2006
+)
+, character n-grams 
+Sapkota et al. (2015)
+, and syntactic structures 
+Tschuggnall and Specht (2014)
+. 
+Gill and Swartz (2011)
+ proposed learning a Dirichlet prior over distributions of only function words to compare authors; while showing the benefits of adding structure, this approach was only tested with two authors and 14 documents. Despite these methods’ early successes, they have been superseded by more powerful deep learning models 
+Pardo and Rosso (2019)
+; 
+Stamatatos et al. (2022)
+; 
+Bevendorff et al. (2024)
+.
+
+There are two major directions in the deep learning approach with implicit authorship representations. Prompting-based work directly uses LLMs to identify authorship through text-only instructions and examples, with promising results 
+(
+Huang et al., 2024
+; 
+Hu et al., 2024
+, e.g.,)
+. However, this approach is limited to a small number of authors due to LLMs’ context window sizes and cost. Retrieval-based approaches typically fine-tune an LLM to generate dense vector representations of style through contrastive learning, enabling efficient ranking over tens of thousands of authors 
+(
+Boenninghoff et al., 2019
+; 
+Rivera-Soto et al., 2021
+; 
+Zhu and Jurgens, 2021
+; 
+Wang et al., 2023
+; 
+Fincke and Boschee, 2024
+, e.g.,)
+.
+
+Currently, most authorship attribution modeling techniques model the documents and do not explicitly parametrize a representation of the author.
+
+One example of a simple author modeling approach comes from 
+Zhu and Jurgens (2021)
+, which leverages document representations to build a Gaussian distribution at the author level. However, there is no notion of whether the distribution is a strong fit for the model. Further, this style of modeling is rigid, causing problems for authors who have a more complex idiolect.
+
+We aim to bridge this gap by building author models based on document representations of the text. We explore many different representations, as the strength of the representation is crucial in building performant models. Additionally, we analyze various modeling techniques for authors and enable modeling flexibility by leveraging a dev set for each author. This approach allows us to build models tailored to a given author’s idiolect.
+
+3 
+Datasets
+
+To study author idiolect across diverse contexts and styles, we curate English-language data from four sources: comments from Reddit 
+Baumgartner et al. (2020)
+, literary books, emails from the public GMANE archive 
+Bevendorff et al. (2020)
+, and Wikipedia 
+(
+Israeli et al., 2025
+)
+. These sources contain sufficient numbers of documents per author to model intra-author variation in different contexts and across time. We describe the preprocessing and data preparation steps next.
+
+Preprocessing
+
+For all data sources, we impose two general requirements on authors regarding their document lengths and the total number of documents. First, documents need to be long enough to evoke a specific style, and therefore we require at least 100 words; this limit is on the lower end for length in past work 
+Boenninghoff et al. (2019)
+ and ensures that the task is more realistic and challenging. Second, to enable a sufficient number of documents for downstream analyses, we retain only authors who have 100 or more documents, up to 250 total for the author. We collect 10K authors meeting both requirements from each source. See Appendix 
+A
+ for full details.
+
+Reddit
+
+A large amount of content on Reddit comes from bots. To avoid modeling non-human users, we removed these accounts using a large curated stoplist and filtering rules (e.g., usernames ending in “Bot"). Using the remaining accounts, we constructed a balanced subset of 10K authors by evenly sampling 100 authors from each combination of (1) total years of Reddit participation (binned into integer buckets from 0 to 9 years), and (2) the number of unique subreddits they had posted in (binned into ranges: 1–5, 6–10, …, 46–50). This stratified sampling ensures a diverse group of authors in both longevity and community participation.
+
+Books
+
+Books represent a unique genre due to their length and register constraints, which influence the style and narrative. To model this influence, we sample 10K novels converted to plain text 
+(
+Gao et al., 2020
+)
+, partition their content at the paragraph level, and retain only paragraphs with 100+ words.
+
+GMANE
+
+The public GMANE archive contains emails and replies on mailing lists for a variety of topics 
+(
+Bevendorff et al., 2020
+)
+. We perform document sampling at the author level with respect to emails and replies with the technique described in Appendix 
+A
+. This email-and-reply setting allows us to later measure the effect of style influence.
+
+Wikipedia
+
+Wikipedia contains diverse contributions from authors on its article and talk pages. We select Wikipedia authors from the Million Author Corpus 
+(
+Israeli et al., 2025
+)
+ and again perform the metadata sampling described in Appendix 
+A
+.
+
+4 
+Modeling Author Style Variation
+
+We evaluate four types of parametric representations of authors derived from the style of their documents. To control for a potential interaction between style representation and author model, we consider six different style representations, two interpretable and four neural. We use document representations to decouple the problem of learning stylistic features from modeling author-specific patterns; by first encoding style, author models operate on stable, reusable, topic-deconfounded representations rather than raw text.
+
+4.1 
+Author Models
+
+Nearest Neighbor
+
+As a representation of current practice, we evaluate a nearest-neighbor model to calculate 
+ for author 
+ and document style representation 
+.
+2
+2
+
+2
+
+              
+              
+              
+            We elide subscripts in this notation as 
+ when it is clear what the author and document refer to.
+ Given some new document 
+, we compute 
+ and then 
+. In essence, this model-free approach relies on the similarity of the nearest neighbor to identify authorship.
+
+Centroid
+
+Zhu and Jurgens (2021)
+ proposed an alternative and simple model where each author is represented as a single Gaussian distribution parameterized by 
+, where 
+ and 
+ denote the mean and covariance matrix specific to author 
+. This model captures the overall distribution of an author’s style. We compute 
+ for each author and then normalize the scores with a softmax.
+
+Gaussian Mixture Models
+
+Authors are thought to have distinct styles depending on context, and therefore we propose using a Gaussian Mixture Model (GMM) parameterized by 
+, where 
+ are the mixture weights, and 
+ and 
+ are the mean and covariance of the 
+-th component for author 
+. Such a model can naturally represent an author’s multiple distinct and consistent styles. However, a GMM requires us to define the number of components, 
+, for the GMM.
+
+Rather than force all authors to have a fixed 
+, we use validation data to optimize 
+ per author. Like the centroid, we normalize 
+ across all authors.
+
+For performance, we constrain the GMM covariance matrices to be diagonal. The style representations (described below) are inherently correlated, so we orthogonalize via principal component analysis (PCA). This orthogonalization allows us to avoid computing the full covariance matrix and reduces the complexity of fitting models for all authors from 
+ to 
+, where 
+ is the number of documents, 
+ the embedding dimension, and 
+ the number of EM iterations.
+
+Appendix 
+E
+ details PCA’s time complexity and performance gains.
+
+RoBERTa
+
+Pretrained language models (PLMs) can capture stylistic information 
+Hayati et al. (2021)
+. Prior work on authorship verification used BERT-based classifiers to predict which of 
+ authors wrote the text 
+(
+Fabien et al., 2020
+, e.g.,)
+, though such models are often trained for small values of 
+ (e.g., 100). Here, we follow this approach and fine-tune a RoBERTa model to predict authorship directly from the text, rather than using intermediate style representations of the documents, which creates an implicit model of authors’ styles.
+
+4.2 
+Document Stylistic Representations
+
+The author models are fit as distributions of their documents’ style representations. Several methods have been proposed for representing document style in authorship attribution, and we employ six distinct representations. (1) Style is represented as the frequency of the 67 lexical and syntactic features from Biber’s Multidimensional Analysis framework 
+(
+Biber, 1988
+)
+ and 29 additional features from 
+Clarke and Grieve (2017)
+ and 
+Clarke (2019)
+. These interpretable features characterize style through rule-based linguistic markers. For scalability, we use NeuroBiber 
+(
+Alkiek et al., 2025
+)
+ to estimate these features.
+(2) An alternative to the low-level style representation of Biber is LISA 
+(
+Patel et al., 2023
+)
+, which uses a PLM to generate interpretable embeddings aligned to stylistic dimensions like tone, emotional expression, and linguistic patterns. These higher-level features capture a complementary view of style, though one not directly optimized for the task of authorship attribution.
+(3) The LUAR 
+(
+Rivera-Soto et al., 2021
+)
+ model is a PLM trained via contrastive learning to represent documents by the same author with similar embeddings. The model is one of the first accurate neural style embedding models.
+(4) The PCM model 
+Kim et al. (2025)
+ is the current state of the art for multilingual neural style embedding.
+(5) The StyleDistance model 
+Patel et al. (2025)
+ was trained using synthetic data to maximally de-confound topic and style.
+(6) The SADIRI model 
+Fincke and Boschee (2024)
+ uses adaptive exemplar filtering for contrastive learning to create representations that perform well in cross-genre settings.
+
+5 
+Experiment: Author Attribution
+
+Here we assess whether explicitly modeling an author’s stylistic variation improves performance.
+
+Setup
+
+We fit each type of author model on the full dataset (40K authors), reporting performance by dataset. For the GMM, we optimize 
+ using a grid search to fit models in 
+, selecting the 
+ that maximizes the probability on the author’s development data.
+Details of RoBERTa training, GPU compute, and author-model runtime are in Appendix 
+I
+.
+
+Models are evaluated for authorship attribution using both Success@8, which is a more recent common metric that captures whether the true author is among the 8 most likely candidates 
+(
+Agarwal et al., 2025
+; 
+Israeli et al., 2025
+, e.g.,)
+, and 
+. Both metrics offer complementary insight: Success@8 reflects the practical performance of an authorship attribution system, while 
+ allows us to assess where a model can identify fine-grained changes to idiolect that may not ultimately affect the ranking. Error bars throughout this paper show 95% bootstrap confidence intervals from 1,000 resamples.
+
+Figure 2: 
+ Performance at attribution documents of 40K authors for different representations of authors and styles, shown as Success@8 on the left and 
+ on the right. Representing authors as mixtures of styles yields consistent performance gains for both metrics. Note that the probabilities/Success@8 for the Nearest Neighbor and RoBERTa model are non-zero but round to 0.00. 
+
+Results
+
+Regardless of how we represented style, modeling authors as mixtures of consistent styles with a GMM yields substantial and significant performance gains for both metrics, as seen in Figure 
+2
+; see Appendix 
+J
+ for the corresponding numerical results. Appendix 
+B
+ further breaks down performance by source. Further, the performance gains are largest for the highest-performing style representations, showing that better style representations provide additional fidelity to model an author’s distinct mixture of styles. These results also highlight the importance of style modeling: while using a similar number of parameters as the LUAR and PCM models, the implicit representations of authorship in the RoBERTa model (Figure 
+2
+ left) are likely insufficient for accurate authorship attribution without additional training approaches like the contrastive learning used by the four neural embeddings. Surprisingly, the commonly used approach of using nearest neighbors also yields very low performance (with the exception of NeuroBiber), suggesting that even adding a simple author model like a Centroid can produce immediate gains.
+
+Is the GMM just learning topical variation?
+
+Two of the state-of-the-art models we use, SADIRI and StyleDistance, are designed to be robust to topic through maximizing cross-genre performance or training on synthetic data, respectively. The GMM improves performance significantly with both representations, suggesting the potential topic confound is not responsible. Appendix 
+C
+ further tests this with held-out Reddit communities.
+
+How many components do authors need?
+
+Our results show that modeling authors as one or more Gaussians yields consistent gains. Examining the distribution of optimal GMM components (
+), we find that 21% of author models have a single component—equivalent to the centroid model—and 61% of author models have between 2-4 components. Surprisingly, 18% of authors benefit from a 5+ component GMM. The full distribution can be found in Appendix 
+D
+ as well as the breakdown per style representation type. This result deviates sharply from current practice in authorship attribution but supports prior work on style that suggests authors do have multiple distinct styles 
+Kredens et al. (2021)
+; 
+Grant and MacLeod (2018)
+.
+
+How many documents are needed to see intra-author variation?
+
+Our prior setup used 50 documents per author to fit a GMM and an additional 25 documents to select the optimal 
+. However, in some settings, fewer documents may be available, raising the possibility that a GMM would be unneeded—i.e., fewer documents could provide insufficient evidence of systematic variation in an author’s style. To test this, we follow a similar setup where we train the same GMM models on varying numbers of training documents, using the best-performing SADIRI style embedding. To test for saturation, we include an additional 30 documents per author, still choosing 
+ according to the highest log-likelihood on a held-out validation set.
+
+The results show that even with a few training documents (e.g., 10), there is benefit to GMM-based modeling as the average optimal 
+ is above 2. However, once we get to around 20 documents, we do not see an increase in the number of components for authors, indicating that additional documents do not increase complexity.
+
+6 
+Does contextual diversity influence stylistic consistency?
+
+Authors may naturally vary their style when communicating with different audiences in order to mirror community norms. While certain stylistic features may remain relatively stable across topics and communities, authorship attribution becomes substantially more challenging under cross
+-
+domain or cross
+-
+genre variation. Indeed, previous work highlights how attribution systems struggle when texts differ in topic, even when authored by the same individual 
+(
+Kestemont et al., 2019
+)
+. However, there is evidence that stylometric markers retain their informativeness even across multiple topics 
+(
+Litvinova et al., 2018
+)
+. Here, we measure this phenomenon on Reddit by using subreddits as a proxy for community, topic, and genre, asking to what degree authors are predictable relative to their contextual diversity.
+
+Setup
+
+We reuse the SADIRI embedding GMM models for the 10K Reddit authors from Section 
+5
+. We then estimate the 
+ using the authors’ 1.1M test documents and stratify according to the number of unique subreddits the author writes in.
+
+Results
+
+Authors with participation in more communities have less distinctive style (Figure 
+3
+). Indeed, authors who post in only a few subreddits maintain a highly distinctive writing style, with 
+ values near 0.85. However, as the number of subreddits increases, this distinctiveness decreases rapidly. Such a trend has two likely causes. First, authors likely adapt to the increasing number of communities, each with different practices, creating a more varied stylistic profile that is more difficult to model with limited data. Second, while our style representations are trained to be robust to content or topic, many authorship attribution models incorrectly learn author-topic associations 
+Wegmann et al. (2022)
+, which can lead to worse performance when authors write in multiple topics.
+
+Figure 3: 
+As the number of communities that an author writes in increases, we see a decrease in stylistic consistency. Authors that write in a large number of subreddits write in their own style significantly less than authors who are focused in a few.
+
+7 
+Do narrative conventions constrain author style?
+
+Narrative conventions significantly shape and shift authorial style. 
+Montfort et al. (2021)
+ show that controlling referring expressions, such as how characters or locations are introduced, yields distinct narrative styles. Similarly, 
+Schwartz et al. (2017)
+ find that writing task framing—like continuing a story versus ending it—results in measurable stylistic variation. These works suggest narrative constraints influence expression beyond an author’s baseline tendencies.
+Where then in novels—if anywhere—are authors least constrained by these conventions? We investigate these findings by evaluating author style at different segments of long-form documents using the books data.
+
+Setup
+
+From the data preprocessing step, books are segmented into chunks that are tagged based on their relative position within the book. We group these documents into deciles according to their relative position within the book. Then, we measure 
+, aggregated on each of these deciles for all 10K authors and test documents.
+
+Results
+
+Figure 
+4
+ shows a clear pattern: authors are most stylistically consistent in the middle of their books, and least consistent at the beginning and end. This suggests that the conventions of writing introductions and conclusions suppress an author’s own style, likely due to functional constraints; authors often open with more stylistically conventional exposition to orient the reader and close with summary or resolution. The middle sections, which tend to carry the core narrative, allow for more sustained and unconstrained expression of authorial voice. Our results suggest that when attributing authorship in long-form text, practitioners must account for genre and discourse constraints, as not all passages are equally informative about authorial style 
+(
+Mosteller and Wallace, 1963
+)
+.
+
+Figure 4: 
+In longer-form documents, authors tend to write least like themselves in the beginning and ending portions. Authors write most like their style in the middle of the book, specifically just before the middle.
+
+8 
+How consistent are authors over time?
+
+An individual’s language changes as they age, which raises the question of to what degree their style also changes. Previous work on shorter time frames has shown evidence that author idiolects tend to stay relatively stable 
+(
+Blas Arroyo, 2023
+; 
+Barlow, 2013
+)
+. Yet, the few sociolinguistic studies on longer time frames with only a few individuals found that their sociolect does change 
+(
+Rickford and Price, 2013
+; 
+Sankoff, 2019
+)
+, suggesting that idiolect might as well.
+
+Setup
+
+New GMM models are trained and evaluated on the SADIRI style embeddings using a chronological data split. The first 50 documents per author (temporally) in Reddit, GMANE, and Wikipedia are used to fit the GMM. The 
+ value is chosen by validating on the next 10 documents. We evaluate on the remaining documents. For each test document, we measure 
+ relative to the time elapsed since that author’s last training document. Results are pooled at the month level for the 37,714 Reddit, 63,372 GMANE, 156,918 Wikipedia article, and 26,750 Wikipedia talk page documents. All authors are equally present in all windows.
+
+Results
+
+Figure 
+5
+ shows that author predictability declines as the time gap between training and test documents increases, with Pearson correlation tests significant across all four genres (
+). 
+ drops sharply within 24 months, especially on Reddit and GMANE. This decrease suggests that authors’ underlying idiolectic styles change over time, becoming dissimilar from their earlier style.
+Wikipedia has a more nuanced decrease in predictability. Both Wikipedia sources see an overall decrease, but the article pages follow the same trend as Reddit and GMANE, while the harder-to-attribute talk pages see only a small decrease.
+
+Figure 5: 
+As time progresses, authors deviate more and more from their initial style. This indicates that author style changes significantly over time, and author models trained in the past may not be as effective as authors continue to write. This effect is particularly noticeable on Reddit and GMANE, which both show a steep decrease, whereas Wikipedia drops initially but then continues with only a small decline.
+
+Why are authors less predictable over time?
+
+The drop in predictability could be due to multiple changes in stylistic behavior. Here, we test three hypotheses: 
+H1
+ The author becomes less stylistically consistent over time and is unable to be accurately identified, 
+H2
+ The author adopts a new, 
+additional
+ substyle that is not present initially, 
+H3
+ The author changes to a new, distinct style with equal complexity.
+
+To test these hypotheses, we employ a sliding window approach that segments each author’s chronological document series into discrete temporal windows, allowing us to compare their styles at different points in time. Briefly, we use 50 consecutive documents to fit a GMM and compare the documents in other windows using the log-likelihood; full details are in Appendix 
+G
+.
+
+Our results support one of the three hypotheses. First, we find evidence for consistent evolution of a stable but distinct idiolect; Figure 
+6
+ shows that held-out documents within a window are reliably identified as an author’s (the diagonal) but this identification drops over time. Thus, we do not find support for H1, which would have a decreasing likelihood over the diagonal. Second, we plot the mean number of components (Appendix Figure 
+16
+) showing that authors do not add or lose style components, maintaining complexity. Finally, Figure 
+17
+ shows that temporal degradation is driven more by location than variance drifts. This indicates stylistic displacement rather than inconsistency. Together, these results support H3: author style shifts over time without changing in complexity.
+
+Figure 6: 
+Heatmap of average log-likelihood for pairs of model window and data window. Performance is highest along the diagonal and declines with increasing separation, indicating distributional drift over time.
+
+9 
+Do authors shift style in conversation?
+
+Linguistic accommodation theory suggests that interlocutors often adjust parts of their language to match that of their conversational partners 
+(
+Giles and Ogay, 2008
+)
+ , and methods for studying accommodation have used function words 
+(
+Litterer et al., 2025
+)
+, suggesting this effect could be from changes in idiolect. Therefore, we ask to what degree authors retain their own style when replying versus adopting the idiolect of the other?
+
+Setup
+
+Here, we re-use the trained models on the SADIRI embeddings, evaluate on GMANE data in the test set, and measure how 
+ changes depending on which type of message an author is sending. To control for differences between authors, we restrict our analysis to pairs of authors 
+, 
+ where each author has made an initial email (a post) and the other author has been the first reply to that post. Using the 1.3M emails in our test data, we identify 956 post-reply pairings and 1109 unique authors that engage in these conversations.
+
+Let author 
+ write a reply 
+ to a post 
+ by author 
+, and let 
+ denote a distinct baseline post written by 
+. Using posterior authorship probabilities 
+, we define two deltas:
+
+and
+
+ measures whether the reply remains identifiable as 
+’s style, while 
+ measures movement toward the parent author 
+. Negative 
+ indicates self drift and positive 
+ indicates accommodation.
+
+Results
+
+When authors reply, they become slightly more identifiable, but show no meaningful accommodation towards the parent author. This suggests that replies may elicit richer stylistic features for the author without being influenced by the parent author’s style. Appendix Figure 
+18
+ shows that authors maintain their idiolect rather than converging toward the style of the author they are replying to. Thus, replies remain a rich signal of idiolect.
+
+10 
+Conclusion
+
+In this study, we seek to model the style representations of 
+authors
+, rather than those of 
+documents
+, showing that such an approach leads to better representations of authorship. With large-scale analyses of 40K authors and millions of documents across four genres, we demonstrate the importance of the writing context. Authors exhibit stylistic variations across conversation contexts, genre norms, and time. Our findings provide a more nuanced understanding of idiolects, highlighting the need to account for context-dependent variation while modeling the invariant aspects of style. Beyond improving authorship verification, our findings can inform sociolinguistics and the development of fairer, more context-aware NLP systems.
+
+Limitations
+
+First, we acknowledge that it is possible that our model is learning a shortcut for idiolect, such as topic. Although each of the embeddings we use attempts to disentangle topic, there is no perfect way to do this. StyleDistance provides a strong signal regarding our modeling setup because it is explicitly trained on synthetic data to de-confound topic and style. Figure 
+2
+ shows that StyleDistance has one of the strongest performance gains from our setup, which makes us more confident that we are modeling stylistic features rather than topical ones. However, author models may still partially encode topic or community-level regularities rather than purely idiolectal variation. Although the held-out subreddit evaluation in Appendix 
+C
+ suggests the model retains substantial stylistic signal under cross-topic generalization, performance does decrease in this setting, indicating that some contextual confounding may remain even with an embedding optimized for cross-genre style representation.
+
+Although we find a strong performance gain from our methodology, we acknowledge that there are limitations to our analysis. First, we leverage a moderate number of documents to build our author models (50), which may not always be feasible. We still believe our approach is beneficial even with a smaller number of documents, as shown in Appendix Figure 
+9
+, but further work would be needed to quantify the trade-offs relative to the number and length of documents available. Second, the model performance still varies depending on the setting in which the document was written. In Sections 6 to 9, we show many different contexts where an author appears to deviate from their own idiolect, as represented by our models. Additionally, in Appendix 
+F
+ we see that authors who write consistently in one setting are not guaranteed to write consistently in another. Thus, while our authorship models do improve performance, these models are still not fully robust to the reality of contextual effects on writing and would be limited in performance depending on where and when the data used to train and evaluate the models was collected.
+
+Ethics Statement
+
+Our study primarily focuses on the theoretical aspects of individual styles. We only made use of public datasets, and all authors in the datasets were properly anonymized to avoid any potential disclosure of real identities. We acknowledge that the authorship verification technology is dual-use. While such technology can be used for forensic investigation and historical authorship attribution, malicious use can also potentially compromise the anonymity of writers and contribute to mass surveillance. We urge the responsible deployment of such technology. Our study shows the fluidity of individual styles, challenging the assumption that individuals’ writing styles are invariant. Therefore, authorship verification technology should not be deployed in high-stakes scenarios without significant human oversight.
+
+References
+
+Agarwal et al. (2025)
+
+Shantanu Agarwal, Joel Barry, Steven Fincke, and Scott Miller. 2025.
+
+Cross-genre authorship attribution via llm-based retrieve-and-rerank.
+
+arXiv preprint arXiv:2510.16819
+.
+
+Alkiek et al. (2025)
+
+Kenan Alkiek, Anna Wegmann, Jian Zhu, and David Jurgens. 2025.
+
+Neurobiber: Fast and
+interpretable stylistic feature extraction
+.
+
+Barber and Garcia Ramirez (2021)
+
+Alex Barber and Eduardo Garcia Ramirez. 2021.
+
+Idiolects.
+
+In Edward N. Zalta, editor, 
+The Stanford Encyclopedia of
+Philosophy
+, Summer 2021 edition. Metaphysics Research Lab, Stanford
+University.
+
+Barlow (2013)
+
+Michael Barlow. 2013.
+
+Individual differences and usage-based grammar.
+
+International Journal of Corpus Linguistics
+, 18(4):443–478.
+
+Baumgartner et al. (2020)
+
+Jason Baumgartner, Savvas Zannettou, Brian Keegan, Megan Squire, and Jeremy
+Blackburn. 2020.
+
+The pushshift reddit dataset.
+
+In 
+Proceedings of the international AAAI conference on web and
+social media
+, volume 14, pages 830–839.
+
+Bevendorff et al. (2020)
+
+Janek Bevendorff, Khalid Al-Khatib, Martin Potthast, and Benno Stein. 2020.
+
+Crawling and Preprocessing Mailing Lists At Scale for Dialog
+Analysis.
+
+In 
+58th Annual Meeting of the Association for Computational
+Linguistics (ACL 2020)
+. Association for Computational Linguistics.
+
+Bevendorff et al. (2024)
+
+Janek Bevendorff, Xavier Bonet Casals, Berta Chulvi, Daryna Dementieva, Ashaf
+Elnagar, Dayne Freitag, Maik Fröbe, Damir Korenčić, Maximilian
+Mayerl, Animesh Mukherjee, et al. 2024.
+
+Overview of pan 2024: multi-author writing style analysis,
+multilingual text detoxification, oppositional thinking analysis, and
+generative ai authorship verification.
+
+In 
+European Conference on Information Retrieval
+, pages 3–10.
+Springer.
+
+Biber (1988)
+
+Douglas Biber. 1988.
+
+Variation
+across Speech and Writing
+.
+
+Cambridge University Press.
+
+Bischoff et al. (2020)
+
+Sebastian Bischoff, Niklas Deckers, Marcel Schliebs, Ben Thies, Matthias Hagen,
+Efstathios Stamatatos, Benno Stein, and Martin Potthast. 2020.
+
+The importance of suppressing domain style in authorship analysis.
+
+arXiv preprint arXiv:2005.14714
+.
+
+Blas Arroyo (2023)
+
+José Luis Blas Arroyo. 2023.
+
+Individual variation and frequency change in early modern spanish:
+Alignment and intra-speaker (in) stability in a corpus of 18th century
+ego-documents.
+
+Journal of Historical Linguistics
+.
+
+Boenninghoff et al. (2019)
+
+Benedikt Boenninghoff, Robert M Nickel, Steffen Zeiler, and Dorothea Kolossa.
+2019.
+
+Similarity learning for authorship verification in social media.
+
+In 
+ICASSP 2019-2019 IEEE international conference on acoustics,
+speech and signal processing (ICASSP)
+, pages 2457–2461. IEEE.
+
+Brocardo et al. (2013)
+
+Marcelo Luiz Brocardo, Issa Traore, Sherif Saad, and Isaac Woungang. 2013.
+
+Authorship verification for short messages using stylometry.
+
+In 
+2013 International Conference on Computer, Information and
+Telecommunication Systems (CITS)
+, pages 1–6. IEEE.
+
+Carden (1970)
+
+Guy Carden. 1970.
+
+A note on conflicting idiolects.
+
+Linguistic Inquiry
+, 1(3):281–290.
+
+Clarke (2019)
+
+Isobelle Clarke. 2019.
+
+Functional linguistic
+variation in Twitter trolling
+.
+
+International Journal of Speech Language and the Law
+, 26.
+
+Clarke and Grieve (2017)
+
+Isobelle Clarke and Jack Grieve. 2017.
+
+Dimensions of Abusive
+Language on Twitter
+.
+
+In 
+Proceedings of the First Workshop on Abusive
+Language Online
+, pages 1–10, Vancouver, BC, Canada. Association for
+Computational Linguistics.
+
+Coulthard (2004)
+
+Malcolm Coulthard. 2004.
+
+Author identification, idiolect, and linguistic uniqueness.
+
+Applied linguistics
+, 25(4):431–447.
+
+Fabien et al. (2020)
+
+Maël Fabien, Esau Villatoro-Tello, Petr Motlicek, and Shantipriya Parida.
+2020.
+
+Bertaa: Bert fine-tuning for authorship attribution.
+
+In 
+Proceedings of the 17th International Conference on Natural
+Language Processing (ICON)
+, pages 127–137, Indian Institute of Technology
+Patna, Patna, India. NLP Association of India.
+
+Fincke and Boschee (2024)
+
+Steven Fincke and Elizabeth Boschee. 2024.
+
+Separating style from substance: Enhancing cross-genre authorship
+attribution through data selection and presentation.
+
+arXiv preprint arXiv:2408.05192
+.
+
+Gao et al. (2020)
+
+Leo Gao, Stella Biderman, Sid Black, Laurence Golding, Travis Hoppe, Charles
+Foster, Jason Phang, Horace He, Anish Thite, Noa Nabeshima, Shawn Presser,
+and Connor Leahy. 2020.
+
+The Pile: An 800gb dataset of diverse text for language modeling.
+
+arXiv preprint arXiv:2101.00027
+.
+
+Preprint. Available at 
+https://arxiv.org/abs/2101.00027
+.
+
+Garcia and Martin (2006)
+
+Antonio Miranda Garcia and Javier Calle Martin. 2006.
+
+Function words in authorship attribution studies.
+
+Literary and Linguistic Computing
+, 22(1):49–66.
+
+George (1990)
+
+Alexander George. 1990.
+
+Whose language is it anyway? some notes on idiolects.
+
+The Philosophical Quarterly (1950-)
+, 40(160):275–298.
+
+Giles and Ogay (2008)
+
+Howard Giles and Tania Ogay. 2008.
+
+Communication accommodation theory.
+
+In Bryan B. Whaley and William Samter, editors, 
+Explaining
+Communication: Contemporary Theories and Exemplars
+, pages 293–310. Lawrence
+Erlbaum Associates, Mahwah, NJ.
+
+Gill and Swartz (2011)
+
+Paramjit S Gill and Tim B Swartz. 2011.
+
+Stylometric analyses using dirichlet process mixture models.
+
+Journal of statistical planning and inference
+,
+141(11):3665–3674.
+
+Grant and MacLeod (2018)
+
+Timothy D Grant and Nicci MacLeod. 2018.
+
+Resources and constraints in linguistic identity performance: a
+theory of authorship.
+
+Language and Law/Linguagem e Direito
+, 5(1):80–96.
+
+Halvani et al. (2016)
+
+Oren Halvani, Christian Winter, and Anika Pflug. 2016.
+
+Authorship verification for different languages, genres and topics.
+
+Digital Investigation
+, 16:S33–S43.
+
+Hayati et al. (2021)
+
+Shirley Anugrah Hayati, Dongyeop Kang, and Lyle Ungar. 2021.
+
+Does BERT
+learn as humans perceive? understanding linguistic styles through lexica
+.
+
+In 
+Proceedings of the 2021 Conference on Empirical Methods in
+Natural Language Processing
+, pages 6323–6331, Online and Punta Cana,
+Dominican Republic. Association for Computational Linguistics.
+
+Holmes and Forsyth (1995)
+
+David I Holmes and Richard S Forsyth. 1995.
+
+The federalist revisited: New directions in authorship attribution.
+
+Literary and Linguistic computing
+, 10(2):111–127.
+
+Hu et al. (2024)
+
+Zhengmian Hu, Tong Zheng, and Heng Huang. 2024.
+
+A Bayesian
+approach to harnessing the power of LLMs in authorship attribution
+.
+
+In 
+Proceedings of the 2024 Conference on Empirical Methods in
+Natural Language Processing
+, pages 13216–13227, Miami, Florida, USA.
+Association for Computational Linguistics.
+
+Huang et al. (2024)
+
+Baixiang Huang, Canyu Chen, and Kai Shu. 2024.
+
+Can large
+language models identify authorship?
+
+In 
+Findings of the Association for Computational Linguistics:
+EMNLP 2024
+, pages 445–460, Miami, Florida, USA. Association for
+Computational Linguistics.
+
+Hudson (1996)
+
+Richard A Hudson. 1996.
+
+Sociolinguistics
+.
+
+Cambridge university press.
+
+Israeli et al. (2025)
+
+Abraham Israeli, Shuai Liu, Jonathan May, and David Jurgens. 2025.
+
+The million authors corpus: A cross-lingual and cross-domain
+wikipedia dataset for authorship verification.
+
+In 
+Findings of the Association for Computational Linguistics:
+ACL 2025
+, pages 25997–26017.
+
+Kestemont et al. (2019)
+
+Mike Kestemont, Efstathios Stamatatos, Enrique Manjavacas, Walter Daelemans,
+Martin Potthast, and Benno Stein. 2019.
+
+Overview of the
+Cross-domain Authorship Attribution Task at PAN 2019
+.
+
+In 
+Working Notes Papers of the CLEF 2019 Evaluation Labs
+,
+volume 2380 of 
+CEUR Workshop Proceedings
+.
+
+Kestemont et al. (2018)
+
+Mike Kestemont, Michael Tschuggnall, Efstathios Stamatatos, Walter Daelemans,
+Günther Specht, Benno Stein, and Martin Potthast. 2018.
+
+Overview of the author identification task at pan-2018: cross-domain
+authorship attribution and style change detection.
+
+In 
+Working Notes Papers of the CLEF 2018 Evaluation Labs.
+Avignon, France, September 10-14, 2018/Cappellato, Linda [edit.]; et al.
+,
+pages 1–25.
+
+Kim et al. (2025)
+
+Junghwan Kim, Haotian Zhang, and David Jurgens. 2025.
+
+Leveraging multilingual training for authorship representation:
+Enhancing generalization across languages and domains.
+
+In 
+Proceedings of the 2025 Conference on Empirical Methods in
+Natural Language Processing (EMNLP)
+.
+
+Kredens et al. (2021)
+
+Krzysztof Kredens, Annina Heini, and Piotr Pęzik. 2021.
+
+100 Idiolects - a corpus for research on individual variation
+across discourse types.
+
+Aston University: FoLD Repository.
+
+Labov (2011)
+
+William Labov. 2011.
+
+The exact description of a speech community: Short a in philadelphia.
+
+In 
+Language change and variation
+, pages 1–58. John Benjamins
+Publishing Company.
+
+Litterer et al. (2025)
+
+Benjamin Roger Litterer, David Jurgens, and Dallas Card. 2025.
+
+Coordinating chaos: A structured review of linguistic coordination
+methodologies.
+
+In 
+Proceedings of the 63rd Annual Meeting of the Association
+for Computational Linguistics (Volume 1: Long Papers)
+, pages 24984–24999.
+
+Litvinova et al. (2018)
+
+Tatiana Litvinova, Olga Litvinova, and Pavel Seredin. 2018.
+
+Assessing the level of stability of idiolectal features across modes,
+topics and time of text production.
+
+In 
+2018 23rd Conference of Open Innovations Association
+(FRUCT)
+, pages 223–230. IEEE.
+
+Mojedano Batel et al. (2024)
+
+Andrea Mojedano Batel, Amparo Soler Bonafont, and Krzysztof Kredens. 2024.
+
+Epistemic modality constructions as stable idiolectal features: A
+cross-genre study of spanish.
+
+International Journal for the Semiotics of Law-Revue
+internationale de Sémiotique juridique
+, 37(2):595–621.
+
+Montfort et al. (2021)
+
+Nick Montfort, Ardalan SadeghiKivi, Joanne Yuan, and Alan Y. Zhu. 2021.
+
+Using referring
+expression generation to model literary style
+.
+
+In 
+Proceedings of the Workshop on Natural Language Processing
+for Digital Humanities
+, pages 64–74, NIT Silchar, India. NLP Association of
+India (NLPAI).
+
+Mosteller and Wallace (1963)
+
+Frederick Mosteller and David L Wallace. 1963.
+
+Inference in an authorship problem: A comparative study of
+discrimination methods applied to the authorship of the disputed federalist
+papers.
+
+Journal of the American Statistical Association
+,
+58(302):275–309.
+
+Neal et al. (2017)
+
+Tempestt Neal, Kalaivani Sundararajan, Aneez Fatima, Yiming Yan, Yingfei Xiang,
+and Damon Woodard. 2017.
+
+Surveying stylometry techniques and applications.
+
+ACM Computing Surveys (CSuR)
+, 50(6):1–36.
+
+Pardo and Rosso (2019)
+
+Francisco Manuel Rangel Pardo and Paolo Rosso. 2019.
+
+Overview
+of the 7th author profiling task at pan 2019: Bots and gender profiling in
+twitter
+.
+
+In 
+Conference and Labs of the Evaluation Forum
+.
+
+Patel et al. (2023)
+
+Ajay Patel, Delip Rao, Ansh Kothary, Kathleen McKeown, and Chris
+Callison-Burch. 2023.
+
+Learning interpretable style
+embeddings via prompting llms
+.
+
+Patel et al. (2025)
+
+Ajay Patel, Jiacheng Zhu, Justin Qiu, Zachary Horvitz, Marianna Apidianaki,
+Kathleen McKeown, and Chris Callison-Burch. 2025.
+
+StyleDistance: Stronger content-independent style embeddings with
+synthetic parallel examples.
+
+In 
+Proceedings of the 2025 Conference of the Nations of the
+Americas Chapter of the Association for Computational Linguistics: Human
+Language Technologies (Volume 1: Long Papers)
+, pages 8662–8685.
+
+Rickford and Price (2013)
+
+John Rickford and Mackenzie Price. 2013.
+
+Girlz ii women: Age-grading, language change and stylistic variation.
+
+Journal of Sociolinguistics
+, 17(2):143–179.
+
+Rivera-Soto et al. (2021)
+
+Rafael A. Rivera-Soto, Olivia Elizabeth Miano, Juanita Ordonez, Barry Y. Chen,
+Aleem Khan, Marcus Bishop, and Nicholas Andrews. 2021.
+
+Learning
+universal authorship representations
+.
+
+In 
+Proceedings of the 2021 Conference on Empirical Methods in
+Natural Language Processing
+, pages 913–919, Online and Punta Cana,
+Dominican Republic. Association for Computational Linguistics.
+
+Sankoff (2019)
+
+Gillian Sankoff. 2019.
+
+Age grading, style, and language change: a lifespan perspective.
+
+In 
+The Routledge companion to the work of John R. Rickford
+,
+pages 308–315. Routledge.
+
+Sapkota et al. (2015)
+
+Upendra Sapkota, Steven Bethard, Manuel Montes, and Thamar Solorio. 2015.
+
+Not all character n-grams are created equal: A study in authorship
+attribution.
+
+In 
+Proceedings of the 2015 conference of the North American
+chapter of the association for computational linguistics: Human language
+technologies
+, pages 93–102.
+
+Schwartz et al. (2017)
+
+Roy Schwartz, Maarten Sap, Ioannis Konstas, Leila Zilles, Yejin Choi, and
+Noah A. Smith. 2017.
+
+The effect of different
+writing tasks on linguistic style: A case study of the ROC story cloze
+task
+.
+
+In 
+Proceedings of the 21st Conference on Computational Natural
+Language Learning (CoNLL 2017)
+, pages 15–25, Vancouver, Canada.
+Association for Computational Linguistics.
+
+Silva et al. (2024)
+
+Kanishka Silva, Ingo Frommholz, Burcu Can, Frédéric Blain, Raheem
+Sarwar, and Laura Ugolini. 2024.
+
+Forged-gan-bert: Authorship attribution for llm-generated forged
+novels.
+
+In 
+Proceedings of the 18th Conference of the European Chapter
+of the Association for Computational Linguistics: Student Research Workshop
+,
+pages 325–337. Association for Computational Linguistics.
+
+Solorio et al. (2013)
+
+Thamar Solorio, Ragib Hasan, and Mainul Mizan. 2013.
+
+A case study of sockpuppet detection in wikipedia.
+
+In 
+Proceedings of the workshop on language analysis in social
+media
+, pages 59–68.
+
+Stamatatos (2009)
+
+Efstathios Stamatatos. 2009.
+
+A survey of modern authorship attribution methods.
+
+Journal of the American Society for information Science and
+Technology
+, 60(3):538–556.
+
+Stamatatos et al. (2022)
+
+Efstathios Stamatatos, Mike Kestemont, Krzysztof Kredens, Piotr Pezik, Annina
+Heini, Janek Bevendorff, Benno Stein, and Martin Potthast. 2022.
+
+Overview of the authorship verification task at pan 2022.
+
+In 
+CEUR workshop proceedings
+, volume 3180, pages 2301–2313.
+CEUR-WS. org.
+
+Sundararajan and Woodard (2018)
+
+Kalaivani Sundararajan and Damon Woodard. 2018.
+
+What represents “style” in authorship attribution?
+
+In 
+Proceedings of the 27th International Conference on
+Computational Linguistics
+, pages 2814–2822.
+
+Tschuggnall and Specht (2014)
+
+Michael Tschuggnall and Günther Specht. 2014.
+
+Enhancing authorship attribution by utilizing syntax tree profiles.
+
+In 
+Proceedings of the 14th Conference of the European Chapter
+of the Association for Computational Linguistics, volume 2: Short Papers
+,
+pages 195–199.
+
+Turell (2011)
+
+M Teresa Turell. 2011.
+
+The use of textual, grammatical and sociolinguistic evidence in
+forensic text comparison.
+
+The International Journal of Speech, Language and the Law
+,
+17(2):211–250.
+
+Tyo et al. (2022)
+
+Jacob Tyo, Bhuwan Dhingra, and Zachary C Lipton. 2022.
+
+On the state of the art in authorship attribution and authorship
+verification.
+
+arXiv preprint arXiv:2209.06869
+.
+
+Wang et al. (2023)
+
+Andrew Wang, Cristina Aggazzotti, Rebecca Kotula, Rafael Rivera Soto, Marcus
+Bishop, and Nicholas Andrews. 2023.
+
+Can authorship
+representation learning capture stylistic features?
+
+Transactions of the Association for Computational Linguistics
+,
+11:1416–1431.
+
+Weerasinghe et al. (2022)
+
+Janith Weerasinghe, Rhia Singh, and Rachel Greenstadt. 2022.
+
+Using authorship verification to mitigate abuse in online
+communities.
+
+In 
+Proceedings of the International AAAI Conference on Web and
+Social Media
+, volume 16, pages 1075–1086.
+
+Wegmann et al. (2022)
+
+Anna Wegmann, Marijn Schraagen, and Dong Nguyen. 2022.
+
+Same
+Author or Just Same Topic? Towards Content-Independent Style
+Representations
+.
+
+In 
+Proceedings of the 7th Workshop on Representation
+Learning for NLP
+, pages 249–268, Dublin, Ireland. Association for
+Computational Linguistics.
+
+Zhu and Jurgens (2021)
+
+Jian Zhu and David Jurgens. 2021.
+
+Idiosyncratic
+but not arbitrary: Learning idiolects in online registers reveals distinctive
+yet consistent individual styles
+.
+
+In 
+Proceedings of the 2021 Conference on Empirical Methods in
+Natural Language Processing
+, pages 279–297, Online and Punta Cana,
+Dominican Republic. Association for Computational Linguistics.
+
+Appendix A 
+Data Sampling
+
+To construct the full dataset, we sample 10K authors from each data source to build a final set of 40K authors. Although we set a lower bound on authors at 100 documents, some authors have a large number of documents, some even in the tens of thousands. Thus, we set an upper bound of 250 documents per author. If an author has more than 250 documents, we sample documents to follow the author’s underlying metadata distribution. As an example, we analyze how the sampling would work for Wikipedia documents. Formally, let 
+ be the number of documents in namespace 
+ for a given author and 
+. We set
+
+We then allocate one additional post to each of the 
+ namespaces with the largest fractional remainders:
+
+This ensures that exactly 250 documents are sampled and that they follow the underlying author’s namespace distribution as closely as possible.
+
+Once the final set of documents is constructed, we create three splits: train, validation, and test. The distribution is 50 for training, 25 for validation, and 
+-75 for Test.
+
+We sample these documents with the intent to ensure that the splits follow the underlying metadata distribution. On average, we observed that authors had 128 test docs. The breakdown for test documents per source can be seen in Table 
+1
+.
+
+Source
+
+Test Count
+
+Reddit
+
+1,154,014
+
+GMANE
+
+1,206,047
+
+Wikipedia
+
+1,344,228
+
+books
+
+1,421,921
+
+Table 1: 
+All sources have a training set of 500K and a development set size of 250K, while test set sizes vary as shown. All sources have over 100 test documents per author on average.
+
+Appendix B 
+Source Based Analysis
+
+In this section, we investigate the differences between the four data sources. This can help us uncover phenomena occurring because of our modeling.
+
+B.1 
+Performance Differences
+
+To measure the performance by source, we simply took all of the testing documents and segmented them by their data source. The results, which can be seen in Figure 
+7
+, uncover an interesting finding where authors from the GMANE data source are much more consistent than the other sources. Additionally, authors who write in Wikipedia talk pages have very low consistency. This may be attributed to the fact that emails are a richer stylistic source, as they are used for day-to-day messaging. On the other hand, Wikipedia talk pages usually are short edit proposals, making it difficult for authors to engage in their own idiolect.
+
+Figure 7: 
+This figure shows consistency across the four data sources. Wikipedia has the lowest consistency by far, and the opposite can be said for GMANE. We hypothesize that this is a result of Wikipedia having more rules and structure, while emails are more informal and are used for day-to-day speech.
+
+B.2 
+Change in Optimal Components
+
+We also wanted to measure the change in components across the sources to see if some authors had more complex idiolect distributions than others. Figure 
+8
+ shows that Reddit and books have a comparable number of styles while GMANE and Wikipedia have 0.5 and 1 more styles on average, respectively. This result paired with Figure 
+7
+ shows that more complexity does not mean higher consistency. Thus, there exists some tradeoff between complexity and performance, reinforcing the findings in 
+3
+ that over half of authors have 2 or fewer components. From these findings, we can be more confident that the model is not learning a topic shortcut because Reddit would be much more topic diverse than books.
+
+Figure 8: 
+GMANE and Wikipedia have more complex idiolect distributions for their authors. Books and Reddit have comparable values, making it difficult to determine what causes authors to have more components. It seems plausible that GMANE has a higher number of styles because it can represent day-to-day and formal speech. However, Wikipedia usually follows a similar norm for its pages, so we would expect a lower number of styles. 
+
+Appendix C 
+Held-Out Subreddit Evaluation
+
+We evaluate cross-topic authorship attribution on Reddit by treating subreddits as proxies for topic/community. For each author, we construct author-specific splits over disjoint subreddit sampled documents. For our setup, authors must have at least 10 subreddits with at least 5 documents in each. Eligible subreddits are allocated 60/20/20 to train, dev, and test, with train and dev documents capped at 50 and 25 per author, respectively, while all documents from held-out test subreddits are retained. As a control, we also construct a random split with the same per-author train/dev/test document counts. Again, we use the most performant model: GMM with the SADIRI embedding. After applying data filters, we had 2 669 authors retained, which are used for both setups.
+
+Split
+
+Success@8
+
+Random
+
+0.751
+
+0.573
+
+Held-out
+
+0.684
+
+0.493
+
+Table 2: 
+Performance under random and held-out-subreddit splits for the cross-topic experiment.
+
+The held-out subreddit evaluation shows that performance decreases when train/dev/test documents come from disjoint communities, but remains strong overall. Under the matched random-sampling control, the model achieves 0.751 Success@8 with mean 
+. When train/dev and test documents are drawn from disjoint subreddit sets, performance drops to 0.684 Success@8 and mean 
+ over the same dataset.
+
+The decline indicates that subreddit context contributes to attribution difficulty. Since subreddits differ in topic, audience, and norms, held-out-subreddit evaluation is a harder out-of-distribution setting than random document splitting. However, the drop is modest, suggesting that the model does not rely solely on subreddit-specific topical cues. The learned models retain substantial idiolectic signal in held-out communities.
+
+Appendix D 
+Number of Optimal Components
+
+Figure 
+9
+ shows the mean number of GMM components after fitting each model on a fixed number of training documents, choosing the 
+ value with the highest log-likelihood on the held-out validation data. The results suggest that even with relatively few documents for an author, e.g., 10, some authors have sufficiently distinct but regular stylistic variation that benefits from having multiple components. The number of optimal components stagnates as soon as we get to 20 training documents, indicating that a small number of documents is all that’s needed to gain benefit from this modeling setup.
+
+Figure 9: 
+The mean optimal number of Gaussian components, 
+, plateaus after approximately 20 training documents, indicating diminishing returns from additional samples.
+
+Table 
+3
+ shows the relative frequency of authors having a specific number of GMM components, 
+, in Experiment 1 (Section 
+5
+).
+
+GMM Components
+
+Percentage of Authors
+
+1
+
+20.94
+
+2
+
+33.80
+
+3
+
+17.49
+
+4
+
+9.71
+
+5
+
+6.70
+
+6
+
+5.77
+
+7
+
+5.60
+
+Table 3: 
+We find that roughly 61% of authors have optimal 
+ values between 2-4. Additionally, only about 20.94% of authors have the centroid as their best model, indicating that an overwhelming majority of authors benefit from more complex modeling. Interestingly, 18% of authors have 5+ components, indicating a much higher idiolectic complexity than the average author.
+
+D.1 
+Does the type of document style influence the optimal 
+?
+
+Here, we examine the distribution of optimal 
+ values across the different types of document styles, shown in Figure 
+10
+. We can see that the PCM embedding leverages the modeling complexity the most. However, there does not seem to be a correlation with the results in Figure 
+2
+, as the SADIRI based embedding had the highest performance boost from GMM modeling but not the most complex distributions. Overall, there is not a clear relationship between the style representation performance and the average optimized 
+.
+
+Figure 10: 
+There does not seem to be a general trend with respect to the strength of the embedding and the optimal 
+ value. In fact, the weakest embedding (NeuroBiber) has a higher average number of components than the strongest embedding (SADIRI). 
+
+Appendix E 
+Orthogonalization Analysis
+
+E.1 
+Stylistic Overlap Amongst Embeddings
+
+We hypothesize that the discrepancy in performance across embeddings arises from differences in the stylistic information captured by each representation. In particular, we expect the SADIRI embedding to capture much of the stylistic variance represented in NeuroBiber, while additionally encoding a broader set of latent features. To test this, we measure the Expected Variation Ratio (EVR) across the embeddings. First, we perform Singular Value Decomposition (SVD) to bring all of the embeddings down to 96 dimensions. We then compute the EVR for each embedding, which represents the proportion of variance explained by each of the 96 latent dimensions obtained from SVD. By correlating these EVR profiles, we observe in Figure 
+11
+ that the principal components of these embeddings exhibit highly similar variance structures, suggesting that they encode overlapping stylistic information. At an aggregate level, the embeddings exhibit consistently high correlations, indicating the presence of a shared set of stylistic signals distributed across their latent spaces.
+
+Figure 11: 
+There is a clear overlap in the stylistic features that the six embeddings are capturing. 
+
+The heatmap additionally reveals several clustering patterns among the embeddings. StyleDistance and SADIRI exhibit nearly identical EVR structures, while LISA and PCM form a second highly correlated pair. NeuroBiber and LUAR maintain strong correlations across nearly all embeddings, suggesting that they may capture a more generalized stylistic representation. The near-perfect correlation between StyleDistance and SADIRI is especially interesting because StyleDistance is explicitly trained to be content-independent. The shared variance structure suggests that the dominant latent directions captured by the SADIRI embedding are not based on semantics or topic, but are strongly organized around stylistic variation. Further, these results suggest that the performance improvements observed in Figure 
+2
+ are likely driven by stylistic structure.
+
+E.2 
+Performance Impact From Orthogonalization
+
+Although orthogonalization is relatively cheap in terms of time complexity, one might question the impact on performance. In this experiment, we analyze the performance of the mixed author model setup with GMMs trained with a diagonal covariance matrix with and without orthogonalization. Indeed, the experiments without orthogonalization were quicker, but from Figure 
+12
+, we can clearly see a strong jump in performance for every embedding. LISA and StyleDistance observe the most performance gain, which is surprising because they have a much lower dimensionality than PCM and SADIRI. These results suggest that the raw embedding spaces violate the independence assumptions imposed by diagonal covariance GMMs. Orthogonalization alleviates this by decorrelating the latent dimensions, which satisfies a key assumption of diagonal covariance matrix GMM modeling.
+
+Figure 12: 
+There is a large boost to performance for all embeddings after using orthogonalization in our modeling setup. This indicates that the step is crucial for our diagonal covariance setup.
+
+E.3 
+PCA Time Complexity Analysis
+
+Now that we’ve established that orthogonalization gives us a major performance boost, we look to formalize the time complexity benefit from using a diagonal covariance matrix instead of a full one.
+
+Setup.
+
+Let 
+ be the number of samples, 
+ the embedding dimension, 
+ the number of mixture components, and 
+ the number of EM iterations.
+
+Full covariance matrix.
+
+Per EM iteration, evaluating Mahalanobis distances and updating full covariances yields
+
+PCA + Diagonal Covariance.
+
+A one-time PCA cost for covariance formation and eigendecomposition:
+
+After orthogonalization (no projection, so 
+), diagonal-covariance EM steps require only elementwise operations:
+
+Evaluation in Practice
+
+We use scikit-learn’s implementation of GMMs with a max iteration of 100.
+In our setup, the most computationally expensive case is
+
+, 
+, 
+
+Under these worst-case parameters with 
+, we see a speedup of approximately 7x. In the worst case 
+, and the
+full covariance is approximately 
+ more work overall
+than PCA + diagonal covariance.
+
+E.4 
+Dimensionality Reduction
+
+We have shown that orthogonalization provides strong performance gains in Figure 
+12
+ and negligible overhead when compared to using a full covariance matrix. However, we can also leverage the dimensionality reduction aspect of PCA and fit our models on a reduced embedding. In Figure 
+13
+, we run PCA on a varying percentage of the SADIRI embedding on 10% of authors. Here, we observe an interesting phenomenon where performance is almost bell shaped where 50-60% has the highest performance. Surprisingly, using the full embedding orthogonalized performs the worst, which indicates that some of the features are introducing noise. The result shows that we could speed up the modeling process substantially and get 
+better
+ results.
+
+Figure 13: 
+We need not perform full orthogonalization to gain most of the benefits. This figure shows that we can use 50% of the PCA reduced embedding and get the best performance for a much lower computational cost.
+
+Note that the raw consistency values are higher than those of the 40K author setup since this result is computed using only a subset of 4K authors due to performance considerations.
+
+Appendix F 
+Are authors consistent across genre changes?
+
+Another interesting fluctuation in writing style occurs when authors write in different genres. Linguistic literature shows us that authors are often consistent across multiple genres 
+(
+Mojedano Batel et al., 2024
+)
+. Another study has shown that an author’s idiolect tends to have low intra-author variation when writing about different topics 
+(
+Litvinova et al., 2018
+)
+. We look to evaluate these findings by observing authors who write in Wikipedia article pages and talk pages.
+
+Setup
+
+First, we filter our dataset to include only posts from authors who have at least 10 posts in both article and talk pages. Next, we compute the quartiles with respect to consistency for article pages. We evaluate these sets of authors together to determine how their performance changes when evaluated in the talk page setting. For context, article pages are the encyclopedia articles that provide factual information regarding subjects. Talk pages serve as a forum for improving article pages, so they are inherently much less formal.
+
+Results
+
+Surprisingly, we see that the most consistent authors in article pages are the least consistent in talk pages. On the other hand, the least consistent authors in formal settings seem to be the most consistent in the informal setting. The key takeaway here is that authors who write stylistically consistently in one setting are not guaranteed to do the same in another setting. Although there are multiple studies supporting the claim that the author’s idiolect remains consistent across genres, these studies only look at fewer than 100 authors. Our analysis for Wikipedia captures posts from over 2000 authors; thus, it could be plausible that these papers did not have a large enough sample size to evaluate their claims.
+
+Figure 14: 
+Authors who are consistent in one genre are not guaranteed to be consistent in another. This Wikipedia analysis shows us that stratified authors who are consistent in a formal setting actually are the least consistent authors in a more informal setting.
+
+Appendix G 
+Additional Details on Temporal Analysis
+
+Here, we fully specify how models were constructed for testing the three hypotheses in the temporal analysis in Section 
+8
+. The documents for each author are partitioned into distinct windows.
+
+To evaluate temporal generalization, we partition each author’s chronologically ordered documents into non-overlapping, author-relative time windows. For an author whose earliest document occurs at time 
+, window 
+ is the interval 
+, where 
+ is a fixed calendar span (
+ years). The number of documents per window varies by author; only authors with at least 
+ documents in a window are included (
+), and an author is filtered out if they do not appear in at least 3 windows. Further, a window is retained only if at least 10% of the 
+remaining
+ author set exists in it. Since we pull from 3 sources, we need at least 3k authors in each window to make the window valid.
+
+Within each window, documents are partitioned into train, dev, and test splits with proportions 60%, 20%, and 20%. The split is random but deterministic for each author–window pair, so the same documents always fall into the same split. A separate GMM is trained on the training portion of each window’s data, with the number of components 
+ chosen via the dev set. Performance is computed by evaluating each model trained on window 
+ on the test documents from every window 
+ (including 
+), where mean log-likelihood is the metric.
+
+Figure 
+6
+ shows one of these configurations where each window is half a year, and we require an author to have at least 15 documents in that range to be considered in the experiment. However, the phenomenon we observe in Figure 
+6
+ is robust to other hyperparameter choices, as shown in Figure 
+15
+. Here we tabulate all of our configurations for different time ranges and minimum number of documents to show that the same overall trend exists where the diagonal is the most performant, reinforcing the claim that H1 is not founded.
+
+Figure 15: 
+The grid tabulates different hyperparameter configurations for the time heatmap found in Figure 
+6
+. We can see that the general trend of the diagonal performing the best holds up regardless of the time range and minimum number of documents.
+
+To assess whether authors’ styles become more or less complex over time, we calculate the mean number of components used by the same set of authors in each time window, shown in
+Figure 
+16
+. The number of components can be thought of as a loose proxy for stylistic diversity, where authors with minimal variation are more likely to be modeled with a single component, whereas those with multiple distinct styles are more likely to have multiple components. Here, we see that authors have negligible variation over time. This indicates that H2 is not supported.
+
+Figure 16: 
+The mean number of components per GMM across the different temporal windows used in the experiment in Section 
+8
+; cf. Figure 
+6
+. Note that the same authors are present in all windows, so the changes reflect a shift in global behavior. 
+
+To investigate H3, we quantify how much GMM 
+location
+ and 
+spread
+ diverge across calendar windows as temporal distance grows. We take the learned models that were learned from the configurations in Figure 
+6
+. For each pair of temporal windows 
+, we compute a location drift score,
+
+and a spread drift score,
+
+We then group these pairwise comparisons by temporal lag 
+. For example, lag 1 compares adjacent windows (
+, 
+, etc), while lag 2 compares windows separated by one interval (
+, 
+, etc). Finally, for each lag, we report the average drift as a percentage increase relative to lag 1 as shown in Figure 
+17
+.
+
+Location drift increases substantially faster with temporal distance than spread drift. Relative to lag 1, the mean location drift 
+ increases by 
+ at lag 2, 
+ at lag 3, and 
+ at lag 4. In contrast, the mean spread drift 
+ increases more gradually, by only 
+, 
+, and 
+ at the corresponding lags. Together with the stable component counts in Figure 
+16
+, these results support H3: authors’ stylistic representations primarily translate through embedding space over time, while overall mixture complexity remains approximately stable and changes in spread accumulate more slowly.
+
+Importantly, 
+ measures the magnitude between spread profiles of temporal windows rather than a strict increase in variance over time. When we instead compare each author’s earliest and latest windows directly, 
+ of authors exhibit tighter distributions, while 
+ exhibit broader distributions. Overall, this produces only a modest net tightening, but there is no general phenomenon that a majority of authors follow.
+
+Figure 17: 
+Relative increase in location drift (
+) and spread drift (
+) as a function of temporal lag 
+. Location drift grows substantially faster than spread drift as lag increases, indicating that temporal degradation is driven primarily by stylistic displacement rather than inconsistency. Note we use the same configurations as Figure 
+6
+.
+
+Appendix H 
+Conversation Style Shifts
+
+Figure 
+18
+ shows the result in the conversation style shift experiment. We observe that replies are slightly richer in idiolect for the reply author. Additionally, reply authors do not seem to shift their style toward the parent author’s idiolect distribution.
+
+Figure 18: 
+Average 
+ and 
+ values for GMANE replies. Replies become slightly more idiolectically rich for the reply author, while showing no meaningful accommodation. 
+
+Appendix I 
+Additional Training Details
+
+The RoBERTa model was trained to predict the specific author from a document. Documents are clipped at 512 tokens. The model is trained for 3 epochs, and we use a downsampled 100K development set to choose the best-performing model across the epochs. We use 
+roberta-base
+ as the base model, a batch size of 32, and the AdamW optimizer with a learning rate of 2e-5, weight decay of 0.01, and 10 warm-up steps. We did not perform extensive hyperparameter tuning for the RoBERTa baseline; instead, we used a standard configuration to provide a strong and reproducible reference point. We observed similar poor performance when using DistilRoBERTa, indicating that the particular model is likely not causing performance degradation.
+
+For all of our experiments, we trained and evaluated on NVIDIA RTX A6000 GPUs. For the nearest neighbor and centroid approaches, roughly 4 GPU hours on one A6000 were sufficient for training and evaluating our models. In the GMM case, we needed up to 24 GPU hours for training and evaluating on larger embeddings, like the SADIRI embedding. The RoBERTa experiment required roughly 48 GPU hours for training and evaluation.
+
+I.1 
+Runtime Details
+
+For runtime comparison across models, Table 
+4
+ shows the worst-case time complexity across the fitting and evaluation steps of the experiments, extending the PCA analysis in Appendix 
+E
+. Let 
+ be the number of authors, 
+ the number of test documents per author, 
+ the number of components per author, 
+ the embedding dimension, and 
+ the number of EM iterations per author.
+
+Model
+
+Fitting
+
+Evaluating
+
+GMM
+
+Centroid
+
+Nearest Neighbor
+
+Table 4: 
+Worst-case fitting and evaluation complexity for the author models.
+
+For training, we set 
+ to be capped at 100. Additionally, from Table 
+3
+, we know that the average 
+ value is approximately 2.64. Thus, in the worst case, nearest-neighbor training is 100 times faster than the centroid model and 264 times faster than the GMM model. Evaluation runtime is more comparable, where the GMM model is roughly 2.64 times slower because of the varying component size. These runtime complexities are informative because experiments varied in which CPU was used and may be affected by other system-dependent bottlenecks, such as I/O, at the time of the experiment.
+
+Appendix J 
+Performance Metrics
+
+Below we provide two tables that more cleanly represent the values for the performance metrics in Figure 
+2
+.
+
+Representation
+
+NN
+
+Centroid
+
+GMM
+
+NeuroBiber
+
+0.15
+
+0.07
+
+0.08
+
++0.01
+
+LISA
+
+0.17
+
+0.23
+
+0.26
+
++0.03
+
+StyleDistance
+
+0.23
+
+0.29
+
+0.34
+
++0.05
+
+LUAR
+
+0.47
+
+0.55
+
+0.57
+
++0.02
+
+PCM
+
+0.64
+
+0.65
+
+0.69
+
++0.04
+
+SADIRI
+
+0.71
+
+0.76
+
+0.78
+
++0.02
+
+Table 5: 
+
+Success@8 values corresponding to
+Figure 
+2
+.
+NN denotes the nearest-neighbor model, and 
+ represents the absolute improvement from using the GMM model versus the Centroid model.
+
+Representation
+
+NN
+
+Centroid
+
+GMM
+
+NeuroBiber
+
+0.00
+
+0.03
+
+0.04
+
++0.01
+
+LISA
+
+0.00
+
+0.11
+
+0.14
+
++0.03
+
+StyleDistance
+
+0.00
+
+0.15
+
+0.19
+
++0.04
+
+LUAR
+
+0.00
+
+0.34
+
+0.36
+
++0.02
+
+PCM
+
+0.00
+
+0.44
+
+0.50
+
++0.06
+
+SADIRI
+
+0.00
+
+0.61
+
+0.64
+
++0.03
+
+Table 6: 
+
+Average 
+ values corresponding to
+Figure 
+2
+.
+NN denotes the nearest-neighbor model, and 
+ represents the absolute improvement from using the GMM model versus the Centroid model.
+
+Appendix K 
+AI Assistance
+
+ChatGPT was used for assistance with coding, specifically in evaluation optimizations on GPUs. In addition, we used AI assistance for grammatical corrections.
+

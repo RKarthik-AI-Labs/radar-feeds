@@ -1,0 +1,2446 @@
+Beyond Independent Predictions: Learning the Browsing Journey for Sequence-Level Re-ranking
+https://arxiv.org/abs/2611.07591
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+Beyond Independent Predictions: Learning the Browsing Journey for Sequence-Level Re-ranking
+
+Conference: 
+Proceedings of the 35th ACM International Conference on Information and Knowledge Management; November 7–11, 2026; Rome, Italy.
+Proceedings of the 35th ACM International Conference on Information and Knowledge Management (CIKM ’26), November 7–11, 2026, Rome, Italy
+ISBN: 
+979-8-4007-2539-5/2026/11
+DOI: 
+10.1145/3799682.3840169
+CCS: 
+Information systems Recommender systems
+CCS: 
+Information systems Learning to rank
+CCS: 
+Information systems Evaluation of retrieval results
+
+Jiayi Zhang
+
+Note: 
+Equal contribution.
+
+email: 
+luohan.zjy@alibaba-inc.com
+
+Affiliation: 
+Taobao & Tmall Group of Alibaba
+, 
+Beijing
+, 
+China
+
+, 
+
+Jingxin Hai
+
+email: 
+haijingxin@stu.xjtu.edu.cn
+
+Affiliation: 
+Xi’an Jiaotong University
+, 
+Xi’an
+, 
+China
+
+, 
+
+Zhenjia Ma
+
+email: 
+mazhenjia.mzj@alibaba-inc.com
+
+Affiliation: 
+Taobao & Tmall Group of Alibaba
+, 
+Beijing
+, 
+China
+
+, 
+
+Hongbin Pei
+
+email: 
+peihongbin@xjtu.edu.cn
+
+Affiliation: 
+Xi’an Jiaotong University
+, 
+Xi’an
+, 
+China
+
+, 
+
+Dagui Chen
+
+Note: 
+Corresponding author.
+
+email: 
+dagui.cdg@alibaba-inc.com
+
+Affiliation: 
+Taobao & Tmall Group of Alibaba
+, 
+Beijing
+, 
+China
+
+, 
+
+Han Zhu
+
+email: 
+zhuhan.zh@alibaba-inc.com
+
+Affiliation: 
+Taobao & Tmall Group of Alibaba
+, 
+Beijing
+, 
+China
+
+ and 
+
+Jian Xu
+
+email: 
+xiyu.xj@alibaba-inc.com
+
+Affiliation: 
+Taobao & Tmall Group of Alibaba
+, 
+Beijing
+, 
+China
+
+© cc
+
+Abstract.
+
+Re-ranking aims to present users with an ordered list that maximizes sequence-level utility.
+Industrial deployments widely adopt the Generator–Evaluator framework, where the generator proposes candidate sequences, and the evaluator scores them to select the best one for display.
+The fidelity of the evaluator’s utility estimates thus directly governs recommendation quality.
+However, existing evaluators predominantly follow the 
+Independent Behavior Modeling (IBM)
+ paradigm, which simplifies the continuous user 
+browsing journey
+ into independent per-item predictions (e.g., CTR).
+This oversimplification ignores two physical realities:
+(i) a click can occur only after the item has been reached and impressed,
+and (ii) items compete for finite user attention.
+As a result, IBM produces systematically biased evaluations and suboptimal sequence selection.
+To address this, we propose a 
+Joint Behavior Modeling (JBM)
+ perspective that explicitly models the 
+display
+ 
+ 
+impression
+ 
+ 
+click
+ process to capture causal and competitive dependencies within a sequence.
+Building on JBM, we develop the 
+Impression-Click Evaluator (ICE)
+, a plug-and-play framework that
+(i) predicts a browsing-depth distribution to estimate per-position impression probabilities,
+(ii) leverages predicted impressions to suppress spurious context from unexposed items during click modeling,
+and (iii) introduces a click distribution matching objective to capture intra-sequence dependencies.
+Extensive offline experiments across diverse backbones, together with a 14-day online A/B test in the Taobao App (+0.70% clicks, +3.67% revenue) and full-traffic deployment, validate the effectiveness and robustness of our approach.
+
+Keywords: 
+Recommender Systems, Re-ranking, Generator–Evaluator, Sequence-level Evaluation, User Behavior Modeling
+
+†
+†
+cc-license: 
+by
+
+1. 
+Introduction
+
+Modern industrial recommender systems 
+(
+Gomez-Uribe and Hunt, 2015
+; 
+Covington et al., 2016
+; 
+Raza et al., 2026
+)
+ typically follow a multi-stage cascade architecture: retrieval 
+(
+Chen et al., 2022
+; 
+Liu et al., 2025
+; 
+Jiang et al., 2025
+; 
+Huang et al., 2025
+)
+, ranking 
+(
+Covington et al., 2016
+; 
+Cheng et al., 2016
+; 
+Guo et al., 2017
+; 
+Wang et al., 2017
+)
+, and re-ranking 
+(
+Cao et al., 2007
+; 
+Pei et al., 2019
+; 
+Zhuang et al., 2018
+; 
+Bello et al., 2018
+)
+.
+As the final decision stage, re-ranking directly determines the ordered list displayed to users and must account for complex sequence-level effects such as inter-item interactions, rather than evaluating items in isolation.
+To this end, industrial practice has converged on the Generator–Evaluator (G–E) framework 
+(
+Feng et al., 2021a
+; 
+Xi et al., 2021
+; 
+Yang et al., 2025
+; 
+Wang et al., 2025
+)
+, where the generator proposes multiple candidate sequences and the evaluator estimates their sequence-level utility to select the optimal one for display.
+
+Accordingly, the performance of the G–E framework is fundamentally bounded by the evaluator’s ability to perform reliable sequence-level evaluation 
+(
+Zhang et al., 2025
+)
+.
+Sequence-level utility is not a static property intrinsic to items; rather, it is dynamically realized through the user 
+browsing journey
+ along the displayed sequence.
+However, as shown in Fig. 
+1
+(A), existing evaluators predominantly follow the 
+I
+ndependent 
+B
+ehavior 
+M
+odeling (
+IBM
+) paradigm, which approximates the overall sequence response as a collection of independent per-item interactions (e.g., clicks).
+Such oversimplification ignores two fundamental characteristics of real-world user behavior.
+
+Figure 1. 
+
+Comparison of modeling paradigms for the 
+evaluator
+ in sequence-level re-ranking.
+
+(A) IBM
+ treats user behaviors along the sequence as isolated events, oversimplifying the physical browsing process and causing systematic tail-utility overestimation.
+
+(B) JBM
+ (ours) models the browsing journey by explicitly estimating impression probabilities to bridge the display-to-impression gap, while capturing intra-sequence dependencies via joint click modeling, yielding high-fidelity utility estimation.
+
+First, there exists a universal 
+display-to-impression gap
+ (
+C1
+) driven by browsing drop-off.
+While the system displays a fixed-length sequence (e.g., 20 items), users often disengage early due to dwindling attention or unfavorable content, leaving tail items unseen.
+This gap impairs the evaluator in two ways:
+(i) it systematically overestimates tail-item utility, favoring sequences that look promising offline but fail to deliver online gains;
+(ii) it introduces spurious context, as unexposed items are mistakenly treated as valid neighbors for those actually seen, contaminating the contextual representations and degrading evaluation reliability.
+
+Second, user interactions exhibit complex 
+intra-sequence behavioral dependencies
+ (
+C2
+).
+On one hand, a 
+causal
+ dependency arises as any interaction is strictly predicated on the item being successfully reached and impressed.
+On the other hand, items compete for a user’s finite attention and intent satisfaction, leading to a 
+competitive
+ dependency:
+once a user clicks an item and finds it satisfactory, the marginal utility of subsequent similar items drops significantly even if their individual quality is high.
+Our empirical analysis (Fig. 
+4
+) confirms that IBM-style models struggle in such “multi-click” scenarios, as they treat clicks as isolated events and fail to capture how items 
+shadow
+ each other across the sequence.
+
+In this work, we focus exclusively on advancing the evaluator design
+, taking the generator as given.
+To address the above issues, we propose the 
+J
+oint 
+B
+ehavior 
+M
+odeling (
+JBM
+) paradigm.
+As illustrated in Fig. 
+1
+(B), JBM reformulates the sequence-level evaluation by explicitly estimating impression probabilities to bridge the display-to-impression gap and modeling the joint distribution of interactions to capture intra-sequence behavioral dependencies.
+Building on JBM, we develop 
+ICE
+ (
+I
+mpression-
+C
+lick 
+E
+valuator), a plug-and-play framework with three core components:
+(i) 
+browsing-depth modeling
+ predicts positional impression (exposure) probabilities to capture early disengagement;
+(ii) 
+impression-aware dynamic masking
+ suppresses context noise from unexposed items during click modeling;
+(iii) 
+click distribution matching
+ captures competitive click patterns within a sequence.
+Extensive experiments on a large-scale industrial dataset, together with comprehensive ablation and rationality analyses, consistently validate ICE’s effectiveness across diverse evaluator backbones.
+A 14-day online A/B test in the Taobao App further yields 
++0.70%
+ clicks and 
++3.67%
+ commercial revenue, leading to successful large-scale full-traffic deployment for hundreds of millions of daily users.
+
+The main contributions of this work are summarized as follows:
+
+•
+
+We formally identify the systematic bias in current sequence-level evaluation and propose 
+JBM
+ as a principled paradigm to ensure physical consistency and capture behavioral dependencies along the browsing journey.
+
+•
+
+We develop 
+ICE
+, a backbone-agnostic, plug-and-play solution under the JBM paradigm that seamlessly enhances diverse industrial evaluator architectures.
+
+•
+
+We validate JBM and ICE through comprehensive offline and online evaluations, with successful full-traffic deployment further demonstrating their real-world impact.
+
+2. 
+Related Work
+
+Re-ranking and the G–E Framework.
+
+Re-ranking refines an initially ranked list to maximize sequence-level utility under multiple objectives and constraints.
+Early work followed the Learning-to-Rank (LTR) framework, progressing from point-wise 
+(
+Li et al., 2007
+; 
+Cheng et al., 2016
+; 
+Covington et al., 2016
+; 
+Guo et al., 2017
+; 
+Wang et al., 2017
+)
+ and pair-wise 
+(
+Burges et al., 2006
+; 
+Joachims, 2006
+; 
+Zheng et al., 2007
+; 
+Burges et al., 2005
+)
+ to list-wise 
+(
+Cao et al., 2007
+; 
+Burges, 2010
+)
+ methods.
+Since items presented together mutually influence user behavior 
+(
+Raj and Ekstrand, 2023
+; 
+Kislinger, 2025
+; 
+Ferrari Dacrema et al., 2022
+; 
+Chen et al., 2023
+)
+, context-aware models (e.g., PRM 
+(
+Pei et al., 2019
+)
+ and sequential encoders 
+(
+Zhuang et al., 2018
+; 
+Bello et al., 2018
+; 
+Ai et al., 2018
+)
+) are introduced to capture inter-item interactions.
+Nevertheless, they suffer from the 
+evaluation-before-reranking
+ 
+(
+Xi et al., 2021
+; 
+Wang et al., 2025
+)
+ dilemma, where items are scored in a context that is subsequently reshaped by the re-sorting process itself.
+Recent generative re-rankers 
+(
+Feng et al., 2021b
+; 
+Zhai et al., 2024
+; 
+Liu et al., 2023
+; 
+Ren et al., 2024
+; 
+Han et al., 2025
+)
+ mitigate this mismatch via end-to-end sequence generation, but face deployment challenges in controllability and latency.
+As a practical alternative, the G–E framework has emerged as the industrial standard 
+(
+Feng et al., 2021a
+; 
+Xi et al., 2021
+; 
+Yang et al., 2025
+; 
+Wang et al., 2025
+; 
+Zhang et al., 2025
+)
+.
+
+Evaluator Design.
+
+Within G–E, prior work has predominantly focused on the generator 
+(
+Shi et al., 2023
+; 
+Yang et al., 2025
+)
+, leaving the evaluator—the final decision-maker—significantly under-explored.
+Existing evaluators, despite diverse architectures (e.g., RNNs 
+(
+Wang et al., 2019
+; 
+Feng et al., 2021a
+)
+, Transformers 
+(
+Xi et al., 2021
+; 
+Wang et al., 2025
+)
+), largely follow the IBM paradigm, overlooking the 
+display-to-impression
+ gap and intra-sequence 
+behavioral dependencies
+.
+
+Impression Modeling.
+
+Exposure bias has been widely studied at the ranking stage 
+(
+Liang et al., 2016
+; 
+Mansoury et al., 2022
+; 
+Mansoury et al., 2024
+)
+, but remain under-explored at the sequence level.
+A recent work 
+(
+Zhang et al., 2025
+)
+ models personalized consumption boundaries to mitigate estimation biases, yet still relies on factorized per-item modeling and ignores the competitive nature of user interactions.
+In contrast, our JBM paradigm jointly models the entire 
+display
+ 
+ 
+impression
+ 
+ 
+click
+ chain, rather than treating user responses as a collection of isolated per-item events.
+
+3. 
+Joint Behavior Modeling Paradigm
+
+We formalize sequence-level evaluation in the G–E framework, contrast IBM with our proposed JBM paradigm, and instantiate JBM under the impression-click chain to guide the design in Sec. 
+4
+.
+
+3.1. 
+Problem Formulation
+
+Let 
+ denote a candidate sequence of 
+ items proposed by the generator, and 
+ represent the target user with associated context.
+Sequence-level utility emerges from user behaviors along the displayed sequence, i.e., the 
+browsing journey
+ from the first to the last position.
+Let 
+ denote the collection of user behavioral events (e.g., impression, click) induced by user 
+ on 
+, where 
+ corresponds to the event at position 
+.
+The sequence-level utility can be defined as the expected utility:
+
+(1)
+
+where 
+ maps behavioral outcomes to utility (e.g., total clicks or revenue).
+The fidelity of 
+ thus hinges entirely on how faithfully 
+ is modeled, which is governed by the two characteristics highlighted in Sec. 
+1
+: the 
+display-to-impression gap
+ (C1) and 
+intra-sequence behavioral dependencies
+ (C2).
+
+3.2. 
+From IBM to JBM
+
+IBM paradigm.
+
+Most existing evaluators 
+(
+Wang et al., 2019
+; 
+Feng et al., 2021a
+; 
+Xi et al., 2021
+; 
+Wang et al., 2025
+; 
+Liang et al., 2016
+; 
+Mansoury et al., 2022
+; 
+Mansoury et al., 2024
+; 
+Zhang et al., 2025
+)
+ factorize 
+ as a product of per-position conditionals:
+
+(2)
+
+where each 
+ is treated as an 
+independent
+ response conditioned only on its item 
+ and the static sequence context 
+.
+This factorization implicitly assumes uniform exposure across all 
+ positions (ignoring C1) and neglects how earlier behaviors 
+ shape later ones (ignoring C2).
+
+JBM paradigm.
+
+To overcome these mismatches, we advocate the JBM paradigm, which models the 
+joint distribution
+ of all behavioral events across the sequence:
+
+(3)
+
+where each behavior 
+ is conditioned on 
+all preceding behaviors
+ 
+.
+The key distinction from Eq. (
+2
+) is the conditioning on 
+, which enables JBM to model how engagement at position 
+ depends on prior user activity (addressing C1) and explicitly captures how earlier interactions shape subsequent ones (addressing C2), within a unified probabilistic framework.
+
+3.3. 
+JBM with the Impression-Click Chain
+
+In general recommendation systems, 
+impressions
+ and 
+clicks
+ are the most fundamental user behaviors that constitute the browsing journey.
+In this section, we instantiate JBM by explicitly modeling the joint distribution of the 
+impression-click chain
+ to perform more reliable sequence-level evaluation.
+
+Accordingly, we represent the behavior sequence 
+ as a pair of binary event vectors 
+, where 
+ denote the occurrence of exposure and click at position 
+.
+To maintain physical consistency with the browsing process, we apply the chain rule to factorize Eq. (
+3
+) as:
+
+(4)
+
+The first factor accounts for the dynamic impression decay (C1), while the second factor models inter-dependent clicks conditioned on actual impressions (C2).
+
+To clarify our notation, we distinguish between 
+empirical rates
+ observed in dataset 
+ for offline measurement and 
+per-sequence probabilities
+ predicted by the evaluator.
+Specifically, 
+Impression-Through Rate (ITR)
+ quantifies the proportion of displayed items that are actually impressed:
+
+(5)
+
+Click-Through Rate (CTR)
+ follows the standard industrial definition over impressed items:
+
+(6)
+
+To measure the end-to-end conversion from display to click, we define the 
+Impression-Through Click-Through Rate (ITCTR)
+:
+
+(7)
+
+On the modeling side, our evaluator predicts per-position probabilities
+
+ with 
+
+and
+
+ with 
+.
+The predicted end-to-end click probability vector follows as:
+
+(8)
+
+i.e., 
+ for each position 
+.
+
+4. 
+Impression-Click Evaluator Framework
+
+Figure 2. 
+
+Overview of 
+ICE
+.
+Starting from a shared embedding layer, the architecture bifurcates into the 
+impression
+ and 
+click
+ modeling branches to realize the JBM paradigm in Eq. (
+4
+).
+The two branches are coupled through three modular components:
+(i) 
+browsing-depth modeling
+ for position-dependent impression probabilities;
+(ii) 
+impression-aware masking
+ for context denoising;
+(iii) 
+sequence-level click distribution matching
+ for behavioral competition.
+
+As shown in Fig. 
+2
+, Impression-Click Evaluator (ICE) is a 
+plug-and-play
+ framework that instantiates the JBM paradigm.
+To implement Eq. (
+4
+),
+ICE adopts a multi-task architecture where the 
+impression
+ and 
+click
+ branches share a common embedding layer and are physically coupled through impression-aware context denoising.
+We detail the three modular components below.
+
+4.1. 
+Browsing-depth Impression Modeling
+
+To bridge the display-to-impression gap (C1), ICE models position-dependent impression probabilities.
+In feed interfaces, visibility follows a monotonic prior: later items are visible only if earlier positions are reached, implying 
+.
+
+To capture this physical process, the 
+Impression Branch
+ processes the shared representations to estimate the user’s 
+browsing depth
+ as a latent categorical variable 
+, representing the last position reached before disengagement.
+It predicts a categorical distribution 
+, from which the impression probability for each position 
+ is derived as the cumulative distribution:
+
+(9)
+
+which guarantees the strict monotonicity and effectively corrects the overestimation of tail items.
+
+4.2. 
+Impression-aware Dynamic Masking
+
+Even though the evaluator takes the full sequence 
+ as input, unexposed items should not contribute contextual signals for click modeling.
+To suppress such spurious context (C1), ICE utilizes the predicted 
+ as confidence signals to modulate contextual interactions within the 
+Click Branch
+.
+This module is backbone-agnostic and supports two implementations:
+
+Transformer-based backbones
+ (Attention Bias).
+
+We define an impression-confidence matrix 
+ where 
+, transformed into a stable additive bias 
+.
+For any self-attention layer with 
+, 
+, and 
+, the attention is computed as:
+
+(10)
+
+This bias effectively suppresses attention weights involving unexposed items.
+We treat 
+ as a detached (stop-gradient) signal to prevent click modeling from biasing the impression modeling task.
+
+DNN-style backbones
+ (Feature Gating).
+
+For backbones without attention mechanisms, ICE implements masking via feature gating. Let 
+ be the contextual representation of position 
+. We modulate it using a gating function 
+:
+
+(11)
+
+where 
+ controls the suppression intensity. Similarly, 
+ is treated as a stop-gradient signal.
+
+4.3. 
+Sequence-level Click Distribution Matching
+
+To capture behavioral dependencies (C2), ICE augments point-wise click supervision with a 
+sequence-level click distribution matching
+ objective.
+This forces the evaluator to model how items compete for the user’s limited attention across the entire sequence.
+
+For each sequence 
+, let 
+ denote the click logits.
+The predicted click-allocation distribution is obtained via a temperature-scaled softmax: 
+.
+The target distribution 
+ is constructed by normalizing the observed clicks: if 
+, 
+; otherwise, 
+ to provide a non-informative target for zero-click sequences.
+We then match the two distributions via KL divergence:
+
+(12)
+
+Unlike point-wise objectives that score each item independently, the softmax normalization in 
+ imposes a finite probability budget across the sequence: a higher predicted score at one position structurally suppresses others, directly capturing the competitive nature of clicks that point-wise losses cannot express.
+
+4.4. 
+Training and Inference
+
+ICE is trained end-to-end in a multi-task fashion, optimizing three objectives simultaneously:
+
+•
+
+Impression Modeling
+: The 
+Impression Branch
+ is supervised by the observed labels 
+ over all 
+ positions via binary cross-entropy (BCE) loss: 
+.
+
+•
+
+Click Modeling
+:
+Following the impression-click chain (Sec. 
+3.3
+), the 
+Click Branch
+ takes impression-aware masked representations (Sec. 
+4.2
+) and is trained on impressed items (
+) via a masked BCE loss: 
+.
+
+Combined with the sequence-level click distribution matching loss from Eq. (
+12
+), the overall objective is:
+
+.
+
+During inference, the evaluator scores each candidate sequence 
+ by instantiating the expected utility 
+ in Eq. (
+1
+).
+
+(13)
+
+where 
+ is an item-specific reward configurable to different deployment objectives: setting 
+ yields expected total clicks, while setting 
+ to the predicted purchase value or bid price targets expected GMV or ad revenue, respectively.
+The candidate sequence with the highest 
+ is selected for display.
+
+5. 
+Experiments
+
+We organize experiments around four research questions:
+
+Q1
+ (Overall Performance): Is ICE a plug-and-play booster that consistently improves diverse evaluator backbones?
+
+Q2
+ (Ablation Study): How does each ICE component contribute?
+
+Q3
+ (Mechanism Analysis): Why do these components work?
+
+Q4
+ (Online Test): Does ICE deliver real-world gains in production?
+
+5.1. 
+Experiment Settings
+
+5.1.1. 
+Baselines.
+
+To verify the generality of ICE, we evaluate it by integrating with a range of representative evaluator backbones from prior work, all of which fall under the IBM paradigm and span both item-wise scorers and context-aware sequential models:
+
+•
+
+DNN / DCN
+ 
+(
+Cheng et al., 2016
+; 
+Wang et al., 2017
+)
+: MLP-based models that predict item-level utility with static contextual features.
+
+•
+
+PRM
+ 
+(
+Pei et al., 2019
+)
+: A personalized re-ranking model that utilizes self-attention to capture intra-list item interactions.
+
+•
+
+BiGRNN / Transformer-based Evaluators
+ 
+(
+Wang et al., 2019
+; 
+Xi et al., 2021
+)
+: Advanced sequential evaluators that employ bidirectional GRUs or multi-head attention to model global dependencies within the sequence.
+
+•
+
+NLGR-E
+ 
+(
+Wang et al., 2025
+)
+: A recent evaluator that models relationships in the feature space to capture sequence-level dependencies.
+
+Table 1. 
+Statistics of the E-commerce Re-ranking Dataset.
+
+Dataset
+
+# User
+
+# Sequence
+
+# Disp.
+
+# Impr.
+
+# Click
+
+E-com.
+
+48.38M
+
+141.79M
+
+2,835.71M
+
+1,652.35M
+
+35.45M
+
+Note: "Disp.", "Impr.", and "Click" represent the total number of items that are displayed, impressed and clicked, respectively. "M" denotes millions.
+
+5.1.2. 
+Datasets.
+
+We conduct offline experiments on a large-scale industrial 
+E-commerce Re-ranking Dataset
+, comprising hundreds of millions of user interaction logs.
+Each instance records a user’s browsing journey on a displayed sequence 
+ of length 
+, including binary labels for impressions (
+) and clicks (
+).
+We employ standard industrial time-based splitting: the first 6 days for training and the 7th day for testing, ensuring no temporal leakage.
+Table 
+1
+ summarizes the key statistics, illustrating a clear conversion funnel from initial display to final click.
+Notably, the significant decay between displayed and impressed items justifies the necessity of explicit impression modeling.
+
+5.1.3. 
+Evaluation Metrics.
+
+We evaluate ICE on three perspectives:
+
+(1) Click Prediction Metrics.
+
+We report the group-AUC over impressed items, denoted as 
+, computed from predicted conditional click probabilities 
+.
+Following standard practice, GAUC is computed by grouping instances by user and then taking a weighted average across groups.
+To evaluate the end-to-end click probability on displayed items, we additionally report 
+, computed from
+
+(14)
+
+for all displayed positions.
+For baseline models that lack impression modeling, we apply the plug-in assumption 
+.
+
+(2) Impression Modeling Metrics.
+
+In feed browsing, impressions are highly imbalanced across positions and exhibit a strict cascade, making GAUC less informative as they can be inflated by position priors.
+We thus employ two complementary metrics:
+
+•
+
+Position-AUC (PAUC).
+ We compute the AUC metric within each position and take a weighted average:
+
+(15)
+
+where 
+ is the number of impressed samples at position 
+.
+
+•
+
+Browsing-depth Error (MAE).
+ We calculate the Mean Absolute Error between the true exit position 
+ and the predicted depth 
+:
+
+(16)
+
+where 
+ denotes the expected browsing depth calculated by
+
+.
+
+(3) Sequence-level Evaluation Metrics.
+
+Since the evaluator’s primary task is candidate sequence selection rather than item reordering, item-level metrics (e.g., GAUC) are insufficient for assessing the overall utility of the displayed sequence.
+We thus propose 
+SeqAUC
+, a sequence-level metric that measures the consistency between the ground-truth utility 
+ and the evaluator’s predicted utility 
+ defined in Eq. (
+13
+).
+
+In this work, we instantiate the ground-truth utility 
+ as the observed total clicks: 
+, and the evaluator’s score as the predicted expected total clicks: 
+.
+Let 
+ denote the set of all ordered pairs from the test set. SeqAUC is computed as:
+
+(17)
+
+A higher SeqAUC indicates a superior capability of the evaluator to identify candidate sequences that yield greater overall utility.
+Moreover, SeqAUC can be readily extended to other objectives by redefining 
+ and 
+.
+
+5.2. 
+Overall Comparison Across Backbones (Q1)
+
+Table 2. 
+
+Overall performance comparison across diverse backbones (Q1).
+For baselines without impression modeling, 
+ is naturally 50.00% and 
+ is constant under the 
+ assumption.
+Results are averaged over 5 runs (
+ std).
+
+Impression Modeling
+
+Click Prediction
+
+Seq. Value Estim.
+
+DNN
+
+50.00 
+ 0.00
+
+3.92 
+ 0.00
+
+65.09 
+ 0.49
+
+64.51 
+ 0.12
+
+82.11 
+ 0.56
+
++ICE
+
+60.48 
+ 2.15
+
+1.17 
+ 0.06
+
+65.83 
+ 0.14
+
+72.48 
+ 0.39
+
+84.87 
+ 0.15
+
+DCN
+
+50.00 
+ 0.00
+
+3.92 
+ 0.00
+
+65.24 
+ 0.14
+
+65.01 
+ 0.07
+
+82.44 
+ 0.06
+
++ICE
+
+59.38 
+ 1.38
+
+1.51 
+ 0.32
+
+65.82 
+ 0.51
+
+72.30 
+ 0.39
+
+84.33 
+ 0.45
+
+PRM
+
+50.00 
+ 0.00
+
+3.92 
+ 0.00
+
+63.72 
+ 1.90
+
+62.37 
+ 0.25
+
+81.22 
+ 0.57
+
++ICE
+
+73.24 
+ 1.48
+
+1.03 
+ 0.01
+
+65.84 
+ 0.04
+
+73.94 
+ 0.34
+
+85.65 
+ 0.11
+
+BiGRNN
+
+50.00 
+ 0.00
+
+3.92 
+ 0.00
+
+65.05 
+ 0.15
+
+63.00 
+ 0.18
+
+81.38 
+ 0.25
+
++ICE
+
+71.44 
+ 0.38
+
+1.04 
+ 0.03
+
+65.90 
+ 0.11
+
+73.92 
+ 0.36
+
+85.56 
+ 0.03
+
+Trans.
+
+50.00 
+ 0.00
+
+3.92 
+ 0.00
+
+64.07 
+ 1.06
+
+62.53 
+ 0.18
+
+81.31 
+ 0.16
+
++ICE
+
+73.84 
+ 0.54
+
+1.04 
+ 0.01
+
+65.86 
+ 0.07
+
+73.91 
+ 0.15
+
+85.84 
+ 0.07
+
+NLGR-E
+
+50.00 
+ 0.00
+
+3.92 
+ 0.00
+
+65.15 
+ 0.06
+
+62.90 
+ 0.08
+
+81.55 
+ 0.08
+
++ICE
+
+70.01 
+ 0.68
+
+1.04 
+ 0.01
+
+65.84 
+ 0.10
+
+73.92 
+ 0.04
+
+85.50 
+ 0.05
+
+To verify the effectiveness of ICE, we integrate it with various backbones and report performance on impression modeling (
+, 
+), click prediction (
+, 
+), and sequence-level evaluation (
+).
+All experiments use a unified setup with 
+, 
+, and 
+ to align the loss scales.
+
+As shown in Table 
+2
+, ICE yields consistent and significant gains across all backbones and metrics.
+Notably, the GAUC
+ITCTR
+ on displayed items exhibits a substantial and robust jump (e.g., 
+ for the Transformer backbone).
+This gain is primarily attributed to the explicit 
+impression modeling
+, which effectively corrects the systematic overestimation of utility at tail positions.
+These improvements directly translate into higher SeqAUC, demonstrating that ICE-enhanced evaluators are significantly more capable of identifying sequences with higher actual utility.
+
+Furthermore, GAUC
+CTR
+ on impressed items also shows steady improvement.
+This suggests that by capturing sequence-level dependencies and suppressing noise from unexposed items, ICE also benefits conventional conditional click prediction.
+These gains hold across architectures from simple MLPs (e.g., DNN) to complex sequential encoders (e.g., Transformer), confirming that ICE serves as a robust, backbone-agnostic, plug-and-play framework.
+
+5.3. 
+Ablation Study (Q2)
+
+In this section, we perform a component-wise ablation study using PRM 
+(
+Pei et al., 2019
+)
+ as the representative backbone to quantify the contribution of each ICE module.
+All variants are trained under identical settings, differing only in the targeted component:
+
+•
+
+w/o Browsing-depth Modeling (Comp-I)
+: Removes the impression branch and assumes 
+ for all positions. As a result, impression-aware masking degenerates to an all-one mask.
+
+•
+
+w/o Impression-aware Dynamic Masking (Comp-II)
+: Disables the dynamic masking in click modeling while maintaining the impression prediction module.
+
+•
+
+w/o Sequence-level Click Distribution Matching (Comp-III)
+: Removes the sequence-level KL divergence objective and trains the click branch solely with point-wise BCE loss.
+
+As shown in Table 
+3
+, the complete ICE framework achieves the best performance across all metrics.
+Removing Comp-I leads to the most substantial degradation in 
+ and 
+, underscoring that precise impression estimation is the cornerstone of sequence evaluation.
+Meanwhile, disabling Comp-II or Comp-III further compromises click prediction and overall sequence selection quality, confirming that each component contributes a distinct and complementary improvement.
+
+Table 3. 
+Component-wise ablation of ICE on the PRM backbone (Q2). Results are reported in percentage (%).
+
+PRM + ICE
+
+73.24
+
+65.84
+
+73.94
+
+85.65
+
+w/o Im. Model
+
+50.00
+
+64.53
+
+67.34
+
+83.29
+
+w/o Im. Mask
+
+72.12
+
+65.74
+
+70.54
+
+85.58
+
+w/o Clk. Dist.
+
+70.69
+
+65.00
+
+70.22
+
+85.50
+
+5.4. 
+Mechanism Analysis (Q3)
+
+To further understand the sources of ICE’s performance gains, we conduct mechanism analyses on its three core components.
+Specifically, we examine 
+whether
+ browsing-depth modeling captures personalized exposure, 
+why
+ impression-aware masking helps click prediction, and 
+what
+ sequence-level click distribution matching captures beyond point-wise CTR training.
+Throughout this section, we analyze impression-related components using several impression probability schemes as references:
+
+•
+
+Constant
+: Assuming 
+ for all positions.
+
+•
+
+Exponential Decay
+: A heuristic decay 
+ (
+).
+
+•
+
+Positional Empirical
+: 
+, the average impression rate at each position over the training set, representing a non-personalized position prior.
+
+•
+
+ICE Predicted
+: impression probabilities derived from ICE.
+
+•
+
+Oracle Impression
+: ground-truth impression labels, serving as the upper bound in masking analysis.
+
+5.4.1. 
+Analysis of Browsing-depth Impression Modeling
+
+We first evaluate whether ICE can accurately model the 
+browsing drop-off
+ and reconcile the display-to-impression gap (C1).
+Fig. 
+3
+ plots the average 
+ across positions for each scheme.
+The 
+Constant
+ assumption (
+) yields a systematic overestimation at later positions.
+While heuristic-based schemes (
+Decay
+, 
+Empir.
+) capture the general monotonic decay of visibility, they rely on static priors and fail to account for user-specific browsing intentions.
+
+As evidenced in Table 
+4
+(a), these non-personalized schemes yield a 
+ of exactly 50.00%, indicating a complete lack of discriminative power within each position.
+In contrast, ICE achieves a substantial PAUC of 73.24% and the lowest 
+ (1.03).
+These results validate ICE’s superior ability to capture personalized browsing boundaries by learning context-dependent exit points, thereby providing a reliable foundation for sequence evaluation.
+
+Table 4. 
+
+Mechanism analysis of impression modeling accuracy and its de-noising effect on click prediction (PRM backbone).
+
+(a)
+ evaluates the precision of different impression schemes.
+
+(b)
+ assesses how these signals, when used as context masks, improve click modeling.
+Note: 
+ is consistently calculated using the ICE-predicted 
+ across all rows to isolate the gains from masking.
+
+Impr. Schemes
+
+(a) Impr. Metrics
+
+(b) Click Metrics
+
+Const.
+
+50.00
+
+3.92
+
+65.74
+
+70.54
+
+Decay
+
+50.00
+
+2.40
+
+65.78
+
+72.30
+
+Empir.
+
+50.00
+
+1.19
+
+65.79
+
+73.34
+
+Pred. (ICE)
+
+73.24
+
+1.03
+
+65.84
+
+73.94
+
+Oracle (GT)
+
+100.0
+
+0.00
+
+74.19
+
+82.44
+
+Figure 3. 
+
+Average impression probability 
+ per position across different schemes.
+
+5.4.2. 
+Analysis of Impression-aware Masking
+
+We next investigate how the masking mechanism facilitates click prediction.
+Specifically, we compare click prediction performance under masks derived from different impression sources:
+(i) 
+Const.
+ (no masking);
+(ii) heuristic schemes (
+Decay
+, 
+Empir.
+);
+(iii) the 
+ICE
+ predicted mask;
+and (iv) the 
+Oracle
+ mask (ground-truth, GT), which represents the theoretical upper bound for context denoising.
+To isolate the denoising effect, we hold other components fixed and vary only the mask source.
+
+Table 
+4
+(b) provides two key insights.
+First, the 
+Oracle
+ mask yields a striking 8.45% lift in GAUC
+CTR
+ compared to the 
+Constant
+ scheme, confirming that filtering unexposed items is essential for pruning irrelevant context and recovering true interaction patterns.
+Second, click prediction performance correlates directly with mask quality (
+Pred. (ICE)
+ 
+ 
+Empir.
+ 
+ 
+Decay
+), demonstrating that more accurate impression estimation produces more effective denoising signals, which in turn yields better click prediction.
+
+5.4.3. 
+Analysis of Sequence-level Click Distribution Modeling
+
+Finally, we analyze how sequence-level distribution matching (Comp-III) handles attention competition.
+We hypothesize that sequences with multiple clicks exhibit stronger intra-sequence behavioral dependencies, as user attention is limited and shared across items.
+To verify this, we partition the test set into two groups: 
+Single-click
+ (exactly 1 click) and 
+Multi-click
+ (more than 1 click).
+
+Figure 4. 
+
+GAUC
+CTR
+ on Single-click (top of each bar) and Multi-click (bottom) groups across six backbones, comparing vanilla (
+blue
+) and ICE-augmented (
+green
+) models.
+ICE consistently elevates overall performance (horizontal line) and narrows the performance gap between groups.
+
+Fig. 
+4
+ presents range-bars per backbone.
+We observe three key findings:
+(i) ICE-augmented models consistently outperform their vanilla counterparts across all architectures.
+(ii) ICE bars are markedly narrower, indicating reduced performance discrepancy between simple and complex sequences and more robust modeling of user browsing journeys.
+(iii) ICE delivers larger lifts on the harder 
+Multi-click
+ group, where competitive dependencies are most pronounced.
+These trends confirm that ICE captures attention competition, addressing the behavioral dependencies in C2.
+
+5.5. 
+Online Experiment (Q4)
+
+We deploy ICE in the 
+Guess You Like
+ feed of the Taobao App, a flagship recommendation scenario serving hundreds of millions of daily users.
+The production system follows a G–E re-ranking framework with a Transformer-based baseline evaluator.
+We integrate ICE into this evaluator while keeping the generator fixed.
+
+We conduct an online A/B test with 5% traffic allocation over 14 days, tracking core metrics alongside 14-day Lifetime Value (LT-14d) as a guardrail metric to monitor user retention.
+Results show that ICE improves impressions by 
++0.58%
+, clicks by 
++0.70%
+, and commercial revenue by 
++3.67%
+.
+Notably, LT-14d also increases by 
++0.23%
+, indicating that the gains are sustained without compromising the long-term user experience.
+Regarding efficiency, the average response time (RT) increases by less than 0.5ms, which is negligible compared to the total system latency.
+Given these consistent improvements, ICE has been fully deployed to the online system, validating the JBM paradigm at industrial scale.
+
+6. 
+Conclusion
+
+This paper introduces the JBM paradigm for evaluator learning in G–E re-ranking.
+Unlike the prevailing IBM that performs independent item-level predictions, JBM explicitly models how sequence utility is realized through interdependent user behaviors.
+We instantiate JBM with ICE, a plug-and-play framework combining browsing-depth impression modeling, impression-aware masking (C1), and sequence-level click distribution matching (C2).
+Across six evaluator backbones, ICE consistently improves impression, click, and sequence-level evaluation.
+A 14-day Taobao A/B test further yields +0.70% clicks and +3.67% revenue with negligible latency overhead, followed by full-traffic deployment.
+Future work will extend JBM to richer behavioral signals (e.g., dwell time) and leverage ICE as a reward signal for generative re-rankers.
+
+7. 
+GenAI Usage Disclosure
+
+We used Claude for language polishing and grammar checking of the manuscript.
+All technical contributions, including the problem formulation, methodology design, experimental setup, and result analysis, were entirely conceived and conducted by the authors without GenAI assistance.
+
+References
+
+Ai 
+et al.
+ (2018)
+
+Q. Ai, K. Bi, J. Guo, and W. B. Croft
+
+Learning a deep listwise context model for ranking refinement
+.
+
+In 
+The 41st international ACM SIGIR conference on research & development in information retrieval
+,
+
+pp. 135–144
+.
+
+Cited by: 
+§2
+.
+
+Bello 
+et al.
+ (2018)
+
+I. Bello, S. Kulkarni, S. Jain, C. Boutilier, E. Chi, E. Eban, X. Luo, A. Mackey, and O. Meshi
+
+Seq2Slate: re-ranking and slate optimization with rnns
+.
+
+arXiv preprint arXiv:1810.02019
+.
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+Burges 
+et al.
+ (2005)
+
+C. Burges, T. Shaked, E. Renshaw, A. Lazier, M. Deeds, N. Hamilton, and G. Hullender
+
+Learning to rank using gradient descent
+.
+
+In 
+Proceedings of the 22nd international conference on Machine learning
+,
+
+pp. 89–96
+.
+
+Cited by: 
+§2
+.
+
+Burges (2010)
+
+C. J. Burges
+
+From ranknet to lambdarank to lambdamart: an overview
+.
+
+Learning
+ 
+11
+ (
+23-581
+), 
+pp. 81
+.
+
+Cited by: 
+§2
+.
+
+Burges 
+et al.
+ (2006)
+
+C. Burges, R. Ragno, and Q. Le
+
+Learning to rank with nonsmooth cost functions
+.
+
+Advances in neural information processing systems
+ 
+19
+.
+
+Cited by: 
+§2
+.
+
+Cao 
+et al.
+ (2007)
+
+Z. Cao, T. Qin, T. Liu, M. Tsai, and H. Li
+
+Learning to rank: from pairwise approach to listwise approach
+.
+
+In 
+Proceedings of the 24th international conference on Machine learning
+,
+
+pp. 129–136
+.
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+Chen 
+et al.
+ (2022)
+
+R. Chen, B. Liu, H. Zhu, Y. Wang, Q. Li, B. Ma, Q. Hua, J. Jiang, Y. Xu, H. Deng, 
+et al.
+
+Approximate nearest neighbor search under neural similarity metric for large-scale recommendation
+.
+
+In 
+Proceedings of the 31st ACM International Conference on Information & Knowledge Management
+,
+
+pp. 3013–3022
+.
+
+Cited by: 
+§1
+.
+
+Chen 
+et al.
+ (2023)
+
+S. Chen, X. Zhang, X. Chen, Z. Li, Y. Wang, Q. Lin, and J. Xu
+
+Reinforcement re-ranking with 2d grid-based recommendation panels
+.
+
+In 
+Proceedings of the Annual International ACM SIGIR Conference on Research and Development in Information Retrieval in the Asia Pacific Region
+,
+
+pp. 282–287
+.
+
+Cited by: 
+§2
+.
+
+Cheng 
+et al.
+ (2016)
+
+H. Cheng, L. Koc, J. Harmsen, T. Shaked, T. Chandra, H. Aradhye, G. Anderson, G. Corrado, W. Chai, M. Ispir, 
+et al.
+
+Wide & deep learning for recommender systems
+.
+
+In 
+Proceedings of the 1st workshop on deep learning for recommender systems
+,
+
+pp. 7–10
+.
+
+Cited by: 
+§1
+,
+
+§2
+,
+
+1st item
+.
+
+Covington 
+et al.
+ (2016)
+
+P. Covington, J. Adams, and E. Sargin
+
+Deep neural networks for youtube recommendations
+.
+
+In 
+Proceedings of the 10th ACM conference on recommender systems
+,
+
+pp. 191–198
+.
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+Feng 
+et al.
+ (2021a)
+
+Y. Feng, Y. Gong, F. Sun, J. Ge, and W. Ou
+
+Revisit recommender system in the permutation prospective
+.
+
+arXiv preprint arXiv:2102.12057
+.
+
+Cited by: 
+§1
+,
+
+§2
+,
+
+§2
+,
+
+§3.2
+.
+
+Feng 
+et al.
+ (2021b)
+
+Y. Feng, B. Hu, Y. Gong, F. Sun, Q. Liu, and W. Ou
+
+GRN: generative rerank network for context-wise recommendation
+.
+
+arXiv preprint arXiv:2104.00860
+.
+
+Cited by: 
+§2
+.
+
+Ferrari Dacrema 
+et al.
+ (2022)
+
+M. Ferrari Dacrema, N. Felicioni, and P. Cremonesi
+
+Offline evaluation of recommender systems in a user interface with multiple carousels
+.
+
+Frontiers in big Data
+ 
+5
+, 
+pp. 910030
+.
+
+Cited by: 
+§2
+.
+
+Gomez-Uribe and Hunt (2015)
+
+C. A. Gomez-Uribe and N. Hunt
+
+The netflix recommender system: algorithms, business value, and innovation
+.
+
+ACM Transactions on Management Information Systems (TMIS)
+ 
+6
+ (
+4
+), 
+pp. 1–19
+.
+
+Cited by: 
+§1
+.
+
+Guo 
+et al.
+ (2017)
+
+H. Guo, R. Tang, Y. Ye, Z. Li, and X. He
+
+DeepFM: a factorization-machine based neural network for ctr prediction
+.
+
+arXiv preprint arXiv:1703.04247
+.
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+Han 
+et al.
+ (2025)
+
+R. Han, B. Yin, S. Chen, H. Jiang, F. Jiang, X. Li, C. Ma, M. Huang, X. Li, C. Jing, 
+et al.
+
+Mtgr: industrial-scale generative recommendation framework in meituan
+.
+
+In 
+Proceedings of the 34th ACM International Conference on Information and Knowledge Management
+,
+
+pp. 5731–5738
+.
+
+Cited by: 
+§2
+.
+
+Huang 
+et al.
+ (2025)
+
+J. Huang, J. Chen, J. Lin, J. Qin, Z. Feng, W. Zhang, and Y. Yu
+
+A comprehensive survey on retrieval methods in recommender systems
+.
+
+ACM Transactions on Information Systems
+ 
+44
+ (
+1
+), 
+pp. 1–43
+.
+
+Cited by: 
+§1
+.
+
+Jiang 
+et al.
+ (2025)
+
+J. Jiang, Y. Huang, B. Liu, X. Kong, X. Li, Z. Xu, H. Zhu, J. Xu, and B. Zheng
+
+Large language model as universal retriever in industrial-scale recommender system
+.
+
+arXiv preprint arXiv:2502.03041
+.
+
+Cited by: 
+§1
+.
+
+Joachims (2006)
+
+T. Joachims
+
+Training linear svms in linear time
+.
+
+In 
+Proceedings of the 12th ACM SIGKDD international conference on Knowledge discovery and data mining
+,
+
+pp. 217–226
+.
+
+Cited by: 
+§2
+.
+
+Kislinger (2025)
+
+J. Kislinger
+
+Full-page recommender: a modular framework for multi-carousel recommendations
+.
+
+In 
+Proceedings of the Nineteenth ACM Conference on Recommender Systems
+,
+
+pp. 1479–1484
+.
+
+Cited by: 
+§2
+.
+
+Li 
+et al.
+ (2007)
+
+P. Li, Q. Wu, and C. Burges
+
+Mcrank: learning to rank using multiple classification and gradient boosting
+.
+
+Advances in neural information processing systems
+ 
+20
+.
+
+Cited by: 
+§2
+.
+
+Liang 
+et al.
+ (2016)
+
+D. Liang, L. Charlin, J. McInerney, and D. M. Blei
+
+Modeling user exposure in recommendation
+.
+
+In 
+Proceedings of the 25th international conference on World Wide Web
+,
+
+pp. 951–961
+.
+
+Cited by: 
+§2
+,
+
+§3.2
+.
+
+Liu 
+et al.
+ (2023)
+
+S. Liu, Q. Cai, Z. He, B. Sun, J. McAuley, D. Zheng, P. Jiang, and K. Gai
+
+Generative flow network for listwise recommendation
+.
+
+In 
+Proceedings of the 29th ACM SIGKDD Conference on Knowledge Discovery and Data Mining
+,
+
+pp. 1524–1534
+.
+
+Cited by: 
+§2
+.
+
+Liu 
+et al.
+ (2025)
+
+Z. Liu, J. Zhang, D. Lian, C. Feng, J. Wang, and E. Chen
+
+Learning deep tree-based retriever for efficient recommendation: theory and method
+.
+
+IEEE Transactions on Pattern Analysis and Machine Intelligence
+.
+
+Cited by: 
+§1
+.
+
+Mansoury 
+et al.
+ (2022)
+
+M. Mansoury, B. Mobasher, and H. van Hoof
+
+Exposure-aware recommendation using contextual bandits
+.
+
+arXiv preprint arXiv:2209.01665
+.
+
+Cited by: 
+§2
+,
+
+§3.2
+.
+
+Mansoury 
+et al.
+ (2024)
+
+M. Mansoury, B. Mobasher, and H. van Hoof
+
+Mitigating exposure bias in online learning to rank recommendation: a novel reward model for cascading bandits
+.
+
+In 
+Proceedings of the 33rd ACM International Conference on Information and Knowledge Management
+,
+
+pp. 1638–1648
+.
+
+Cited by: 
+§2
+,
+
+§3.2
+.
+
+Pei 
+et al.
+ (2019)
+
+C. Pei, Y. Zhang, Y. Zhang, F. Sun, X. Lin, H. Sun, J. Wu, P. Jiang, J. Ge, W. Ou, 
+et al.
+
+Personalized re-ranking for recommendation
+.
+
+In 
+Proceedings of the 13th ACM conference on recommender systems
+,
+
+pp. 3–11
+.
+
+Cited by: 
+§1
+,
+
+§2
+,
+
+2nd item
+,
+
+§5.3
+.
+
+Raj and Ekstrand (2023)
+
+A. Raj and M. D. Ekstrand
+
+Towards measuring fairness in grid layout in recommender systems
+.
+
+arXiv preprint arXiv:2309.10271
+.
+
+Cited by: 
+§2
+.
+
+Raza 
+et al.
+ (2026)
+
+S. Raza, M. Rahman, S. Kamawal, A. Toroghi, A. Raval, F. Navah, and A. Kazemeini
+
+A comprehensive review of recommender systems: transitioning from theory to practice
+.
+
+Computer Science Review
+ 
+59
+, 
+pp. 100849
+.
+
+Cited by: 
+§1
+.
+
+Ren 
+et al.
+ (2024)
+
+Y. Ren, Q. Yang, Y. Wu, W. Xu, Y. Wang, and Z. Zhang
+
+Non-autoregressive generative models for reranking recommendation
+.
+
+In 
+Proceedings of the 30th ACM SIGKDD Conference on Knowledge Discovery and Data Mining
+,
+
+pp. 5625–5634
+.
+
+Cited by: 
+§2
+.
+
+Shi 
+et al.
+ (2023)
+
+X. Shi, F. Yang, Z. Wang, X. Wu, M. Guan, G. Liao, W. Yongkang, X. Wang, and D. Wang
+
+PIER: permutation-level interest-based end-to-end re-ranking framework in e-commerce
+.
+
+In 
+Proceedings of the 29th ACM SIGKDD Conference on Knowledge Discovery and Data Mining
+,
+
+pp. 4823–4831
+.
+
+Cited by: 
+§2
+.
+
+Wang 
+et al.
+ (2019)
+
+F. Wang, X. Fang, L. Liu, Y. Chen, J. Tao, Z. Peng, C. Jin, and H. Tian
+
+Sequential evaluation and generation framework for combinatorial recommender system
+.
+
+arXiv preprint arXiv:1902.00245
+.
+
+Cited by: 
+§2
+,
+
+§3.2
+,
+
+3rd item
+.
+
+Wang 
+et al.
+ (2017)
+
+R. Wang, B. Fu, G. Fu, and M. Wang
+
+Deep & cross network for ad click predictions
+.
+
+In 
+Proceedings of the ADKDD’17
+,
+
+pp. 1–7
+.
+
+Cited by: 
+§1
+,
+
+§2
+,
+
+1st item
+.
+
+Wang 
+et al.
+ (2025)
+
+S. Wang, X. Wei, S. Kou, C. Wang, W. Chen, Q. Tang, Y. Zhu, X. Xiao, and X. Wang
+
+NLGR: utilizing neighbor lists for generative rerank in personalized recommendation systems
+.
+
+In 
+Companion Proceedings of the ACM on Web Conference 2025
+,
+
+pp. 530–537
+.
+
+Cited by: 
+§1
+,
+
+§2
+,
+
+§2
+,
+
+§3.2
+,
+
+4th item
+.
+
+Xi 
+et al.
+ (2021)
+
+Y. Xi, W. Liu, X. Dai, R. Tang, W. Zhang, Q. Liu, X. He, and Y. Yu
+
+Context-aware reranking with utility maximization for recommendation
+.
+
+arXiv preprint arXiv:2110.09059
+.
+
+Cited by: 
+§1
+,
+
+§2
+,
+
+§2
+,
+
+§3.2
+,
+
+3rd item
+.
+
+Yang 
+et al.
+ (2025)
+
+H. Yang, Z. Qi, S. Liu, X. Yang, X. Wang, X. Li, L. Hu, H. Li, and K. Gai
+
+Comprehensive list generation for multi-generator reranking
+.
+
+In 
+Proceedings of the 48th International ACM SIGIR Conference on Research and Development in Information Retrieval
+,
+
+pp. 2298–2308
+.
+
+Cited by: 
+§1
+,
+
+§2
+,
+
+§2
+.
+
+Zhai 
+et al.
+ (2024)
+
+J. Zhai, L. Liao, X. Liu, Y. Wang, R. Li, X. Cao, L. Gao, Z. Gong, F. Gu, M. He, 
+et al.
+
+Actions speak louder than words: trillion-parameter sequential transducers for generative recommendations
+.
+
+arXiv preprint arXiv:2402.17152
+.
+
+Cited by: 
+§2
+.
+
+Zhang 
+et al.
+ (2025)
+
+K. Zhang, X. Wang, X. Yang, S. Liu, H. Yang, X. Li, F. Sun, and Q. Cao
+
+From generation to consumption: personalized list value estimation for re-ranking
+.
+
+arXiv preprint arXiv:2508.02242
+.
+
+Cited by: 
+§1
+,
+
+§2
+,
+
+§2
+,
+
+§3.2
+.
+
+Zheng 
+et al.
+ (2007)
+
+Z. Zheng, K. Chen, G. Sun, and H. Zha
+
+A regression framework for learning ranking functions using relative relevance judgments
+.
+
+In 
+Proceedings of the 30th annual international ACM SIGIR conference on Research and development in information retrieval
+,
+
+pp. 287–294
+.
+
+Cited by: 
+§2
+.
+
+Zhuang 
+et al.
+ (2018)
+
+T. Zhuang, W. Ou, and Z. Wang
+
+Globally optimized mutual influence aware ranking in e-commerce search
+.
+
+arXiv preprint arXiv:1805.08524
+.
+
+Cited by: 
+§1
+,
+
+§2
+.
+
