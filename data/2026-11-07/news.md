@@ -1,6 +1,6 @@
 # News candidates — 2026-11-07 (IST)
 
-Generated 2026-11-07 06:30 UTC. Showing 180 items first seen in the last 18 h or published in the last 30 h; 222 older items from the 3-day window are only in news.json.
+Generated 2026-11-07 06:38 UTC. Showing 181 items first seen in the last 18 h or published in the last 30 h; 223 older items from the 3-day window are only in news.json.
 Each item appears once, in the first section it matches. Dates are as reported by the source ("date unknown" = page with no date).
 
 ## By priority topic
@@ -15,8 +15,8 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - nothing new
 
 ### Crawl (4)
-- [2026-11-07 00:55 UTC] AI crawlers list: 8 bots to know and manage — Hostinger — (Google News link; search the headline) · Crawl
 - [2026-11-07 00:04 UTC] AI crawlers list for 2026: 8 bots and how to manage them — Hostinger — (Google News link; search the headline) · Crawl · +1 other hits
+- [2026-11-07 00:04 UTC] AI crawlers list: 8 bots to know and manage — Hostinger — (Google News link; search the headline) · Crawl
 - [2026-11-06 21:11 UTC] Cloudflare revenue gains 39% to $782.5m, fastest growth in nearly four years — PPC Land — https://ppc.land/cloudflare-revenue-gains-39-to-782-5m-fastest-growth-in-nearly-four-years/ · Crawl
 - [2026-11-06 16:22 UTC] Fingerprint Expands Bot Detection to Uncover Hidden Muse, Instinct and Grok Bot Traffic as AI Agents Increasingly Conceal Their Identities — VMblog — (Google News link; search the headline) · (already listed on an earlier day) · Crawl · +1 other hits
 
@@ -34,15 +34,15 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-06 17:54 UTC] War damage cut ad budgets, 76% of Ukrainian agencies tell IAB Ukraine — PPC Land — https://ppc.land/war-damage-cut-ad-budgets-76-of-ukrainian-agencies-tell-iab-ukraine/ · Ads
 - [2026-11-06 17:49 UTC] MNTN cuts its 2026 revenue forecast 11% after sales execution problems — PPC Land — https://ppc.land/mntn-cuts-its-2026-revenue-forecast-11-after-sales-execution-problems/ · Ads
 - [2026-11-06 15:35 UTC] TikTok Search Ads Are Becoming Real Search Advertising via @sejournal, @MattGSouthern — Search Engine Journal — https://www.searchenginejournal.com/tiktok-search-ads-are-becoming-real-search-advertising/596016/ · Ads
-- [2026-11-06 08:02 UTC] From adviser to advertiser: can we trust AI? — Yorkshire Bylines — (Google News link; search the headline) · Ads
 - [2026-11-06 03:29 UTC] ChatGPT Ads wants premium rates, but advertisers are still waiting for results — Storyboard18 — (Google News link; search the headline) · (already listed on an earlier day) · Ads
 - [2026-11-05 20:23 UTC] ChatGPT gains advertisers faster than OpenAI can prove performance — eMarketer — (Google News link; search the headline) · Ads
 - [2026-11-05 16:28 UTC] Alphabet: The Advertising Phenomenon Investors Always Miss (NASDAQ:GOOG) — Seeking Alpha — (Google News link; search the headline) · Ads · +1 other hits
 - [2026-11-05 14:47 UTC] A Volume Control for AI-Native Advertising Content — Unite.AI — (Google News link; search the headline) · Ads · +1 other hits
+- [2026-11-05 13:07 UTC] Adthena Reports ChatGPT Ads Surpass 200,000 Placements — MarTech Cube — (Google News link; search the headline) · Ads
 - [2026-11-05 10:20 UTC] How AI shopping agents are changing advertising for Amazon and Walmart — Marketing Tech News — (Google News link; search the headline) · Ads, Brand/product recommendation
 - [2026-11-04 21:00 UTC] Reddit Adds Ads To Search, Expands Keyword Targeting via @sejournal, @MattGSouthern — Search Engine Journal — https://www.searchenginejournal.com/reddit-begins-testing-ads-in-its-own-search-results/595935/ · Ads
 
-### Search / AEO / GEO (21)
+### Search / AEO / GEO (22)
 - [2026-11-07 06:15 UTC] How to Measure AI Search Visibility Without Mistaking Crawls for Citations — TechBullion — (Google News link; search the headline) · Citation & source selection, GEO/AEO
 - [2026-11-07 00:48 UTC] Google adds home services booking to AI Mode — Homepros — (Google News link; search the headline) · GEO/AEO
 - [2026-11-06 21:41 UTC] People Inc. loses 26% of core web sessions as Google AI Overviews spread — PPC Land — https://ppc.land/people-inc-loses-26-of-core-web-sessions-as-google-ai-overviews-spread/ · GEO/AEO · +1 other hits
@@ -64,25 +64,28 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-05 23:28 UTC] Perplexity Takes on OpenAI and Anthropic With Work-Focused AI Agents — lapaasvoice.com — https://lapaasvoice.com/perplexity-takes-on-openai-and-anthropic-with-work-focused-ai-agents/ · GEO/AEO
 - [2026-11-05 22:26 UTC] Perplexity AI: the answer engine with a lot of question marks — The Verge — (Google News link; search the headline) · GEO/AEO
 - [2026-11-05 11:42 UTC] What Lifted Angi (NASDAQ:ANGI) Shares 33% on a Reported Google AI Mode Link-Up? — Kalkine — (Google News link; search the headline) · GEO/AEO
+- [2026-11-04 09:01 UTC] With a single phrase 'Update report card' every morning, Claude Code reads the site's numbers — note — https://note.com/ai_shukyaku_diy/n/n4894ab525ea7?hl=en
 
-### Model & lab launches (news search) (53)
+### Model & lab launches (news search) (54)
 - [2026-11-07 05:25 UTC] Best AI Chatbots by Budget: $8 Grok to $500 ChatGPT [2026] — https://tech-insider.org/ — (Google News link; search the headline)
-- [2026-11-07 05:09 UTC] What Alibaba left blank about Qwen4 — Asia Times — (Google News link; search the headline)
+- [2026-11-07 05:09 UTC] What Alibaba left blank about Qwen4 — Asia Times — https://asiatimes.com/2026/11/what-alibaba-left-blank-about-qwen4/ · +1 other hits
 - [2026-11-07 03:21 UTC] Is Grok AI Free in 2026? Free Tier Limits and What You Get — Fello AI — (Google News link; search the headline)
 - [2026-11-07 00:28 UTC] DeepSeek V4.1 Flash vs Gemini 4 Argon vs Haiku 5.5 [2026] — tech-insider.org — (Google News link; search the headline)
 - [2026-11-06 22:18 UTC] OpenAI Introduces BioBasicsBench to Test AI Agents on Wet-Lab Data — Unite.AI — (Google News link; search the headline)
 - [2026-11-06 20:27 UTC] Anthropic’s Claude Can Now Read Your Bank Accounts — Yahoo Finance — (Google News link; search the headline)
 - [2026-11-06 20:00 UTC] OpenAI Launches GPT-6 Cyber, Expanding AI Vulnerability Research and Finds 1000+ Exploits — LinkedIn — (Google News link; search the headline)
-- [2026-11-06 18:56 UTC] OpenAI Launches GPT-6 Cyber to Find Security Flaws, Limits Access Over Hacking Risks — Security Boulevard — https://securityboulevard.com/2026/11/openai-launches-gpt-6-cyber-to-find-security-flaws-limits-access-over-hacking-risks/ · +1 other hits
+- [2026-11-06 19:21 UTC] Can Claude dream now? Anthropic’s latest experiment gets eerily close to human thinking — Interesting Engineering on MSN — https://www.msn.com/en-us/technology/general/can-claude-dream-now-anthropic-s-latest-experiment-gets-eerily-close-to-human-thinking/ar-AA2gVuwn
+- [2026-11-06 18:56 UTC] OpenAI Launches GPT-6 Cyber to Find Security Flaws, Limits Access Over Hacking Risks — Security Boulevard — (Google News link; search the headline)
 - [2026-11-06 18:27 UTC] Anthropic Launches Claude Personal Finance Ahead of Nasdaq Listing — PYMNTS.com — (Google News link; search the headline)
 - [2026-11-06 17:21 UTC] Mistral Studio Launches Managed Agents and On-Premises Apps — Pasquale Pillitteri — (Google News link; search the headline)
 - [2026-11-06 17:15 UTC] Google Launches Gemini Omni 1.2 Flash With 15-Second AI Video — Pasquale Pillitteri — (Google News link; search the headline)
+- [2026-11-06 16:30 UTC] OpenAI adds SIP telephony to GPT-Live for inbound and outbound phone calls — news.lavx.hu — https://news.lavx.hu/article/openai-adds-sip-telephony-to-gpt-live-for-inbound-and-outbound-phone-calls
 - [2026-11-06 16:01 UTC] Google Releases Gemini Omni 1.2 Flash, Extending Video Clips to 15 Seconds and Slashing Prices by 30% — OODA Loop — (Google News link; search the headline)
-- [2026-11-06 16:00 UTC] OpenAI Raises $11B at $1.25T Valuation [2026] — shattered.io — https://shattered.io/openai-11-billion-funding-1-25-trillion-valuation-bloomberg-2026/
+- [2026-11-06 16:00 UTC] OpenAI’s GPT-6 Cyber: A Dangerous New AI Threat or Our Ultimate Digital Guardian? — The Tech Edvocate — https://www.thetechedvocate.org/openais-gpt-6-cyber-a-dangerous-new-ai-threat-or-our-ultimate-digital-guardian/
 - [2026-11-06 15:33 UTC] Anthropic Launches Personal Finance in Claude: AI-Powered Banking Insights via Plaid — FF News — (Google News link; search the headline)
-- [2026-11-06 14:58 UTC] OpenAI Launches GPT-6 Cyber After AI Helps Find 81 Firefox Flaws, 948 Linux Exploits — The Hacker News — (Google News link; search the headline)
+- [2026-11-06 14:58 UTC] OpenAI Launches GPT-6 Cyber After AI Helps Find 81 Firefox Flaws, 948 Linux Exploits — The Hacker News — https://thehackernews.com/2026/11/openai-launches-gpt-6-cyber-after-ai.html · +1 other hits
 - [2026-11-06 14:56 UTC] Qwen by Alibaba on a Home PC: Instructions, Requirements, and Unexpected Test Results — Incrypted — https://incrypted.com/en/qwen-by-alibaba-on-a-home-pc/ · +1 other hits
-- [2026-11-06 14:18 UTC] Anthropic Launches Personal Finance Feature for Claude, Expands into Scientific Research — KuCoin — (Google News link; search the headline)
+- [2026-11-06 14:18 UTC] Anthropic Launches Personal Finance Feature for Claude, Expands into Scientific Research — KuCoin — https://www.kucoin.com/news/flash/anthropic-launches-personal-finance-feature-for-claude-expands-into-scientific-research · +1 other hits
 - [2026-11-06 14:12 UTC] Qwen 4: Confirmed Facts, Latest Teaser and Release Status — Kingy AI — (Google News link; search the headline)
 - [2026-11-06 13:56 UTC] OpenAI Releases GPT-6 Cyber to Vetted Defenders With a Critical Rating — Technology Org — (Google News link; search the headline)
 - [2026-11-06 13:01 UTC] We Asked Grok if Ethereum Can Reach $4,000 by 2028 — 24/7 Wall St. — https://247wallst.com/investing/cryptocurrency/2026/11/06/we-asked-grok-if-ethereum-can-reach-4000-by-2028/
@@ -92,40 +95,38 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-06 12:00 UTC] Google Launches Gemini Omni 1.2 Flash, Bringing Longer AI Videos And Easier Editing for Creators — News18 — (Google News link; search the headline)
 - [2026-11-06 11:42 UTC] Google launches Gemini Omni 1.2 Flash, cuts video generation price by 30% — mediasat.info — (Google News link; search the headline)
 - [2026-11-06 11:21 UTC] Muse Spark Open vs DeepSeek V4.1 vs Beam: 1M Context [2026] — shattered.io — https://shattered.io/muse-spark-open-vs-deepseek-v4-1-flash-vs-beam-1-0-1m-context-2026/ · (already listed on an earlier day) · +1 other hits
-- [2026-11-06 10:51 UTC] Vals finds open AI models closing the hacking gap with gated frontier systems — Crypto Briefing — https://cryptobriefing.com/vals-open-ai-models-close-hacking-gap/ · GEO/AEO
 - [2026-11-06 10:49 UTC] OpenAI launches new GPT-6 Cyber model that found 81 flaws on Firefox — CyberInsider — https://cyberinsider.com/openai-gpt-6-cyber-model-firefox-vulnerabilities/ · GEO/AEO · +1 other hits
+- [2026-11-06 10:10 UTC] OpenAI and Anthropic drop new AI tools for cybersecurity, images and finance — CNET on MSN — https://www.msn.com/en-us/money/general/openai-and-anthropic-drop-new-ai-tools-for-cybersecurity-images-and-finance/ar-AA2gVZh9
 - [2026-11-06 09:53 UTC] Claude Personal Finance: Features, Privacy and ChatGPT Comparison — TechRepublic — https://www.techrepublic.com/article/news-claude-personal-finance-features-privacy-chatgpt/
 - [2026-11-06 09:44 UTC] Google Launches Gemini Omni 1.2 Flash With 15-second AI Videos — Dataconomy — (Google News link; search the headline)
 - [2026-11-06 09:41 UTC] Alibaba Group to announce Q2FY27 results on November 19 — scanx.trade — (Google News link; search the headline)
 - [2026-11-06 08:57 UTC] DeepSeek's cheap V4.1 Flash model undercuts the AI spending panic — Startup Fortune — (Google News link; search the headline)
+- [2026-11-06 08:52 UTC] Anthropic launches Personal Finance in Claude — ForkLog — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-11-06 07:24 UTC] Mira Murati’s Inkling 2 Overtakes Mistral as the Top Open-Weight Model Outside China — trendingtopics.eu — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-11-06 06:56 UTC] DeepSeek Declares War on Silicon Valley's Monopoly, Vowing to Fight to the End — China Academy — (Google News link; search the headline)
 - [2026-11-06 06:08 UTC] Qwen 4 Release Date: What We Know So Far — Fello AI — (Google News link; search the headline) · (already listed on an earlier day)
-- [2026-11-06 05:55 UTC] Anthropic Launches a Read-Only Personal Finance Feature for Claude in the U.S. — kucoin — https://www.kucoin.com/news/flash/anthropic-launches-read-only-personal-finance-feature-for-claude-in-the-u-s · (already listed on an earlier day)
 - [2026-11-06 05:18 UTC] Google's Gemini Omni 1.2 Flash lets you generate longer videos — NewsBytes — https://www.newsbytesapp.com/news/science/google-unveils-gemini-omni-1-2-flash-model/story · (already listed on an earlier day)
 - [2026-11-06 04:32 UTC] Moonshot AI Releases Kimi K3.1 Pro Weights: A 2.8-Trillion-Parameter Model Shipping at About 1.56TB — XenoSpectrum — https://xenospectrum.com/en/kimi-k31-pro-open-weights-deployment/ · (already listed on an earlier day) · +1 other hits
 - [2026-11-06 04:20 UTC] Google launches Gemini Omni 1.2 Flash with 30% lower prices and longer AI videos — Neowin — https://www.neowin.net/news/google-launches-gemini-omni-12-flash-with-30-lower-prices-and-longer-ai-videos/ · (already listed on an earlier day) · +1 other hits
 - [2026-11-06 03:22 UTC] DeepSeek’s AI Agent Hits 1.54M Daily Users and 5.5M a Month — FourWeekMBA — (Google News link; search the headline) · (already listed on an earlier day)
+- [2026-11-06 02:19 UTC] OpenAI’s GPT-6 Cyber found 81 Firefox flaws earlier AI testing missed — Help Net Security — https://www.helpnetsecurity.com/2026/11/06/openai-gpt-6-cyber-released/
 - [2026-11-06 02:19 UTC] Google introduces Gemini Omni 1.2 Flash — Zamin.uz — https://zamin.uz/en/technology/226504-google-introduces-gemini-omni-1-2-flash.html · (already listed on an earlier day)
 - [2026-11-06 02:00 UTC] Alibaba brings Cloud and AI to the first Youth Olympic Games in Africa — Philstar.com — (Google News link; search the headline)
 - [2026-11-06 01:58 UTC] Moonshot AI Launches Hosted Agent Service, Sandbox Priced at 0.072 Yuan per Hour — BigGo Finance — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-11-06 01:25 UTC] DeepSeek Harness Daily Active Users Surge 468% to 1.54 Million — finance.biggo.com — (Google News link; search the headline)
-- [2026-11-06 00:59 UTC] OpenAI's new cybersecurity model is less likely to hack companies — NewsBytes — https://www.newsbytesapp.com/news/science/openai-launches-gpt-6-cyber-with-improved-vulnerability-detection-and-safety/story · (already listed on an earlier day)
-- [2026-11-06 00:47 UTC] Claude Duet Guide: Proactive AI Features and What it Can Do — Geeky Gadgets — https://www.geeky-gadgets.com/claude-duet-early-access-review/
-- [2026-11-05 23:19 UTC] Anthropic Launches Read-Only Personal Finance for Claude, Via Plaid: how 13 outlets framed it — NewsCord — (Google News link; search the headline)
-- [2026-11-05 22:33 UTC] OpenAI Launches GPT-6 Cyber To Take On Claude Mythos And Gemini, Finds Flaws Hackers Could Exploit — Times Now — https://www.timesnownews.com/technology-science/openai-launches-gpt-6-cyber-to-take-on-claude-mythos-and-gemini-finds-flaws-hackers-could-exploit-article-156473244 · GEO/AEO
-- [2026-11-05 17:48 UTC] Meta AI Agent: Muse — note — https://note.com/kiyo_ai_note/n/n3a2288af0211?hl=en
+- [2026-11-06 00:39 UTC] Anthropic brings bank account connectivity to Claude: Check spending, balances and loan interest with AI — Mint — https://www.livemint.com/ai/anthropic-brings-bank-account-connectivity-to-claude-check-spending-balances-and-loan-interest-with-ai-11793953943979.html
+- [2026-11-05 19:01 UTC] OpenAI says its new GPT-6 Cyber has already uncovered 'thousands' of exploits — Mashable — https://mashable.com/tech/openai-gpt-6-cyber · GEO/AEO
+- [2026-11-05 16:00 UTC] Alibaba’s Qwen AI Model Challenges DeepSeek and Zhipu With Performance on Everyday Hardware — lapaasvoice.com — https://lapaasvoice.com/alibabas-qwen-ai-model-challenges-deepseek-and-zhipu-with-performance-on-everyday-hardware/ · GEO/AEO
 - [2026-11-05 14:43 UTC] Kimi K3.1 Pro Goes Open-Weight: 2.8T Parameters [2026] — shattered.io — (Google News link; search the headline)
 - [2026-11-05 13:40 UTC] Kimi Formally Launches Hosted Agents for Enterprise AI Workloads — Unite.AI — (Google News link; search the headline)
 - [2026-11-05 08:00 UTC] Bleeding Llama: Malicious GGUF Drains Your Local LLM Memory — Pasquale Pillitteri — (Google News link; search the headline)
 - [2026-11-05 07:13 UTC] Alibaba Cloud Lingjun Zhenwu M890 SuperPoD Adds Day-Zero Support for Kimi K3.1 Pro — Pandaily — (Google News link; search the headline)
 
-### B2B buyer AI / adoption (5)
+### B2B buyer AI / adoption (4)
 - [2026-11-07 00:00 UTC] AI agent for business: who uses agents, what they do, and what businesses spend — Hostinger — (Google News link; search the headline)
 - [2026-11-06 19:40 UTC] CISOs Have Spoken: Risk Reduction, Not Another Cyber Risk Rating — Forrester — (Google News link; search the headline)
 - [2026-11-06 13:46 UTC] Q3 losses widen as nine-month operating cash flow rises at Forrester Research (FORR). — Stock Titan — (Google News link; search the headline)
 - [2026-11-06 11:00 UTC] ChatGPT and Claude Can Now Pay Company Bills. Suppliers Pay the Fee — Business Model Analyst — (Google News link; search the headline)
-- [2026-11-06 03:45 UTC] In B2B, Agents Narrow The Field—But The Human Still Buys — Forbes — https://www.forbes.com/councils/forbestechcouncil/2026/11/06/in-b2b-agents-narrow-the-field-but-the-human-still-buys/ · +1 other hits
 
 ### Sites with no usable feed (via Google News site: search) (11)
 - [2026-11-07 04:38 UTC] How to use voice mode on the web and Mac app — Perplexity — (Google News link; search the headline) · GEO/AEO
@@ -143,6 +144,7 @@ Each item appears once, in the first section it matches. Dates are as reported b
 ## Other items from source feeds
 
 ### Labs (official feeds + trackers) (19)
+- [2026-11-07 06:35 UTC] Shenzhen, home to tech giants and an illicit trade of smuggled chips and stolen iPhones, is clearing out its illegitimate markets ahead of the APEC summit (William Langley/Financial Times) — Techmeme — https://www.techmeme.com/261107/p4#a261107p4
 - [2026-11-07 06:25 UTC] Huawei unveils HarmonyOS-powered Qinyun HM650 series desktop PCs for enterprise and government users, saying they use "100% domestically made" components (Iris Deng/South China Morning Post) — Techmeme — https://www.techmeme.com/261107/p3#a261107p3
 - [2026-11-07 06:00 UTC] Axon invests $1.2B in Skydio, whose autonomous drones are used by public safety agencies, the US military, and 32 allied nations, at a $5.2B pre-money valuation (Carly Page/Resilience Media) — Techmeme — https://www.techmeme.com/261107/p2#a261107p2
 - [2026-11-07 05:45 UTC] Beijing-based Sand.ai, an AI startup specializing in video generation, raised a $200M Series A+, bringing its total funding over the past 10 months to $300M (Eudora Wang/DealStreetAsia) — Techmeme — https://www.techmeme.com/261107/p1#a261107p1
@@ -157,7 +159,6 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-06 21:12 UTC] Sources: Anthropic is continuing with plans to list before the Thanksgiving holiday this month, expecting to raise $80B-$100B at a valuation of $1.25T to $1.75T (Financial Times) — Techmeme — https://www.techmeme.com/261106/p21#a261106p21
 - [2026-11-06 19:35 UTC] AI physics startup PSI says a system running a non-public Anthropic model proved the Aaronson-Ambainis conjecture, a quantum computing question open since 2008 (PSI) — Techmeme — https://www.techmeme.com/261106/p20#a261106p20
 - [2026-11-06 18:50 UTC] Elon Musk says US government contracts will account for under 10% of SpaceX's revenue this quarter, down from 16.6% last quarter and around 20% in 2025 (Bloomberg) — Techmeme — https://www.techmeme.com/261106/p19#a261106p19
-- [2026-11-06 18:05 UTC] Sources: Microsoft has been turning off rented computing capacity from Oracle after declining to renew a 2023 deal, because the hardware used older Nvidia chips (Brody Ford/Bloomberg) — Techmeme — https://www.techmeme.com/261106/p18#a261106p18
 - [2026-11-06 17:13 UTC] Quoting Nilay Patel — Simon Willison — https://simonwillison.net/2026/Nov/6/nilay-patel/ · GEO/AEO
 - [2026-11-06 08:00 UTC] Partnering with Hacktron to find vulnerabilities in OpenAI’s systems — OpenAI News — https://openai.com/index/partnering-with-hacktron
 - [2026-11-06 00:00 UTC] Measuring how AI agents handle everyday wet-lab science — OpenAI News — https://openai.com/index/measuring-how-ai-agents-handle-wet-lab-science
