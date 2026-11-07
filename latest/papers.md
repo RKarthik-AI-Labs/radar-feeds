@@ -1,10 +1,10 @@
-# Paper candidates — 2026-11-06 (IST)
+# Paper candidates — 2026-11-07 (IST)
 
-Generated 2026-11-06 08:27 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
-Totals: 21 new topic matches · 9 other new cs.IR · 124 seen in earlier runs.
+Generated 2026-11-07 01:11 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Totals: 22 new topic matches · 9 other new cs.IR · 103 seen in earlier runs.
 Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
 
-## New papers matching your topics (21), highest score first
+## New papers matching your topics (22), highest score first
 
 ### The Popular Get More Popular: Auditing Brand Bias in Generative Search
 - arXiv 2611.07614v1 · v1 2026-11-05 07:57 UTC · cs.AI, cs.CY, cs.SI
@@ -82,6 +82,15 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Full text: data/fulltext/2611.07403.txt
 
 > Replay attacks are difficult to detect in vision-based control systems because previously recorded observations can remain plausible while the physical system follows a different trajectory. This paper develops an adaptive dynamic-watermarking framework for detecting replay attacks against vision-based controllers. A private Gaussian watermark is added to the nominal control input, and a control input-conditioned latent dynamics network (LDN) predicts the corresponding evolution in a compact latent space learned from image observations. Attack evidence is obtained from the discrepancy between the predicted latent response and the latent representation of the received image observation. A reinforcement learning policy adjusts the watermark covariance using the latent state and detector confidence, thereby balancing attack detectability, watermark energy, and control distortion. A Lagrangian penalty on task-specific safety costs is included during training to limit the adverse effect of the excitation. The framework is evaluated on a vision-guided UR5 manipulation task in which the robot reaches a target while avoiding a moving human arm under nominal and replay-attacked observations.
+
+### HeLM: Hierarchical Explicit Language Memory for Non-Markovian Manipulation
+- arXiv 2611.02660 · v1 2026-11-02 07:20 UTC · 
+- Authors: Gyeonghun Kim, Donghoon Kim, Minsoo Choi, Suyun Lee
+- Topics: Manipulation · score 6 · found via HF daily papers
+- Link: https://arxiv.org/abs/2611.02660
+- Full text: not stored: license is arxiv-default, which does not allow redistribution; read it on arXiv
+
+> Recent advances in Vision-Language-Action (VLA) models have enabled fine manipulation capabilities, yet performing tasks that require working memory remains a key challenge. Most existing VLA architectures operate under a Markovian assumption, mapping only the current observation to an action, which leads to failure in non-Markovian environments. Inspired by the human 'inner monologue', we propose Hierarchical Explicit Language Memory (HeLM), a hierarchical VLA framework that maintains task-relevant history in explicit language through factorized event detection and event-triggered memory updates. We evaluate HeLM across 10 non-Markovian real-world tasks with 56 variants, including five newly formulated inter-episode tasks that require persistent context across task boundaries. HeLM improves intra-episode success by 12.8 percentage points over the strongest baseline and achieves 78% subtask success on compositional generalization tasks, while using up to 4.5x less memory and running 2.5x faster than the keyframe baseline at long horizons.
 
 ### SPILLWAY: Separating Target Admission from Sanitization to Defend Tool-Using Agents against Prompt Injection
 - arXiv 2611.07222v1 · v1 2026-11-04 23:18 UTC · cs.AI, cs.CR
@@ -217,7 +226,7 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Domain-specific information retrieval — https://arxiv.org/abs/2611.08228
 - GINGER: Spicing Up Graph-Based Vector Search — https://arxiv.org/abs/2611.08306
 
-## Already listed on an earlier day, still inside the look-back window (124)
+## Already listed on an earlier day, still inside the look-back window (103)
 - Characterizing Adversarial GEO via Implicit Brand Injection — https://arxiv.org/abs/2611.04005 (score 21)
 - IntentGEO: Intent-aware Generative Engine Optimization for Recommendation — https://arxiv.org/abs/2611.04225 (score 18)
 - The Web Doesn't Sit Still: Adversarial Self-Evolving Attacks on Search Agents — https://arxiv.org/abs/2611.03754 (score 13)
@@ -226,8 +235,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - WISE: An Agentic Framework for Whole-page Multimodal Search Experience Attribution — https://arxiv.org/abs/2611.06777 (score 12)
 - ScamWorld: An Interactive Environment for Evaluating Web Agents Against Online Fraud — https://arxiv.org/abs/2611.04879 (score 11)
 - Securing Web Agents with the Compile-Then-Execute Paradigm — https://arxiv.org/abs/2611.06039 (score 11)
-- StreamDuo: A Live Commentator and a Research Agent for Unseen Games — https://arxiv.org/abs/2611.01120 (score 10)
-- Same Trajectory, Different Knowledge: Information-State-Aware On-Policy Distillation for Search Agents — https://arxiv.org/abs/2611.01987 (score 10)
 - DR Pixel: Page-Native Deep Research with Vision-Language Models — https://arxiv.org/abs/2611.03097 (score 10)
 - Auto-Research Agent on MSA Organization to Improve Protein-Protein Complex Structure Prediction — https://arxiv.org/abs/2611.03183 (score 10)
 - Can We Stop the Backtest Yet? Anytime-Valid Promotion Tests for Adaptive Financial Research Agents — https://arxiv.org/abs/2611.03384 (score 10)
@@ -235,10 +242,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Where Search Agents Go Off the Rails: Graph-Grounded Step-Level Verification — https://arxiv.org/abs/2611.06662 (score 10)
 - LifeVal: Evaluating AI Model Performance on Personalized Agentic Consumer Tasks — https://arxiv.org/abs/2611.06687 (score 10)
 - Selfrionette: A Fingertip Force-Input Controller for Continuous Full-Body Avatar Manipulation and Diverse Haptic Interactions — https://arxiv.org/abs/2611.03052 (score 9)
-- Hybrid Computer Use: A Unified Programmatic, Semantic, and Visual Interface for General Agents — https://arxiv.org/abs/2610.41432 (score 8)
-- Don't Guess, Ask Wisely: Benchmarking and Training Proactive Elicitation in Open-Domain LLM Conversations — https://arxiv.org/abs/2611.01878 (score 8)
-- Interface Quilt: Modifying Applications with Computer Use Agents and Generative UI — https://arxiv.org/abs/2611.01891 (score 8)
-- One String to Rule Them All: Measuring Consent Under the IAB Global Privacy Platform — https://arxiv.org/abs/2611.02014 (score 8)
 - RecGroupMemory: Feedback-Aware Cohort Memory for E-Commerce Recommendation — https://arxiv.org/abs/2611.02453 (score 8)
 - ICJ-Graph: A Citation Graph and a Layered Document Corpus of the International Court of Justice — https://arxiv.org/abs/2611.02630 (score 8)
 - E-GenRM: Generative Reward Modeling for Open-Ended E-Commerce Shopping Agents — https://arxiv.org/abs/2611.03008 (score 8)
@@ -263,13 +266,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - ReuseGR: Offline--Online Decoupled Generative Retrieval via Adaptive Prefix Reuse — https://arxiv.org/abs/2611.04259 (score 7)
 - Voluntary Servitude: Weaponized Safety Warning Mechanisms for Controlling AI Agents — https://arxiv.org/abs/2611.04393 (score 7)
 - Collaborative Search Meets Large Language Models: An Empirical Study — https://arxiv.org/abs/2611.04619 (score 7)
-- MemHarmBench: Evaluating Cross-Session Prompt Injection in Memory-Persistent AI Agents — https://arxiv.org/abs/2611.01700 (score 6)
-- Reddit Community Signals as a Supplementary Domain-Reputation Feature in Spam Classification: A Conservative Controlled Evaluation — https://arxiv.org/abs/2611.01813 (score 6)
-- EAGR: Evidence-Guided Adaptive Graph Retrieval — https://arxiv.org/abs/2611.01910 (score 6)
-- Beyond Prompt Injection: The Tool Update Gap in LLM Agent Security — https://arxiv.org/abs/2611.01976 (score 6)
-- Testing concept-level audits of melanoma classifiers with diffusion counterfactuals and matched positive controls — https://arxiv.org/abs/2611.02119 (score 6)
-- Conditional Calibration Contracts under Coupled Load: A Branch-Aware Audit of Switched Inference — https://arxiv.org/abs/2611.02121 (score 6)
-- Detect, Repair and Audit: A Hierarchical Multi-Agent Defense Against Adversarial Attacks in Energy Forecasting — https://arxiv.org/abs/2611.02310 (score 6)
 - From Language to Country to Valence: A Multilingual Audit of Stereotype Bias Across LLMs — https://arxiv.org/abs/2611.02585 (score 6)
 - SearchInject: Retrieval Exposure Control for Indirect Prompt Injection in Language-Model Search — https://arxiv.org/abs/2611.02643 (score 6)
 - The Customer Never Sees the Goal: Measuring and Detecting Vulnerability-Targeted Manipulation in LLM Assistants — https://arxiv.org/abs/2611.02689 (score 6)
@@ -287,8 +283,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Information-Matched Auditing of Conversational Emotion-Shift Forecasting: A Leakage-Safe Evaluation Protocol — https://arxiv.org/abs/2611.05895 (score 6)
 - Do Saliency Maps Fail Dense Breasts? A Chance-Normalized, Confounder-Aware Audit of Explanation Fairness in Mammography — https://arxiv.org/abs/2611.05909 (score 6)
 - Signed but Steerable: Measuring and Closing the Text-Vector Integrity Gap in Offline Retrieval-Augmented Generation — https://arxiv.org/abs/2611.06498 (score 5)
-- EvoRec: A Unified Self-Evolving Agentic Recommender with Dynamic Reflection Trees — https://arxiv.org/abs/2611.01977 (score 4)
-- Multi-criteria Rating and Review based Recommendation Model — https://arxiv.org/abs/2611.02019 (score 4)
 - DualEvolve: Dual-Level Self-Evolution of Mechanism and Orchestration for Recommendation — https://arxiv.org/abs/2611.04439 (score 4)
 - OneTrans-GSR: A Generative Slate Ranking Paradigm Unifying Reranking and Mix-Ranking with One Autoregressive Transformer — https://arxiv.org/abs/2611.04720 (score 4)
 - Auditing Multi-Proxy Explanations of Web User Preferences: Identification Boundaries and Abstention — https://arxiv.org/abs/2611.04997 (score 4)
@@ -296,8 +290,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - HARP: Training-Free Dual-Profile Agentic Communication for LLM-Based Recommendation — https://arxiv.org/abs/2611.05319 (score 4)
 - SciToT: Multimodal Tip-of-the-Tongue Retrieval for Scientific Papers — https://arxiv.org/abs/2611.05829 (score 4)
 - PMRecBench: A Benchmark for Personalization in Recommendation Agents under Multimodal Queries — https://arxiv.org/abs/2611.06349 (score 4)
-- CST: Lightweight Risk Triage with Source-Grounded Evidence for Web Discussions — https://arxiv.org/abs/2611.01710 (score 3)
-- Adversarial Robustness of Retrieval-Based Fact-Checking: Detecting and Mitigating Evidence Contamination — https://arxiv.org/abs/2611.02139 (score 3)
 - Enhancing Stock Market Information Retrieval with Retrieval-Augmented Generation — https://arxiv.org/abs/2611.03747 (score 2)
 - Weaver: Weaving Preference Evidence through Incremental Reasoning for Personalized Retrieval-Augmented Generation — https://arxiv.org/abs/2611.05900 (score 2)
 - Bridging Low-Level Image Fusion and High-Level Semantic Understanding — https://arxiv.org/abs/2611.02896 (score 1)
