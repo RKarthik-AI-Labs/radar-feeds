@@ -1,7 +1,7 @@
 # Paper candidates — 2026-11-07 (IST)
 
-Generated 2026-11-07 06:38 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
-Totals: 1 new topic matches · 0 other new cs.IR · 127 seen in earlier runs.
+Generated 2026-11-07 07:14 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Totals: 1 new topic matches · 0 other new cs.IR · 125 seen in earlier runs.
 Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
 
 ## New papers matching your topics (1), highest score first
@@ -17,7 +17,7 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 
 ## Other new cs.IR papers, title only (0)
 
-## Already listed on an earlier day, still inside the look-back window (127)
+## Already listed on an earlier day, still inside the look-back window (125)
 - The Popular Get More Popular: Auditing Brand Bias in Generative Search — https://arxiv.org/abs/2611.07614 (score 22)
 - Characterizing Adversarial GEO via Implicit Brand Injection — https://arxiv.org/abs/2611.04005 (score 21)
 - IntentGEO: Intent-aware Generative Engine Optimization for Recommendation — https://arxiv.org/abs/2611.04225 (score 18)
@@ -36,7 +36,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - LifeVal: Evaluating AI Model Performance on Personalized Agentic Consumer Tasks — https://arxiv.org/abs/2611.06687 (score 10)
 - Beyond Instruction Override: Benchmarking Indirect Prompt Injection with Task-Tampering Attacks — https://arxiv.org/abs/2611.07640 (score 10)
 - Selfrionette: A Fingertip Force-Input Controller for Continuous Full-Body Avatar Manipulation and Diverse Haptic Interactions — https://arxiv.org/abs/2611.03052 (score 9)
-- ICJ-Graph: A Citation Graph and a Layered Document Corpus of the International Court of Justice — https://arxiv.org/abs/2611.02630 (score 8)
 - E-GenRM: Generative Reward Modeling for Open-Ended E-Commerce Shopping Agents — https://arxiv.org/abs/2611.03008 (score 8)
 - From Local Skills to Long-Horizon Web Tasks: Progressive Skill Exploration for LLM Web Agents — https://arxiv.org/abs/2611.03116 (score 8)
 - CUA-Master: Scaling Computer-use Agents through Open-World Recursive Improvements — https://arxiv.org/abs/2611.03126 (score 8)
@@ -64,7 +63,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Voluntary Servitude: Weaponized Safety Warning Mechanisms for Controlling AI Agents — https://arxiv.org/abs/2611.04393 (score 7)
 - Collaborative Search Meets Large Language Models: An Empirical Study — https://arxiv.org/abs/2611.04619 (score 7)
 - Dynamic Watermarking and Action-Conditioned Latent Dynamics for Secure Vision-Based Controllers — https://arxiv.org/abs/2611.07403 (score 7)
-- SearchInject: Retrieval Exposure Control for Indirect Prompt Injection in Language-Model Search — https://arxiv.org/abs/2611.02643 (score 6)
 - The Customer Never Sees the Goal: Measuring and Detecting Vulnerability-Targeted Manipulation in LLM Assistants — https://arxiv.org/abs/2611.02689 (score 6)
 - PanoTac: A Dense Three-Axis Tactile Sensor for Robust Touch-Centric Manipulation — https://arxiv.org/abs/2611.03520 (score 6)
 - Pixel-UMI: Learning Environment-Aware Whole-Body Manipulation from Sensorized Human Demonstrations — https://arxiv.org/abs/2611.03647 (score 6)
