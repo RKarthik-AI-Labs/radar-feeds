@@ -1,6 +1,6 @@
 # News candidates — 2026-11-08 (IST)
 
-Generated 2026-11-08 06:37 UTC. Showing 110 items first seen in the last 18 h or published in the last 30 h; 211 older items from the 3-day window are only in news.json.
+Generated 2026-11-08 06:45 UTC. Showing 115 items first seen in the last 18 h or published in the last 30 h; 212 older items from the 3-day window are only in news.json.
 Each item appears once, in the first section it matches. Dates are as reported by the source ("date unknown" = page with no date).
 
 ## By priority topic
@@ -43,40 +43,44 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-06 10:53 UTC] Perplexity Lets You Build Teammate AI Agents Ready to Handle Your Work — PCMag UK — (Google News link; search the headline) · GEO/AEO
 - [2026-11-06 10:24 UTC] Perplexity Teammates: AI Agents for Work That Never "Sleep" — SecNews.gr — (Google News link; search the headline) · GEO/AEO
 
-### Model & lab launches (news search) (28)
-- [2026-11-08 03:57 UTC] OpenAI launches GPT-6 Cyber for authorized vulnerability research — NeoTeo — (Google News link; search the headline)
+### Model & lab launches (news search) (31)
+- [2026-11-08 05:49 UTC] Mistral Large 4 (Le Chonk): Open Weights, License, Price and Benchmarks — Fello AI — (Google News link; search the headline)
+- [2026-11-08 04:47 UTC] Kimi K3.1 Pro open weights: release reported Nov. 4 — NeoTeo — (Google News link; search the headline)
 - [2026-11-08 03:32 UTC] France’s Mistral launches AI model it says outperforms some Chinese rivals — DD News — (Google News link; search the headline) · GEO/AEO
+- [2026-11-07 22:18 UTC] NAACP v. xAI — Constitutional Accountability Center — (Google News link; search the headline)
 - [2026-11-07 21:37 UTC] Mistral Adds Managed Agents and Apps to Its Studio Platform — FourWeekMBA — (Google News link; search the headline)
 - [2026-11-07 16:23 UTC] Alibaba's December Qwen Deadline Is the Real Test of Its Apple Bet — ad-hoc-news.de — https://www.ad-hoc-news.de/boerse/news/unternehmensnachrichten/alibaba-s-december-qwen-deadline-is-the-real-test-of-its-apple-bet/70475209 · +1 other hits
 - [2026-11-07 16:21 UTC] DeepSeek Harness 0.2.2 Lands, and It Can Delegate to Codex and Claude — Pasquale Pillitteri — (Google News link; search the headline)
 - [2026-11-07 16:21 UTC] Alibaba's Qoder makes a mystery coding model called Qoduck free to use — Startup Fortune — https://startupfortune.com/alibabas-qoder-makes-a-mystery-coding-model-called-qoduck-free-to-use/
+- [2026-11-07 15:59 UTC] Anthropic launches personal finance feature for Claude — Kalinga TV — https://kalingatv.com/technology/anthropic-launches-personal-finance-feature-for-claude/ · (already listed on an earlier day)
 - [2026-11-07 12:19 UTC] Kimi AI Pricing: $1 Top-Up vs $159 Ultra Plan [2026] — https://tech-insider.org/ — (Google News link; search the headline)
 - [2026-11-07 10:08 UTC] Alibaba stock gains 9.24% ahead of November 19 results — ad-hoc-news.de — (Google News link; search the headline)
 - [2026-11-07 08:30 UTC] Qwen3.5 9B uncensored arrives with DeepSeek-V4-Pro reasoning, refuses 3 of 100 prompts — Pasquale Pillitteri — (Google News link; search the headline)
 - [2026-11-07 07:30 UTC] Why AGI’s fuzzy definition matters for investors betting on Google, Meta, and Microsoft — Barchart on MSN — https://www.msn.com/en-us/news/other/why-agi-s-fuzzy-definition-matters-for-investors-betting-on-google-meta-and-microsoft/ar-AA2gXKel
+- [2026-11-07 07:30 UTC] Out of all Google's Gemini models, this is the one I can't stop reaching for — How-To Geek — https://www.howtogeek.com/out-of-all-googles-gemini-models-this-is-the-one-i-cant-stop-reaching-for/
 - [2026-11-07 07:28 UTC] Nous Research's Arete-27B Cuts Qwen Propaganda From 22% to 0.9% — aiweekly — https://aiweekly.co/alerts/nous-researchs-arete-27b-cuts-qwen-propaganda-from-22-to-09
 - [2026-11-07 05:25 UTC] Best AI Chatbots by Budget: $8 Grok to $500 ChatGPT [2026] — https://tech-insider.org/ — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-11-07 05:09 UTC] What Alibaba left blank about Qwen4 — Asia Times — (Google News link; search the headline) · (already listed on an earlier day)
-- [2026-11-07 04:47 UTC] Better IPO to Buy: Anthropic vs. SpaceX — The Motley Fool — https://www.fool.com/investing/2026/11/07/better-ipo-to-buy-anthropic-vs-spacex/
-- [2026-11-07 02:59 UTC] Leaked Bell Model May Equip ChatGPT 6.2 with 10 Trillion Parameters — Geeky Gadgets — https://www.geeky-gadgets.com/openai-gpt-6-2-rumors/
-- [2026-11-07 02:37 UTC] DeepSeek V4.1-Flash Cuts Output Price 70% [2026] — shattered.io — https://shattered.io/deepseek-v4-1-flash-70-percent-price-cut-2026/
-- [2026-11-07 00:40 UTC] Gemini 4 Hydrogen Flash Rumor: 0 Official Pages [2026] — shattered.io — (Google News link; search the headline) · (already listed on an earlier day)
+- [2026-11-07 04:47 UTC] Who Owns DeepSeek, The Chinese AI Company? — Yahoo Finance — https://finance.yahoo.com/technology/ai/articles/owns-deepseek-chinese-ai-company-124700230.html
+- [2026-11-07 02:39 UTC] OpenAI Unveiled GPT-6 Cyber for Vulnerability Hunting: Model Found 81 Critical Flaws in Firefox — INCRYPTED — https://incrypted.com/en/openai-unveiled-gpt-6-cyber-for-vulnerability-hunting-model-found-81-critical-flaws-in-firefox/
+- [2026-11-07 02:21 UTC] Gemini 3.8 Flash Leak: Is Google preparing to leapfrog Fable 5 at a fraction of the cost? — Nokiapoweruser — (Google News link; search the headline)
 - [2026-11-07 00:36 UTC] Gemini 4 Pro Leaks: Wild Benchmark Scores and Low Pricing Disrupt AI Race — Nokiapoweruser — (Google News link; search the headline)
 - [2026-11-07 00:28 UTC] DeepSeek vs Gemini 4 Argon vs Haiku 5.5: 20x Gap [2026] — tech-insider.org — (Google News link; search the headline)
 - [2026-11-06 20:37 UTC] DeepSeek V4.1 Flash hits 848 tokens per second on Nvidia’s GB300 NVL72 — Crypto Briefing — (Google News link; search the headline)
-- [2026-11-06 20:00 UTC] Grok Bot costs versus revenue: Musk's warning — NeoTeo — (Google News link; search the headline)
-- [2026-11-06 16:02 UTC] Google Leaks Gemini 3.7 Flash in SDK Code—Here’s What We Know — Nokiapoweruser — (Google News link; search the headline)
 - [2026-11-06 15:44 UTC] OpenAI introduces GPT-6 Cyber to identify and fix security flaws before hackers can exploit them — Tech Edition — (Google News link; search the headline)
 - [2026-11-06 13:00 UTC] AI Gateway adds DeepSeek Search and Fetch tools — vercel — https://vercel.com/changelog/ai-gateway-adds-deepseek-search-and-fetch-tools
+- [2026-11-06 11:34 UTC] OpenAI launches GPT-6 Cyber to find software vulnerabilities — Verdict — (Google News link; search the headline)
 - [2026-11-06 09:15 UTC] Claude Learns to Track Your Money: Anthropic Launches a Personal AI Financial Assistant — Root-Nation.com — (Google News link; search the headline)
+- [2026-11-06 08:50 UTC] OpenAI Introduces GPT-6 Cyber: What It Can Do — en.ain.ua — (Google News link; search the headline)
 - [2026-11-06 08:43 UTC] Google Schedules Gemini 3.8 and 3.6 Flash API Price Increases for January 1, 2027 — Yahoo Finance — (Google News link; search the headline)
 - [2026-11-06 08:00 UTC] Qwen4 coming soon? Alibaba launches its official teaser — Pasquale Pillitteri — (Google News link; search the headline)
 - [2026-11-05 19:00 UTC] Anthropic launches personal finance feature in Claude, lets users connect bank accounts for money insights — The Times of India on MSN — https://www.msn.com/en-in/news/other/anthropic-launches-personal-finance-feature-in-claude-lets-users-connect-bank-accounts-for-money-insights/ar-AA2gWkmj
 
-### B2B buyer AI / adoption (4)
+### B2B buyer AI / adoption (5)
 - [2026-11-07 18:37 UTC] ChatGPT Hit One-Fifth of Google’s Search Volume. What Changes for B2B — Security Boulevard — (Google News link; search the headline)
 - [2026-11-07 15:59 UTC] Only 13% of CIOs Say AI Has Delivered Significant Value. The Gap Comes Down to Measurement — Times Square Chronicles — https://t2conline.com/only-13-of-cios-say-ai-has-delivered-significant-value-the-gap-comes-down-to-measurement/
 - [2026-11-07 10:40 UTC] Rivetline Pairs Live Dashboards With AI Visibility Work for B2B Teams — Carroll County Mirror-Democrat — (Google News link; search the headline)
+- [2026-11-07 01:03 UTC] What Can Your AI Agents Access, Change and Approve? — cybersecurity-insiders — https://www.cybersecurity-insiders.com/what-can-your-ai-agents-access-change-and-approve/
 - [2026-11-06 21:27 UTC] AI Service Demand is Easy to Underestimate. Here’s Why — CustomerThink — https://customerthink.com/ai-service-demand-is-easy-to-underestimate-heres-why/
 
 ### Sites with no usable feed (via Google News site: search) (16)
@@ -89,7 +93,7 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-07 11:04 UTC] Salesforce, Inc. Stock Price: Quote, Forecast, Splits & News (CRM) — Perplexity — (Google News link; search the headline) · (already listed on an earlier day) · GEO/AEO
 - [2026-11-07 07:23 UTC] Login - HUMAN Documentation — HUMAN Documentation — (Google News link; search the headline) · +1 other hits
 - [2026-11-07 04:38 UTC] How to use voice mode on the web and Mac app — Perplexity — (Google News link; search the headline) · (already listed on an earlier day) · GEO/AEO
-- [2026-11-06 19:30 UTC] Influencer marketing Archives — Search Engine Land — (Google News link; search the headline)
+- [2026-11-06 19:42 UTC] How to calculate share of voice (+ Why it matters for SEO) — Search Engine Land — (Google News link; search the headline) · GEO/AEO
 - [2026-11-06 19:21 UTC] How to conduct a backlink audit: Tips, tools, & examples — Search Engine Land — (Google News link; search the headline)
 - [2026-11-06 16:13 UTC] Peec AI GmbH Archives — Search Engine Land — (Google News link; search the headline)
 - [2026-11-06 16:00 UTC] When does your ecommerce site need a new category page? — Search Engine Land — (Google News link; search the headline) · Brand/product recommendation
@@ -117,7 +121,8 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-07 14:30 UTC] Investigation: some Chinese companies approved by the US Commerce Department to handle Nvidia's H200 chips have empty offices and ties to firms under sanctions (New York Times) — Techmeme — https://www.techmeme.com/261107/p9#a261107p9
 - [2026-11-07 11:40 UTC] Nasscom President Rajesh Nambiar warns AI could make it harder for fresh Indian engineering graduates to find jobs, urging an immediate CS curriculum overhaul (Sayan Chakraborty/Nikkei Asia) — Techmeme — https://www.techmeme.com/261107/p8#a261107p8
 
-### SEO / search press (20)
+### SEO / search press (21)
+- [2026-11-08 06:39 UTC] YouTube Studio now suggests products for affiliate creators to tag — PPC Land — https://ppc.land/youtube-studio-now-suggests-products-for-affiliate-creators-to-tag/
 - [2026-11-08 05:54 UTC] Meta's Muse gains voice and avatars in the US, not yet in Canada — PPC Land — https://ppc.land/metas-muse-gains-voice-and-avatars-in-the-us-not-yet-in-canada/
 - [2026-11-08 05:51 UTC] Websites pay for nearly all 14 AI agent problems, Cloudflare argues — PPC Land — https://ppc.land/websites-pay-for-nearly-all-14-ai-agent-problems-cloudflare-argues/
 - [2026-11-08 05:48 UTC] Disney sets aside 1 of 3 nights at its first Asia fan event for Disney+ — PPC Land — https://ppc.land/disney-sets-aside-1-of-3-nights-at-its-first-asia-fan-event-for-disney/
