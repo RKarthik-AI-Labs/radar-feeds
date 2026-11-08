@@ -1,16 +1,15 @@
 # Paper candidates — 2026-11-08 (IST)
 
-Generated 2026-11-08 01:11 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
-Totals: 0 new topic matches · 0 other new cs.IR · 91 seen in earlier runs.
+Generated 2026-11-08 06:37 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Totals: 0 new topic matches · 0 other new cs.IR · 83 seen in earlier runs.
 Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
 
 ## New papers matching your topics (0), highest score first
 
 ## Other new cs.IR papers, title only (0)
 
-## Already listed on an earlier day, still inside the look-back window (91)
+## Already listed on an earlier day, still inside the look-back window (83)
 - The Popular Get More Popular: Auditing Brand Bias in Generative Search — https://arxiv.org/abs/2611.07614 (score 22)
-- IntentGEO: Intent-aware Generative Engine Optimization for Recommendation — https://arxiv.org/abs/2611.04225 (score 18)
 - CORE: Coarse-to-Fine Search with Context Management for Deep Research — https://arxiv.org/abs/2611.07859 (score 14)
 - $τ$-Rec-Books: A Disclosure-Controlled Benchmark for Requirement Elicitation in Agentic Recommender Systems — https://arxiv.org/abs/2611.04459 (score 12)
 - WISE: An Agentic Framework for Whole-page Multimodal Search Experience Attribution — https://arxiv.org/abs/2611.06777 (score 12)
@@ -19,8 +18,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Where Search Agents Go Off the Rails: Graph-Grounded Step-Level Verification — https://arxiv.org/abs/2611.06662 (score 10)
 - LifeVal: Evaluating AI Model Performance on Personalized Agentic Consumer Tasks — https://arxiv.org/abs/2611.06687 (score 10)
 - Beyond Instruction Override: Benchmarking Indirect Prompt Injection with Task-Tampering Attacks — https://arxiv.org/abs/2611.07640 (score 10)
-- AdSteer: Native Advertising in Large Language Model Generation — https://arxiv.org/abs/2611.04147 (score 8)
-- Reliability Stress Testing of RAG Retrieval under Query-Relevant Corpus Poisoning — https://arxiv.org/abs/2611.04264 (score 8)
 - SPADE: Spatiotemporal Preference Alignment and Diversity Enhancement for Local Search — https://arxiv.org/abs/2611.04662 (score 8)
 - Learning to Rank Explanations for Recommendation with Language Models — https://arxiv.org/abs/2611.04775 (score 8)
 - CARTBench: Rubric-Based Evaluation of Shopping Advice for Complex and Ambiguous Requests with Timelines — https://arxiv.org/abs/2611.05862 (score 8)
@@ -33,8 +30,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Full Provenance on the COSS Causal Axis: An Event-Level Closure of Causal Attribution and Confused-Deputy Exclusion — https://arxiv.org/abs/2611.07164 (score 8)
 - BRIDGE: Bridging the Semantic Quantization Gap for Generative Recommendation — https://arxiv.org/abs/2611.07425 (score 8)
 - ControlAnything: Generative UI and On-Demand Device Integration for Mixed-Reality Hand Interaction by a Coding Agent — https://arxiv.org/abs/2611.08321 (score 8)
-- ReuseGR: Offline--Online Decoupled Generative Retrieval via Adaptive Prefix Reuse — https://arxiv.org/abs/2611.04259 (score 7)
-- Voluntary Servitude: Weaponized Safety Warning Mechanisms for Controlling AI Agents — https://arxiv.org/abs/2611.04393 (score 7)
 - Collaborative Search Meets Large Language Models: An Empirical Study — https://arxiv.org/abs/2611.04619 (score 7)
 - Dynamic Watermarking and Action-Conditioned Latent Dynamics for Secure Vision-Based Controllers — https://arxiv.org/abs/2611.07403 (score 7)
 - The Devil is in the Context: Nine Dimensions of Prompt Injection Attacks — https://arxiv.org/abs/2611.04672 (score 6)
