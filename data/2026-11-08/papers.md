@@ -1,17 +1,16 @@
 # Paper candidates — 2026-11-08 (IST)
 
-Generated 2026-11-08 07:26 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
-Totals: 0 new topic matches · 0 other new cs.IR · 83 seen in earlier runs.
+Generated 2026-11-08 07:54 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Totals: 0 new topic matches · 0 other new cs.IR · 80 seen in earlier runs.
 Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
 
 ## New papers matching your topics (0), highest score first
 
 ## Other new cs.IR papers, title only (0)
 
-## Already listed on an earlier day, still inside the look-back window (83)
+## Already listed on an earlier day, still inside the look-back window (80)
 - The Popular Get More Popular: Auditing Brand Bias in Generative Search — https://arxiv.org/abs/2611.07614 (score 22)
 - CORE: Coarse-to-Fine Search with Context Management for Deep Research — https://arxiv.org/abs/2611.07859 (score 14)
-- $τ$-Rec-Books: A Disclosure-Controlled Benchmark for Requirement Elicitation in Agentic Recommender Systems — https://arxiv.org/abs/2611.04459 (score 12)
 - WISE: An Agentic Framework for Whole-page Multimodal Search Experience Attribution — https://arxiv.org/abs/2611.06777 (score 12)
 - ScamWorld: An Interactive Environment for Evaluating Web Agents Against Online Fraud — https://arxiv.org/abs/2611.04879 (score 11)
 - Securing Web Agents with the Compile-Then-Execute Paradigm — https://arxiv.org/abs/2611.06039 (score 11)
@@ -46,7 +45,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - ZeroRAG: Adaptive Semantic Peer Routing for Decentralized Retrieval-Augmented Generation — https://arxiv.org/abs/2611.07928 (score 6)
 - MOMASPLAT: Dynamic Novel-View Demonstration Augmentation for Mobile Manipulation — https://arxiv.org/abs/2611.08372 (score 6)
 - Signed but Steerable: Measuring and Closing the Text-Vector Integrity Gap in Offline Retrieval-Augmented Generation — https://arxiv.org/abs/2611.06498 (score 5)
-- DualEvolve: Dual-Level Self-Evolution of Mechanism and Orchestration for Recommendation — https://arxiv.org/abs/2611.04439 (score 4)
 - OneTrans-GSR: A Generative Slate Ranking Paradigm Unifying Reranking and Mix-Ranking with One Autoregressive Transformer — https://arxiv.org/abs/2611.04720 (score 4)
 - Auditing Multi-Proxy Explanations of Web User Preferences: Identification Boundaries and Abstention — https://arxiv.org/abs/2611.04997 (score 4)
 - JHiMA-WebRL: A Joint Hierarchical Multi-Agent Reinforcement Learning Framework for Long-Horizon Web Tasks — https://arxiv.org/abs/2611.05263 (score 4)
