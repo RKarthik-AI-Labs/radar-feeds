@@ -1,48 +1,24 @@
-# Paper candidates — 2026-11-07 (IST)
+# Paper candidates — 2026-11-08 (IST)
 
-Generated 2026-11-07 07:42 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
-Totals: 1 new topic matches · 0 other new cs.IR · 124 seen in earlier runs.
+Generated 2026-11-08 01:11 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Totals: 0 new topic matches · 0 other new cs.IR · 91 seen in earlier runs.
 Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
 
-## New papers matching your topics (1), highest score first
-
-### HeLM: Hierarchical Explicit Language Memory for Non-Markovian Manipulation
-- arXiv 2611.02660 · v1 2026-11-02 07:20 UTC · 
-- Authors: Gyeonghun Kim, Donghoon Kim, Minsoo Choi, Suyun Lee
-- Topics: Manipulation · score 6 · found via HF daily papers
-- Link: https://arxiv.org/abs/2611.02660
-- Full text: not stored: license is arxiv-default, which does not allow redistribution; read it on arXiv
-
-> Recent advances in Vision-Language-Action (VLA) models have enabled fine manipulation capabilities, yet performing tasks that require working memory remains a key challenge. Most existing VLA architectures operate under a Markovian assumption, mapping only the current observation to an action, which leads to failure in non-Markovian environments. Inspired by the human 'inner monologue', we propose Hierarchical Explicit Language Memory (HeLM), a hierarchical VLA framework that maintains task-relevant history in explicit language through factorized event detection and event-triggered memory updates. We evaluate HeLM across 10 non-Markovian real-world tasks with 56 variants, including five newly formulated inter-episode tasks that require persistent context across task boundaries. HeLM improves intra-episode success by 12.8 percentage points over the strongest baseline and achieves 78% subtask success on compositional generalization tasks, while using up to 4.5x less memory and running 2.5x faster than the keyframe baseline at long horizons.
+## New papers matching your topics (0), highest score first
 
 ## Other new cs.IR papers, title only (0)
 
-## Already listed on an earlier day, still inside the look-back window (124)
+## Already listed on an earlier day, still inside the look-back window (91)
 - The Popular Get More Popular: Auditing Brand Bias in Generative Search — https://arxiv.org/abs/2611.07614 (score 22)
-- Characterizing Adversarial GEO via Implicit Brand Injection — https://arxiv.org/abs/2611.04005 (score 21)
 - IntentGEO: Intent-aware Generative Engine Optimization for Recommendation — https://arxiv.org/abs/2611.04225 (score 18)
 - CORE: Coarse-to-Fine Search with Context Management for Deep Research — https://arxiv.org/abs/2611.07859 (score 14)
-- The Web Doesn't Sit Still: Adversarial Self-Evolving Attacks on Search Agents — https://arxiv.org/abs/2611.03754 (score 13)
-- Learning to Adjudicate: Verifier-Guided Multi-Agent Reasoning for E-Commerce Relevance — https://arxiv.org/abs/2611.02758 (score 12)
 - $τ$-Rec-Books: A Disclosure-Controlled Benchmark for Requirement Elicitation in Agentic Recommender Systems — https://arxiv.org/abs/2611.04459 (score 12)
 - WISE: An Agentic Framework for Whole-page Multimodal Search Experience Attribution — https://arxiv.org/abs/2611.06777 (score 12)
 - ScamWorld: An Interactive Environment for Evaluating Web Agents Against Online Fraud — https://arxiv.org/abs/2611.04879 (score 11)
 - Securing Web Agents with the Compile-Then-Execute Paradigm — https://arxiv.org/abs/2611.06039 (score 11)
-- DR Pixel: Page-Native Deep Research with Vision-Language Models — https://arxiv.org/abs/2611.03097 (score 10)
-- Auto-Research Agent on MSA Organization to Improve Protein-Protein Complex Structure Prediction — https://arxiv.org/abs/2611.03183 (score 10)
-- Can We Stop the Backtest Yet? Anytime-Valid Promotion Tests for Adaptive Financial Research Agents — https://arxiv.org/abs/2611.03384 (score 10)
-- MCP Tool Poisoning in Agentic AI Frameworks: A Cross-Framework Measurement Study — https://arxiv.org/abs/2611.03555 (score 10)
 - Where Search Agents Go Off the Rails: Graph-Grounded Step-Level Verification — https://arxiv.org/abs/2611.06662 (score 10)
 - LifeVal: Evaluating AI Model Performance on Personalized Agentic Consumer Tasks — https://arxiv.org/abs/2611.06687 (score 10)
 - Beyond Instruction Override: Benchmarking Indirect Prompt Injection with Task-Tampering Attacks — https://arxiv.org/abs/2611.07640 (score 10)
-- Selfrionette: A Fingertip Force-Input Controller for Continuous Full-Body Avatar Manipulation and Diverse Haptic Interactions — https://arxiv.org/abs/2611.03052 (score 9)
-- E-GenRM: Generative Reward Modeling for Open-Ended E-Commerce Shopping Agents — https://arxiv.org/abs/2611.03008 (score 8)
-- From Local Skills to Long-Horizon Web Tasks: Progressive Skill Exploration for LLM Web Agents — https://arxiv.org/abs/2611.03116 (score 8)
-- CUA-Master: Scaling Computer-use Agents through Open-World Recursive Improvements — https://arxiv.org/abs/2611.03126 (score 8)
-- ScienceCUA: Resource-to-Skill Construction and Execution-Guided Skill Evolution for Scientific Computer Use Agents — https://arxiv.org/abs/2611.03238 (score 8)
-- IAMRAGBENCH: Benchmarking Authorization Expansions in LLM-Generated AWS IAM Policies under RAG Poisoning — https://arxiv.org/abs/2611.03431 (score 8)
-- WebHarbor: Docking Real Websites for Evolving GUI Agent Environments — https://arxiv.org/abs/2611.03634 (score 8)
-- SLATE: A Large-Scale Benchmark for Long-Horizon API Selection in E-commerce Tool Use — https://arxiv.org/abs/2611.03982 (score 8)
 - AdSteer: Native Advertising in Large Language Model Generation — https://arxiv.org/abs/2611.04147 (score 8)
 - Reliability Stress Testing of RAG Retrieval under Query-Relevant Corpus Poisoning — https://arxiv.org/abs/2611.04264 (score 8)
 - SPADE: Spatiotemporal Preference Alignment and Diversity Enhancement for Local Search — https://arxiv.org/abs/2611.04662 (score 8)
@@ -57,18 +33,10 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Full Provenance on the COSS Causal Axis: An Event-Level Closure of Causal Attribution and Confused-Deputy Exclusion — https://arxiv.org/abs/2611.07164 (score 8)
 - BRIDGE: Bridging the Semantic Quantization Gap for Generative Recommendation — https://arxiv.org/abs/2611.07425 (score 8)
 - ControlAnything: Generative UI and On-Demand Device Integration for Mixed-Reality Hand Interaction by a Coding Agent — https://arxiv.org/abs/2611.08321 (score 8)
-- RuntimeTickets: Source-Grounded Security Obligations for Agent Skills — https://arxiv.org/abs/2611.03772 (score 7)
-- From Benchmarks to Behaviors: A Framework for Auditing AI Agents — https://arxiv.org/abs/2611.03939 (score 7)
 - ReuseGR: Offline--Online Decoupled Generative Retrieval via Adaptive Prefix Reuse — https://arxiv.org/abs/2611.04259 (score 7)
 - Voluntary Servitude: Weaponized Safety Warning Mechanisms for Controlling AI Agents — https://arxiv.org/abs/2611.04393 (score 7)
 - Collaborative Search Meets Large Language Models: An Empirical Study — https://arxiv.org/abs/2611.04619 (score 7)
 - Dynamic Watermarking and Action-Conditioned Latent Dynamics for Secure Vision-Based Controllers — https://arxiv.org/abs/2611.07403 (score 7)
-- PanoTac: A Dense Three-Axis Tactile Sensor for Robust Touch-Centric Manipulation — https://arxiv.org/abs/2611.03520 (score 6)
-- Pixel-UMI: Learning Environment-Aware Whole-Body Manipulation from Sensorized Human Demonstrations — https://arxiv.org/abs/2611.03647 (score 6)
-- Pixel: A Co-Designed Full-Stack Robot System for Learning General-Purpose Mobile Manipulation — https://arxiv.org/abs/2611.03648 (score 6)
-- AIRoA-0: Long-Horizon, Precise, Cross-Embodiment Manipulation from Handheld Data — https://arxiv.org/abs/2611.03815 (score 6)
-- Whose startup does the AI back? An algorithm audit of reputation and demographic signals in LLM-assisted crowdfunding — https://arxiv.org/abs/2611.03993 (score 6)
-- LLM-based NPCs in Video Games: A Systematic Mapping Study — https://arxiv.org/abs/2611.05427 (score 6)
 - The Devil is in the Context: Nine Dimensions of Prompt Injection Attacks — https://arxiv.org/abs/2611.04672 (score 6)
 - Right Tool, Wrong Parameters: Defending LLM Agents Against Parameter Poisoning — https://arxiv.org/abs/2611.04673 (score 6)
 - When Category Means Move: A Paired-Support Audit of Recommendation Logs with Random Insertions — https://arxiv.org/abs/2611.05006 (score 6)
@@ -98,8 +66,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Tasteply: Externalizing Stable and Situational Preference as Manipulable Spatial Objects — https://arxiv.org/abs/2611.07851 (score 3)
 - Weaver: Weaving Preference Evidence through Incremental Reasoning for Personalized Retrieval-Augmented Generation — https://arxiv.org/abs/2611.05900 (score 2)
 - CacheGraft: Enhancing Retrieval-Augmented Generation via Latent-Space Document Enrichment — https://arxiv.org/abs/2611.07393 (score 2)
-- Bridging Low-Level Image Fusion and High-Level Semantic Understanding — https://arxiv.org/abs/2611.02896 (score 1)
-- Modular and Efficient Approximate Nearest Neighbors Search with Vectorium and kANNolo — https://arxiv.org/abs/2611.03927 (score 1)
 - QueryFlow: Multi-Hop Graph Retrieval with Adaptive Query Evolution — https://arxiv.org/abs/2611.04625 (score 1)
 - RAGCompass: Generalizable Retriever Routing via Reranking — https://arxiv.org/abs/2611.05596 (score 1)
 - ArcRAG: Agentic Compositional Retrieval over Knowledge Graphs — https://arxiv.org/abs/2611.06481 (score 1)
