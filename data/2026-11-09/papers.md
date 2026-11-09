@@ -1,7 +1,7 @@
 # Paper candidates — 2026-11-09 (IST)
 
-Generated 2026-11-09 07:16 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
-Totals: 19 new topic matches · 12 other new cs.IR · 44 seen in earlier runs.
+Generated 2026-11-09 08:02 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Totals: 19 new topic matches · 12 other new cs.IR · 43 seen in earlier runs.
 Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
 
 ## New papers matching your topics (19), highest score first
@@ -202,14 +202,13 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - SPARSEUP: Towards Better Recipes for Training Modern Learned Sparse Retrievers — https://arxiv.org/abs/2611.09680
 - SAGE-PAIR: Source-Pretrained Routed Residual Adaptation for Sparse-Feedback Recommendation — https://arxiv.org/abs/2611.09728
 
-## Already listed on an earlier day, still inside the look-back window (44)
+## Already listed on an earlier day, still inside the look-back window (43)
 - The Popular Get More Popular: Auditing Brand Bias in Generative Search — https://arxiv.org/abs/2611.07614 (score 22)
 - CORE: Coarse-to-Fine Search with Context Management for Deep Research — https://arxiv.org/abs/2611.07859 (score 14)
 - WISE: An Agentic Framework for Whole-page Multimodal Search Experience Attribution — https://arxiv.org/abs/2611.06777 (score 12)
 - Where Search Agents Go Off the Rails: Graph-Grounded Step-Level Verification — https://arxiv.org/abs/2611.06662 (score 10)
 - LifeVal: Evaluating AI Model Performance on Personalized Agentic Consumer Tasks — https://arxiv.org/abs/2611.06687 (score 10)
 - Beyond Instruction Override: Benchmarking Indirect Prompt Injection with Task-Tampering Attacks — https://arxiv.org/abs/2611.07640 (score 10)
-- Beyond Risk Cues: A Mechanism-Level Benchmark and Verifiable Debate for Scam Video Detection on the Web — https://arxiv.org/abs/2611.06110 (score 8)
 - Beyond the Landing Page: Website Blocking, Tracker Visibility, and Human Alignment in Automated Web Crawls — https://arxiv.org/abs/2611.06197 (score 8)
 - Presentation Sensitivity in Typed Decision Models for Subjective Text Evaluation — https://arxiv.org/abs/2611.06384 (score 8)
 - U.S. State Guidance on AI in K-12 Education: A Comparative Content and Citation Analysis — https://arxiv.org/abs/2611.06762 (score 8)
