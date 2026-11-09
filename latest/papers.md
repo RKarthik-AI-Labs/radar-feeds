@@ -1,24 +1,21 @@
-# Paper candidates — 2026-11-08 (IST)
+# Paper candidates — 2026-11-09 (IST)
 
-Generated 2026-11-08 07:54 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
-Totals: 0 new topic matches · 0 other new cs.IR · 80 seen in earlier runs.
+Generated 2026-11-09 01:15 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Totals: 0 new topic matches · 0 other new cs.IR · 57 seen in earlier runs.
 Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
 
 ## New papers matching your topics (0), highest score first
 
 ## Other new cs.IR papers, title only (0)
 
-## Already listed on an earlier day, still inside the look-back window (80)
+## Already listed on an earlier day, still inside the look-back window (57)
 - The Popular Get More Popular: Auditing Brand Bias in Generative Search — https://arxiv.org/abs/2611.07614 (score 22)
 - CORE: Coarse-to-Fine Search with Context Management for Deep Research — https://arxiv.org/abs/2611.07859 (score 14)
 - WISE: An Agentic Framework for Whole-page Multimodal Search Experience Attribution — https://arxiv.org/abs/2611.06777 (score 12)
-- ScamWorld: An Interactive Environment for Evaluating Web Agents Against Online Fraud — https://arxiv.org/abs/2611.04879 (score 11)
 - Securing Web Agents with the Compile-Then-Execute Paradigm — https://arxiv.org/abs/2611.06039 (score 11)
 - Where Search Agents Go Off the Rails: Graph-Grounded Step-Level Verification — https://arxiv.org/abs/2611.06662 (score 10)
 - LifeVal: Evaluating AI Model Performance on Personalized Agentic Consumer Tasks — https://arxiv.org/abs/2611.06687 (score 10)
 - Beyond Instruction Override: Benchmarking Indirect Prompt Injection with Task-Tampering Attacks — https://arxiv.org/abs/2611.07640 (score 10)
-- SPADE: Spatiotemporal Preference Alignment and Diversity Enhancement for Local Search — https://arxiv.org/abs/2611.04662 (score 8)
-- Learning to Rank Explanations for Recommendation with Language Models — https://arxiv.org/abs/2611.04775 (score 8)
 - CARTBench: Rubric-Based Evaluation of Shopping Advice for Complex and Ambiguous Requests with Timelines — https://arxiv.org/abs/2611.05862 (score 8)
 - Intra-Architecture Source Attribution for Stable Diffusion: A New Task with Benchmark Dataset and Baseline — https://arxiv.org/abs/2611.06000 (score 8)
 - Beyond Risk Cues: A Mechanism-Level Benchmark and Verifiable Debate for Scam Video Detection on the Web — https://arxiv.org/abs/2611.06110 (score 8)
@@ -29,11 +26,7 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Full Provenance on the COSS Causal Axis: An Event-Level Closure of Causal Attribution and Confused-Deputy Exclusion — https://arxiv.org/abs/2611.07164 (score 8)
 - BRIDGE: Bridging the Semantic Quantization Gap for Generative Recommendation — https://arxiv.org/abs/2611.07425 (score 8)
 - ControlAnything: Generative UI and On-Demand Device Integration for Mixed-Reality Hand Interaction by a Coding Agent — https://arxiv.org/abs/2611.08321 (score 8)
-- Collaborative Search Meets Large Language Models: An Empirical Study — https://arxiv.org/abs/2611.04619 (score 7)
 - Dynamic Watermarking and Action-Conditioned Latent Dynamics for Secure Vision-Based Controllers — https://arxiv.org/abs/2611.07403 (score 7)
-- The Devil is in the Context: Nine Dimensions of Prompt Injection Attacks — https://arxiv.org/abs/2611.04672 (score 6)
-- Right Tool, Wrong Parameters: Defending LLM Agents Against Parameter Poisoning — https://arxiv.org/abs/2611.04673 (score 6)
-- When Category Means Move: A Paired-Support Audit of Recommendation Logs with Random Insertions — https://arxiv.org/abs/2611.05006 (score 6)
 - GRIDSHIELD: Verifiable Grid Feasibility and Manipulation Resistance in Privacy-Preserving Peer-to-Peer Energy Trading — https://arxiv.org/abs/2611.05816 (score 6)
 - Risk Control Certifies Rates, Not Magnitudes: An Audit of Selective Fetal Biometry — https://arxiv.org/abs/2611.05851 (score 6)
 - Information-Matched Auditing of Conversational Emotion-Shift Forecasting: A Leakage-Safe Evaluation Protocol — https://arxiv.org/abs/2611.05895 (score 6)
@@ -45,10 +38,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - ZeroRAG: Adaptive Semantic Peer Routing for Decentralized Retrieval-Augmented Generation — https://arxiv.org/abs/2611.07928 (score 6)
 - MOMASPLAT: Dynamic Novel-View Demonstration Augmentation for Mobile Manipulation — https://arxiv.org/abs/2611.08372 (score 6)
 - Signed but Steerable: Measuring and Closing the Text-Vector Integrity Gap in Offline Retrieval-Augmented Generation — https://arxiv.org/abs/2611.06498 (score 5)
-- OneTrans-GSR: A Generative Slate Ranking Paradigm Unifying Reranking and Mix-Ranking with One Autoregressive Transformer — https://arxiv.org/abs/2611.04720 (score 4)
-- Auditing Multi-Proxy Explanations of Web User Preferences: Identification Boundaries and Abstention — https://arxiv.org/abs/2611.04997 (score 4)
-- JHiMA-WebRL: A Joint Hierarchical Multi-Agent Reinforcement Learning Framework for Long-Horizon Web Tasks — https://arxiv.org/abs/2611.05263 (score 4)
-- HARP: Training-Free Dual-Profile Agentic Communication for LLM-Based Recommendation — https://arxiv.org/abs/2611.05319 (score 4)
 - SciToT: Multimodal Tip-of-the-Tongue Retrieval for Scientific Papers — https://arxiv.org/abs/2611.05829 (score 4)
 - PMRecBench: A Benchmark for Personalization in Recommendation Agents under Multimodal Queries — https://arxiv.org/abs/2611.06349 (score 4)
 - What Gets Hacked in a Collaborative Reward for LLM Recommenders: The Part That Does Not Depend on the User — https://arxiv.org/abs/2611.07588 (score 4)
@@ -59,6 +48,4 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Tasteply: Externalizing Stable and Situational Preference as Manipulable Spatial Objects — https://arxiv.org/abs/2611.07851 (score 3)
 - Weaver: Weaving Preference Evidence through Incremental Reasoning for Personalized Retrieval-Augmented Generation — https://arxiv.org/abs/2611.05900 (score 2)
 - CacheGraft: Enhancing Retrieval-Augmented Generation via Latent-Space Document Enrichment — https://arxiv.org/abs/2611.07393 (score 2)
-- QueryFlow: Multi-Hop Graph Retrieval with Adaptive Query Evolution — https://arxiv.org/abs/2611.04625 (score 1)
-- RAGCompass: Generalizable Retriever Routing via Reranking — https://arxiv.org/abs/2611.05596 (score 1)
 - ArcRAG: Agentic Compositional Retrieval over Knowledge Graphs — https://arxiv.org/abs/2611.06481 (score 1)
