@@ -1,0 +1,2820 @@
+FOSCAR: Accelerating Decode Attention over 2- and 4-Bit KV Caches through Affine Folding
+https://arxiv.org/abs/2611.09722
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+marginparsep has been altered.
+
+topmargin has been altered.
+
+marginparwidth has been altered.
+
+marginparpush has been altered.
+
+The page layout has been altered.
+
+Please do not change the page layout, or include packages like geometry,
+savetrees, or fullpage, which change it for you.
+
+We’re not able to reliably undo arbitrary changes to the style. Please remove
+the offending package(s), or layout-changing commands and try again.
+
+ 
+
+FOSCAR: Accelerating Decode Attention over 2- and 4-Bit KV Caches through Affine Folding
+
+ 
+
+Donglin Zhuang
+ 
+1 
+2 
+
+Pragaash Ponnusamy
+ 
+1 
+
+Xiaoxia Wu
+ 
+1 
+
+Shuaiwen Leon Song
+ 
+2 
+
+Zhongzhu Zhou
+ 
+1 
+2 
+
+†
+†
+footnotetext: 
+1
+Together AI
+
+2
+University of Sydney.
+Correspondence to: Donglin Zhuang <donglinzhuang@outlook.com>.
+ 
+
+Preprint.
+
+Abstract
+
+Large-language-model decode attention streams the key–value (KV) cache for every generated token.
+Packing that cache into 2-bit or 4-bit quantized integers reduces memory traffic but does not automatically translate into latency saving.
+Existing 2-bit fused kernels only reach less than 
+/
+ of peak HBM throughput on H100/B200.
+We identify that converting each value and applying its scale and offset before feeding Tensor Cores is a major bottleneck because instruction-issue throughput is a scarce resource on modern GPUs.
+FOSCAR does not apply scale and offset to each value from the KV cache, but uses 
+affine folding
+ to apply scale and offset to either the other operand or the output of matrix products in decode attention, depending on the quantization scheme (token-wise or channel-wise).
+This reduces scale-and-offset operations by up to two orders of magnitude while preserving the dequantized attention output in exact arithmetic.
+FOSCAR includes carefully designed bit manipulation to feed KV operands to Tensor Cores efficiently, requiring only 
+ and 
+ ALU instructions per element for the INT2 KV cache on H100 and B200, respectively.
+Finally, FOSCAR builds warp-specialized GPU pipelines for Hopper (H100) and Blackwell (B200), leveraging architecture-specific features such as 
+wgmma
+ and 
+tcgen05
+.
+On H100, FOSCAR INT2 and INT4 kernels achieve geo-mean speedups of 
+ and 
+ over FlashInfer BF16, and 
+ and 
+ over TensorRT-LLM FP8.
+On B200, the corresponding INT2 and INT4 speedups are 
+ and 
+ over FlashInfer BF16, 
+ and 
+ over TensorRT-LLM FP8, and 
+ and 
+ over TensorRT-LLM NVFP4.
+We integrate FOSCAR into SGLang to benchmark serving efficiency.
+On long-context serving workloads, FOSCAR increases peak aggregate throughput by up to 
+ and 
+ over 2-bit and 16-bit baselines, respectively.
+We open-source FOSCAR as a kernel library at 
+https://github.com/FutureMLS-Lab/FOSCAR
+.
+
+1 
+Introduction
+
+Autoregressive language-model decoding reads each active request’s key–value (KV) cache on every decode step.
+The cache footprint grows with batch size and context length; storing it consumes high-bandwidth memory (HBM) capacity, and streaming it from HBM often dominates decode-attention latency.
+Low-bit KV quantization reduces that traffic directly.
+KIVI 
+Liu et al. (2024)
+, Kitty 
+Xia et al. (2025)
+, OSCAR 
+Zhou et al. (2026)
+, KVQuant 
+Hooper et al. (2024)
+, and QServe 
+Lin et al. (2025)
+ store each cached value in 2–4 bits with a group-shared scale and offset.
+
+Compressing the cache in memory does not eliminate on-chip operand preparation.
+KIVI 
+Liu et al. (2024)
+, QServe 
+Lin et al. (2025)
+, TurboAttention 
+Kang et al. (2025)
+, BitDecoding 
+Du et al. (2026)
+, SAW-INT4 
+Jia et al. (2026)
+, and OSCAR 
+Zhou et al. (2026)
+ all convert or reconstruct low-bit values before each matrix product.
+This preparation consumes instruction-issue throughput, registers, and shared-memory bandwidth even when fused into attention without writing dequantized K and V to HBM.
+
+Although bit-packing reduces HBM traffic, per-element operand preparation can still limit the resulting latency speedup.
+
+FOSCAR applies affine folding to the query–key (QK) and probability–value (PV) matrix products, which reduce over channels and tokens.
+For token-wise K, the kernel scales each group’s partial QK result and adds the group’s offset times the matching query sum.
+For token-wise V, the kernel scales the attention weights before PV and adds a weighted sum of offsets to the output.
+Channel-wise K instead scales the query before QK, while channel-wise V scales each group’s partial PV result, and both add the corresponding offset-weighted sum.
+These per-group operations replace element-wise scale multiplication and offset addition, while bit manipulation constructs Tensor Core KV operands directly from packed integers.
+In exact arithmetic, affine folding produces the same attention output as dequantizing every KV value before the matrix products.
+
+This paper makes four contributions:
+
+•
+
+Identify decode attention performance bottleneck.
+
+We compare per-byte reconstruction instruction demand against peak instruction-issue and HBM throughputs on H100 and B200, showing how per-element conversion and affine arithmetic limit low-bit decode speedups (
+Sec.
+ 
+3
+).
+
+•
+
+Efficient Tensor Core operand preparation via affine folding.
+
+We formulate affine folding for independent token-wise or channel-wise K and V quantization, paired with bit-level Tensor Core operand construction, to feed Tensor Cores efficiently with lower instruction demand (
+Secs.
+ 
+4.1
+ and 
+4.3
+).
+
+•
+
+Fast GPU kernels for Hopper and Blackwell.
+
+We design warp-specialized decode pipelines for H100 register accumulators and B200 tensor-memory (TMEM) accumulators (
+Sec.
+ 
+4.4
+).
+
+•
+
+Kernel and serving-engine evaluation.
+
+We evaluate FOSCAR in standalone kernel benchmarks and integrated into SGLang 
+Zheng et al. (2024)
+.
+FOSCAR INT2 achieves geometric-mean kernel-latency speedups over FlashInfer BF16 of 
+ on H100 and 
+ on B200.
+For long-context serving workloads, FOSCAR INT2 increases peak aggregate serving throughput by up to 
+ and 
+ over 2-bit and 16-bit baselines, respectively (
+Sec.
+ 
+6
+).
+
+2 
+Background and Motivation
+
+2.1 
+Decode attention with a quantized KV cache
+
+Each decode step streams the cached K and V tensors from HBM, so low-bit storage reduces the bytes that attention must read.
+Asymmetric quantization stores each cached element as a 
+-bit quantized value 
+.
+Each quantization group shares a scale 
+ and an additive offset 
+ to reconstruct an element 
+ as
+
+(1)
+
+For either K or V, a token-wise group shares a scale and offset across channels within one token 
+Yao et al. (2022)
+, whereas a channel-wise group shares them across tokens within one channel 
+Banner et al. (2019)
+.
+
+2.2 
+Limited latency savings in low-bit decode
+
+Low-bit storage reduces the bytes that an attention kernel reads from HBM, but existing kernels still convert and dequantize each cached value before the matrix product.
+In 
+Fig.
+ 
+1
+, two- and four-bit kernels achieve a much smaller fraction of peak HBM throughput on their KV traffic than BF16 kernels, whether they fuse dequantization into attention 
+Lin et al. (2025)
+; 
+Kang et al. (2025)
+; 
+Du et al. (2026)
+; 
+Jia et al. (2026)
+; 
+Zhou et al. (2026)
+ or into separate matrix-vector kernels 
+Liu et al. (2024)
+.
+
+Unpacking each integer value and applying its group scale and offset consume instruction-issue slots.
+As the stored bit width drops, HBM transfer time falls while this per-value instruction cost stays fixed, shifting the bottleneck from memory bandwidth to instruction issue.
+
+Sec.
+ 
+3
+ quantifies this instruction-issue cost and shows how affine folding removes per-value affine arithmetic.
+
+3 
+Reconstruction limits low-bit decode attention speedups
+
+A low-bit KV cache reduces HBM traffic, but the kernel must still construct floating-point operands fast enough to supply the Tensor Cores.
+In existing baselines, reconstruction involves converting integer values into floating-point operands, applying the affine transformation 
+, and optionally performing one additional conversion to match the Tensor Core operand format (e.g., BF16 to FP8).
+
+3.1 
+Low-bit baselines fall short of peak HBM throughput
+
+(a) 
+H100 (3.35 TB/s peak).
+
+(b) 
+B200 (8.00 TB/s peak).
+
+Figure 1: 
+Effective KV access throughput of baseline kernels and FOSCAR at 
+ and 
+ as a percentage of peak HBM throughput.
+
+We benchmark FlashInfer 
+Ye et al. (2025)
+, TensorRT-LLM 
+NVIDIA Corporation (2026e)
+, FlashAttention-2 
+Dao (2024)
+, FlashAttention-3 
+Shah et al. (2024)
+, FlashAttention-4 
+Zadouri et al. (2026)
+, BitDecoding 
+Du et al. (2026)
+, KIVI 
+Liu et al. (2024)
+, Kitty 
+Xia et al. (2025)
+, SAW-INT4 
+Jia et al. (2026)
+, and OSCAR 
+Zhou et al. (2026)
+ across KV-cache storage formats.
+We compute effective KV access throughput by dividing the bytes in one read of the stored values, scales, and offsets by decode time.
+
+Fig.
+ 
+1
+ expresses this rate as a fraction of each GPU’s peak HBM throughput at batch size 
+ and context length 
+.
+
+FlashInfer BF16 exceeds 
+ of peak on both H100 and B200.
+On B200, hardware-native TensorRT-LLM NVFP4 reaches 
+ of peak in the 4-bit group.
+Among integer 4-bit baselines, BitDecoding is highest at 
+ on H100 and 
+ on B200, while its INT2 kernel reaches only 
+ and 
+, respectively.
+FOSCAR reaches 
+ and 
+ at INT4 and INT2 on H100, and 
+ and 
+ on B200.
+Although low-bit baselines read fewer KV-cache bytes, their effective KV access throughput remains far below peak because kernel latency is bounded by the slowest pipeline stage.
+
+Sec.
+ 
+3.2
+ shows how operand reconstruction can demand more instruction-issue throughput than the GPU provides at peak HBM throughput.
+
+3.2 
+Reconstruction consumes instruction-issue slots
+
+HBM transfers, operand preparation, softmax, and Tensor Core products all require instructions from the warp schedulers.
+
+(a) 
+Peak throughput across GPU generations, normalized to H100 (labels show Rubin).
+
+(b) 
+Instruction-issue demand per packed KV byte on H100 and B200. INT
+FP for converting packed integers to floating-point values; Affine is for apply scale and offset.
+
+Figure 2: 
+GPU throughput scaling and per-byte instruction-issue demand for operand construction and affine evaluation (FOSCAR shown at four query heads per KV head and group size 
+).
+
+From H100 to B200, peak HBM throughput grows 
+, while peak instruction-issue throughput grows only 
+ 
+NVIDIA Corporation (2025b)
+; 
+NVIDIA Corporation (2025a)
+; 
+NVIDIA Corporation (2025c)
+; 
+NVIDIA Corporation (2026a)
+.
+Peak dense Tensor Core throughput grows 
+ when comparing H100 FP8 with B200 FP4 
+NVIDIA Corporation (2025b)
+; 
+NVIDIA Corporation (2025a)
+; 
+NVIDIA Corporation (2025c)
+.
+
+Fig.
+ 
+2a
+ compares these peak throughputs across GPU generations
+1
+1
+
+1
+
+              
+              
+              
+              
+              
+              
+              
+            Rubin’s figures are preliminary; we infer its instruction-issue throughput from FP32 CUDA Core throughput assuming 128 lane-slots per SM cycle 
+NVIDIA Corporation (2023)
+; 
+NVIDIA Corporation (2026c)
+; 
+NVIDIA Corporation (2026a)
+.
+.
+
+Narrower stored values reduce HBM traffic without proportionally reducing reconstruction work.
+We count the instructions to convert packed integers to BF16, evaluate 
+ in BF16, and convert the results to FP8 or FP4 when the Tensor Core instructions require those formats.
+One lane-slot corresponds to one instruction issued for one warp lane 
+NVIDIA Corporation (2026b)
+.
+Let 
+ denote the lane-slots required to construct an operand and evaluate 
+ for one quantized value, 
+ the GPU’s peak instruction-issue throughput in lane-slots/s, and 
+ its peak HBM throughput in bytes/s.
+Each quantized value occupies 
+ bytes in INT4 and 
+ bytes in INT2, excluding scales and offsets.
+Streaming the cache at peak HBM throughput remains within peak instruction-issue throughput only when
+
+(2)
+
+Fig.
+ 
+2b
+ compares this per-byte issue demand against the hardware peak from 
+Eq.
+ 
+2
+ on H100 and B200.
+
+Preparing four BF16 Tensor Core operands on H100 requires two 
+SHF
+ and two 
+LOP3
+ instructions for INT
+FP conversion.
+Two BF16 
+HFMA2
+ instructions then evaluate the affine transformation 
+, each producing two BF16 values in a 32-bit register 
+Frantar et al. (2025)
+.
+The total is six instructions, or six lane-slots per warp lane.
+Four values occupy two bytes in INT4 or one byte in INT2, giving 
+ or 
+ lane-slots/byte in 
+Fig.
+ 
+2b
+, respectively.
+Therefore, reconstruction alone can consume 
+ and 
+ of H100’s peak hardware budget of 
+ lane-slots/byte, leaving little room for other parts of the kernel.
+
+On B200, two 
+F2FP
+ instructions convert the four BF16 values directly to FP8 or FP4 and pack them into registers.
+2
+2
+
+2
+
+              
+              
+              
+              
+              
+              
+              
+            Before PTX ISA 9.1 
+NVIDIA Corporation (2026d)
+, the conversion uses FP32 intermediates and takes six instructions per four values with CUDA 13.0.
+Reconstruction then costs twelve instructions, or 
+ and 
+ lane-slots/byte for INT4 and INT2, respectively.
+
+Reconstructing four values therefore takes 
+ lane-slots, or 
+ lane-slots/byte for INT4 and 
+ lane-slots/byte for INT2.
+At peak HBM throughput, INT2 reconstruction 
+exceeds
+ B200’s hardware peak of 
+ lane-slots/byte, and INT4 reconstruction alone consumes 
+ of that peak.
+
+FOSCAR removes per-value affine evaluation and never materializes a reconstructed K or V tile.
+Instead, it constructs Tensor Core operands directly from 
+, applies each group’s scale to the other matrix input or partial product, and adds the offset as an output correction.
+At four query heads per KV head and group size 
+, affine folding reduces issue demand in 
+Fig.
+ 
+2b
+ to 
+ and 
+ lane-slots/byte (INT4 and INT2) on H100, and to 
+ and 
+ on B200.
+
+4 
+FOSCAR Design
+
+FOSCAR consists of three components:
+
+•
+
+Affine folding
+ moves shared scales and offsets from individual KV values to matrix-product inputs and results so that Tensor Cores consume operands built directly from packed quantized values, reducing the affine demand in 
+Fig.
+ 
+2b
+ (
+Sec.
+ 
+4.1
+).
+
+•
+
+Bit-level Tensor Core operand construction
+ builds Tensor Core operands directly from packed quantized values, reducing the INT
+FP conversion demand in 
+Fig.
+ 
+2b
+ (
+Sec.
+ 
+4.3
+).
+
+•
+
+Warp-specialized GPU pipelines
+ overlap data movement, operand preparation, matrix products, and affine corrections on Hopper and Blackwell (
+Sec.
+ 
+4.4
+).
+
+4.1 
+The affine folding mechanism
+
+before fold
+fold into
+operand 
+output
+correction
+after fold
+
+(a) 
+Operand-fold scales a column of 
+ and adds the offset correction to every output column (
+Eq.
+ 
+3
+).
+
+before fold
+fold into
+accumulator
+output
+correction
+after fold
+
+(b) 
+Acc-fold scales a partial output column and adds the offset-weighted row sums of 
+ (
+Eq.
+ 
+4
+).
+
+Figure 3: 
+Affine folding of 
+, where 
+ is the reduction axis.
+
+Consider 
+, where 
+, 
+ holds quantized values, and 
+ indexes the reduction.
+When each row 
+ of 
+ shares a scale 
+ and offset 
+ across columns 
+, distributing reconstruction through the product gives
+
+(3)
+
+We call this 
+operand-fold
+ (
+Fig.
+ 
+3a
+): the scale multiplies the other input 
+, and the offset contributes a separate reduction of 
+ without reconstructing individual entries of 
+.
+
+token-wise
+ span 
+acc-fold
+channel-wise
+ span 
+operand-fold
+
+(a) 
+ reduces over 
+, so token-wise K uses acc-fold and channel-wise K uses operand-fold.
+
+token-wise
+ span 
+operand-fold
+channel-wise
+ span 
+acc-fold
+
+(b) 
+ reduces over 
+, so token-wise V uses operand-fold and channel-wise V uses acc-fold.
+
+Figure 4: 
+Affine folding modes for token-wise and channel-wise K and V tiles.
+
+When each column 
+ of 
+ shares a scale 
+ and offset 
+ across the reduction index 
+, both terms factor out of the sum:
+
+(4)
+
+We call this 
+acc-fold
+ (
+Fig.
+ 
+3b
+): the scale multiplies the accumulated product, and the offset multiplies the corresponding row sum of 
+.
+Both 
+operand-fold
+ and 
+acc-fold
+ preserve the result of applying 
+ element-wise in exact arithmetic.
+
+In attention, K and V arrive as 
+ tiles, with 
+ cached tokens and head dimension 
+.
+Token-wise groups share a scale and offset along 
+ within each token, whereas channel-wise groups share them along 
+ within each channel.
+Because 
+ reduces over 
+, token-wise K uses acc-fold and channel-wise K uses operand-fold into 
+ (
+Fig.
+ 
+4a
+).
+Because 
+ reduces over 
+, token-wise V uses operand-fold into 
+ and channel-wise V uses acc-fold (
+Fig.
+ 
+4b
+).
+FOSCAR allows K and V to select their quantization and folding schemes independently according to the cache’s quantization policy.
+
+Fig.
+ 
+5
+ illustrates where scales and offsets are applied in the attention algorithm.
+FOSCAR retains online softmax 
+Dao et al. (2023)
+; 
+Dao et al. (2022)
+; 
+Dao (2024)
+ and changes only the QK and PV operand paths and their output corrections.
+
+QK
+PV
+ quantized
+ quantized
+K operand
+V operand
+softmax
+K corr.
+V corr.
+channel-wise K
+operand-fold
+token-wise K
+acc-fold
+token-wise V
+operand-fold
+channel-wise V
+acc-fold
+
+Figure 5: 
+Affine folding in attention.
+Dashed arrows show where each K and V quantization scheme applies its scales.
+
+With 
+ query heads per KV head and group size 
+, affine folding reduces scalar scale-and-offset operations from one multiply-add per stored value to 
+ (
+Appendix
+ 
+C
+).
+
+4.2 
+Affine folding spans multiple quantization groups
+
+Under acc-fold, an unscaled partial product cannot cross a quantization-group boundary.
+When a reduction spans multiple groups, the kernel applies each group’s scale and offset to its partial product before adding the result to the running accumulator (
+Eq.
+ 
+4
+).
+We call this partial product 
+group-local
+ because it sums only over the values that share one scale and offset.
+Operand-fold instead scales the other matrix input before multiplication, so the accumulator can span multiple groups without rescaling; its offset correction still follows 
+Eq.
+ 
+3
+.
+
+Both the Hopper and Blackwell kernels enforce the same ordering constraints on these corrections, although they assign the work to different warpgroups (
+Sec.
+ 
+4.4
+).
+For operand-fold, the kernel can accumulate offset contributions for the same output separately and add their sum later.
+QK corrections must precede softmax, while PV corrections must precede division by the accumulated softmax denominator.
+
+4.3 
+Constructing Tensor Core operands from packed integers
+
+FOSCAR constructs floating-point Tensor Core operands directly from packed integer bit patterns.
+3
+3
+
+3
+
+              
+              
+              
+              
+              
+              
+              
+            The Hopper kernel uses BF16 operands with 
+wgmma
+.
+The Blackwell kernel uses 
+tcgen05
+ with E4M3 inputs for 
+ and 
+, E4M3 KV operands for INT4, and E2M1 KV operands for INT2 (using the 
+kind::f8f6f4
+ instruction mode 
+NVIDIA Corporation (2026d)
+).
+
+Hopper combines each integer value with a fixed BF16 bit pattern, a technique known as mantissa injection 
+Kim et al. (2022)
+; 
+Frantar et al. (2025)
+; 
+Du et al. (2026)
+.
+Combining 
+ with 
+0x4300
+ via bitwise OR produces the exact BF16 value 
+.
+
+On Blackwell, FOSCAR can convert integer values into floating point more efficiently by 
+directly placing each integer’s bit pattern in the low bits of a floating-point operand and filling the remaining bits with zeros
+.
+For example, the bit patterns of the INT2 values 
+ represent 
+ in FP4 (E2M1), giving 
+.
+INT4 similarly yields FP8 (E4M3) operands with 
+ 
+Lin (2025)
+.
+
+Mapping
+
+ALU/elem.
+
+Hopper
+
+INT4
+BF16
+
+1.00
+
+INT2
+BF16
+
+1.00
+
+Blackwell
+
+INT4
+E4M3
+
+0.38
+
+INT2
+E2M1
+
+0.19
+
+Table 1: 
+Tensor Core operand mappings and their static ALU costs per stored value.
+The 
+ column gives the bit-level construction of 
+ from 
+.
+
+(a) 
+Packed register layout and bit-level operand construction.
+
+(b) 
+K operand flow from global memory to the Tensor Core.
+Tile shapes are logical (tokens 
+ channels).
+
+Figure 6: 
+Register packing and global-to-Tensor-Core dataflow for INT2 K in FOSCAR.
+
+These constructions produce operands of the form 
+ (
+) whose numerical values differ from the stored integers.
+To account for 
+ without extra per-element instructions, we fold both constants into each group’s shared scale and offset.
+Substituting 
+ into 
+ (
+Eq.
+ 
+1
+) gives
+
+(5)
+
+Affine folding then applies 
+ and 
+ in place of 
+ and 
+, leaving the attention result unchanged in exact arithmetic (
+Sec.
+ 
+4.1
+).
+
+ and 
+ are precomputed in FP32 when the quantized KV cache is stored in HBM.
+
+Table
+ 
+1
+ summarizes the 
+ mappings, the 
+ pairs used for compensation, and the ALU cost of converting each integer KV element into a Tensor Core operand.
+
+Fig.
+ 
+6a
+ shows how FOSCAR packs INT2 K values in each 32-bit register to match these bit-level constructions.
+On Hopper, each byte interleaves pairs of 2-bit values so that one bit shift and one masked merge (
+LOP3
+) produce two BF16 operands in a 32-bit register.
+On Blackwell, each 32-bit register holds 16 two-bit values arranged as eight channel pairs; one bit shift and two masks unpack the register directly into two 32-bit registers holding 16 FP4 operands.
+Both kernels use the Tensor Memory Accelerator (TMA) to copy packed tiles from global to shared memory (
+Fig.
+ 
+6b
+).
+Hopper consumers build K operands in registers and collectively issue 
+wgmma
+; Blackwell prepares a shared-memory operand tile that a separate issue thread supplies to Tensor Cores by issuing 
+tcgen05
+ 
+NVIDIA Corporation (2026d)
+.
+
+Appendix
+ 
+A
+ extends the INT2 K example to the packing and dataflow of INT2 V and INT4 KV operands on both GPUs.
+
+(a) 
+H100: 
+WG0
+ issues the tile copies using TMA, and two consumer warpgroups alternate even and odd tiles.
+
+(b) 
+B200: 
+WG0
+ issues the tile copies and 
+tcgen05
+ matrix instructions, while 
+WG1
+–
+WG3
+ prepare KV operands, apply affine folding, and compute softmax on CUDA Cores.
+
+Figure 7: 
+FOSCAR’s Hopper and Blackwell pipelines.
+
+ constructs 
+’s floating-point Tensor Core operand from packed integers (
+Sec.
+ 
+4.3
+).
+
+corr.
+ denotes the output correction, and 
+WG
+ 
+W[
+]
+ denotes warpgroup 
+, warp 
+.
+Dashed boxes execute only for the corresponding K or V quantization axis.
+
+4.4 
+Warp-specialized GPU pipelines
+
+We design separate warp-specialized pipelines for Hopper and Blackwell.
+Hopper’s 
+wgmma
+ accumulates into registers owned by its issuing warpgroup, whereas Blackwell’s 
+tcgen05
+ accumulates into tensor memory (TMEM) accessible to other warpgroups in the CTA 
+NVIDIA Corporation (2026d)
+.
+
+On Hopper, one producer warpgroup issues TMA copies, and two consumer warpgroups process alternating even and odd KV tiles (
+Fig.
+ 
+7a
+).
+Each consumer builds KV operands and runs its own QK–softmax–PV chain, keeping online-softmax state and output accumulators in registers.
+Each consumer applies scales and offset corrections according to 
+Fig.
+ 
+5
+: K corrections precede softmax, and V corrections update the output as described in 
+Sec.
+ 
+4.2
+.
+For channel-wise K, the producer warpgroup prepares the scaled 
+ inputs.
+At the end of the sequence, one consumer merges the two warpgroups’ softmax states and partial outputs into the final CTA output.
+
+Blackwell assigns copy and matrix-product issue, operand preparation, softmax, and output accumulation to separate warpgroups (
+Fig.
+ 
+7b
+).
+The issue warpgroup starts TMA transfers and 
+tcgen05
+ products, while the preparation warpgroup constructs KV operands in shared memory.
+The softmax warpgroup reads QK accumulators from TMEM, applies K offset corrections (and K scales for token-wise K) in FP32, computes the softmax weights 
+, and scales 
+ for token-wise V (quantizing folded 
+ and 
+ tiles to E4M3 with a per-row scale).
+The output warpgroup reads PV accumulators from TMEM, maintains the running output, and applies V offset corrections (and V scales for channel-wise V); for channel-wise K, it also prepares the scaled 
+ inputs.
+Shared-memory buffers pass operands between warpgroups, while TMEM passes matrix-product accumulators.
+
+Multi-stage buffers in shared memory and TMEM allow producer warpgroups to work on later tiles while downstream warpgroups process earlier tiles.
+We tune the buffer depth and producer lead distance empirically for each workload; for clarity, 
+Fig.
+ 
+7b
+ illustrates a one-step lead.
+
+5 
+Serving Engine Integration
+
+We integrate FOSCAR into SGLang as a backend for paged decode attention 
+Zheng et al. (2024)
+.
+FOSCAR incorporates common optimization techniques, including split-KV, which divides long contexts across CTAs to increase parallelism.
+To better understand how FOSCAR benefits existing serving systems with quantized KV caches, we integrate FOSCAR with OSCAR 
+Zhou et al. (2026)
+ as a drop-in replacement for its INT2 kernel and keep OSCAR’s quantization policy, rotations, and BF16 windows (
+Sec.
+ 
+6.4
+) unchanged.
+
+6 
+Evaluation
+
+We implement FOSCAR in CuTe DSL (CUTLASS 4.8, CUDA 13.0) and evaluate it on NVIDIA H100 (80 GB HBM3) and B200 (180 GB HBM3e) GPUs with 
+, 
+, 
+, page size 64, and token-wise K and V quantization groups of 
+ values with FP32 scales and offsets.
+Token-wise K and V exercise both acc-fold on QK and operand-fold on PV; 
+Appendix
+ 
+B
+ evaluates all four combinations of token-wise and channel-wise K and V, where FOSCAR achieves 
+–
+ speedups over FlashInfer BF16 on H100 and 
+–
+ on B200.
+We evaluate batch sizes 1 and 8 at context lengths of 8K, 32K, 128K, and 512K, and batch size 64 at 8K, 16K, 32K, 64K, and 128K.
+Each measurement takes the median of five timed iterations (excluding an L2 flush before each call) after five warmups, and includes all decode kernels and split reduction.
+Plotted speedups normalize each kernel’s latency to FlashInfer BF16, whereas speedups quoted in the text compare FOSCAR directly against each named baseline within the same benchmark series (using five-run medians for B200 INT4 vendor baselines and three-run medians for BitDecoding and SAW).
+
+6.1 
+Kernel performance
+
+(a) 
+H100, batch 1.
+
+(b) 
+H100, batch 8.
+
+(c) 
+H100, batch 64.
+
+(d) 
+B200, batch 1.
+
+(e) 
+B200, batch 8.
+
+(f) 
+B200, batch 64.
+
+Figure 8: 
+Kernel speedups of FOSCAR and 2- and 4-bit baselines over FlashInfer BF16.
+
+(a) 
+H100, batch 1.
+
+(b) 
+H100, batch 8.
+
+(c) 
+H100, batch 64.
+
+(d) 
+B200, batch 1.
+
+(e) 
+B200, batch 8.
+
+(f) 
+B200, batch 64.
+
+Figure 9: 
+Kernel speedups of FOSCAR and 8- and 16-bit baselines over FlashInfer BF16.
+The dashed line marks parity.
+
+Figs.
+ 
+8
+ and 
+9
+ compare FOSCAR against sub-byte and wider-format baselines.
+On H100, FOSCAR INT2 achieves a 
+ geometric-mean speedup over FlashInfer BF16 and 
+ over TensorRT-LLM FP8, with maxima of 
+ and 
+.
+On B200, the geometric-mean speedups are 
+ over BF16, 
+ over TensorRT-LLM FP8, and 
+ over TensorRT-LLM NVFP4, with maxima of 
+, 
+, and 
+.
+These vendor kernels are invoked through FlashInfer, and FOSCAR INT2 outperforms them across all tested batch sizes and context lengths.
+Against OSCAR INT2 and BitDecoding INT2, FOSCAR INT2 achieves geometric-mean speedups of 
+ and 
+ on H100, and 
+ and 
+ on B200.
+
+On H100, FOSCAR INT4 achieves geometric-mean speedups of 
+ over FlashInfer BF16, 
+ over TensorRT-LLM FP8, 
+ over BitDecoding INT4, and 
+ over SAW INT4.
+On B200, FOSCAR INT4 achieves geometric-mean speedups of 
+ over FlashInfer BF16, 
+ over TensorRT-LLM FP8, 
+ over BitDecoding INT4, and 
+ over SAW INT4.
+It matches native NVFP4 overall (
+, ranging from 
+ to 
+; faster at 32K–128K for batch 64), while returning BF16 output instead of NVFP4’s FP8 output.
+
+Appendix
+ 
+C
+ further evaluates how FOSCAR INT2 speedup scales across 
+.
+
+(a) 
+H100: 
+reconstruction
+ versus folding.
+
+(b) 
+B200: E4M3 
+reconstruction
+ versus folding.
+
+(c) 
+B200: folded E4M3 versus E2M1.
+
+Figure 10: 
+FOSCAR INT2 kernel latency ratios between ablation variants at equal split-KV counts (first variant’s latency divided by the second’s).
+Panels (b) and (c) decode an INT2 cache into E4M3 or E2M1 Tensor Core operands on B200; error bars show paired 95% confidence intervals across ten runs.
+
+6.2 
+Kernel accuracy
+
+(a) 
+H100.
+
+(b) 
+B200.
+
+Figure 11: 
+ output error of BF16 decode (FlashInfer), FOSCAR INT4, FOSCAR INT2, and OSCAR INT2 on the synthetic input (logarithmic scale).
+
+Fig.
+ 
+11
+ compares the 
+ output error of BF16 decode (FlashInfer), FOSCAR INT4, FOSCAR INT2, and OSCAR INT2.
+To stress-test quantization, our synthetic input amplifies eight K channels, ramps K’s per-token scale along the sequence, and rescales K so that pre-softmax attention logits have unit standard deviation.
+For INT2, FOSCAR and OSCAR decode the same quantized cache written by OSCAR’s clipped quantizer without BF16 windows.
+Both INT2 kernels yield 
+ errors of 
+–
+, compared with 
+–
+ for FOSCAR INT4 and 
+ for BF16 decode.
+Under unclipped min–max INT2 quantization, the 
+ error rises to 
+–
+.
+Compared directly against the dequantized INT2 cache, FOSCAR’s kernel arithmetic error is only 
+ on both H100 and B200, matching BF16 decode and confirming that the 
+–
+ error stems from 2-bit quantization rather than affine folding.
+
+6.3 
+Kernel ablation
+
+On INT2 caches with equal split-KV counts within each pair, 
+Fig.
+ 
+10
+ ablates affine folding against per-value reconstruction on H100 and B200, and FP4 (E2M1) against FP8 (E4M3) KV Tensor Core operands on B200.
+On H100, FOSCAR’s speedup over external baselines combines its warp-specialized kernel design with affine folding, which adds a 
+–
+ speedup over per-value reconstruction (
+Fig.
+ 
+10a
+) as expected when H100 reconstruction remains within the hardware issue peak (
+Fig.
+ 
+2b
+).
+On B200, the reconstruction baseline follows the standard approach of dequantizing INT2 values into FP8 (E4M3) Tensor Core operands before each matrix product; because this per-value reconstruction exceeds B200’s issue peak, affine folding achieves a 
+–
+ speedup (
+Fig.
+ 
+10b
+).
+Switching the folded B200 INT2 kernel from FP8 (E4M3) to FP4 (E2M1) KV operands and their matching packing layout provides an additional 
+–
+ speedup (
+Fig.
+ 
+10c
+).
+
+6.4 
+Serving throughput
+
+(a) 
+H100, 99% prefix-cache hit.
+
+(b) 
+H100, 95% prefix-cache hit.
+
+(c) 
+B200, 99% prefix-cache hit.
+
+(d) 
+B200, 95% prefix-cache hit.
+
+Figure 12: 
+Per-user and aggregate Qwen3-8B serving throughput on a single GPU with 100K input and 1K output tokens.
+
+We serve Qwen3-8B with 100K input tokens, 1K output tokens, and 99% or 95% prefix-cache hits (one cached prefix per request), sharing a BF16 prefill backend across configurations.
+We evaluate two INT2 configurations to show both realistic accuracy-preserving integration and pure 2-bit kernel speed: 
+OSCAR INT2 + Ours
+ replaces OSCAR’s INT2 decode kernel with FOSCAR while keeping OSCAR’s rotations and BF16 windows (128 initial and 512 recent tokens, 
+ of the 100K context), whereas 
+Ours INT2
+ uses FOSCAR’s token-wise INT2 K and V cache without recent windows or rotations.
+We vary concurrency in powers of two up to 16 on H100 and 32 (plus 48) on B200 to measure per-user (median request output tokens/s) and aggregate (total output tokens/s) throughput (
+Fig.
+ 
+12
+).
+
+At a 99% prefix-cache hit rate, 
+OSCAR INT2 + Ours
+ reaches a peak aggregate throughput of 487 tokens/s on H100 and 868 tokens/s on B200, compared with 269 and 333 tokens/s for OSCAR (
+ and 
+ higher).
+
+Ours INT2
+ reaches 506 tokens/s on H100 and 897 tokens/s on B200, improving over OSCAR by 
+ and 
+; this also exceeds FlashInfer BF16’s peaks of 115 tokens/s on H100 (at concurrency 2) and 355 tokens/s on B200 (at concurrency 8) by 
+ and 
+.
+At 95% prefix hits, 
+OSCAR INT2 + Ours
+ and 
+Ours INT2
+ reach 337 and 346 tokens/s versus OSCAR’s 214 tokens/s on H100, and 738 and 755 tokens/s versus 297 tokens/s on B200.
+Across cache formats, peak throughput reflects both decoder speed and the number of concurrent requests that fit in memory.
+
+6.5 
+Serving accuracy
+
+Table 2: 
+Qwen3-8B serving accuracy on H100 (mean 
+ sample standard deviation across five runs).
+
+Configuration
+
+GPQA-Diamond (%)
+
+GSM8K (%)
+
+FlashInfer BF16
+
+OSCAR INT2
+
+OSCAR INT2 + Ours
+
+Table
+ 
+2
+ compares FlashInfer BF16, OSCAR INT2, and 
+OSCAR INT2 + Ours
+ on GPQA-Diamond 
+Rein et al. (2023)
+ and GSM8K on H100, reporting the mean and sample standard deviation across five runs per configuration.
+Every question-paired 95% confidence interval for the accuracy difference between configurations spans zero, so five runs show no measurable accuracy gain or loss (though five runs do not establish formal equivalence).
+Median prompt lengths are 243 tokens for GPQA-Diamond and 91 tokens for GSM8K; because 
+OSCAR INT2 + Ours
+ decodes the identical quantized cache as OSCAR with 
+ arithmetic error (
+Sec.
+ 
+6.2
+), it preserves OSCAR’s cache accuracy while accelerating decode.
+
+7 
+Related Work
+
+7.1 
+KV-cache quantization algorithms
+
+KIVI 
+Liu et al. (2024)
+, KVQuant 
+Hooper et al. (2024)
+, and Kitty 
+Xia et al. (2025)
+ establish low-bit KV formats and motivate channel-wise grouping for K and token-wise grouping for V.
+Atom 
+Zhao et al. (2024)
+ and QServe 
+Lin et al. (2025)
+ co-design 4-bit quantization formats and serving kernels, while GEAR 
+Kang et al. (2024)
+ adds low-rank and sparse error corrections.
+FOSCAR retains uniform affine quantization and changes how a Tensor Core kernel evaluates the quantized cache.
+Nonlinear lookup formats and sparse outlier representations cannot be expressed as a single affine transform and require separate kernel support.
+
+7.2 
+Quantized attention kernels
+
+BitDecoding provides low-bit Tensor Core attention kernels across several GPU generations 
+Du et al. (2026)
+.
+On Hopper, it converts stored integer values and applies scales and offsets before the matrix products.
+On Blackwell, it uses block-scaled FP4 instructions that restrict scales to the contraction axis, omit offsets, and quantize 
+ and each 
+ tile to FP4.
+TensorRT-LLM’s XQA kernel folds a scalar INT8 or FP8 KV scale into the QK and PV accumulators 
+NVIDIA Corporation (2026e)
+.
+QServe fuses low-bit KV dequantization into CUDA-core batched matrix-vector products 
+Lin et al. (2025)
+.
+TurboAttention converts sub-8-bit values into INT8 operands for Tensor Core attention 
+Kang et al. (2025)
+.
+The SageAttention kernels quantize full-precision 
+, 
+, and 
+ inputs for prefill and general attention workloads, including FP4 Tensor Core execution on Blackwell 
+Zhang et al. (2025c)
+; 
+Zhang et al. (2025a)
+; 
+Zhang et al. (2025b)
+.
+SAW-INT4 
+Jia et al. (2026)
+ combines token-wise affine INT4 caches with a block-diagonal Hadamard rotation, while OSCAR 
+Zhou et al. (2026)
+ combines a mixed INT2/BF16 cache with offline spectral rotations; both kernels reconstruct cached values before their matrix products.
+FOSCAR instead applies affine folding across independent token-wise or channel-wise K and V caches, folding group scales and non-zero offsets into the 
+ or 
+ inputs or into group-local partial products while keeping 
+ and 
+ in BF16 or FP8.
+Our serving evaluation combines affine folding with OSCAR’s cache policy and rotations (
+Sec.
+ 
+6.4
+).
+
+7.3 
+Attention pipelines and kernel reparameterization
+
+FlashAttention-2 introduces work partitioning for tiled attention 
+Dao (2024)
+, FlashAttention-3 overlaps producer and consumer warpgroups through warp specialization 
+Shah et al. (2024)
+, FlashInfer provides paged-cache attention kernels for serving engines 
+Ye et al. (2025)
+, and FlashAttention-4 studies how Blackwell’s higher Tensor Core throughput shifts bottlenecks toward on-chip staging and non-matmul instructions 
+Zadouri et al. (2026)
+.
+RepVGG 
+Ding et al. (2021)
+ folds training-time convolution branches into inference kernels, CODA 
+Guo et al. (2026)
+ rewrites Transformer operators into GEMM epilogues, and quantized GEMM kernels 
+Zhao et al. (2024)
+; 
+Lin et al. (2025)
+ rescale group partial sums or subtract zero-point activation sums in their epilogues.
+FOSCAR combines warp-specialized attention pipelining with scale-and-offset folding across both QK and PV under online softmax, where the eliminated per-element work grows with context length.
+
+7.4 
+Quantized inference architecture
+
+Oaken combines a KV quantization policy with custom hardware for online and offline compression 
+Kim et al. (2025)
+.
+Weight-only kernels such as Marlin 
+Frantar et al. (2025)
+; 
+Lin (2025)
+, FLUTE 
+Guo et al. (2024)
+, and LUT-GEMM 
+Park et al. (2024)
+ optimize single matrix products over quantized model weights.
+FOSCAR instead targets the QK and PV matrix products of decode attention, which are linked by online softmax, on unmodified Hopper and Blackwell Tensor Cores.
+
+8 
+Conclusion
+
+FOSCAR accelerates decode attention over low-bit KV caches through affine folding, which moves each quantization group’s shared scale to a matrix-product input or partial result and applies its offset as an output correction.
+Its Hopper and Blackwell kernels construct Tensor Core KV operands from packed quantized values through bit manipulation, while affine folding preserves the attention output of the reconstructed cache in exact arithmetic.
+On H100 and B200, FOSCAR INT2 outperforms FlashInfer BF16 and TensorRT-LLM FP8 across all tested batch sizes and context lengths on the main benchmark grid.
+Qwen3-8B serving experiments also show throughput gains of up to 
+ over baselines in settings with long contexts and high cache hit rates that align with popular agentic workloads.
+
+References
+
+Banner 
+et al.
+ (2019)
+
+R. Banner, Y. Nahshan, and D. Soudry
+
+Post training 4-bit quantization of convolutional networks for rapid-deployment
+.
+
+In 
+Advances in Neural Information Processing Systems 32: Annual Conference
+on Neural Information Processing Systems 2019, NeurIPS 2019, December
+8-14, 2019, Vancouver, BC, Canada
+,  
+H. M. Wallach, H. Larochelle, A. Beygelzimer, F. d’Alché-Buc, E. B. Fox, and R. Garnett (Eds.)
+,
+
+pp. 7948–7956
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2.1
+.
+
+Dao 
+et al.
+ (2022)
+
+T. Dao, D. Y. Fu, S. Ermon, A. Rudra, and C. Ré
+
+FlashAttention: fast and memory-efficient exact attention with io-awareness
+.
+
+In 
+Advances in Neural Information Processing Systems 35: Annual Conference
+on Neural Information Processing Systems 2022, NeurIPS 2022, New Orleans,
+LA, USA, November 28 - December 9, 2022
+,  
+S. Koyejo, S. Mohamed, A. Agarwal, D. Belgrave, K. Cho, and A. Oh (Eds.)
+,
+
+External Links: 
+Link
+
+Cited by: 
+§4.1
+.
+
+Dao 
+et al.
+ (2023)
+
+T. Dao, D. Haziza, F. Massa, and G. Sizov
+
+Flash-Decoding for long-context inference
+.
+
+Note: 
+PyTorch BlogAccessed 2026-08-14
+
+External Links: 
+Link
+
+Cited by: 
+§4.1
+.
+
+Dao (2024)
+
+T. Dao
+
+FlashAttention-2: faster attention with better parallelism and work partitioning
+.
+
+In 
+The Twelfth International Conference on Learning Representations,
+ICLR 2024, Vienna, Austria, May 7-11, 2024
+,
+
+External Links: 
+Link
+
+Cited by: 
+§3.1
+,
+
+§4.1
+,
+
+§7.3
+.
+
+Ding 
+et al.
+ (2021)
+
+X. Ding, X. Zhang, N. Ma, J. Han, G. Ding, and J. Sun
+
+RepVGG: making vgg-style convnets great again
+.
+
+In 
+IEEE Conference on Computer Vision and Pattern Recognition, CVPR
+2021, virtual, June 19-25, 2021
+,
+
+pp. 13733–13742
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§7.3
+.
+
+Du 
+et al.
+ (2026)
+
+D. Du, S. Cao, J. Cheng, L. Mai, T. Cao, and M. Yang
+
+BitDecoding: unlocking tensor cores for long-context llms with low-bit KV cache
+.
+
+In 
+IEEE International Symposium on High Performance Computer Architecture,
+HPCA 2026, Sydney, Australia, January 31 - Feb. 4, 2026
+,
+
+pp. 1–13
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§1
+,
+
+§2.2
+,
+
+§3.1
+,
+
+§4.3
+,
+
+§7.2
+.
+
+Frantar 
+et al.
+ (2025)
+
+E. Frantar, R. L. Castro, J. Chen, T. Hoefler, and D. Alistarh
+
+MARLIN: mixed-precision auto-regressive parallel inference on large language models
+.
+
+In 
+Proceedings of the 30th ACM SIGPLAN Annual Symposium on Principles
+and Practice of Parallel Programming, PPoPP 2025, Las Vegas, NV, USA,
+March 1-5, 2025
+,
+
+pp. 239–251
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§3.2
+,
+
+§4.3
+,
+
+§7.4
+.
+
+Guo 
+et al.
+ (2024)
+
+H. Guo, W. Brandon, R. Cholakov, J. Ragan-Kelley, E. P. Xing, and Y. Kim
+
+Fast matrix multiplications for lookup table-quantized llms
+.
+
+In 
+Findings of the Association for Computational Linguistics: EMNLP
+2024, Miami, Florida, USA, November 12-16, 2024
+,  
+Y. Al-Onaizan, M. Bansal, and Y. Chen (Eds.)
+,
+
+Findings of ACL
+, Vol. 
+EMNLP 2024
+, 
+pp. 12419–12433
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§7.4
+.
+
+Guo 
+et al.
+ (2026)
+
+H. Guo, J. Zhang, A. Menon, D. Guessous, V. Thakkar, Y. Kim, and T. Dao
+
+CODA: rewriting transformer blocks as gemm-epilogue programs
+.
+
+CoRR
+ 
+abs/2605.19269
+.
+
+External Links: 
+Link
+,
+
+Document
+,
+
+2605.19269
+
+Cited by: 
+§7.3
+.
+
+Hooper 
+et al.
+ (2024)
+
+C. Hooper, S. Kim, H. Mohammadzadeh, M. W. Mahoney, Y. S. Shao, K. Keutzer, and A. Gholami
+
+KVQuant: towards 10 million context length LLM inference with KV cache quantization
+.
+
+In 
+Advances in Neural Information Processing Systems 37: Annual Conference
+on Neural Information Processing Systems 2024, NeurIPS 2024, Vancouver,
+BC, Canada, December 10 - 15, 2024
+,  
+A. Globersons, L. Mackey, D. Belgrave, A. Fan, U. Paquet, J. M. Tomczak, and C. Zhang (Eds.)
+,
+
+External Links: 
+Link
+
+Cited by: 
+Appendix B
+,
+
+§1
+,
+
+§7.1
+.
+
+Jia 
+et al.
+ (2026)
+
+J. Jia, J. Li, Z. Zhou, J. H. Heo, J. Wang, T. Dao, S. L. Song, B. Athiwaratkun, C. Xu, T. Zhang, and X. Wu
+
+SAW-INT4: system-aware 4-bit kv-cache quantization for real-world LLM serving
+.
+
+CoRR
+ 
+abs/2604.19157
+.
+
+External Links: 
+Link
+,
+
+Document
+,
+
+2604.19157
+
+Cited by: 
+§1
+,
+
+§2.2
+,
+
+§3.1
+,
+
+§7.2
+.
+
+Kang 
+et al.
+ (2025)
+
+H. Kang, S. Bharadwaj, J. Hensman, T. Krishna, V. Rühle, and S. Rajmohan
+
+TurboAttention: efficient attention approximation for high throughputs llm
+.
+
+In 
+Proceedings of the Eighth Conference on Machine Learning and Systems,
+MLSys 2025, Santa Clara, CA, USA, May 12-15, 2025
+,  
+M. Zaharia, G. Joshi, and Y. (. Lin (Eds.)
+,
+
+External Links: 
+Link
+
+Cited by: 
+§1
+,
+
+§2.2
+,
+
+§7.2
+.
+
+Kang 
+et al.
+ (2024)
+
+H. Kang, Q. Zhang, S. Kundu, G. Jeong, Z. Liu, T. Krishna, and T. Zhao
+
+GEAR: an efficient KV cache compression recipe for near-lossless generative inference of LLM
+.
+
+CoRR
+ 
+abs/2403.05527
+.
+
+External Links: 
+Link
+,
+
+Document
+,
+
+2403.05527
+
+Cited by: 
+§7.1
+.
+
+Kim 
+et al.
+ (2025)
+
+M. Kim, S. Hong, R. Ko, S. Choi, H. Lee, J. Kim, J. Kim, and J. Park
+
+Oaken: fast and efficient LLM serving with online-offline hybrid KV cache quantization
+.
+
+In 
+Proceedings of the 52nd Annual International Symposium on Computer
+Architecture, ISCA 2025, Tokyo, Japan, June 21-25, 2025
+,
+
+pp. 482–497
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§7.4
+.
+
+Kim 
+et al.
+ (2022)
+
+Y. J. Kim, R. Henry, R. Fahim, and H. H. Awadalla
+
+Who says elephants can’t run: bringing large scale moe models into cloud scale production
+.
+
+CoRR
+ 
+abs/2211.10017
+.
+
+External Links: 
+Link
+,
+
+Document
+,
+
+2211.10017
+
+Cited by: 
+§4.3
+.
+
+Lin (2025)
+
+J. Lin
+
+Add W4A8 support for the Marlin kernel
+.
+
+Note: 
+vLLM pull request #24722Accessed 2026-08-19
+
+External Links: 
+Link
+
+Cited by: 
+§A.2
+,
+
+§4.3
+,
+
+§7.4
+.
+
+Lin 
+et al.
+ (2025)
+
+Y. Lin, H. Tang, S. Yang, Z. Zhang, G. Xiao, C. Gan, and S. Han
+
+QServe: W4A8KV4 quantization and system co-design for efficient LLM serving
+.
+
+In 
+Proceedings of the Eighth Conference on Machine Learning and Systems,
+MLSys 2025, Santa Clara, CA, USA, May 12-15, 2025
+,  
+M. Zaharia, G. Joshi, and Y. (. Lin (Eds.)
+,
+
+External Links: 
+Link
+
+Cited by: 
+§1
+,
+
+§1
+,
+
+§2.2
+,
+
+§7.1
+,
+
+§7.2
+,
+
+§7.3
+.
+
+Liu 
+et al.
+ (2024)
+
+Z. Liu, J. Yuan, H. Jin, S. (. Zhong, Z. Xu, V. Braverman, B. Chen, and X. Hu
+
+KIVI: A tuning-free asymmetric 2bit quantization for KV cache
+.
+
+In 
+Forty-first International Conference on Machine Learning, ICML 2024,
+Vienna, Austria, July 21-27, 2024
+,  
+R. Salakhutdinov, Z. Kolter, K. A. Heller, A. Weller, N. Oliver, J. Scarlett, and F. Berkenkamp (Eds.)
+,
+
+Proceedings of Machine Learning Research
+, Vol. 
+235
+, 
+pp. 32332–32344
+.
+
+External Links: 
+Link
+
+Cited by: 
+Appendix B
+,
+
+§1
+,
+
+§1
+,
+
+§2.2
+,
+
+§3.1
+,
+
+§7.1
+.
+
+NVIDIA Corporation (2023)
+
+NVIDIA Corporation
+
+GPU performance background user’s guide
+.
+
+ 
+NVIDIA Corporation
+.
+
+Note: 
+Accessed 2026-08-12
+
+External Links: 
+Link
+
+Cited by: 
+footnote 1
+.
+
+NVIDIA Corporation (2025a)
+
+NVIDIA Corporation
+
+NVIDIA DGX B200 datasheet
+.
+
+ 
+NVIDIA Corporation
+.
+
+Note: 
+Accessed 2026-08-05
+
+External Links: 
+Link
+
+Cited by: 
+§3.2
+.
+
+NVIDIA Corporation (2025b)
+
+NVIDIA Corporation
+
+NVIDIA H100 tensor core GPU
+.
+
+ 
+NVIDIA Corporation
+.
+
+Note: 
+Accessed 2026-08-05
+
+External Links: 
+Link
+
+Cited by: 
+§3.2
+.
+
+NVIDIA Corporation (2025c)
+
+NVIDIA Corporation
+
+NVIDIA HGX platform
+.
+
+ 
+NVIDIA Corporation
+.
+
+Note: 
+Accessed 2026-08-05
+
+External Links: 
+Link
+
+Cited by: 
+§3.2
+.
+
+NVIDIA Corporation (2026a)
+
+NVIDIA Corporation
+
+CUDA C++ best practices guide
+.
+
+ 
+NVIDIA Corporation
+.
+
+Note: 
+Accessed 2026-07-30
+
+External Links: 
+Link
+
+Cited by: 
+§3.2
+,
+
+footnote 1
+.
+
+NVIDIA Corporation (2026b)
+
+NVIDIA Corporation
+
+CUDA C++ programming guide
+.
+
+ 
+NVIDIA Corporation
+.
+
+Note: 
+Accessed 2026-08-20
+
+External Links: 
+Link
+
+Cited by: 
+§3.2
+.
+
+NVIDIA Corporation (2026c)
+
+NVIDIA Corporation
+
+NVIDIA Vera Rubin NVL72
+.
+
+ 
+NVIDIA Corporation
+.
+
+Note: 
+Accessed 2026-08-05
+
+External Links: 
+Link
+
+Cited by: 
+footnote 1
+.
+
+NVIDIA Corporation (2026d)
+
+NVIDIA Corporation
+
+Parallel thread execution ISA, version 9.4
+.
+
+ 
+NVIDIA Corporation
+.
+
+Note: 
+Accessed 2026-10-29
+
+External Links: 
+Link
+
+Cited by: 
+§A.2
+,
+
+§4.3
+,
+
+§4.4
+,
+
+footnote 2
+,
+
+footnote 3
+.
+
+NVIDIA Corporation (2026e)
+
+NVIDIA Corporation
+
+TensorRT-LLM
+.
+
+ 
+NVIDIA Corporation
+.
+
+Note: 
+Accessed 2026-08-19
+
+External Links: 
+Link
+
+Cited by: 
+§3.1
+,
+
+§7.2
+.
+
+Park 
+et al.
+ (2024)
+
+G. Park, B. Park, M. Kim, S. Lee, J. Kim, B. Kwon, S. J. Kwon, B. Kim, Y. Lee, and D. Lee
+
+LUT-GEMM: quantized matrix multiplication based on luts for efficient inference in large-scale generative language models
+.
+
+In 
+The Twelfth International Conference on Learning Representations,
+ICLR 2024, Vienna, Austria, May 7-11, 2024
+,
+
+External Links: 
+Link
+
+Cited by: 
+§7.4
+.
+
+Rein 
+et al.
+ (2023)
+
+D. Rein, B. L. Hou, A. C. Stickland, J. Petty, R. Y. Pang, J. Dirani, J. Michael, and S. R. Bowman
+
+GPQA: A graduate-level google-proof q&a benchmark
+.
+
+CoRR
+ 
+abs/2311.12022
+.
+
+External Links: 
+Link
+,
+
+Document
+,
+
+2311.12022
+
+Cited by: 
+§6.5
+.
+
+Shah 
+et al.
+ (2024)
+
+J. Shah, G. Bikshandi, Y. Zhang, V. Thakkar, P. Ramani, and T. Dao
+
+FlashAttention-3: fast and accurate attention with asynchrony and low-precision
+.
+
+In 
+Advances in Neural Information Processing Systems 37: Annual Conference
+on Neural Information Processing Systems 2024, NeurIPS 2024, Vancouver,
+BC, Canada, December 10 - 15, 2024
+,  
+A. Globersons, L. Mackey, D. Belgrave, A. Fan, U. Paquet, J. M. Tomczak, and C. Zhang (Eds.)
+,
+
+External Links: 
+Link
+
+Cited by: 
+§3.1
+,
+
+§7.3
+.
+
+Xia 
+et al.
+ (2025)
+
+H. Xia, X. Wu, J. Li, R. Wu, J. Wang, J. Wang, C. Li, A. Singhal, A. D. Shah, A. Ariyak, D. Zhuang, Z. Zhou, B. Athiwaratkun, Z. Zheng, and S. L. Song
+
+Kitty: accurate and efficient 2-bit KV cache quantization with dynamic channel-wise precision boost
+.
+
+CoRR
+ 
+abs/2511.18643
+.
+
+External Links: 
+Link
+,
+
+Document
+,
+
+2511.18643
+
+Cited by: 
+§1
+,
+
+§3.1
+,
+
+§7.1
+.
+
+Yao 
+et al.
+ (2022)
+
+Z. Yao, R. Y. Aminabadi, M. Zhang, X. Wu, C. Li, and Y. He
+
+ZeroQuant: efficient and affordable post-training quantization for large-scale transformers
+.
+
+In 
+Advances in Neural Information Processing Systems 35: Annual Conference
+on Neural Information Processing Systems 2022, NeurIPS 2022, New Orleans,
+LA, USA, November 28 - December 9, 2022
+,  
+S. Koyejo, S. Mohamed, A. Agarwal, D. Belgrave, K. Cho, and A. Oh (Eds.)
+,
+
+External Links: 
+Link
+
+Cited by: 
+§2.1
+.
+
+Ye 
+et al.
+ (2025)
+
+Z. Ye, L. Chen, R. Lai, W. Lin, Y. Zhang, S. Wang, T. Chen, B. Kasikci, V. Grover, A. Krishnamurthy, and L. Ceze
+
+FlashInfer: efficient and customizable attention engine for LLM inference serving
+.
+
+In 
+Proceedings of the Eighth Conference on Machine Learning and Systems,
+MLSys 2025, Santa Clara, CA, USA, May 12-15, 2025
+,  
+M. Zaharia, G. Joshi, and Y. (. Lin (Eds.)
+,
+
+External Links: 
+Link
+
+Cited by: 
+§3.1
+,
+
+§7.3
+.
+
+Zadouri 
+et al.
+ (2026)
+
+T. Zadouri, M. Hoehnerbach, J. Shah, T. Liu, V. Thakkar, and T. Dao
+
+FlashAttention-4: algorithm and kernel pipelining co-design for asymmetric hardware scaling
+.
+
+CoRR
+ 
+abs/2603.05451
+.
+
+External Links: 
+Link
+,
+
+Document
+,
+
+2603.05451
+
+Cited by: 
+§3.1
+,
+
+§7.3
+.
+
+Zhang 
+et al.
+ (2025a)
+
+J. Zhang, H. Huang, P. Zhang, J. Wei, J. Zhu, and J. Chen
+
+SageAttention2: efficient attention with thorough outlier smoothing and per-thread INT4 quantization
+.
+
+In 
+Forty-second International Conference on Machine Learning, ICML
+2025, Vancouver, BC, Canada, July 13-19, 2025
+,  
+A. Singh, M. Fazel, D. Hsu, S. Lacoste-Julien, F. Berkenkamp, T. Maharaj, K. Wagstaff, and J. Zhu (Eds.)
+,
+
+Proceedings of Machine Learning Research
+, Vol. 
+267
+.
+
+External Links: 
+Link
+
+Cited by: 
+§7.2
+.
+
+Zhang 
+et al.
+ (2025b)
+
+J. Zhang, J. Wei, H. Wang, P. Zhang, X. Xu, H. Huang, K. Jiang, J. Chen, and J. Zhu
+
+SageAttention3: microscaling FP4 attention for inference and an exploration of 8-bit training
+.
+
+In 
+Advances in Neural Information Processing Systems 38: Annual Conference
+on Neural Information Processing Systems 2025, NeurIPS 2025, San Diego,
+CA, USA, December 2-7, 2025 / Mexico City, Mexico, November 30 - December
+5, 2025
+,  
+D. Belgrave, C. Zhang, L. N. Montoya, H. Lin, R. Pascanu, P. Koniusz, M. Ghassemi, N. Chen, I. V. M. Ruíz, and A. Loaiza-Bonilla (Eds.)
+,
+
+External Links: 
+Link
+
+Cited by: 
+§7.2
+.
+
+Zhang 
+et al.
+ (2025c)
+
+J. Zhang, J. Wei, P. Zhang, J. Zhu, and J. Chen
+
+SageAttention: accurate 8-bit attention for plug-and-play inference acceleration
+.
+
+In 
+The Thirteenth International Conference on Learning Representations,
+ICLR 2025, Singapore, April 24-28, 2025
+,
+
+External Links: 
+Link
+
+Cited by: 
+§7.2
+.
+
+Zhao 
+et al.
+ (2024)
+
+Y. Zhao, C. Lin, K. Zhu, Z. Ye, L. Chen, S. Zheng, L. Ceze, A. Krishnamurthy, T. Chen, and B. Kasikci
+
+Atom: low-bit quantization for efficient and accurate LLM serving
+.
+
+In 
+Proceedings of the Seventh Annual Conference on Machine Learning and
+Systems, MLSys 2024, Santa Clara, CA, USA, May 13-16, 2024
+,  
+P. B. Gibbons, G. Pekhimenko, and C. D. Sa (Eds.)
+,
+
+External Links: 
+Link
+
+Cited by: 
+§7.1
+,
+
+§7.3
+.
+
+Zheng 
+et al.
+ (2024)
+
+L. Zheng, L. Yin, Z. Xie, C. Sun, J. Huang, C. H. Yu, S. Cao, C. Kozyrakis, I. Stoica, J. E. Gonzalez, C. W. Barrett, and Y. Sheng
+
+SGLang: efficient execution of structured language model programs
+.
+
+In 
+Advances in Neural Information Processing Systems 37: Annual Conference
+on Neural Information Processing Systems 2024, NeurIPS 2024, Vancouver,
+BC, Canada, December 10 - 15, 2024
+,  
+A. Globersons, L. Mackey, D. Belgrave, A. Fan, U. Paquet, J. M. Tomczak, and C. Zhang (Eds.)
+,
+
+External Links: 
+Link
+
+Cited by: 
+4th item
+,
+
+§5
+.
+
+Zhou 
+et al.
+ (2026)
+
+Z. Zhou, D. Zhuang, J. Li, Z. Chen, S. L. Song, B. Athiwaratkun, and X. Wu
+
+OSCAR: offline spectral covariance-aware rotation for 2-bit KV cache quantization
+.
+
+CoRR
+ 
+abs/2605.17757
+.
+
+External Links: 
+Link
+,
+
+Document
+,
+
+2605.17757
+
+Cited by: 
+§1
+,
+
+§1
+,
+
+§2.2
+,
+
+§3.1
+,
+
+§5
+,
+
+§7.2
+.
+
+Appendix A 
+KV Packing and Dataflow
+
+Fig.
+ 
+6
+ illustrates how FOSCAR packs INT2 K values and constructs Tensor Core operands on Hopper and Blackwell.
+The same approach extends to INT2 V and INT4 K and V because cache packing arranges quantized values to match each Tensor Core operand layout, and the decode kernel constructs floating-point operands with shifts and masks.
+Quantizing K or V along tokens or channels changes how scales and offsets are grouped and where affine folding applies them (
+Sec.
+ 
+4.1
+), whereas the integer packing below depends only on the stored bit width and matrix operand layout.
+
+A.1 
+Hopper: packing for register operands
+
+Hopper packs K and V according to the register fragments that each consumer thread supplies to 
+wgmma
+.
+For QK, the K operand has token-by-channel coordinates, as shown in 
+Fig.
+ 
+6a
+.
+For PV, the V operand has channel-by-token coordinates, so FOSCAR packs V values according to the transposed V tile.
+Both layouts let each consumer thread load contiguous packed words from shared memory and construct its register operands without gathering individual values.
+
+Each 32-bit packed word places the two quantized values for a pair of BF16 operands in fields sixteen bits apart.
+An INT2 word holds sixteen values, forming eight pairs; an INT4 word holds eight values, forming four pairs.
+A shift aligns both fields with their BF16 mantissas, and a masked merge combines them with a fixed BF16 bit pattern.
+The stored bit width sets the field spacing and the number of pairs per word.
+K and V differ only in the logical coordinates of those pairs and share the same pairwise register construction.
+Affine folding compensates for the resulting operand mapping through 
+Eq.
+ 
+5
+.
+
+The Hopper dataflow in 
+Fig.
+ 
+6b
+ therefore also applies to INT2 V and INT4 K and V.
+TMA copies the packed tiles from global to shared memory.
+Consumer threads construct BF16 operands in registers, and all four warps of a consumer warpgroup collectively issue 
+wgmma
+.
+The QK product consumes K fragments, and the PV product consumes the transposed V fragments.
+
+A.2 
+Blackwell: packing for shared-memory operands
+
+The Blackwell kernel uses the same packed-word layout for K and V at each stored bit width.
+Both tensors store channels of a token together, with the values interleaved within each word for direct operand construction.
+The preparation warpgroup writes the constructed operands to the shared-memory layouts required by QK and PV.
+
+INT2 K and V.
+
+Each 32-bit word holds sixteen integer values in eight four-bit groups.
+Group 
+ places 
+ in its low two bits and 
+ in its high two bits, for 
+.
+For a packed word 
+, the kernel constructs two operand words:
+
+Each output holds eight E2M1 operands, with the unused bits of each four-bit operand set to zero.
+The patterns for 
+ represent 
+, giving 
+.
+Affine folding compensates with 
+ and 
+.
+The two masks and one shift construct sixteen operands without numeric conversion, accounting for the INT2 cost in 
+Table
+ 
+1
+.
+This is the Blackwell construction shown for K in 
+Fig.
+ 
+6a
+; V uses the same bit operations.
+
+INT4 K and V.
+
+Each 32-bit word holds eight integer values in four bytes.
+Byte 
+ places 
+ in its low four bits and 
+ in its high four bits, for 
+.
+The corresponding construction is
+
+Each output holds four E4M3 operands, with each integer in the low four bits of its byte.
+For 
+, these patterns represent 
+.
+Affine folding compensates with 
+ and 
+.
+The two masks and one shift construct eight operands, accounting for the INT4 cost in 
+Table
+ 
+1
+.
+Marlin W4A8 uses the same INT4-to-E4M3 mapping for weights 
+Lin (2025)
+; FOSCAR applies it to unsigned KV values, whose construction needs no sign extraction.
+
+Seven of the sixteen INT4 bit patterns represent subnormal E4M3 values, for which the PTX specification leaves matrix-operand behavior undefined 
+NVIDIA Corporation (2026d)
+.
+We test these subnormal values on B200 across both matrix-operand positions and both shared-memory layouts used by the kernel, and all matrix-instruction outputs match FP64 reference results.
+
+For both stored bit widths, the Blackwell dataflow follows 
+Fig.
+ 
+6b
+.
+TMA copies packed K and V tiles to shared memory, the preparation warpgroup constructs the QK and PV operands in shared memory, and a separate issue thread launches 
+tcgen05
+.
+The operand format changes from E2M1 for INT2 to E4M3 for INT4, while the division of work across copying, operand preparation, and matrix-product issue remains the same.
+
+Appendix B 
+Quantization-Axis Combinations
+
+(a) 
+H100.
+
+(b) 
+B200.
+
+Figure 13: 
+Decode kernel speed across channel-wise K and V quantization combinations relative to token-wise K and V (
+, dashed line) at the same stored bit width and shape (
+, 
+, 
+, group size 
+).
+
+The main evaluation uses token-wise K and token-wise V with group size 
+, which applies acc-fold to QK and operand-fold to PV (
+Sec.
+ 
+4.1
+).
+To evaluate all four combinations of token-wise and channel-wise K and V, we benchmark FOSCAR INT2 and INT4 on H100 and B200 across 
+ and 
+ at 
+, 
+, 
+, and 
+, following the timing methodology of 
+Sec.
+ 
+6
+ and verifying every output against an FP32 reference.
+
+Fig.
+ 
+13
+ compares the decode speed of the three channel-wise K and V combinations against token-wise K and V (
+) at the same stored bit width and shape.
+On H100 (
+Fig.
+ 
+13a
+), the channel-wise combinations run at 
+–
+ the speed of token-wise K and V at INT2 and 
+–
+ at INT4, corresponding to 
+–
+ (INT2) and 
+–
+ (INT4) speedups over FlashInfer BF16 across all four axis combinations.
+On B200 (
+Fig.
+ 
+13b
+), the single-axis channel-wise combinations (
+K-ch / V-tok
+ and 
+K-tok / V-ch
+) run at 
+–
+ the speed of token-wise K and V at INT2 and 
+–
+ at INT4, while channel-wise K and V (
+K-ch / V-ch
+) runs at 
+–
+ at INT2 and 
+–
+ at INT4, corresponding to 
+–
+ (INT2) and 
+–
+ (INT4) speedups over FlashInfer BF16 across all four combinations.
+Channel-wise K and channel-wise V read more scales and offsets and perform per-group work along the token dimension: operand-fold on channel-wise K scales 
+ for each token group, while acc-fold on channel-wise V rescales group-local PV partial results across token groups.
+The relative gap is larger on B200 than on H100 for two architectural reasons: first, the Blackwell kernel tiles the sequence at 
+ tokens rather than 
+, so 
+ splits each sequence tile into two sub-tile groups and runs both the 
+-plane builder and the per-group PV accumulator drain inside the correction warpgroup; second, Blackwell’s 
+tcgen05
+ QK product consumes an FP8 E4M3 query operand rather than Hopper’s BF16 operand, so each channel-wise K group must compute a per-row maximum and power-of-two scale to requantize 
+ to E4M3.
+With KIVI-style channel-wise K and token-wise V 
+Liu et al. (2024)
+; 
+Hooper et al. (2024)
+, FOSCAR runs at 
+–
+ of token-wise speed on H100 (
+–
+ over FlashInfer BF16) and 
+–
+ on B200 (
+–
+ over FlashInfer BF16) at INT2, and 
+–
+ on H100 (
+–
+ over FlashInfer BF16) and 
+–
+ on B200 (
+–
+ over FlashInfer BF16) at INT4.
+
+Appendix C 
+Head-Ratio and Group-Size Trade-off
+
+(a) 
+Token-wise quantization.
+
+(b) 
+Channel-wise quantization.
+
+Figure 14: 
+Scalar scale and offset operations per stored K or V value for affine folding versus element-wise 
+ reconstruction (dashed).
+
+(a) 
+Batch 1.
+
+(b) 
+Batch 8.
+
+Figure 15: 
+FOSCAR INT2 speedup over FlashInfer BF16 across 
+ at 128K context (
+, 
+).
+
+When 
+ query heads share one KV head and each quantization group spans 
+ values, affine folding performs one scale multiplication and one offset multiply-add per group for each query head, or 
+ scalar affine operations per stored value.
+Reconstructing each cached value once with 
+ and reusing it across the 
+ query heads costs one multiply-add per stored value.
+
+Fig.
+ 
+14
+ compares the scalar affine operations per value as 
+ and 
+ vary.
+At 
+ and 
+, affine folding uses 
+ operations per value, a 
+ reduction.
+Break-even occurs at 
+; because standard grouped-query attention models use group sizes 
+, affine folding requires up to 
+ fewer scalar affine operations than per-element reconstruction.
+
+Fig.
+ 
+15
+ measures this trade-off empirically by varying 
+ from 1 to 32 (
+ from 32 down to 1) with 
+, 
+, and 
+ at 128K context for batches 1 and 8.
+At 
+ (
+), the smaller KV cache and higher 
+ ratio limit the gain over FlashInfer BF16 (
+ and 
+ on H100; 
+ and 
+ on B200).
+As 
+ grows, KV traffic increases while 
+ decreases, raising FOSCAR INT2’s speedup over FlashInfer BF16 to 
+ at batch 1 and 
+ at batch 8 on H100, and to 
+ and 
+ on B200 (
+Figs.
+ 
+15a
+ and 
+15b
+).
+

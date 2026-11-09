@@ -1,0 +1,2643 @@
+Cutpurse: Decomposing Explanation-Guided Model Extraction on Tabular Data
+https://arxiv.org/abs/2611.09375
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+Cutpurse
+: Decomposing Explanation-Guided Model Extraction on Tabular Data
+
+Seyma Selcan Magara
+*
+, Hanru Zhang
+*
+, Fatme El Zahraa Hamad, Nico Pfeifer, Mete Akgün
+*
+
+Affiliation: 
+University of Tübingen
+, Tübingen, Germany 
+
+*
+Medical Data Privacy and Privacy-Preserving Machine Learning Group
+
+{seyma-selcan.magara, hanru.zhang, nico.pfeifer, mete.akguen}@uni-tuebingen.de 
+
+fatme-el-zahraa.hamad@student.uni-tuebingen.de
+
+Abstract
+
+Explanation APIs are often treated as increasing model-extraction risk, but an end-to-end attack comparison cannot show whether an explanation reveals model-specific information or merely supplies a convenient next-query coordinate. We study this distinction for explanation-guided extraction of tabular classifiers. We separate an explanation into an 
+attribution
+ channel, which ranks influential features, and a 
+coordinate
+ channel, which supplies candidate feature values for perturbing those features. We then test whether the useful bin edges are privileged to the service or reproducible from the adversary’s own data.
+
+Across six datasets and five target families, using attribution rankings to choose which features to perturb provides no systematic extraction advantage. 
+Lime
+’s discretization bin edges can improve fidelity by up to 
+ percentage points on continuous features, but those edges are quantiles of the explainer’s background data rather than properties of the target model. In controlled comparisons, an attacker-side grid reproduces the useful bin-edge gains without querying an explanation API. We use these findings to derive 
+Cutpurse
+, which combines a self-computed grid with diverse query generation and boundary search. Against a service that withholds bin edges, 
+Cutpurse
+ improves fidelity by 
+ percentage points on continuous-feature targets. It also exceeds the undefended published attack by 
+ percentage points. Thus, withholding default 
+Lime
+ bin edges alone does not prevent effective extraction under the in-domain auxiliary-input, probability-output, and same-family surrogate assumptions studied here. Our results concern default 
+Lime
+ and 
+Shap
+ configurations for tabular classifiers. They do not establish the same conclusion for other explainers, target classes, or data-free attackers.
+
+Index Terms: 
+model extraction, model stealing, explainable AI, SHAP, LIME, machine-learning-as-a-service, privacy
+
+I 
+Introduction
+
+Machine learning services increasingly return a post-hoc explanation alongside each prediction. This practice improves transparency, but it also raises a security question: does an explanation endpoint give a model-extraction adversary a capability that prediction access alone cannot provide? Model extraction builds a surrogate that agrees with a black-box target on unseen inputs 
+[
+1
+, 
+2
+]
+. High-fidelity extraction compromises model confidentiality and can support offline transfer-based attacks 
+[
+1
+, 
+3
+, 
+4
+]
+. It can also amortize the target-query cost of downstream membership inference 
+[
+5
+]
+.
+
+We take Autolycus 
+[
+6
+]
+, an explanation-guided extraction attack against interpretable tabular classifiers, as our starting point. It couples the feature information returned by 
+Lime
+ or 
+Shap
+ with a traversal that generates new queries. Its evaluation shows that this complete attack can extract models effectively under a limited query budget. It does not, however, isolate how much the explanation outputs (feature rankings and LIME bin edges) and the traversal each contribute to that performance. 
+Lime
+ provides both a feature ranking and bin edges, while 
+Shap
+ provides feature attributions without bin edges. Even if an explanation output helps, it remains unclear whether it reveals information specific to the service or information the attacker can approximate from its own data. These distinctions determine whether the explanation API provides a model-specific capability or merely a convenient query-placement aid.
+
+We decompose the information Autolycus consumes into two channels. The attribution channel ranks influential features. The bin-edge channel supplies candidate feature values for perturbing those features. This decomposition lets us test each channel while holding the rest of the attack fixed. It also gives a controlled test for a service-specific disclosure. We compare the service’s bin edges with equivalent edges that the adversary estimates from its own auxiliary data.
+
+The resulting diagnosis also motivates 
+Cutpurse
+. Autolycus explores outward from a small seed set, so it can miss regions that no seed reaches. It also does not actively search between opposite-class samples for a decision crossing. We address these limitations with diverse query generation and boundary search. For bin-edge placement, 
+Cutpurse
+ fits 
+Lime
+’s default discretization grid to its own auxiliary inputs. It combines this auxiliary grid with the two traversal components and never calls an explanation API. Section 
+V
+ derives these three design choices.
+
+Contributions
+
+•
+
+A channel decomposition of explanation-guided extraction.
+ We separately evaluate feature selection by attribution ranking and 
+Lime
+ bin edges in the base Autolycus traversal. Across six datasets and five target families, ranking-based selection provides no systematic advantage, whereas bin edges can improve fidelity by up to 
+ percentage points on continuous-feature targets (§
+VI-B
+–
+VI-C
+).
+
+•
+
+A controlled test of service-specific bin-edge information
+ For LIME’s default quartile discretizer, bin edges are quantiles of the explainer’s background data, not properties of the target model. Under the auxiliary-input conditions studied, attacker-fitted grids reproduce similar bin-edge gains. Grids fitted on small initial seed pools retain most of these gains. A sensitivity check with LIME’s label-dependent entropy discretizer gives the same qualitative result.
+
+•
+
+A constructive explanation-free attack.
+ 
+Cutpurse
+ combines an attacker-computed grid with established diversity and boundary-search techniques and makes no explanation calls. On continuous-feature targets, it improves fidelity by 
+ percentage points over the defended Autolycus configuration and by 
+ percentage points over Autolycus with bin edges available (§
+VI-E
+). It demonstrates that an adaptive attacker can recover useful query-placement capability independently of the explanation API under the studied assumptions.
+
+Scope
+
+We study one family of explanation-guided attacks on interpretable tabular classifiers. Our results do not imply that explanations are harmless in general. These conclusions may not extend to other explanation methods or configurations, high-dimensional or neural targets, or data-free attacks.
+
+II 
+Background and Related Work
+
+II-A
+ 
+Model Extraction and Post-hoc Explanations
+
+Model extraction attacks reconstruct a functional copy 
+ of a black-box target 
+ from query access alone, with success measured by prediction agreement between 
+ and 
+ on held-out data (formalised in §
+III
+). When the target is deployed as an explainable service, each query returns not only a label but a post-hoc explanation, which may reveal additional structure about 
+. Two dominant explanation families expose fundamentally different information:
+
+•
+
+Shapley-based feature attribution (SHAP)
+ SHAP 
+[
+7
+]
+ assigns each feature a signed magnitude 
+, its Shapley marginal contribution to the prediction at 
+. This is a statement of how much each feature matters locally. It carries no explicit information about where along a
+feature axis the decision changes.
+
+•
+
+Local surrogate explanation (LIME)
+ LIME fits an interpretable model to a discretized neighbourhood of 
+. Continuous features are binned, and the returned coefficients are attached to 
+ pairs. LIME therefore reveals both an influential feature and the bin edge of the local discretization bin.
+
+This distinction between feature rankings alone and feature rankings accompanied by
+local bin edges is central to our analysis. We test whether the base Autolycus traversal benefits from using an attribution ranking for feature selection and whether it benefits from LIME bin edges (§
+III
+, §
+IV
+).
+
+II-B
+ 
+Related Work
+
+Model Extraction Attacks
+
+Model extraction attacks aim to reconstruct a functional copy of a black-box target model through strategic querying 
+[
+1
+]
+.
+Early work by Lowd and Meek framed adversarial classifier reverse engineering from query access 
+[
+8
+]
+.
+Tramèr et al. 
+[
+1
+]
+ demonstrated that
+simple equation-solving over prediction outputs suffices for linear models.
+Subsequent methods scaled to neural networks: Knockoff Nets 
+[
+9
+]
+
+trains a surrogate on outputs obtained by querying with a knock-off dataset,
+while Jagielski et al. 
+[
+2
+]
+ show that high-fidelity extraction
+of deep networks is possible given sufficient queries.
+Other work has examined extraction from complementary perspectives, framing it as knowledge distillation 
+[
+3
+, 
+10
+]
+ or active learning 
+[
+11
+]
+, where queries are selected to efficiently transfer or recover the target model’s decision boundary.
+This line of work has also motivated the defence methods, for example, Juuti et al. 
+[
+12
+]
+ propose PRADA, which detects anomalous query distributions
+associated with DNN model-stealing attempts.
+More recently, Marich 
+[
+13
+]
+ formalises the problem as distributional equivalence
+and proposes an active sampling strategy that maximises information gain per query.
+In contrast, our method requires only a small per-class seed set rather than a large
+public transfer set, and synthesises informative queries from that seed.
+
+Explanation-Guided Extraction
+
+The observation that post-hoc explanations leak structural information about the
+target model motivates a distinct attack family.
+Milli et al. 
+[
+14
+]
+ first demonstrated that gradient-based explanations
+suffice to reconstruct linear models exactly.
+Miura et al. 
+[
+15
+]
+ (MEGEX) carry gradient explanations into the data-free setting: treating the returned gradient as a derivative signal, the adversary trains a generative
+model that synthesises its own queries, so no real input data is needed. Both exploit a property our
+
+Shap
+ and 
+Lime
+ setting lacks, namely that a gradient specifies a direction in
+input space rather than only a per-feature magnitude.
+Autolycus 
+[
+6
+]
+ extended this to classical ML classifiers
+(decision trees, logistic regression, naive Bayes, and 
+-NN) by using LIME and SHAP
+explanations as traversal guides: the attacker perturbs seed samples along the
+directions of highest feature attribution, progressively labelling a synthetic dataset
+to train a surrogate. Yan et al. 
+[
+16
+]
+ (XaMEA) similarly
+exploit the spatial information contained in explanations in a model-agnostic manner.
+Our question is narrower than whether explanations help extraction in general. For the default LIME and SHAP configurations used by Autolycus, we separately test the attribution ranking and LIME bin edges. We also test whether the bin edges supplied by the service outperform a grid fitted by the adversary.
+
+Counterfactual-Based Extraction
+
+A growing body of work exploits counterfactual explanations (CFs) rather than
+attribution scores.
+Aïvodji et al. 
+[
+17
+]
+ first showed that CFs leak enough
+boundary information to build high-fidelity surrogates, and DualCF 
+[
+18
+]
+
+improved query efficiency by training on CF/counter-CF pairs that
+straddle the decision boundary.
+Khouna et al. 
+[
+19
+]
+ propose the Tree Reconstruction Attack (TRA),
+which uses a restricted CF oracle to perform axis-aligned binary search,
+achieving exact functional reconstruction of decision trees and random forests.
+Although theoretically elegant, TRA requires an oracle that returns the
+nearest counterfactual confined to a specific hyper-rectangle, an assumption rarely satisfied by deployed XAI APIs.
+Concurrently, Otto et al. 
+[
+20
+]
+ derive query complexity bounds for extracting
+linear classifiers under factual and counterfactual query regimes.
+Our setting does not assume a counterfactual oracle. 
+Cutpurse
+ first constructs cross-class pairs from its query pool, then uses prediction queries to bisect between them. LIME bin edges are used only as candidate values when constructing those queries. They are not treated as counterfactuals or as boundary locations.
+
+Privacy Implications of Explanations
+
+Recent work highlights the security cost of XAI transparency.
+Shokri et al. 
+[
+21
+]
+ show that feature-based explanations can increase
+membership-inference risk by revealing information about training examples.
+Ezzeddine et al. 
+[
+22
+]
+ show that exposing counterfactual explanations through query-based
+APIs makes shadow-based membership inference attacks (MIAs) more effective in MLaaS settings, and
+characterise a three-way trade-off between privacy leakage, predictive performance and explanation
+quality.
+Quan et al. 
+[
+23
+]
+ make the complementary point that post-hoc feature-importance explanations can act as a side channel, lowering the query cost of evasion, membership inference, and extraction. Such risks motivate privacy-preserving explanation mechanisms, surveyed by Nguyen et al. 
+[
+24
+]
+.
+We focus on model confidentiality, measuring surrogate fidelity rather than a downstream inference attack. Our controlled grid comparison asks whether withholding LIME bin edges provides protection beyond what an adversary can reproduce from auxiliary inputs.
+
+III 
+Problem Formulation
+
+Setting
+
+Let 
+ be a black-box target classifier, with 
+ and 
+I. The attacker does not receive the target parameters or training data. Following Autolycus, our evaluation trains the surrogate in the target’s model family, adopting its assumption that the model type can be identified during retraining 
+[
+25
+, 
+6
+]
+. Each prediction query 
+ returns a label 
+ and a class-probability vector 
+, and counts against a total budget 
+.
+
+Our controlled Autolycus experiments additionally expose a post-hoc explanation 
+ from 
+. 
+Cutpurse
+ is evaluated with the
+same prediction access but makes no explanation calls. In both cases, the attack starts from the class-balanced seed protocol used by Autolycus: 
+ auxiliary inputs per class (
+ for
+
+Lime
+ and 
+ for 
+Shap
+). The target labels, the seed queries and those labels are used to train the surrogate.
+
+Security property
+
+The property under attack is model confidentiality. The attacker seeks a surrogate that agrees with 
+ on held-out inputs. A higher-fidelity surrogate can support downstream inference attacks 
+[
+5
+, 
+24
+]
+, but evaluating those attacks is beyond the scope of this work.
+
+Explanation oracle
+
+Starting from seed queries, baseline work expands its query pool by perturbing samples it
+has already queried. Autolycus uses the explanation’s feature ranking to choose which input features to perturb. When using LIME, the returned bin edges also provide candidate values for those perturbations. The two explainers therefore expose structurally different information about 
+ near 
+:
+
+•
+
+Shap
+: 
+, a vector of
+signed Shapley attributions in which 
+ measures the local influence magnitude of feature 
+ 
+[
+7
+]
+. It reports how much each feature matters, but does not provide a candidate feature value for the next query.
+
+•
+
+Lime
+: 
+ over a selected feature subset 
+, where feature 
+ has local weight 
+ and lies in the discretization bin 
+. Beyond the feature weight, 
+Lime
+ therefore supplies bin edges that can be used as candidate feature values for placing the next query.
+
+Objective
+
+The attacker trains a surrogate 
+ that is functionally equivalent to 
+, measured by prediction agreement:
+
+(1)
+
+Here 
+ is the (unknown) data distribution over 
+, estimated in practice by a held-out test set disjoint from the attacker’s seed set 
+ and its queries.
+The attack succeeds if 
+ is high while the number of API calls stays within 
+.
+
+What does an explanation leak?
+
+For each queried sample, the base Autolycus traversal uses the explanation in two ways when it constructs its next perturbations:
+
+1.
+
+Attribution ranking:
+ a ranking of locally influential features by 
+ or 
+, available from both 
+Shap
+ and 
+Lime
+.
+
+2.
+
+LIME bin edges:
+ the edges 
+ of the local discretization bin. These give candidate values for changing a continuous feature. SHAP magnitudes do not.
+
+We test these inputs and the source of the bin edges with three questions:
+
+RQ1.
+
+Does the attribution ranking improve the base traversal over random feature selection?
+
+RQ2.
+
+Do LIME bin edges improve that traversal over fixed steps from the current value?
+
+RQ3.
+
+Can an attacker fit an auxiliary grid that substitutes for the target’s LIME grid?
+
+RQ1 and RQ2 isolate what the base traversal receives from an explanation. RQ3 holds that traversal fixed and varies only the grid source, so it tests whether the service discloses information the
+attacker cannot reproduce.
+
+Auxiliary Data Assumptions
+
+Autolycus allows the attacker’s auxiliary dataset to range from a small set of initial examples to a comprehensive dataset 
+[
+6
+]
+. In its evaluation, each benchmark dataset is split into target-training (
+), evaluation (
+), and auxiliary (
+) partitions. It then draws 
+ inputs per class from the auxiliary partition to initialize the traversal. We follow this seed protocol: the target is trained only on the target-training partition, and the attacker queries the 
+ initial seeds per class.
+
+Beyond initialization, Autolycus uses auxiliary feature scales to set the perturbation steps in its SHAP traversal. RQ3 asks a different question: can the attacker fit its own LIME grid instead of receiving bin edges from the service? We first fit the attacker grid on the full 
+ auxiliary partition to make the main comparison baseline-compatible. This condition fits the attacker-side grid on the full auxiliary partition, although the traversal queries only its initial seeds and generated inputs.
+
+Because access to a full auxiliary partition is a generous attacker condition,
+we use it first to provide a baseline-compatible comparison with Autolycus.
+RQ3 then evaluates stricter conditions. The grid-data sensitivity analysis fits the grid using only the same 
+ initial seeds per class usd to start the attack. The class-support sensitivity restricts both the seeds and grid-fitting inputs to a subset of classes, while retaining all classes in the target and evaluation data.
+For entropy discretization, the attacker uses the target predictions returned for the initial seed queries as discretizer labels.
+
+IV 
+Three Weaknesses of Explanation-Guided Traversal
+
+Autolycus expands a small per-class auxiliary seed set by repeatedly explaining the current sample, perturbing its top-ranked features, and querying the results. We identify three limitations of this design. The first two concern the traversal and motivate the two components 
+Cutpurse
+ adds (§
+V
+). The third concerns the information supplied by the explanation and motivates channel analysis that follows. §
+VI
+ evaluates all three.
+
+W1: coverage is a property of the seed set, not the budget
+
+Covering distinct decision regions is a standard query-placement goal in model extraction 
+[
+1
+, 
+26
+]
+. Every new Autolycus query is a perturbation of an earlier seed or query. Under a limited budget, repeated local perturbations may concentrate queries around the initial seeds and leave distant regions unexplored. Phase 1 introduces non-local proposals to broaden input-space coverage.
+
+W2: the traversal never searches for a boundary
+
+Boundary-adjacent queries can constrain a surrogate more than queries from a class interior 
+[
+1
+, 
+26
+]
+. Autolycus steps 
+ from the current sample along selected features, so it crosses a boundary only incidentally. It does not take two oppositely predicted samples and search the segment between them. Phase 2 adds that search.
+
+W3: the combined attack obscures where its gain comes from.
+
+Autolycus evaluates query traversal, explanation-guided feature selection, and LIME bin-edge placement as one combined attack rather than as separate components. Any observed improvement may therefore be attributed too broadly to explanations, without showing whether it comes from the attribution ranking, the bin edges, or the traversal itself. Moreover, even if an explanation component helps, the combined result does not show whether it provides information specific to the service or information that an attacker can reconstruct from its own data. RQ1–RQ3 separate these possibilities
+
+Withholding bin edges as a mitigation
+
+A service could return attribution weights while withholding LIME bin edges. This prevents the base Autolycus traversal from using the feature values returned by LIME, but it is protective only if the attacker cannot construct a useful substitute grid. Whether an attacker can construct a useful substitute grid depends on how the discretizer generates its grid. LIME’s default 
+QuartileDiscretizer
+ places cuts at the 
+th, 
+th, and 
+th percentiles of the background data, so auxiliary feature values can be used to estimate a similar grid. LIME’s entropy discretizer instead fits label-dependent trees. In our setting, the attacker uses the predictions returned for its initial seed queries as those labels. RQ3 tests both conditions: the default quartile grid and an entropy-grid sensitivity check using target predictions on the initial inputs. 
+Cutpurse
+ uses an auxiliary grid together with the coverage and boundary-search components motivated by W1 and W2.
+
+V 
+Cutpurse
+
+Cutpurse
+ addresses the three limitations in §
+IV
+ with three phases. Before the attack, the attacker fits LIME’s default 
+QuartileDiscretizer
+ to its auxiliary data, obtaining the attacker-side grid 
+. At run time, 
+Cutpurse
+ queries only the target’s prediction API. It does not call the explanation API. Phase 1 creates coverage beyond the seed neighbourhoods (W1). Phase 2 searches between oppositely predicted samples (W2). Phase 3 expands the resulting pool by perturbing randomly selected features from bin edges in the auxiliary grid (W3).
+
+Diverse query generation and bisection are established extraction techniques 
+[
+1
+, 
+3
+, 
+26
+]
+. Our contribution is to combine them with an auxiliary grid after testing whether that grid can replace the bin edges used by the base traversal.
+
+Fig. 1: 
+The attacker fits a grid on auxiliary data, then uses diverse generation, boundary search, and self-grid traversal to construct a surrogate dataset. It queries the prediction API but does not query the explanation API, the greyed-out explanation endpoint is shown for context only
+
+Figure 
+1
+ sketches the pipeline. Like the base traversal, 
+Cutpurse
+ expands each queried sample by selecting 
+ features and creating separate children that change one selected feature at a time. It selects the features at random rather than from an explanation ranking, and obtains their local bin edges from the attacker-side grid rather than from a LIME response. The per-feature offset 
+ is set before the attack from the feature scale, independently of the explanation and target-model outputs. Algorithm 
+1
+ summarises the three phases.
+
+Algorithm 1
+ 
+ 
+Cutpurse
+: explanation-free model extraction. Parameter values are given in
+§
+V-A
+–
+V-C
+.
+
+1:
+
+            
+            
+          target prediction API 
+, auxiliary data 
+, seeds 
+, step sizes 
+, budget 
+
+2:
+
+            
+            
+          surrogate 
+
+3:
+
+ 
+ attacker-side grid
+
+4:
+
+ traversal queue, labelled set
+
+5:
+
+// Phase 1: diverse query generation
+
+6:
+
+ retained diverse samples
+
+7:
+
+// Phase 2: boundary search
+
+8:
+
+ 
+ boundary-search samples
+
+9:
+
+for
+ 
+ cross-class pairs 
+ drawn from 
+ 
+do
+
+10:
+
+            
+            
+            
+
+11:
+
+            
+            
+            
+
+12:
+
+            
+            
+            
+ 
+ 
+ steps, midpoints 
+
+13:
+
+            
+            
+            
+; 
+
+14:
+
+end
+ 
+for
+
+15:
+
+16:
+
+// Phase 3: self-grid traversal
+
+17:
+
+while
+ 
+ 
+and
+ budget and per-class quotas remain 
+do
+
+18:
+
+            
+            
+            
+; 
+
+19:
+
+            
+            
+            
+
+20:
+
+            
+            
+            
+for all
+ 
+ 
+do
+
+21:
+
+            
+            
+             
+, or 
+ if undefined
+
+22:
+
+            
+            
+             add 
+ with coordinate 
+ set to 
+, if valid and new
+
+23:
+
+            
+            
+            
+end
+ 
+for
+
+24:
+
+end
+ 
+while
+
+25:
+
+return
+ 
+
+V-A
+ 
+Phase 1: Diverse Query Generation
+
+Autolycus expands a small per-class seed set by local perturbation, so regions far from every seed may never be visited.
+Phase 1 is a coverage heuristic that proposes inputs by either combining feature values from two current samples (crossover) or modifying feature values of one sample (mutation). To limit distance from the original seed data, it discards proposals whose nearest original seed is farther than the 
+th percentile of seed-to-seed nearest-neighbour distances. Among the remaining proposals, it selects the one farthest from the current pool and repeats this procedure. Thus, the selected inputs are different from those already available while remaining close to the seed data. The target is queried for each selected input, and it is added to the traversal pool only when the target’s maximum predicted probability exceeds 
+. Phase 1 uses no explanation information.
+
+V-B
+ 
+Phase 2: Boundary Search
+
+Phase 2 searches for samples near a change in the target prediction. We enumerate pairs of initial seed samples with different target-predicted labels, shuffle them, and draw 
+ pairs. For each pair 
+, 
+Cutpurse
+ selects 
+ features at random and constructs an initial child using 
+ as an anchor. For a selected continuous feature, it sets the value to the edge in 
+ that lies in the direction of 
+. For every other continuous feature, it samples a value uniformly between the values in 
+ and 
+. Categorical features are copied at random from either parent. It then performs a fixed-depth search between the child and 
+. At each step, it queries an intermediate point and uses the returned label to choose the segment explored next. Repeating this eight times produces eight midpoint queries intended to concentrate samples near a change in the target prediction. We fix the depth at eight in all experiments to balance this refinement against its query cost. The resulting midpoint queries are added to 
+. We use up to 
+ pairs and reduce this number at small budgets to reserve queries for Phase 3.
+
+V-C
+ 
+Phase 3: Self-Grid Traversal
+
+Phase 3 turns each queried sample into candidates for further queries. For each
+sample 
+, 
+Cutpurse
+ selects a fixed number 
+ of features at random. Each
+selected continuous feature 
+ produces two candidate children. They retain
+all other feature values from 
+ and set feature 
+ just below or above its
+local edge in 
+, offset by 
+.
+
+Before a candidate enters the queue, 
+Cutpurse
+ enforces the feature domains: it
+discards out-of-range categorical values and clips continuous values to their
+observed bounds. It also discards candidates that duplicate an already queried
+or queued sample. The remaining children enter the queue until the budget is
+exhausted or the per-class quotas are met. This phase uses neither explanation
+weights nor explanation calls.
+
+VI 
+Experiments
+
+VI-A
+ 
+Setup
+
+We evaluate on six public tabular datasets (Table 
+I
+) covering continuous, categorical, and mixed feature schemas, against five target families: logistic regression (LR), naive Bayes (NB), 
+-NN, decision tree (DT) and random forest (RF). We use the dataset versions and preprocessing reported for Autolycus, the explanation-guided extraction attack that we analyse throughout. In particular, for crop, five complete classes are removed from the label-sorted 
+-row source data, leaving 
+ rows and 
+ balanced classes. All five appear in every experiment: the channel ablations of §
+VI-B
+ and §
+VI-C
+, the self-computability test of §
+VI-D
+, in the adversary comparison of §
+VI-E
+ and in the budget sweep. We scope to tabular data throughout, following the attack we analyse 
+[
+6
+]
+. Following the Autolycus convention, the LIME attacker uses 
+ seed per class and explores 
+ top features, and the SHAP attacker uses 
+ and 
+. Query budgets are per dataset (Table 
+I
+). We inherit the baseline’s query accounting unchanged: the explanation is bundled with the prediction and not charged separately, a candidate already queried or queued is not resubmitted, and fidelity is reported against a fixed maximum query budget. Phases 1 and 2 both consume budget. Every diverse candidate is queried, including those the confidence filter then discards, and every bisection midpoint is queried and retained as training data. A budget-scaling rule caps that combined overhead so it cannot starve Phase 3 at small 
+. All compared configurations receive the same maximum budget.
+
+Unless a setting is varied in a named ablation or sweep, we fix it across datasets, target families, and target instantiations. For 
+Cutpurse
+, Phase 1 uses 
+ and the 
+th percentile nearest-seed-distance filter. It generates at most 
+ diverse candidates. Phase 2 uses at most 
+ cross-class pairs and eight bisection steps per pair. We selected the diverse-generation cap of 
+ once in a global sensitivity sweep and then held it fixed rather than tuning it per target or split.
+
+Compared configurations always run on paired seed sets (identical draws, identical RNG state), and surrogate fidelity (Eq. 
+1
+) is aggregated by the mean over refits. Aggregate contrasts include 
+ percentile-bootstrap intervals over dataset–model cell means. For per-cell directional effects, we use paired Wilcoxon signed-rank tests and control the false-discovery rate at 
+ with Benjamini–Hochberg adjustment within each comparison family. Complete intervals and adjusted 
+-values are included in the artifact.
+
+Protocol
+
+We deviate from the original attack’s reporting in two ways, both toward more conservative estimates. First, the original trains 
+ surrogate refits for each attack configuration and reports the single one most similar to the target, a quantity measured on the evaluation set, so the selection is made using the reported metric. We instead report the mean over the 
+ refits, which avoids selection on the evaluation metric. (
+ denotes surrogate refits and is unrelated to the top-
+ feature budget 
+, and we use 
+ for DT, 
+ for RF, and 
+ otherwise.)
+Secondly, the original varies only the attacker’s seed sets against a single fitted target, so its reported spread reflects seed noise rather than variation across targets. For the ablations (§
+VI-B
+, §
+VI-C
+) we therefore draw 
+ independent train/test splits and retrain the target on each, pairing all configurations within a split, so each observation is an independent target instantiation. We retain the original single-split protocol only for the decomposition of Appendix 
+A
+ and the sweeps of Appendix 
+B
+ and Appendix 
+F
+, so that those numbers stay comparable to the published baseline. Every comparison in the main text uses the multi-split protocol.
+
+TABLE I: 
+Datasets. cont. counts continuous features and 
+ is the query budget. Train, evaluation
+and auxiliary partitions follow the 
+ split of the attack we analyse.
+
+feat.
+
+cont.
+
+cls.
+
+crop
+
+7
+
+7
+
+17
+
+adult
+
+11
+
+3
+
+2
+
+breast
+
+30
+
+30
+
+2
+
+nursery
+
+8
+
+0
+
+3
+
+mushroom
+
+21
+
+0
+
+2
+
+pendigits
+
+16
+
+16
+
+10
+
+VI-B
+ 
+RQ1: Does the attribution ranking help?
+
+We replace explanation-ranked feature selection with a random-
+ choice while holding the rest of the base traversal fixed. If an attribution ranking provides a reliable advantage, random selection should reduce fidelity.
+
+For 
+Shap
+, ranked selection has no overall advantage: the mean difference over the 
+ cells is 
+pp (95% interval 
+. Table 
+II
+). The two largest positive effects occur for TreeSHAP on the decision-tree and random-forest targets trained on mushroom (DT 
+pp and RF 
+pp). However, SHAP-guided selection reduces fidelity for mushroom logistic regression, which uses KernelSHAP (
+pp), and for several nursery targets. For 
+Lime
+, where both configurations retain the bin edge, the mean difference is 
+pp (95% interval 
+. Table 
+III
+) and the median is 
+pp. Individual LIME effects occur in both directions, ranging from 
+pp to 
+pp. These experiments do not establish a general rule for predicting which targets benefit from ranking.
+
+Thus, attribution-ranked top-
+ feature selection has no overall mean advantage in this base traversal, although it improves fidelity for some targets. This experiment does not test other uses of attribution values, such as choosing perturbation sizes or allocating queries. RQ2 tests the separate contribution of LIME bin edges.
+
+TABLE II: 
+RQ1: SHAP-ranked versus random feature selection. Mean paired fidelity difference (pp). Positive values mean SHAP-ranked selection achieves higher fidelity.
+
+crop
+
+pendigits
+
+breast
+
+adult
+
+nursery
+
+mushroom
+
+LR
+
+NB
+
+KNN
+
+DT
+
+RF
+
+TABLE III: 
+RQ1: LIME-ranked versus random feature selection. Mean paired fidelity difference (pp).
+Bin edges are available to both configurations. Positive values mean LIME-ranked selection achieves higher fidelity.
+
+crop
+
+pendigits
+
+breast
+
+adult
+
+nursery
+
+mushroom
+
+LR
+
+NB
+
+KNN
+
+DT
+
+RF
+
+VI-C
+ 
+RQ2: Do LIME bin edges help?
+
+Like RQ1, this experiment uses the base traversal, without 
+Cutpurse
+’s diverse generation or boundary search. Following the baseline, both configurations perturb the same top-
+ features selected by LIME with a fixed unit step. The bin-edge configuration produces 
+ and 
+, where 
+ and 
+ are LIME’s returned bin edges. The control produces 
+ and 
+ from the current feature value 
+. Thus, the configurations differ only in the coordinate from which the baseline’s unit step begins.
+
+TABLE IV: 
+RQ2: Effect of LIME bin edges. Mean paired fidelity difference (pp). Positive values mean bin-edge traversal achieves higher fidelity.
+
+crop
+
+pendigits
+
+breast
+
+adult
+
+nursery
+
+mushroom
+
+LR
+
+NB
+
+KNN
+
+DT
+
+RF
+
+Across all 
+ cells, bin-edge stepping improves fidelity by 
+pp on average (95% interval 
+), and 
+ cells retain a positive directional effect after Benjamini–Hochberg adjustment. The largest gains occur on crop and pendigits (Table 
+IV
+). On crop, bin-edge stepping improves fidelity by 
+ to 
+pp across the five targets. On pendigits, it improves LR, NB, and DT by 
+ to 
+pp. Unlike RQ1, these large effects have a consistent positive direction.
+
+The interpretation of a bin edge depends on the feature type. For a continuous feature, an edge is a numeric value at which to place a nearby query. A categorical feature has no corresponding ordered boundary. If integer-encoded categories are discretized, an apparent edge reflects the arbitrary encoding rather than a meaningful change in the feature. A separate issue arises for near-ceiling targets: when base fidelity is already high, better query placement has little room to increase measured agreement. Thus, the useful bin edges in this study occur on continuous tabular features. They are candidate query values, not decision-boundary estimates.
+
+VI-D
+ 
+RQ3: Can auxiliary data reproduce the LIME grid?
+
+RQ2 experiments show that LIME bin edges can help the base traversal. RQ3 asks whether an attacker can construct an equivalent grid from auxiliary data rather than obtain those edges from LIME. LIME’s default 
+QuartileDiscretizer
+ places bin edges at the 
+th, 
+th, and 
+th percentiles of its background data. Those percentiles depend on the data used to fit the discretizer, not on the target model or its labels.
+
+RQ3 focuses on the 
+ dataset-model pairs in which RQ2 found a positive bin-edge effect that passed the paired robustness check. The question here is whether an attacker can reproduce a useful grid, not whether bin edges help every target.
+
+Each paired trial has three otherwise identical base-traversal configurations. The traversal, seed inputs, query budget, and random state are fixed, so only the grid source varies. 
+nothresh
+ uses no bin edge. 
+tgt
+ uses a LIME grid fitted on the target’s training features 
+, representing the grid from which the service returns bin edges. 
+aux
+ uses a grid fitted on the attacker’s auxiliary data 
+. We report each grid’s fidelity gain over 
+nothresh
+. The target advantage, 
+, directly compares the two grid sources: a value near zero means that the auxiliary grid is an effective substitute.
+
+TABLE V: 
+RQ3: Target and auxiliary LIME grids. Fidelity gain over no-bin-edge traversal (pp).
+Target advantage 
+, so negative values favour the auxiliary grid.
+
+dataset
+
+model
+
+tgt
+
+aux
+
+target adv.
+
+crop
+
+LR
+
+crop
+
+DT
+
+crop
+
+NB
+
+crop
+
+RF
+
+pendigits
+
+LR
+
+crop
+
+KNN
+
+mushroom
+
+KNN
+
+breast
+
+NB
+
+pendigits
+
+DT
+
+pendigits
+
+NB
+
+nursery
+
+NB
+
+nursery
+
+KNN
+
+Across the twelve cells in Table 
+V
+, the auxiliary grid reproduces the gain. The mean target-grid advantage is 
+pp (95% interval 
+) and ranges from 
+ to 
+pp, while the bin-edge effect itself reaches 
+pp. On crop/KNN, the auxiliary grid is 
+pp higher than the target grid. The target grid does not show a consistent advantage in this controlled comparison.
+
+Grid-data sensitivity
+
+The comparison above fits the auxiliary grid on the full baseline-compatible partition. We then fit it using only the 
+ inputs per class that initialize the attack, leaving the controlled traversal unchanged. Table 
+VI
+ shows selected cases from the full sweep in Appendix 
+D
+. On crop, one input per class already matches the target-grid gain for LR and DT. Pendigits is more demanding: for LR, the auxiliary gain rises from 
+pp with one input per class to 
+pp with two, against 
+pp for the target grid. Thus, the full 
+ partition is not required to fit a useful grid in these tests. The analysis retains the initial small seed pool and does not make the entire attack data-free directly.
+
+TABLE VI: 
+RQ3: Quartile grids fitted on a small initial pool. Fidelity gain over no-bin-edge traversal (pp). Target uses target training features. 
+ is the number of initial inputs per class used to fit the auxiliary grid. Full results are in Appendix 
+D
+.
+
+dataset
+
+model
+
+target
+
+crop
+
+LR
+
+crop
+
+DT
+
+pendigits
+
+LR
+
+pendigits
+
+DT
+
+VI-D
+1 
+Class-support restriction.
+
+The preceding analyses draw seeds and grid-fitting data
+from the same auxiliary partition. We next restrict the attacker to a subset of the auxiliary
+classes, while the target and evaluation set retain every class. We test all five crop targets and
+the three pendigits targets with a positive RQ2 effect. A moderate restriction retains 
+ of 
+
+crop classes and 
+ of 
+ digit classes. A severe restriction retains 
+ and 
+, respectively.
+For each restriction, the target-grid and attacker-grid configurations use the same restricted seeds,
+budget, traversal, and random state. Their difference therefore measures the value of the service
+grid conditional on the attacker’s available classes.
+
+TABLE VII: 
+RQ3: Class-support sensitivity. Target-grid advantage (pp) with matched restricted seeds.
+
+restriction
+
+target advantage
+
+cells favouring target
+
+moderate
+
+severe
+
+Under the moderate restriction, the target grid has only a small mean advantage. Under the severe
+restriction, it is higher in all eight evaluated cells, by 
+pp on average. The attacker-side
+grid remains useful even in this setting: relative to the same restricted attack without bin edges,
+it improves fidelity by 
+pp under the moderate restriction and 
+pp under the severe
+one. Thus, a restricted attacker can still benefit from self-computed bin edges, but under severe
+class-support restriction they no longer fully substitute for the service grid. Appendix 
+E
+
+gives the per-cell results and separates the effects of restricting the grid, the seeds, and both.
+
+VI-D
+2 
+Entropy discretization.
+
+The default quartile discretizer uses no labels. We therefore also test LIME’s label-dependent entropy discretizer, which fits a small decision tree for each feature. The attacker uses the cached target predictions on two initial inputs per class as the discretizer labels. This adds no separate query type because the same predictions initialize the attack. Table 
+VIII
+ reports the seven configurations in which entropy bin edges improve the base traversal. It gives each grid’s gain over no-bin-edge traversal and the target advantage, defined as target minus auxiliary. The auxiliary entropy grid retains these gains. Its difference from the target grid ranges from 
+pp to 
+pp, with no consistent direction. Thus, even for this label-dependent discretizer, two initial inputs per class are sufficient for the reported comparisons. Entropy-tree tie breaking is random, so results at other pool sizes need not vary monotonically.
+
+TABLE VIII: 
+RQ3: Entropy-grid results with two initial inputs per class. Fidelity gain over
+no-bin-edge traversal (pp).
+
+dataset
+
+model
+
+target
+
+auxiliary
+
+target adv.
+
+crop
+
+LR
+
+crop
+
+NB
+
+crop
+
+KNN
+
+crop
+
+DT
+
+crop
+
+RF
+
+pendigits
+
+LR
+
+pendigits
+
+DT
+
+TABLE IX: 
+Evaluation of 
+Cutpurse
+. Mean fidelity (%) and pairwise contrasts (pp). 
+sg
+aut
+
+compares the auxiliary grid and random feature selection with the target explanation under the base
+traversal. 
+self-grid
+ and 
+Cutpurse
+ make no explanation calls.
+
+fidelity
+
+contrast
+
+dataset
+
+model
+
+blind
+
+defended
+
+autolycus
+
+self-grid
+
+Cutpurse
+
+sg
+aut
+
+Cutpurse
+aut
+
+Cutpurse
+def
+
+crop
+
+LR
+
+crop
+
+NB
+
+crop
+
+KNN
+
+crop
+
+DT
+
+crop
+
+RF
+
+pendigits
+
+LR
+
+pendigits
+
+NB
+
+pendigits
+
+KNN
+
+pendigits
+
+DT
+
+pendigits
+
+RF
+
+breast
+
+LR
+
+breast
+
+NB
+
+breast
+
+KNN
+
+breast
+
+DT
+
+breast
+
+RF
+
+adult
+
+LR
+
+adult
+
+NB
+
+adult
+
+KNN
+
+adult
+
+DT
+
+adult
+
+RF
+
+nursery
+
+LR
+
+nursery
+
+NB
+
+nursery
+
+KNN
+
+nursery
+
+DT
+
+nursery
+
+RF
+
+mushroom
+
+LR
+
+mushroom
+
+NB
+
+mushroom
+
+KNN
+
+mushroom
+
+DT
+
+mushroom
+
+RF
+
+mean
+
+VI-E
+ 
+Evaluation of 
+Cutpurse
+ without explanation calls
+
+RQ1–RQ3 isolate information obtained from an explanation and test whether the target grid is
+replaceable. We now evaluate 
+Cutpurse
+, which combines an auxiliary grid with diverse generation and
+boundary search. Unlike RQ3, this comparison evaluates attack performance rather than
+service-specific disclosure. Table 
+IX
+ compares five configurations under the same maximum budget,
+auxiliary pool, per-split seeds, surrogate family, and evaluation set:
+
+•
+
+blind
+: the base traversal with random feature selection and no grid. This is the prediction-only floor.
+
+•
+
+defended
+: the base traversal with the service’s attribution ranking but without bin edges.
+
+•
+
+autolycus
+: the base traversal using the service’s attribution ranking and bin edges.
+
+•
+
+self-grid
+: the base traversal with random feature selection and an auxiliary grid, without explanation calls.
+
+•
+
+Cutpurse
+: 
+self-grid
+ plus diverse generation and boundary search, without explanation calls.
+
+The 
+self-grid
+ contrast is an end-to-end check: it removes both the service ranking and service bin edges while keeping the base traversal. It averages 
+ percentage points over all 
+ cells (95% interval 
+), with differences in both directions. This result is consistent with the controlled RQ3 test. It is not a replacement for it. The three prediction-only configurations—
+blind
+, 
+self-grid
+, and 
+Cutpurse
+—make no explanation calls. Their grids are fitted from auxiliary data before the attack begins.
+
+What the additional query placement contributes
+
+The contrast 
+Cutpurse
+ holds the auxiliary grid fixed and isolates diverse generation plus boundary search. It averages 
+ percentage points across all cells. On the four datasets with continuous features, it is 
+ percentage points. On the two categorical datasets, it is 
+ percentage points. Across all 
+ cells, 
+Cutpurse
+ averages 
+pp (95% interval 
+), with 
+ positive directional effects after Benjamini–Hochberg adjustment. On continuous-feature datasets, the contrast is 
+pp (95% interval 
+); on categorical datasets, it is 
+pp. The additional phases use grid values to place continuous-feature queries, so the categorical results are outside the method’s intended scope. For example, on nursery/KNN, Autolycus reaches 
+ and 
+Cutpurse
+ reaches 
+.
+
+The component decomposition in Appendix 
+A
+ separates the two additions. Their average contributions are similar (
+ percentage points for boundary search and 
+ for diverse generation), but the pattern depends on the target: diverse generation contributes most for naive Bayes, while boundary search contributes most for logistic regression and random forests.
+
+Fig. 2: 
+Fidelity vs. query budget for Autolycus (grey, dashed), Autolycus with bin edges
+withheld (red, dotted) and 
+Cutpurse
+ (blue, solid), per dataset (rows) and target (columns), for the four
+datasets with continuous features. Band is the standard error over ten independent target
+instantiations. Same splits, seed sets and attack RNG as Table 
+IX
+, whose cells are the
+rightmost point of each curve.
+
+Effect of withholding bin edges
+
+The defended service returns attribution weights but omits LIME bin edges. This reduces Autolycus’s fidelity on some continuous-feature targets: crop/LR falls from 
+ to 
+, and crop/DT from 
+ to 
+. Across the continuous-feature datasets, replacing the defended configuration with 
+self-grid
+ raises fidelity by 
+ percentage points on average. Adding diverse generation and boundary search raises it by a further 
+ percentage points. Across all 
+ cells, 
+Cutpurse
+ exceeds the defended configuration by 
+pp (95% interval 
+), with 
+ positive directional effects after Benjamini–Hochberg adjustment; on continuous-feature targets, the contrast is 
+pp (95% interval 
+). The first contrast combines self-supplied bin edges with random feature selection, while RQ1 finds no systematic benefit from the removed ranking for feature selection in the base traversal.
+
+Appendix 
+C
+ matches 
+Cutpurse
+ and Autolycus on either perturbation-step rule. The 
+Cutpurse
+ advantage remains positive under both matched comparisons.
+
+Figure 
+2
+ shows that this difference can grow with the budget. On crop/DT, the Autolycus–defended gap rises from 
+ to 
+ percentage points. On crop/NB, it rises from 
+ to 
+. At 
+, however, 
+Cutpurse
+ can trail both baselines because it allocates up to 
+ queries to bisection and up to 
+ to diverse generation. The curves cross by 
+ in the reported examples. The effect is not universal: on pendigits/KNN, withholding the bin edges changes little at every budget. These results assume in-domain auxiliary inputs. RQ3 and the grid-data sensitivity analysis identify how little of that data is needed to fit the grids tested here.
+
+VII 
+Discussion and Limitations
+
+Implication for default LIME
+
+In this setting, LIME bin edges can be useful to an extraction attack, but RQ3 shows that their source need not be the service. The default quartile edges are statistics of the explainer background data. An auxiliary grid reproduces their effect in our controlled comparisons. Withholding bin edges therefore affects Autolycus, but it does not lower the performance of 
+Cutpurse
+ under our auxiliary-data condition. This is not a claim about all explanation methods or all LIME configurations.
+
+Scope.
+
+Cutpurse is intended for tabular targets with genuine continuous features. It uses an auxiliary grid to place single-feature queries, so it is not competitive on the categorical datasets. In our LIME setup, those datasets are integer encoded and the discretizer treats the columns as continuous. Their quartile bin edges depend on an arbitrary category ordering. The TreeSHAP results provide a separate qualification to RQ1: on the mushroom decision-tree and random-forest targets, TreeSHAP rankings help feature selection in the base traversal. Ranking-based feature selection is not reliable across target families. We do not generalize these results to neural or high-dimensional targets, other explainer configurations, or label-dependent discretizers.
+
+Auxiliary data and measurement limits.
+
+The main comparisons use the 
+ auxiliary partition of Autolycus for baseline compatibility. The grid-data sensitivity analysis shows that fitting the grid can instead use only the initial class-balanced pool. It does not make the complete attack data-free: it retains in-domain seeds and the other fixed attack settings. Fidelity on 
+breast
+ is measured on 
+ held-out points, so a single disagreement changes it by 
+ percentage points. We therefore do not interpret small effects on that dataset. Finally, Phase 1’s input-space diversity objective is a proxy for decision-cell coverage rather than a direct coverage measurement.
+
+VIII 
+Conclusion
+
+For the default LIME and SHAP configurations on the tabular classifiers we study, using attribution rankings for feature selection in the base Autolycus traversal provides no systematic extraction advantage. LIME bin edges can improve Autolycus by up to 
+ percentage points on continuous-feature targets. However, the controlled grid-substitution test shows no consistent advantage for the target grid over an attacker-side grid. The grid-data sensitivity analysis further shows that the full 
+ partition is not required to fit a useful grid in the tested cases.
+
+Cutpurse
+ uses such an auxiliary grid, diverse query generation, and boundary search without calling an explanation API. On continuous-feature targets, it improves fidelity by 
+ percentage points over the defended service and by 
+ over Autolycus. These latter comparisons measure a stronger attack, not additional disclosure. The result is conditional on the tabular, continuous-feature, auxiliary-data setting studied here. Determining which explanation outputs remain unavailable to an adaptive adversary is an open question.
+
+Open Science
+
+The artifact containing the implementation, stored experimental outputs, and scripts will be released.
+
+References
+
+[1]
+
+F. Tramèr, F. Zhang, A. Juels, M. K. Reiter, and T. Ristenpart
+ (2016)
+
+Stealing machine learning models via prediction APIs
+.
+
+In 
+USENIX Security
+,
+
+Cited by: 
+§I
+,
+
+§II-B
+,
+
+§IV
+,
+
+§IV
+,
+
+§V
+.
+
+[2]
+
+M. Jagielski, N. Carlini, D. Berthelot, A. Kurakin, and N. Papernot
+ (2020)
+
+High accuracy and high fidelity extraction of neural networks
+.
+
+In 
+USENIX Security
+,
+
+Cited by: 
+§I
+,
+
+§II-B
+.
+
+[3]
+
+N. Papernot, P. McDaniel, I. Goodfellow, S. Jha, Z. B. Celik, and A. Swami
+ (2017)
+
+Practical black-box attacks against machine learning
+.
+
+In 
+AsiaCCS
+,
+
+Cited by: 
+§I
+,
+
+§II-B
+,
+
+§V
+.
+
+[4]
+
+Z. Yue, Z. He, H. Zeng, and J. McAuley
+ (2021)
+
+Black-box attacks on sequential recommenders via data-free model extraction
+.
+
+In 
+Proceedings of the Fifteenth ACM Conference on Recommender Systems
+,
+
+pp. 44–54
+.
+
+External Links: 
+Document
+
+Cited by: 
+§I
+.
+
+[5]
+
+A. C. Oksuz, A. Halimi, and E. Ayday
+ (2026)
+
+LoMime: query-efficient membership inference using model extraction in label-only settings
+.
+
+arXiv:2602.18934
+.
+
+Cited by: 
+§I
+,
+
+§III
+.
+
+[6]
+
+A. C. Oksuz, A. Halimi, and E. Ayday
+ (2024)
+
+AUTOLYCUS: exploiting explainable artificial intelligence (XAI) for model extraction attacks against interpretable models
+.
+
+Proceedings on Privacy Enhancing Technologies (PoPETs)
+ 
+2024
+ (
+4
+).
+
+Note: 
+arXiv:2302.02162
+
+Cited by: 
+Appendix D
+,
+
+§I
+,
+
+§II-B
+,
+
+§III
+,
+
+§III
+,
+
+§VI-A
+.
+
+[7]
+
+S. M. Lundberg and S. Lee
+ (2017)
+
+A unified approach to interpreting model predictions
+.
+
+In 
+NeurIPS
+,
+
+Cited by: 
+1st item
+,
+
+1st item
+.
+
+[8]
+
+D. Lowd and C. Meek
+ (2005)
+
+Adversarial learning
+.
+
+In 
+Proceedings of the Eleventh ACM SIGKDD International Conference on Knowledge Discovery in Data Mining
+,
+
+pp. 641–647
+.
+
+External Links: 
+Document
+
+Cited by: 
+§II-B
+.
+
+[9]
+
+T. Orekondy, B. Schiele, and M. Fritz
+ (2019)
+
+Knockoff nets: stealing functionality of black-box models
+.
+
+In 
+CVPR
+,
+
+Cited by: 
+§II-B
+.
+
+[10]
+
+J. R. Correia-Silva, R. F. Berriel, C. Badue, A. F. De Souza, and T. Oliveira-Santos
+ (2018)
+
+Copycat CNN: stealing knowledge by persuading confession with random non-labeled data
+.
+
+In 
+IJCNN
+,
+
+Cited by: 
+§II-B
+.
+
+[11]
+
+V. Chandrasekaran, K. Chaudhuri, I. Giacomelli, S. Jha, and S. Yan
+ (2020)
+
+Exploring connections between active learning and model extraction
+.
+
+In 
+29th USENIX Security Symposium (USENIX Security 20)
+,
+
+pp. 1309–1326
+.
+
+External Links: 
+Link
+
+Cited by: 
+§II-B
+.
+
+[12]
+
+M. Juuti, S. Szyller, S. Marchal, and N. Asokan
+ (2019)
+
+PRADA: protecting against DNN model stealing attacks
+.
+
+In 
+2019 IEEE European Symposium on Security and Privacy (EuroS&P)
+,
+
+pp. 512–527
+.
+
+External Links: 
+Document
+
+Cited by: 
+§II-B
+.
+
+[13]
+
+P. Karmakar and D. Basu
+ (2023)
+
+Marich: a query-efficient distributionally equivalent model extraction attack
+.
+
+In 
+NeurIPS
+,
+
+Cited by: 
+§II-B
+.
+
+[14]
+
+S. Milli, L. Schmidt, A. D. Dragan, and M. Hardt
+ (2019)
+
+Model reconstruction from model explanations
+.
+
+In 
+FAccT
+,
+
+Cited by: 
+§II-B
+.
+
+[15]
+
+T. Miura, S. Hasegawa, T. Shibahara, and N. Yanai
+ (2024)
+
+MEGEX: data-free model extraction attack against gradient-based explainable AI
+.
+
+In 
+ACM Workshop on Secure and Trustworthy Deep Learning Systems (SecTL)
+,
+
+Note: 
+arXiv:2107.08909
+
+Cited by: 
+§II-B
+.
+
+[16]
+
+A. Yan, T. Huang, L. Ke, X. Liu, Q. Chen, and C. Dong
+ (2023)
+
+Explanation leaks: explanation-guided model extraction attacks
+.
+
+Information Sciences
+ 
+632
+, 
+pp. 269–284
+.
+
+External Links: 
+Document
+
+Cited by: 
+§II-B
+.
+
+[17]
+
+U. Aïvodji, A. Bolot, and S. Gambs
+ (2020)
+
+Model extraction from counterfactual explanations
+.
+
+arXiv:2009.01884
+.
+
+Cited by: 
+§II-B
+.
+
+[18]
+
+Y. Wang, H. Qian, and C. Miao
+ (2022)
+
+DualCF: efficient model extraction attack from counterfactual explanations
+.
+
+In 
+ACM Conference on Fairness, Accountability, and Transparency (FAccT)
+,
+
+Note: 
+arXiv:2205.06504
+
+External Links: 
+Document
+
+Cited by: 
+§II-B
+.
+
+[19]
+
+A. Khouna, J. Ferry, and T. Vidal
+ (2025)
+
+From counterfactuals to trees: competitive analysis of model extraction attacks
+.
+
+In 
+NeurIPS
+,
+
+Note: 
+arXiv:2502.05325
+
+Cited by: 
+§II-B
+.
+
+[20]
+
+D. Otto, J. Kurtz, D. den Hertog, and I. Birbil
+ (2026)
+
+Linear model extraction via factual and counterfactual queries
+.
+
+arXiv:2602.09748
+.
+
+Cited by: 
+§II-B
+.
+
+[21]
+
+R. Shokri, M. Strobel, and Y. Zick
+ (2021)
+
+On the privacy risks of model explanations
+.
+
+In 
+Proceedings of the 2021 AAAI/ACM Conference on AI, Ethics, and Society
+,
+
+pp. 231–241
+.
+
+External Links: 
+Document
+
+Cited by: 
+§II-B
+.
+
+[22]
+
+F. Ezzeddine, O. Zammar, S. Giordano, and O. Ayoub
+ (2026)
+
+Explanations leak: membership inference with differential privacy and active learning defense
+.
+
+arXiv:2602.03611
+.
+
+Cited by: 
+§II-B
+.
+
+[23]
+
+P. Quan, S. Chakraborty, J. V. Jeyakumar, and M. Srivastava
+ (2022)
+
+On the amplification of security and privacy risks by post-hoc explanations in machine learning models
+.
+
+arXiv:2206.14004
+.
+
+Cited by: 
+§II-B
+.
+
+[24]
+
+T. T. Nguyen, T. T. Huynh, Z. Ren, T. T. Nguyen, P. L. Nguyen, H. Yin, and Q. V. H. Nguyen
+ (2024)
+
+A survey of privacy-preserving model explanations: privacy risks, attacks, and countermeasures
+.
+
+arXiv:2404.00673
+.
+
+Cited by: 
+§II-B
+,
+
+§III
+.
+
+[25]
+
+N. Papernot, P. D. McDaniel, and I. J. Goodfellow
+ (2016)
+
+Transferability in machine learning: from phenomena to black-box attacks using adversarial samples
+.
+
+arXiv preprint arXiv:1605.07277
+.
+
+Cited by: 
+§III
+.
+
+[26]
+
+S. Pal, Y. Gupta, A. Shukla, A. Kanade, S. K. Shevade, and V. Ganapathy
+ (2020)
+
+ACTIVETHIEF: model extraction using active learning and unannotated public data
+.
+
+In 
+AAAI
+,
+
+Cited by: 
+§IV
+,
+
+§IV
+,
+
+§V
+.
+
+Appendix A 
+Component decomposition: which phase drives the gain?
+
+Our pipeline adds two components to the Autolycus traversal: diverse query generation (Phase 1) and
+boundary search (Phase 2). We isolate their contributions with three nested configurations on the same seed sets, namely Autolycus alone (
+base
+), 
+boundary (Phase 2, no diverse), and 
+diverse on top, so that boundary
+(
+boundary)
+base
+ and
+diverse
+full
+(
+boundary). Figure 
+3
+ reports the result.
+
+The two components contribute about equally on average (
+ and 
+pp), but which one
+drives the gain is strongly target-dependent: naive Bayes benefits almost entirely from
+diverse generation (
+pp), since a generative model needs distribution coverage, whereas random forest and logistic regression benefit almost entirely from boundary search
+(
+, 
+pp), which places labelled points on the decision surface. This decomposition measures
+what the added query-placement components contribute. It does not test other possible uses of
+attribution magnitudes. RQ1 separately tests feature selection by attribution ranking in the base
+traversal. One caveat bounds this decomposition: the boundary term as measured here bundles
+Phase 2 boundary search with the Phase 3 bin-edge stepping it inherits from Autolycus, so it should
+be read as the combined contribution of both rather than of bisection alone. §
+VI-C
+
+isolates bin-edge stepping directly. Like the sweeps of Appendix 
+B
+, this decomposition uses the
+explanation-reading configuration, so it measures what the two components add given the
+target’s explanation, while §
+VI-E
+ measures what they add without it.
+
+Fig. 3: 
+Contribution of each component to the LIME fidelity gain over
+Autolycus (percentage points, mean over datasets, top budget). Boundary search dominates for
+RF/LR. Diverse generation dominates for NB.
+
+The split is also strongly dataset-dependent (Figure 
+4
+): diverse
+generation carries almost the entire gain on 
+adult
+/NB (
+pp, a generative target starved
+of coverage), while boundary search dominates on the tree targets of 
+crop
+ and the linear
+targets of 
+breast
+. Neither component is tied to a particular dataset, both being query placement mechanisms, which is why the aggregate in Figure 
+3
+ splits evenly.
+
+Fig. 4: 
+Per dataset: contribution of boundary search (Phase 2, orange) and
+diverse generation (Phase 1, green) to the LIME fidelity gain over Autolycus (percentage points, top
+budget, mean over 
+ seed sets), one panel per dataset, grouped by target model. Shared
+
+-axis. The 
+adult
+/NB diverse bar (
+pp) sets the scale.
+
+Appendix B 
+Attack performance under matched information access
+
+This experiment runs our three phases with the target’s explanation rather than a self-computed
+grid, so both sides read the same 
+Lime
+ output and the comparison isolates query
+placement. §
+VI-E
+ evaluates the
+
+Cutpurse
+ attack, which is the one the paper proposes. This appendix and Appendix 
+A
+
+predate the multi-split protocol of §
+VI-A
+ and are reported unchanged on the original
+single split over five datasets, omitting pendigits, so that they stay comparable to the published
+baseline.
+
+Figure 
+5
+ plots surrogate fidelity against query budget for the
+explanation-reading configuration and the Autolycus 
+Lime
+ baseline. At a single fixed diverse
+budget it improves fidelity on 18 of 25 target/dataset combinations, with the most consistent gains
+on the non-tree targets that have headroom (LR/NB on crop, nursery, and mushroom).
+
+Fig. 5: 
+Fidelity vs. query budget, our phases reading the target’s explanation (solid, blue) vs. Autolycus-
+Lime
+
+(dashed, grey), per target (rows) and dataset (columns). Band is the standard error over 
+ seed
+sets. 
+, 
+, diverse budget fixed at cap
+. Shared 
+-axis (
+–
+).
+
+The same attack helps under SHAP
+
+Repeating this with 
+Shap
+ as the explainer (
+, 
+) gives the same picture: the
+same configuration improves over Autolycus-
+Shap
+ on the same non-tree targets (LR/NB/KNN,
+largest where the baseline has headroom, e.g. nursery and mushroom), while tree targets sit near
+their fidelity ceiling and show no gain (Figure 
+7
+, Appendix 
+F
+).
+That the same boundary-and-diversity machinery helps under both explainers, independent of the particular attribution scores it consumes, is the first indication that the attribution channel is
+not what drives the gain (H1). The 
+Lime
+-specific advantage of a free threshold is
+isolated separately in §
+VI-C
+.
+
+Diverse-budget sensitivity
+
+The effect of diverse generation depends on the target. It helps high-headroom targets and can hurt
+near-ceiling or small continuous targets. We selected cap
+ once in a global exploratory sweep
+and fixed it for all reported target families and datasets. We did not tune this value per target or
+target instantiation.
+
+Appendix C 
+Step-size sensitivity
+
+The main 
+Cutpurse
+ configuration uses the feature-scaled perturbation step 
+, while the
+published LIME traversal uses a unit step. We repeat the comparison with both methods using each
+rule on the 
+ continuous-feature dataset–model cells. Within each method, switching the rule is
+the only change. All configurations use the same 
+ train/test splits, retrained targets, seed
+sets, attack random states, query budgets, evaluation sets, surrogate families, and refit counts.
+
+For each cell, we first compute the mean paired fidelity difference over its 
+ target
+instantiations. Table 
+X
+ averages these 
+ cell values. Its intervals are percentile
+bootstrap intervals from 
+ resamples of the cells, so they summarize variation across the
+evaluated cells rather than independent-dataset inference. In both direct, matched comparisons,
+
+Cutpurse
+ has higher mean fidelity. Even against the higher-scoring Autolycus step rule selected within
+each cell, the mean difference remains positive.
+
+TABLE X: 
+Step-size sensitivity on continuous-feature targets. Mean fidelity difference (pp) over
+
+ dataset–model cells.
+
+contrast
+
+mean
+
+ interval
+
+Cutpurse
+ 
+ Autolycus, feature-scaled
+
+Cutpurse
+ 
+ Autolycus, unit
+
+Cutpurse
+ 
+ stronger Autolycus rule
+
+Autolycus: feature-scaled 
+ unit
+
+Appendix D 
+How little auxiliary data rebuilds the grid
+
+§
+VI-D
+ shows that a discretizer the adversary fits on its own auxiliary partition
+reproduces the target’s. That partition is the “comprehensive” end of the range the threat model
+inherits 
+[
+6
+]
+. Here we find the other end, sweeping the number of samples
+per class the discretizer is fitted on while holding the attack, the seed set, the budget and
+the RNG fixed, so that only the estimate of the grid varies. Table 
+XI
+ gives the full
+quartile-grid sweep. We run this on
+the datasets with continuous features: on the fully categorical ones the bin edges are artefacts of
+the integer encoding (§
+VII
+), so how fast that artefact converges is not informative.
+
+TABLE XI: 
+Full quartile-grid sensitivity sweep. Fidelity gain over no-bin-edge traversal (pp) with the
+auxiliary grid fitted on 
+ inputs per class. The target column is the target-grid gain. Ten paired
+splits.
+
+aux
+, fitted on 
+ per class
+
+dataset
+
+model
+
+target
+
+full aux
+
+crop
+
+LR
+
+crop
+
+DT
+
+crop
+
+NB
+
+crop
+
+RF
+
+pendigits
+
+LR
+
+crop
+
+KNN
+
+breast
+
+NB
+
+pendigits
+
+DT
+
+pendigits
+
+NB
+
+The requirement is very small, and crop and pendigits bound it from either side. On crop the adversary
+is at parity with one sample per class: 
+ against the target’s 
+ on LR, 
+
+against 
+ on DT. Only KNN lags at 
+, and it catches up by 
+. Pendigits converges
+more slowly, as its shape predicts: sixteen wide-range continuous features to place quartiles on and
+ten classes rather than seventeen. Its tree and generative targets are nonetheless at parity almost at
+once (
+ against the target’s 
+ on DT at one sample per class, 
+ against 
+ on NB
+at two), while LR climbs 
+ and is still some two points short of
+the target’s 
+ at five per class, closing only with the full partition. Breast sits between
+them, at parity by 
+.
+
+A quartile is a cheap statistic, and a handful of points per class estimates it well enough to recover
+most of the gain: on crop the columns to the left of 
+aux
+ are, to within noise, the same
+numbers, and on pendigits they reach 
+ to 
+ per cent of it. An adversary holding a small
+fraction of the auxiliary pool is therefore no worse off. Re-estimating the bins online from the
+accumulated query set is the one variant that does worse, because the attack concentrates queries
+near decision boundaries and its own history is therefore a biased estimator of the marginal
+distribution the bins summarise.
+
+Appendix E 
+Class-support restriction sensitivity
+
+The main RQ3 comparison varies the grid source while retaining the class-balanced seed protocol.
+Here, the attacker instead receives data for only a random subset of classes. For crop, the moderate
+and severe pools retain 
+ and 
+ of 
+ classes. For pendigits, they retain 
+ and 
+ of 
+.
+The target and evaluation set retain all classes. In the direct source comparison, both configurations
+start from the same restricted seed pool. One fits its grid on that pool and the other uses a grid
+fitted on the target-training features. Thus, the target advantage in Table 
+XII
+
+does not include the loss from missing seeds.
+
+TABLE XII: 
+Class-support sensitivity by target. Target-grid advantage (pp); positive values favour the target grid.
+
+dataset
+
+model
+
+moderate
+
+severe
+
+crop
+
+LR
+
+crop
+
+NB
+
+crop
+
+KNN
+
+crop
+
+DT
+
+crop
+
+RF
+
+pendigits
+
+LR
+
+pendigits
+
+NB
+
+pendigits
+
+DT
+
+The moderate restriction has a small mean target advantage of 
+pp, with six of eight cells
+positive. Under the severe restriction, all eight cells favour the target grid and the mean advantage
+is 
+pp. These cells share datasets and splits, so their directions summarize the evaluated
+settings rather than an independent-dataset significance test.
+
+To separate this source effect from the cost of missing seeds, we form a 
+ decomposition
+using the full or restricted seed pool and the full or restricted attacker-side grid. Table 
+XIII
+
+reports fidelity differences over the full-seed, full-grid configuration. Restricting the seeds is the
+dominant cost. Shifting the grid alone is small, but it compounds the seed restriction under the
+severe condition. The restricted attacker still receives a large bin-edge gain over its matched
+no-bin-edge traversal.
+
+TABLE XIII: 
+Class-support decomposition. Mean fidelity difference (pp) over eight cells.
+
+effect
+
+moderate
+
+severe
+
+restricted grid only
+
+restricted seeds only
+
+restricted grid and seeds
+
+interaction
+
+own-grid bin-edge gain
+
+Appendix F 
+Query-budget sweeps
+
+This appendix collects two kinds of budget sweep. Figure 
+6
+ is the
+categorical companion to Figure 
+2
+ and, like it, evaluates 
+Cutpurse
+ against the
+defended and undefended service under the multi-split protocol. The remaining figures instead run our
+three phases with the target’s explanation rather than a self-computed grid, so that both sides read
+the same output and the comparison isolates query placement. The 
+Cutpurse
+ attack itself is
+evaluated in §
+VI-E
+.
+
+Figure 
+7
+ is the 
+Shap
+ companion to Figure 
+5
+,
+discussed in §
+B
+.
+
+Fig. 6: 
+Defense sweep on the two purely categorical datasets, the companion to
+Figure 
+2
+. Withholding the bin edges costs Autolycus almost nothing here, since
+integer-encoded categories give the discretizer no meaningful cut points, and 
+Cutpurse
+ has no edge to
+snap to either.
+
+Fig. 7: 
+Shap
+ companion: surrogate fidelity vs. query budget. Our phases reading the target’s 
+Shap
+ output
+(solid, blue) vs. Autolycus-
+Shap
+ (dashed, grey), per target (rows) and dataset (columns).
+Shaded band is the standard error over the 
+ seed sets. 
+, 
+. All panels share a
+fixed 
+-axis (
+–
+) for cross-panel comparability.
+

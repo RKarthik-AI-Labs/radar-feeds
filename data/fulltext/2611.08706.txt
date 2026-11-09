@@ -1,0 +1,6178 @@
+Dual-Stream LLM-Guided Reward Design for Reject-Inference-Aware Reinforcement Learning in E-Commerce Payment Fraud Detection
+https://arxiv.org/abs/2611.08706
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+Dual-Stream LLM-Guided Reward Design for Reject-Inference-Aware
+
+Reinforcement Learning in E-Commerce Payment Fraud Detection
+
+Bo Qu
+
+†
+†
+thanks: 
+Corresponding Author.
+
+Affiliation: 
+eBay
+
+Email: 
+boqu@ebay.com
+
+  
+
+Zhurong Wang
+
+Affiliation: 
+eBay
+
+  
+
+Frank Zahradnik
+
+Affiliation: 
+eBay
+
+  
+
+Ming Ouyang
+
+Affiliation: 
+eBay
+
+Abstract
+
+Production fraud-detection models learn from a censored slice of their own traffic:
+transactions a legacy system blocked never receive fraud labels, so models train on a biased,
+approved-only distribution. We extend LLM-guided reward design—the
+framework
+of 
+Qu et al. (2025)
+, where an LLM evolves the reward of a two-step
+REINFORCE fraud-blocking policy—to attack this 
+reject-inference
+ problem inside the
+reward. A single LLM designs a 
+dual-stream reward
+: stream 1 applies the standard
+dollar-weighted precision objective to labeled transactions; stream 2 scores
+legacy-
+blocked
+, unlabeled transactions by contrasting the newest gradient-boosted risk
+signal against the legacy scores that drove the original block. Rather than prescribe which
+signals matter, we expose a 
+superset
+ of evidence and let the LLM decide for itself which to
+use, guided by evaluation feedback alone; because it writes the reward as code, that choice is
+directly auditable.
+On a held-out four-month out-of-time test, the dual-stream agent beats the prior
+labeled-only agent at every target recall—by 
+, 
+ and 
+ points of
+dollar-weighted precision at 80%, 85% and 90% recall—and the production baseline by 
+
+points on average. The resulting policy is architecturally identical to
+
+Qu et al. (2025)
+ and adds no inference cost.
+
+1 
+Introduction
+
+Prompt
+
+Context
+
+task desc.
+
+RL env code
+
+human reward
+
+fraud-rate
+
+statistics
+
+LLM
+
+Qwen3-class
+
+(open, FP8)
+
+A100
+
+80 GB
+
+Candidate
+
+get_reward
+
+(full sig.)
+
+AST check;
+
+resample
+
+if invalid
+
+Stream 1: Labeled
+
+appr_flag=1
+,
+
+target 
+
+Lagrangian prec.
+
+reward (human baseline)
+
+Stream 2: Blocked
+
+appr_flag=0
+,
+
+target 
+, censored
+
+newest vs. legacy GBMs;
+
+LLM selects signals
+
+Dual-Stream Reward
+
+REINFORCE
+
+Step 0 (PRA)
+: all
+
+Step 1 (PA)
+: passed
+
+newest GBMs
+
+ embed.
+softmax
+
+;
+
+ ep./cand.
+
+Eval
+
+in-loop: 1 mo.
+
+final: 4 mo. OOT
+
+$-wtd. prec.
+
+@ target recall
+
+shared grad.
+
+best / suboptimal / reflection
+
+adapt. temp. (
+ / 
+)
+
+ iter. 
+ cand.;
+
+best reward retained
+
+legacy GBM scores:
+
+reward-only; never
+
+in policy input state
+
+policy net unchanged
+
+(no added cost)
+
+Figure 1: 
+Dual-Stream LLM-Guided Reward Design. An open-weight Qwen3-class LLM (FP8, single
+A100 80 GB) evolves candidate 
+get_reward
+ functions with adaptive temperature,
+retaining the best. Each AST-validated candidate scores two streams under one REINFORCE
+gradient and one two-step policy: 
+Stream 1
+, the dollar-weighted Lagrangian on
+labeled approved rows; 
+Stream 2
+, a censored-outcome reward on historically blocked
+rows whose label is unobservable. The prompt exposes a 
+superset
+ of candidate signals and
+the LLM selects which to rely on from evaluation feedback (§
+4.3
+). Legacy
+scores enter 
+only
+ the reward, so the trained policy is architecturally identical to the
+labeled-only baseline and adds no inference cost.
+
+Large language models (LLMs) now match or exceed human performance on code generation
+
+Chen et al. (2021)
+ and reasoning 
+Kojima et al. (2022)
+, and a growing line of work uses
+them to 
+design the reward functions
+ of RL agents automatically: prompting an LLM as a proxy
+reward evaluator 
+Kwon et al. (2023)
+, and the evolutionary code-generation paradigm of EUREKA
+
+Ma et al. (2024a)
+, Text2Reward 
+Xie et al. (2024)
+ and Language-to-Rewards
+
+Yu et al. (2023)
+—the LLM writes reward code, a policy is trained per candidate, and feedback
+conditions the next generation—later extended with reward critics 
+Li et al. (2024)
+,
+sim-to-real transfer 
+Ma et al. (2024b)
+ and sample-efficient reformulations
+
+Sarukkai et al. (2024)
+; 
+Sun et al. (2025)
+. This literature is dominated by robotics and game
+benchmarks, where every rollout yields a reward.
+Prior work brought this paradigm to e-commerce payment fraud: 
+Qu et al. (2025)
+ frames transaction risk as a multi-step Markov decision process (MDP)
+and lets an LLM evolve the reward for a two-step REINFORCE policy that blocks or passes each
+transaction at pre- and post-authorization, outperforming both human-designed Lagrangian
+rewards and the production gradient-boosted-machine (GBM) baseline in dollar-weighted
+precision at target recall.
+
+The censored-label gap.
+
+That system, like essentially all supervised fraud models, trains on 
+approved
+
+transactions only—those the legacy model and rules let through, whose fraud outcome (a
+chargeback) is eventually observed. But a large fraction of traffic is 
+blocked
+ before
+it can produce an outcome. These blocked rows are scored by the same newest GBM models that
+feed the RL policy and carry the legacy scores that drove the block, yet their ground-truth
+label is fundamentally 
+unobservable
+. Training on the approved slice alone thus
+optimizes on a distribution systematically narrower—and lower-risk—than the deployment
+population. This is the classical 
+reject-inference
+ / selective-labels problem of
+credit scoring 
+Heckman (1979)
+; 
+Lakkaraju et al. (2017)
+; 
+Ehrhardt et al. (2021)
+, here
+appearing inside an LLM-guided RL reward-design loop for the first time. Classical remedies
+attack it with explicit machinery—Heckman selection correction, self-labeling
+
+Kozodoi et al. (2020)
+, reject-aware multi-task networks 
+Liu et al. (2022)
+, and
+positive-unlabeled estimators 
+Elkan and Noto (2008)
+; 
+du Plessis et al. (2015)
+; 
+Bekker and Davis (2020)
+;
+we instead let one LLM reason over each blocked row’s newest-versus-legacy score structure and
+
+synthesize
+ the censored-outcome reward directly.
+
+Positioning.
+
+Our reward sits in the cost-sensitive, constrained-RL tradition rather than the data- or
+loss-level imbalance remedies 
+Chawla et al. (2002)
+; 
+Lin et al. (2017)
+: fraud as sequential decisioning
+
+Shen and Kurshan (2020)
+; 
+Vimal et al. (2021)
+; 
+Qayoom et al. (2024)
+; 
+Henderson et al. (2023)
+, a per-stage precision
+constraint in the spirit of 
+Tessler et al. (2019)
+, a dollar-weighted objective
+
+Dervovic et al. (2023)
+, and cost-sensitive decision theory
+
+Elkan (2001)
+; 
+Bahnsen et al. (2015)
+; 
+Höppner et al. (2022)
+; 
+Verbraken et al. (2013)
+; 
+Cotter et al. (2019)
+.
+It inverts RLHF/RLAIF 
+Ouyang et al. (2022)
+; 
+Bai et al. (2022)
+; 
+Lee et al. (2024)
+—the LLM
+
+designs
+ a reward for an external policy and is never updated—aligning with code-as-policy
+work 
+Liang et al. (2023)
+; 
+Wang et al. (2024)
+. LLMs appear in industrial trust-and-safety pipelines
+
+Qiao et al. (2024)
+; 
+Chakraborty et al. (2024)
+; 
+Yang et al. (2025)
+; 
+Fan et al. (2025)
+; 
+Kath et al. (2026)
+ and
+e-commerce fraud detection 
+Rodrigues et al. (2022)
+; 
+Mutemi and Bacao (2024)
+; none applies LLM-guided
+reward design to censored fraud labels.
+
+Contributions.
+
+•
+
+Reject-inference-aware reward design.
+ To our knowledge, the first
+LLM-guided reward-design loop to learn from censored, never-approved samples. Prior LLM
+reward work 
+Ma et al. (2024a)
+; 
+Li et al. (2024)
+; 
+Yu et al. (2023)
+ targets robotics and games,
+where every rollout yields a reward; none confronts labels missing by construction.
+
+•
+
+A dual-stream reward, designed semi-zero-shot.
+ One LLM emits a single reward with
+two internal streams (Figure 
+1
+): stream 1 keeps the human baseline
+Lagrangian on labeled rows, preserving the production objective; stream 2 scores blocked rows from
+their newest-versus-legacy score structure. Stream 1 is seeded from the reference reward
+
+Qu et al. (2025)
+ refined under its few-shot setting, but no human design exists for the
+blocked stream, so stream 2 is authored 
+zero-shot
+—evidence that the loop can
+
+invent
+ reward structure, not only tune it.
+
+•
+
+Signal selection left to the LLM, and auditable afterwards.
+ Rather than
+hand-encoding which risk signals matter, we expose a superset of 14 candidates and let evaluation
+feedback drive the choice. The selected reward relies on two of them and ignores
+the rest—including the legacy scores our own schema assumed it would need—and because it is
+emitted as code, that decision is inspectable rather than buried in fitted weights (§
+4.3
+).
+
+•
+
+Held-out temporal evidence, month by month.
+ We evaluate on a four-month
+out-of-time window held out from 
+both
+ policy training and the LLM selection loop, reporting
+each month at each target recall rather than only pooled. At the tightest operating point the
+dual-stream reward leads the published method of 
+Qu et al. (2025)
+ in all four months; at
+loose recall the ordering reverses, which §
+4.2
+ traces to a difference in 
+where
+
+each policy does its blocking.
+
+•
+
+A deployment-realistic setup.
+ The reward designer is an open
+
+27B-parameter model (Qwen3-class, FP8) on a single A100 (80 GB); the resulting policy is
+unchanged in size and latency from the work of 
+Qu et al. (2025)
+.
+
+2 
+Method
+
+2.1 
+Transaction Risk as a Constrained MDP
+
+This work adopts the MDP formulation of 
+Qu et al. (2025)
+. A transaction passes through two
+checkpoints—
+pre-authorization
+ (PRA, step 0), where the agent acts on all
+transactions, and 
+post-authorization
+ (PA, step 1), where it acts only on
+transactions it passed at step 0. At step 
+ the state 
+ is the vector of
+newest GBM risk scores plus a stage indicator, the action 
+, and the reward 
+. We maximize the business objective
+
+Maximize
+
+(1)
+
+subject to
+
+i.e. maximize dollar-weighted true positives net of false positives while blocking more
+fraudulent GMV early (PRA) than late (PA). The human baseline reward follows from a
+Lagrangian relaxation of a per-stage precision constraint 
+:
+
+(2)
+
+The policy is a compact DNN (categorical embeddings 
+ GBM scores 
+ two-class
+softmax) trained with REINFORCE 
+Williams (1992)
+ (Adam, lr 
+).
+
+2.2 
+Censored Outcomes and the Dual-Stream Reward
+
+In the dual-stream method the training set is the union of two streams:
+
+•
+
+Labeled / approved
+ rows (
+), with an observed fraud
+label 
+.
+
+•
+
+Blocked
+ rows (
+), with 
+
+(unobservable). These carry legacy risk scores (two model generations 
+ four heads)
+that informed the original blocking decision, together with buyer segment and payment
+method.
+
+We denote the four legacy supervised risk-model heads 
+–
+ and the legacy model
+generations 
+gen-1
+, 
+gen-2
+; the two-generation count is incidental—the
+dual-stream reward accepts any number of legacy score sets, each an additional
+staleness-aware evidence signal on blocked rows.
+The LLM designs a single reward with the extended 
+19-argument
+ signature
+
+get_reward(current_step, action, target, wgt, is_blocked, legacy_g1_{h1,h2,h3,h4},
+legacy_g2_{h1,h2,h3,h4}, newest_{h1,h2,h3,h4}, byr_segment, pymnt_inst)
+
+On labeled rows (
+) the legacy and context arguments are zero, so
+stream 1 is a function of 
+ alone and takes the same dollar-weighted Lagrangian form as
+Eq. 
+2
+, with the LLM free to co-tune its coefficients. Because stream 2 is
+gated entirely by 
+is_blocked
+, it never contributes to the reward on approved
+traffic, so the resulting policy remains architecturally identical to the labeled-only
+baseline. On blocked rows the LLM designs stream 2 
+from scratch
+: unlike stream 1, which is
+seeded from the human baseline reward of Eq. 
+2
+—the same reference 
+Qu et al. (2025)
+
+refined under its few-shot setting—the reject-inference stream has no human-authored template
+to seed from, so its entire structure is produced zero-shot. The dual-stream method must therefore start the
+blocked stream in the zero-shot regime rather than refining a human design.
+
+Legacy scores are reward-only.
+
+A deliberate architectural choice: legacy scores enter the reward function 
+only
+—never
+the policy’s input state. The policy learns from the newest real-time signal, while the legacy
+scores serve as reward-time 
+evidence
+ about a blocked row’s latent risk, keeping the
+policy’s feature contract unchanged and preventing it from depending on signals it
+would not see at scoring time.
+
+Score disagreement as an uncertainty signal.
+
+For a blocked row the newest GBM score and the legacy score jointly form a natural
+uncertainty proxy: agreement at high risk supports a confident block; a high legacy score
+contradicted by a low newest score suggests over-blocking and a conservative reward; a low
+legacy score revised upward signals newly-caught risk; and mutual agreement at low risk
+drives the reward toward a pass. Because one LLM reasons over both signals semantically, no
+separate PU-learning or inverse-propensity estimator is needed—the disagreement structure
+is already in the data and the LLM synthesizes it, sidestepping the importance-weighting or
+self-labeling machinery that classic reject inference and PU learning employ
+
+Elkan and Noto (2008)
+; 
+Kozodoi et al. (2020)
+; 
+Liu et al. (2022)
+.
+
+A menu of signals, not a claim about them.
+
+On blocked rows we deliberately expose a 
+superset
+ of candidate evidence—both legacy
+generations across all four heads, the four newest heads, buyer segment and payment instrument, 14
+arguments in all—without claiming in advance that any is informative. Exposing them 
+is
+
+the experiment: because the reward is code, the evolved function records which signals the designer
+leaned on and which it discarded (§
+4.3
+).
+
+Step routing and aggregation.
+
+At step 0 stream 2 uses the PRA legacy and newest scores; at step 1 (only rows passed at
+step 0) the PA scores. The two-step rewards are summed and the REINFORCE loss
+
+ accumulated across both steps, exactly as in stream 1, so the two streams
+share one gradient and one policy.
+
+2.3 
+LLM Reward Optimization Loop
+
+The evolutionary loop is unchanged from that of 
+Qu et al. (2025)
+ and is summarized in
+Algorithm 
+1
+ (Appendix 
+A
+): over 
+ outer iterations it samples 
+
+candidate reward functions per iteration; each valid candidate (checked by AST parsing
+against the required signature) trains a fresh policy for 
+ episodes; the
+best candidate by dollar-weighted precision at target recall is retained and its performance
+is fed back into the LLM context for the next iteration. LLM temperature is adaptive (decayed
+on improvement, grown on plateau); loop constants are given in §
+3
+. To ground stream 2 we additionally inject a compact table of
+
+dollar-weighted fraud rates by buyer cohort and payment method
+, computed on the labeled
+training data, so the LLM can calibrate context-conditioned weights rather than guessing them.
+The full prompt templates are reproduced in Appendix 
+C
+.
+
+3 
+Experimental Setup
+
+Data.
+
+All data are real-world transactions drawn from a large e-commerce payment system, split into
+three disjoint temporal windows: policy training on February 2026, LLM candidate selection on
+March 2026, and a held-out out-of-time (OOT) test on April 1–July 31, 2026. The fraud target is an
+unauthorized-chargeback label matured as of 2026-09-01. Training combines 
+M labeled
+approved transactions with 
+M legacy-blocked ones (
+ the labeled
+stream), for 
+M samples—nearly tripling the usable data. March drives LLM
+best-candidate selection; the four OOT months are held out from both training and selection and
+are used only for the evaluation reported below.
+
+Reward-designer LLM and hardware.
+
+The reward designer is an open Qwen3-class 
+27B-parameter instruction model served in
+FP8. All training and LLM inference run on a single 
+NVIDIA A100 (80 GB)
+ with
+standard CPU/RAM support—a substantial simplification over the setup of 
+Qu et al. (2025)
+ (2
+
+V100 32 GB, 4-bit), enabled by FP8 serving of the larger backbone.
+
+Loop hyperparameters.
+
+Both systems run the loop of 
+Qu et al. (2025)
+ under one shared configuration, adjusted
+from that work for a direct comparison: 
+,
+
+, 
+, optimizing around target recalls
+
+, policy training batch 
+, Adam
+lr 
+, adaptive temperature 
+.
+We compare two LLM-designed systems: the labeled-only 
+single-stream
+ agent (
+SS
+),
+reproducing 
+Qu et al. (2025)
+, and the 
+dual-stream
+ agent (
+DS
+) of this
+work. Both ran the 
+same
+ full 
+ budget with no early stopping; their
+best-candidate iterations (SS 34, DS 25) mark only 
+where
+ each run’s top reward emerged, so
+the comparison is not confounded by run length.
+
+Metric.
+
+Dollar-weighted $Precision at fixed dollar-weighted $Recall thresholds, computed against
+the production baseline risk score 
+ (the legacy production score at the PRA
+checkpoint, written 
+Base
+ in all tables). The two-step agent’s operating points are
+obtained by sweeping block-score thresholds across both stages; because each system’s sweep lands
+on its own discrete grid, the achieved recalls differ slightly between systems at a given target.
+The SS and DS agents reported in Section 
+4
+ are each run’s best candidate on the
+March evaluation set.
+
+4 
+Results
+
+4.1 
+Held-Out OOT Generalization
+
+Table 
+1
+ reports overall dollar-weighted precision on the four-month held-out
+window (April–July 2026) at target recalls 0.80–0.90 (§
+3
+).
+
+Across this range the dual-stream agent improves on the production baseline at every target:
+$precision rises from 47.09% to 
+55.15%
+ at 80% recall, from 39.95% to
+
+46.36%
+ at 85%, and from 29.91% to 
+35.92%
+ at 90%—gains of 
+,
+
+ and 
+ points, 
+ on average. It also beats the labeled-only agent at every
+target, by 
+, 
+ and 
+ points (
+ on average), so DS dominates SS across
+the whole reported range rather than winning only on the mean; Appendix 
+D
+ gives
+the full swept curve for both agents. We conducted three independent training trials for each agent; results stabilized across
+trials, with exact operating points varying trial to trial.
+
+Where the fraud is stopped.
+
+Eq. 
+1
+ also requires that more
+fraudulent GMV be stopped pre- than post-authorization. This is an 
+aggregate
+ constraint,
+imposed on the reward in expectation over the training distribution rather than enforced at any
+particular threshold pair; nothing guarantees it at every operating point an agent is later swept
+to, so the meaningful question is how often, and how badly, a trained policy breaks it. The
+right-hand columns of Table 
+1
+ give the share of each agent’s blocked fraud GMV
+intercepted at step 0. DS keeps the majority pre-authorization at all three targets (67.1%,
+94.8%, 64.8%); SS does so at two of the three, stopping only 
+12.5%
+ early at the 90%
+target and routing the remainder past the issuer authorization request. On this evaluation window,
+then, precision and step ordering do not appear to trade off against one another.
+
+Table 1: 
+Overall held-out OOT (April–July 2026), read at the first operating point at or above the
+target $Recall; no interpolation. 
+Base
+: production GBM. 
+SS
+: labeled-only agent
+reproducing 
+Qu et al. (2025)
+. 
+DS
+: dual-stream (this work). Right-hand block:
+share of each agent’s 
+blocked fraud GMV
+ intercepted at step 0;
+Eq. 
+1
+ asks for 
+50%; the underlined cell falls below it.
+
+$Precision
+
+$TP stopped at PRA
+
+$Recall
+
+Base
+
+SS
+
+DS
+
+SS
+
+DS
+
+80%
+
+47.09%
+
+50.41%
+
+55.15%
+
+64.8%
+
+67.1%
+
+85%
+
+39.95%
+
+44.00%
+
+46.36%
+
+81.6%
+
+94.8%
+
+90%
+
+29.91%
+
+32.95%
+
+35.92%
+
+12.5%
+
+64.8%
+
+avg
+
+38.98%
+
+42.45%
+
+45.81%
+
+targets satisfying Eq. 
+1
+
+2 / 3
+
+3 / 3
+
+4.2 
+Month-by-Month Behavior
+
+Pooled results can mask a policy that decays as it ages away from its training window.
+Table 
+2
+ breaks the held-out window into its four months, each evaluated
+independently and reported 
+at each target recall
+—the agents behave differently across the
+band, and averaging hides it. Absolute levels shift sharply month to month (at 80% the baseline
+runs 61.27% in April against 19.27% in May), so only within-row comparisons are meaningful.
+
+Two patterns hold. First, the dual-stream advantage over SS 
+concentrates at the tight end of
+the band
+: at the 80% target DS leads SS in all four months, while at 90% the ordering reverses
+and SS leads in three of four. Against the production baseline DS is positive every month at 85%
+and 90% and in three of four at 80%—where SS clears the baseline only once, falling 
+
+points below it in July. Second, that reversal is the step-ordering result of §
+4
+
+seen from another angle: SS earns its loose-recall precision by deferring blocking to
+post-authorization, intercepting just 12.5% of blocked fraud GMV early at the pooled 90% target
+(Table 
+1
+)—strong on precision alone, but it pushes fraud past the issuer
+authorization request. Together the two tables place DS ahead where a payment system would actually
+operate: the tight, high-precision end of the band, without giving up early interception.
+
+Table 2: 
+Held-out OOT $Precision 
+differences
+ by month and target $Recall (R), same
+extraction rule as Table 
+1
+. Absolute levels are omitted: the fraud mix shifts
+month to month, so only within-cell system comparisons are meaningful. Bold marks a DS win.
+
+R
+
+Apr
+
+May
+
+Jun
+
+Jul
+
+DS 
+ SS
+
+80%
+
+2.80
+
+1.00
+
+1.91
+
+4.77
+
+85%
+
+2.83
+
+5.28
+
+1.15
+
+4.97
+
+90%
+
+2.08
+
+1.36
+
+7.23
+
+3.81
+
+DS 
+ Base
+
+80%
+
+0.99
+
+3.51
+
+1.43
+
+0.62
+
+85%
+
+7.08
+
+1.68
+
+3.46
+
+1.32
+
+90%
+
+9.54
+
+4.54
+
+3.53
+
+6.06
+
+4.3 
+Which Signals the LLM Kept
+
+Because the reward is emitted as code, the selected function records which of the 14 evidence
+signals offered on blocked rows (§
+2.2
+) the designer actually chose: it
+references four, and relies on two.
+
+The clearest case is its treatment of the legacy scores. The reward normalizes them onto the
+newest models’ scale and then never uses them again:
+
+⬇
+
+#
+ 
+Legacy
+ 
+normalised
+ 
+(1-1000
+ 
+->
+ 
+0-1),
+ 
+retained
+ 
+as
+
+#
+ 
+secondary
+ 
+evidence
+ 
+only:
+ 
+deliberately
+ 
+NOT
+ 
+mixed
+
+#
+ 
+into
+ 
+conf_score
+ 
+below.
+
+legacy_g1_h1_n
+ 
+=
+ 
+legacy_g1_h1
+ 
+/
+ 
+1000.0
+
+legacy_g2_h1_n
+ 
+=
+ 
+legacy_g2_h1
+ 
+/
+ 
+1000.0
+
+#
+ 
+Primary
+ 
+confidence
+ 
+=
+ 
+newest
+ 
+(calibrated)
+ 
+head.
+
+conf_score
+ 
+=
+ 
+torch
+.
+clamp
+(
+newest_h1
+,
+ 
+0.0,
+ 
+1.0)
+
+Its docstring justifies the omission as avoiding “stale-model noise”. The
+newest-versus-legacy 
+disagreement
+ schema we sketched in §
+2.2
+ is therefore
+not what the loop converged to: handed both, it promoted the newest calibrated head to sole
+confidence term and demoted the legacy generations to validators—a staleness-aware choice no
+fixed formula would make. Payment instrument and the three secondary heads of each generation are
+never referenced. Buyer segment, which we offered without prescribing a use, is kept: the reward
+conditions its block thresholds (
+ for low-risk cohorts, 
+ for the highest-risk one) and
+its reward weights on it, but never the confidence itself. We draw no conclusion that
+the discarded signals are uninformative—only that exposing a superset and letting the designer
+select is a workable way to find out, and that the choice stays auditable because it is code.
+
+Two further behaviors emerged unprompted. Rather than scoring a linear
+
+ margin, the reward 
+hinge-gates
+—paying for blocking only
+
+above
+ threshold and for passing only 
+below
+, with symmetric penalties in the crossover
+band (intermediate terms inlined; exact code in Appendix 
+B
+):
+
+⬇
+
+#
+ 
+BLOCK:
+ 
+hinge
+ 
+reward
+ 
+above
+ 
+threshold;
+ 
+penalty
+ 
+below.
+
+block_pen_thr
+ 
+=
+ 
+seg_threshold
+ 
+-
+ 
+pass_margin
+ 
+-
+ 
+0.15
+
+r_block
+ 
+=
+ 
+torch
+.
+clamp
+(
+conf_score
+ 
+-
+ 
+seg_threshold
+,
+ 
+min
+=0.0)
+ 
+\
+
+ 
+-
+ 
+torch
+.
+clamp
+(
+block_pen_thr
+ 
+-
+ 
+conf_score
+,
+ 
+min
+=0.0)
+ 
+*
+ 
+2.0
+
+#
+ 
+PASS:
+ 
+the
+ 
+mirror
+ 
+image.
+
+r_pass
+ 
+=
+ 
+torch
+.
+clamp
+(
+seg_threshold
+ 
+-
+ 
+conf_score
+,
+ 
+min
+=0.0)
+ 
+\
+
+ 
+-
+ 
+torch
+.
+clamp
+(
+conf_score
+ 
+-
+ 
+(
+seg_threshold
+ 
++
+ 
+pass_margin
+),
+
+ 
+min
+=0.0)
+ 
+*
+ 
+2.0
+
+Its docstring records this as a fix for the false positives a linear margin produced.
+Finally it applies a 
+strong step-0 bias
+, scaling blocked-stream rewards at
+pre-authorization and adding a flat early-block bonus:
+
+⬇
+
+#
+ 
+Strong
+ 
+step-0
+ 
+bias
+ 
+to
+ 
+drive
+ 
+early
+ 
+(pre-auth)
+ 
+blocking.
+
+if
+ 
+current_step
+ 
+==
+ 
+0:
+
+ 
+step_mult
+,
+ 
+block_boost
+ 
+=
+ 
+1.8,
+ 
+is_block
+ 
+*
+ 
+0.5
+
+else
+:
+
+ 
+step_mult
+,
+ 
+block_boost
+ 
+=
+ 
+1.0,
+ 
+0.0
+
+r_blocked
+ 
+=
+ 
+seg_weight
+ 
+*
+ 
+(
+r_base
+ 
+*
+ 
+step_mult
+ 
++
+ 
+block_boost
+)
+
+This produces the pre-authorization interception shares of
+Table 
+1
+, and echoes the early-stage up-weighting independently re-derived by
+
+Qu et al. (2025)
+. The labeled stream converged to a precision-leaning Lagrangian
+(
+ on TP/FP/FN), clamped to 
+.
+
+5 
+Conclusion
+
+Qu et al. (2025)
+ showed that an LLM can evolve the reward of a two-step REINFORCE
+fraud-blocking policy from labeled, approved traffic alone. We extend that framework to the
+censored half of the problem: a single LLM evolves a 
+dual-stream
+ reward spanning both
+labeled approved and legacy-blocked transactions, performing reject inference inside the reward
+itself and deciding for itself which risk signals to trust. Across a four-month OOT window the
+resulting policy beats the production GBM baseline and the labeled-only agent at every target
+recall in the operating range, by 
+ and 
+ points of dollar-weighted precision on
+average, while leaving the policy architecture of 
+Qu et al. (2025)
+, and hence its reported
+sub-50 ms CPU inference, unchanged. The censored population carries usable risk signal; an LLM
+can write the reward that extracts it, and leave a readable record of what it used.
+
+Limitations
+
+Reject-inference bias.
+
+The blocked population is a biased, non-random (MNAR)
+sample. Stream 2’s rewards assume the newest GBM scores carry genuine risk signal on blocked
+rows; where the original block was driven by features the newest models do not observe, this
+assumption can propagate legacy-policy bias. We caution against treating stream 2 rewards as
+ground-truth labels.
+
+Ethics Statement
+
+Data and privacy.
+
+All experiments use internal historical transaction records
+accessed under the platform’s data-governance program; no human-subject data were
+collected and no personally identifying attributes are used as model features.
+
+Risk of harm.
+
+Blocking errors carry real consequences: a false block harms a
+legitimate buyer; a missed fraud harms sellers and the platform. Any deployment should include
+human review, redress paths, and ongoing monitoring for differential impact across buyer
+cohorts.
+
+References
+
+Bahnsen et al. (2015)
+
+Alejandro Correa Bahnsen, Djamila Aouada, and Björn Ottersten. 2015.
+
+Example-dependent cost-sensitive decision trees
+.
+
+Expert Systems with Applications
+, 42(19):6609–6619.
+
+Bai et al. (2022)
+
+Yuntao Bai, Saurav Kadavath, Sandipan Kundu, Amanda Askell, Jackson Kernion, Andy Jones, et al. 2022.
+
+Constitutional AI: Harmlessness from AI feedback
+.
+
+arXiv preprint arXiv:2212.08073.
+
+Bekker and Davis (2020)
+
+Jessa Bekker and Jesse Davis. 2020.
+
+Learning from positive and unlabeled data: A survey
+.
+
+Machine Learning
+, 109(4):719–760.
+
+Chakraborty et al. (2024)
+
+Joymallya Chakraborty, Wei Xia, Anirban Majumder, Dan Ma, Walid Chaabene, and Naveed Janvekar. 2024.
+
+DetoxBench: Benchmarking large language models for multitask fraud and abuse detection
+.
+
+In 
+Proceedings of the 30th ACM SIGKDD Conference on Knowledge Discovery and Data Mining (Applied Data Science Track)
+.
+
+Chawla et al. (2002)
+
+Nitesh V. Chawla, Kevin W. Bowyer, Lawrence O. Hall, and W. Philip Kegelmeyer. 2002.
+
+SMOTE: Synthetic minority over-sampling technique
+.
+
+Journal of Artificial Intelligence Research
+, 16:321–357.
+
+Chen et al. (2021)
+
+Mark Chen, Jerry Tworek, Heewoo Jun, Qiming Yuan, Henrique Ponde de Oliveira Pinto, Jared Kaplan, Harri Edwards, Yuri Burda, Nicholas Joseph, Greg Brockman, et al. 2021.
+
+Evaluating large language models trained on code.
+
+arXiv preprint arXiv:2107.03374
+.
+
+Cotter et al. (2019)
+
+Andrew Cotter, Heinrich Jiang, Maya Gupta, Serena Wang, Taman Narayan, Seungil You, and Karthik Sridharan. 2019.
+
+Optimization with non-differentiable constraints with applications to fairness, recall, churn, and other goals
+.
+
+Journal of Machine Learning Research
+, 20(172):1–59.
+
+Dervovic et al. (2023)
+
+Danial Dervovic, Saeid Amiri, and Michael Cashmore. 2023.
+
+Value detection rate: A performance metric for payments fraud detection
+.
+
+In 
+ICAPS Workshop on Planning and Scheduling for Financial Services (FinPlan)
+.
+
+du Plessis et al. (2015)
+
+Marthinus Christoffel du Plessis, Gang Niu, and Masashi Sugiyama. 2015.
+
+Convex formulation for learning from positive and unlabeled data
+.
+
+In 
+Proceedings of the 32nd International Conference on Machine Learning (ICML)
+.
+
+Ehrhardt et al. (2021)
+
+Adrien Ehrhardt, Christophe Biernacki, Vincent Vandewalle, Philippe Heinrich, and Sébastien Beben. 2021.
+
+Reject inference methods in credit scoring
+.
+
+Journal of Applied Statistics
+, 48(13-15):2734–2754.
+
+Elkan (2001)
+
+Charles Elkan. 2001.
+
+The foundations of cost-sensitive learning
+.
+
+In 
+Proceedings of the 17th International Joint Conference on Artificial Intelligence (IJCAI)
+, volume 2, pages 973–978.
+
+Elkan and Noto (2008)
+
+Charles Elkan and Keith Noto. 2008.
+
+Learning classifiers from only positive and unlabeled data
+.
+
+In 
+Proceedings of the 14th ACM SIGKDD International Conference on Knowledge Discovery and Data Mining (KDD)
+.
+
+Fan et al. (2025)
+
+Xiran Fan, Zhimeng Jiang, Chin-Chia Michael Yeh, Yuzhong Chen, Yingtong Dou, Menghai Pan, and Yan Zheng. 2025.
+
+Enhancing foundation models in transaction understanding with LLM-based sentence embeddings
+.
+
+In 
+Proceedings of the 2025 Conference on Empirical Methods in Natural Language Processing: Industry Track
+, pages 903–911.
+
+Heckman (1979)
+
+James J. Heckman. 1979.
+
+Sample selection bias as a specification error.
+
+Econometrica
+, 47(1):153–161.
+
+Henderson et al. (2023)
+
+Peter Henderson, Ben Chugg, Brandon Anderson, Kristen Altenburger, Alex Turk, John Guyton, Jacob Goldin, and Daniel E. Ho. 2023.
+
+Integrating reward maximization and population estimation: Sequential decision-making for IRS audit selection
+.
+
+In 
+Proceedings of the AAAI Conference on Artificial Intelligence
+.
+
+Höppner et al. (2022)
+
+Sebastiaan Höppner, Bart Baesens, Wouter Verbeke, and Tim Verdonck. 2022.
+
+Instance-dependent cost-sensitive learning for detecting transfer fraud
+.
+
+European Journal of Operational Research
+, 297(1):291–300.
+
+Kath et al. (2026)
+
+Suraj Kath, Sanket Badhe, Preet Shah, Ashwin Sampathkumar, and Shivani Gupta. 2026.
+
+Large language models in the abuse detection pipeline
+.
+
+Preprint
+, arXiv:2604.00323.
+
+Kojima et al. (2022)
+
+Takeshi Kojima, Shixiang Shane Gu, Machel Reid, Yutaka Matsuo, and Yusuke Iwasawa. 2022.
+
+Large language models are zero-shot reasoners.
+
+Advances in neural information processing systems
+, 35:22199–22213.
+
+Kozodoi et al. (2020)
+
+Nikita Kozodoi, Panagiotis Katsas, Stefan Lessmann, Luis Moreira-Matias, and Konstantinos Papakonstantinou. 2020.
+
+Shallow self-learning for reject inference in credit scoring
+.
+
+In 
+Machine Learning and Knowledge Discovery in Databases (ECML PKDD), LNCS 11908
+.
+
+Kwon et al. (2023)
+
+Minae Kwon, Sang Michael Xie, Kalesha Bullard, and Dorsa Sadigh. 2023.
+
+Reward design with language models
+.
+
+In 
+The Eleventh International Conference on Learning Representations (ICLR)
+.
+
+Lakkaraju et al. (2017)
+
+Himabindu Lakkaraju, Jon Kleinberg, Jure Leskovec, Jens Ludwig, and Sendhil Mullainathan. 2017.
+
+The selective labels problem: Evaluating algorithmic predictions in the presence of unobservables
+.
+
+In 
+Proceedings of the 23rd ACM SIGKDD International Conference on Knowledge Discovery and Data Mining (KDD)
+.
+
+Lee et al. (2024)
+
+Harrison Lee, Samrat Phatale, Hassan Mansoor, Thomas Mesnard, Johan Ferret, Kellie Lu, et al. 2024.
+
+RLAIF vs. RLHF: Scaling reinforcement learning from human feedback with AI feedback
+.
+
+In 
+Proceedings of the 41st International Conference on Machine Learning (ICML)
+.
+
+Li et al. (2024)
+
+Hao Li, Xue Yang, Zhaokai Wang, Xizhou Zhu, Jie Zhou, Yu Qiao, Xiaogang Wang, Hongsheng Li, Lewei Lu, and Jifeng Dai. 2024.
+
+Auto MC-reward: Automated dense reward design with large language models for Minecraft
+.
+
+In 
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)
+.
+
+Liang et al. (2023)
+
+Jacky Liang, Wenlong Huang, Fei Xia, Peng Xu, Karol Hausman, Brian Ichter, Pete Florence, and Andy Zeng. 2023.
+
+Code as policies: Language model programs for embodied control
+.
+
+In 
+IEEE International Conference on Robotics and Automation (ICRA)
+, pages 9493–9500.
+
+Lin et al. (2017)
+
+Tsung-Yi Lin, Priya Goyal, Ross Girshick, Kaiming He, and Piotr Dollár. 2017.
+
+Focal loss for dense object detection.
+
+In 
+Proceedings of the IEEE International Conference on Computer Vision (ICCV)
+, pages 2980–2988.
+
+Liu et al. (2022)
+
+Qiang Liu, Yingtao Luo, Shu Wu, Zhen Zhang, Xiangnan Yue, Hong Jin, and Liang Wang. 2022.
+
+RMT-Net: Reject-aware multi-task network for modeling missing-not-at-random data in financial credit scoring
+.
+
+IEEE Transactions on Knowledge and Data Engineering
+, 35.
+
+Ma et al. (2024a)
+
+Yecheng Jason Ma, William Liang, Guanzhi Wang, De-An Huang, Osbert Bastani, Dinesh Jayaraman, Yuke Zhu, Linxi Fan, and Anima Anandkumar. 2024a.
+
+Eureka: Human-level reward design via coding large language models.
+
+In 
+The Twelfth International Conference on Learning Representations (ICLR)
+.
+
+Ma et al. (2024b)
+
+Yecheng Jason Ma, William Liang, Hungju Wang, Sam Wang, Yuke Zhu, Linxi Fan, Osbert Bastani, and Dinesh Jayaraman. 2024b.
+
+DrEureka: Language model guided sim-to-real transfer
+.
+
+In 
+Robotics: Science and Systems (RSS)
+.
+
+Mutemi and Bacao (2024)
+
+Abdul Mutemi and Fernando Bacao. 2024.
+
+E-commerce fraud detection based on machine learning techniques: Systematic literature review
+.
+
+Big Data Mining and Analytics
+, 7(2):419–444.
+
+Ouyang et al. (2022)
+
+Long Ouyang, Jeff Wu, Xu Jiang, Diogo Almeida, Carroll L. Wainwright, Pamela Mishkin, et al. 2022.
+
+Training language models to follow instructions with human feedback
+.
+
+Advances in Neural Information Processing Systems (NeurIPS)
+, 35:27730–27744.
+
+Qayoom et al. (2024)
+
+Abdul Qayoom, Mansoor Ahmed Khuhro, Kamlesh Kumar, Muhammad Waqas, Umair Saeed, Shafiq ur Rehman, Yadong Wu, and Song Wang. 2024.
+
+A novel approach for credit card fraud transaction detection using deep reinforcement learning scheme
+.
+
+PeerJ Computer Science
+.
+
+Qiao et al. (2024)
+
+Wei Qiao, Tushar Dogra, Otilia Stretcu, Yu-Han Lyu, Tiantian Fang, Dongjin Kwon, Chun-Ta Lu, Enming Luo, Yuan Wang, Chih-Chun Chia, Ariel Fuxman, Fangzhou Wang, Ranjay Krishna, and Mehmet Tek. 2024.
+
+Scaling up LLM reviews for google ads content moderation
+.
+
+In 
+Proceedings of the 17th ACM International Conference on Web Search and Data Mining (WSDM)
+, pages 1174–1175.
+
+Qu et al. (2025)
+
+Bo Qu, Zhurong Wang, Daisuke Yagi, Zhen Xu, Yang Zhao, Yinan Shan, and Frank Zahradnik. 2025.
+
+LLM-enhanced self-evolving reinforcement learning for multi-step E-commerce payment fraud risk detection
+.
+
+In 
+Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics (Volume 6: Industry Track)
+, pages 92–103.
+
+Rodrigues et al. (2022)
+
+Vinicius Facco Rodrigues, Lucas Micol Policarpo, Diórgenes Eugênio da Silveira, Rodrigo Da Rosa Righi, Cristiano André da Costa, Jorge Luis Victória Barbosa, Rodolfo Stoffel Antunes, Rodrigo Scorsatto, and Tanuj Arcot. 2022.
+
+Fraud detection and prevention in E-commerce: A systematic literature review
+.
+
+Electronic Commerce Research and Applications
+, 56:101207.
+
+Sarukkai et al. (2024)
+
+Vishnu Sarukkai, Brennan Shacklett, Zander Majercik, Kush Bhatia, Christopher Re, and Kayvon Fatahalian. 2024.
+
+Automated rewards via LLM-generated progress functions
+.
+
+arXiv preprint arXiv:2410.09187.
+
+Shen and Kurshan (2020)
+
+Hongda Shen and Eren Kurshan. 2020.
+
+Deep q-network-based adaptive alert threshold selection policy for payment fraud systems in retail banking.
+
+In 
+Proceedings of the First ACM International Conference on AI in Finance
+, pages 1–7.
+
+Sun et al. (2025)
+
+Shengjie Sun, Runze Liu, Jiafei Lyu, Jingwen Yang, Liangpeng Zhang, and Xiu Li. 2025.
+
+A large language model-driven reward design framework via dynamic feedback for reinforcement learning
+.
+
+Knowledge-Based Systems
+.
+
+Tessler et al. (2019)
+
+Chen Tessler, Daniel J. Mankowitz, and Shie Mannor. 2019.
+
+Reward constrained policy optimization
+.
+
+In 
+International Conference on Learning Representations (ICLR)
+.
+
+Verbraken et al. (2013)
+
+Thomas Verbraken, Wouter Verbeke, and Bart Baesens. 2013.
+
+A novel profit maximizing metric for measuring classification performance of customer churn prediction models
+.
+
+IEEE Transactions on Knowledge and Data Engineering
+, 25(5):961–973.
+
+Vimal et al. (2021)
+
+Siddharth Vimal, Kanishka Kayathwal, Hardik Wadhwa, and Gaurav Dhama. 2021.
+
+Application of deep reinforcement learning to payment fraud.
+
+arXiv preprint arXiv:2112.04236
+.
+
+Wang et al. (2024)
+
+Guanzhi Wang, Yuqi Xie, Yunfan Jiang, Ajay Mandlekar, Chaowei Xiao, Yuke Zhu, Linxi Fan, and Anima Anandkumar. 2024.
+
+Voyager: An open-ended embodied agent with large language models.
+
+Transactions on Machine Learning Research
+.
+
+Williams (1992)
+
+Ronald J Williams. 1992.
+
+Simple statistical gradient-following algorithms for connectionist reinforcement learning.
+
+Machine learning
+, 8:229–256.
+
+Xie et al. (2024)
+
+Tianbao Xie, Siheng Zhao, Chen Henry Wu, Yitao Liu, Qian Luo, Victor Zhong, Yanchao Yang, and Tao Yu. 2024.
+
+Text2Reward: Reward shaping with language models for reinforcement learning
+.
+
+In 
+International Conference on Learning Representations (ICLR)
+.
+
+Yang et al. (2025)
+
+Chengdong Yang, Hongrui Liu, Daixin Wang, Zhiqiang Zhang, Cheng Yang, and Chuan Shi. 2025.
+
+FLAG: Fraud detection with LLM-enhanced graph neural network
+.
+
+In 
+Proceedings of the 31st ACM SIGKDD Conference on Knowledge Discovery and Data Mining
+, volume 2, pages 5150–5160.
+
+Yu et al. (2023)
+
+Wenhao Yu, Nimrod Gileadi, Chuyuan Fu, Sean Kirmani, Kuang-Huei Lee, Montse Gonzalez Arenas, Hao-Tien Lewis Chiang, Tom Erez, Leonard Hasenclever, Jan Humplik, et al. 2023.
+
+Language to rewards for robotic skill synthesis.
+
+In 
+Proceedings of the 7th Conference on Robot Learning (CoRL)
+.
+
+Appendix A 
+Reward-Optimization Loop
+
+Algorithm 
+1
+ details the LLM reward-optimization loop used throughout the main
+text; the evolutionary outer loop is unchanged from that of 
+Qu et al. (2025)
+, and only the per-candidate reward (Stream 1
+Stream 2) differs.
+
+Algorithm 1
+ 
+ LLM-based Dual-Stream Reward Optimization
+
+0:
+
+            
+            
+           
+
+1:
+
+            
+            
+           Initialize env. 
+, baseline 
+, best reward 
+, temperature
+
+2:
+
+            
+            
+           
+for
+ 
+ to 
+ 
+do
+
+3:
+
+            
+            
+            Update temperature from feedback
+
+4:
+
+            
+            
+            
+for
+ 
+ to 
+ 
+do
+
+5:
+
+            
+            
+             Sample 
+ from LLM; validate signature via AST; re-sample if invalid
+
+6:
+
+            
+            
+            
+end
+ 
+for
+
+7:
+
+            
+            
+            
+for all
+ valid 
+ 
+do
+
+8:
+
+            
+            
+             
+ {dual-stream data}
+
+9:
+
+            
+            
+             
+ on eval. set
+
+10:
+
+            
+            
+            
+end
+ 
+for
+
+11:
+
+            
+            
+            Update 
+; update LLM instructions with best / sub-optimal / reflection
+
+12:
+
+            
+            
+           
+end
+ 
+for
+
+Appendix B 
+Best Dual-Stream Reward Function
+
+Listing 
+1
+ gives the complete reward function selected by the loop
+(iteration 25), reproduced verbatim apart from anonymization: the four GBM head names are
+rendered 
+h1
+–
+h4
+, the two legacy model generations 
+g1
+/
+g2
+,
+and every buyer-segment descriptor is redacted to 
+{descr}
+. The numeric coefficients
+are the LLM’s own evolved values and are unmodified. The three behaviors discussed in
+§
+4.3
+ are visible here: the newest calibrated head is the sole confidence term
+(the normalized legacy variables are computed but deliberately never mixed in), blocking and
+passing are hinge-gated with symmetric crossover penalties, and step 0 carries a 
+
+multiplier plus a fixed early-block bonus. The listing also retains the per-cohort threshold and
+weight vectors the LLM derived from the injected fraud-rate statistics; these are peripheral to
+the censored-outcome mechanism this paper is about, and are reproduced only so that the artifact
+is shown complete and unedited.
+
+⬇
+
+import
+ 
+torch
+
+def
+ 
+get_reward
+(
+current_step
+,
+ 
+action
+,
+ 
+target
+,
+ 
+wgt
+,
+ 
+is_blocked
+,
+
+ 
+legacy_g1_h1
+,
+ 
+legacy_g1_h2
+,
+ 
+legacy_g1_h3
+,
+ 
+legacy_g1_h4
+,
+
+ 
+legacy_g2_h1
+,
+ 
+legacy_g2_h2
+,
+ 
+legacy_g2_h3
+,
+ 
+legacy_g2_h4
+,
+
+ 
+newest_h1
+,
+ 
+newest_h2
+,
+ 
+newest_h3
+,
+ 
+newest_h4
+,
+
+ 
+byr_segment
+,
+ 
+pymnt_inst
+):
+
+ 
+""
+"
+
+ 
+Precision-gated
+ 
+score
+ 
+thresholding
+ 
+for
+ 
+the
+ 
+blocked
+ 
+stream.
+
+ 
+Stream
+ 
+1
+ 
+(labeled):
+ 
+dollar-weighted
+ 
+Lagrangian,
+ 
+precision-leaning
+
+ 
+(TP
+ 
++2,
+ 
+FP
+ 
+-3,
+ 
+FN
+ 
+-2),
+ 
+with
+ 
+a
+ 
+mild
+ 
+step-0
+ 
+boost
+ 
+(1.05).
+
+ 
+Stream
+ 
+2
+ 
+(blocked,
+ 
+censored):
+ 
+the
+ 
+newest
+ 
+calibrated
+ 
+GBM
+ 
+head
+ 
+is
+ 
+the
+
+ 
+PRIMARY
+ 
+confidence;
+ 
+legacy
+ 
+scores
+ 
+are
+ 
+kept
+ 
+only
+ 
+as
+ 
+SECONDARY
+
+ 
+validators
+ 
+and
+ 
+deliberately
+ 
+NOT
+ 
+blended
+ 
+into
+ 
+the
+ 
+confidence,
+ 
+to
+
+ 
+avoid
+ 
+injecting
+ 
+stale-model
+ 
+noise.
+
+ 
+Per-segment
+ 
+block
+ 
+thresholds
+ 
+are
+ 
+set
+ 
+INVERSELY
+ 
+to
+ 
+the
+ 
+injected
+
+ 
+per-segment
+ 
+precision
+ 
+statistics;
+ 
+segment
+ 
+weights
+ 
+likewise.
+
+ 
+Hinge
+ 
+gating:
+ 
+reward
+ 
+blocking
+ 
+only
+ 
+above
+ 
+threshold
+ 
+and
+ 
+passing
+ 
+only
+
+ 
+below,
+ 
+with
+ 
+symmetric
+ 
+penalties
+ 
+in
+ 
+the
+ 
+crossover
+ 
+band.
+
+ 
+Strong
+ 
+step-0
+ 
+bias
+ 
+on
+ 
+the
+ 
+blocked
+ 
+stream
+ 
+(step_mult
+ 
+1.8,
+ 
+block_boost
+ 
+0.5).
+
+ 
+Final
+ 
+clamp
+ 
+to
+ 
+[-2,
+ 
+2]
+ 
+for
+ 
+REINFORCE
+ 
+gradient
+ 
+stability.
+
+ 
+"
+""
+
+ 
+device
+ 
+=
+ 
+action
+.
+device
+
+ 
+reward
+ 
+=
+ 
+torch
+.
+zeros_like
+(
+action
+.
+float
+(),
+ 
+device
+=
+device
+)
+
+ 
+labeled_mask
+ 
+=
+ 
+(
+is_blocked
+ 
+==
+ 
+0.0).
+float
+()
+
+ 
+blocked_mask
+ 
+=
+ 
+(
+is_blocked
+ 
+==
+ 
+1.0).
+float
+()
+
+ 
+a
+,
+ 
+t
+ 
+=
+ 
+action
+.
+long
+(),
+ 
+target
+.
+long
+()
+
+ 
+#
+ 
+----
+ 
+STREAM
+ 
+1:
+ 
+LABELED
+ 
+(ground
+ 
+truth
+ 
+available)
+ 
+----
+
+ 
+if
+ 
+labeled_mask
+.
+sum
+()
+ 
+>
+ 
+0:
+
+ 
+is_tp
+ 
+=
+ 
+((
+a
+ 
+==
+ 
+1)
+ 
+&
+ 
+(
+t
+ 
+==
+ 
+1)).
+float
+()
+
+ 
+is_fp
+ 
+=
+ 
+((
+a
+ 
+==
+ 
+1)
+ 
+&
+ 
+(
+t
+ 
+==
+ 
+0)).
+float
+()
+
+ 
+is_fn
+ 
+=
+ 
+((
+a
+ 
+==
+ 
+0)
+ 
+&
+ 
+(
+t
+ 
+==
+ 
+1)).
+float
+()
+
+ 
+r_labeled
+ 
+=
+ 
+(
+is_tp
+ 
+*
+ 
+2.0
+ 
++
+ 
+is_fp
+ 
+*
+ 
+-3.0
+ 
++
+ 
+is_fn
+ 
+*
+ 
+-2.0)
+ 
+*
+ 
+wgt
+
+ 
+step_boost
+ 
+=
+ 
+1.05
+ 
+if
+ 
+current_step
+ 
+==
+ 
+0
+ 
+else
+ 
+1.0
+
+ 
+reward
+ 
+=
+ 
+torch
+.
+where
+(
+labeled_mask
+ 
+==
+ 
+1.0,
+ 
+step_boost
+ 
+*
+ 
+r_labeled
+,
+ 
+reward
+)
+
+ 
+#
+ 
+----
+ 
+STREAM
+ 
+2:
+ 
+BLOCKED
+ 
+(label
+ 
+unobservable;
+ 
+reason
+ 
+over
+ 
+scores)
+ 
+----
+
+ 
+if
+ 
+blocked_mask
+.
+sum
+()
+ 
+>
+ 
+0:
+
+ 
+#
+ 
+Legacy
+ 
+normalised
+ 
+(1-1000
+ 
+->
+ 
+0-1),
+ 
+retained
+ 
+as
+ 
+secondary
+ 
+evidence
+
+ 
+#
+ 
+only:
+ 
+deliberately
+ 
+NOT
+ 
+mixed
+ 
+into
+ 
+conf_score
+ 
+below.
+
+ 
+legacy_g1_h1_n
+ 
+=
+ 
+legacy_g1_h1
+ 
+/
+ 
+1000.0
+
+ 
+legacy_g2_h1_n
+ 
+=
+ 
+legacy_g2_h1
+ 
+/
+ 
+1000.0
+
+ 
+#
+ 
+Primary
+ 
+confidence
+ 
+=
+ 
+newest
+ 
+(calibrated)
+ 
+head.
+
+ 
+conf_score
+ 
+=
+ 
+torch
+.
+clamp
+(
+newest_h1
+,
+ 
+0.0,
+ 
+1.0)
+
+ 
+seg_float
+ 
+=
+ 
+byr_segment
+.
+float
+()
+
+ 
+#
+ 
+Per-segment
+ 
+BLOCK
+ 
+thresholds,
+ 
+set
+ 
+inversely
+ 
+to
+ 
+segment
+ 
+precision.
+
+ 
+t_seg_0
+ 
+=
+ 
+0.70
+ 
+*
+ 
+(
+seg_float
+ 
+==
+ 
+0).
+float
+()
+ 
+#
+ 
+{descr}
+ 
+(strictest)
+
+ 
+t_seg_1
+ 
+=
+ 
+0.60
+ 
+*
+ 
+(
+seg_float
+ 
+==
+ 
+1).
+float
+()
+ 
+#
+ 
+{descr}
+
+ 
+t_seg_2
+ 
+=
+ 
+0.50
+ 
+*
+ 
+(
+seg_float
+ 
+==
+ 
+2).
+float
+()
+ 
+#
+ 
+{descr}
+
+ 
+t_seg_3
+ 
+=
+ 
+0.65
+ 
+*
+ 
+(
+seg_float
+ 
+==
+ 
+3).
+float
+()
+ 
+#
+ 
+{descr}
+
+ 
+t_seg_4
+ 
+=
+ 
+0.45
+ 
+*
+ 
+(
+seg_float
+ 
+==
+ 
+4).
+float
+()
+ 
+#
+ 
+{descr}
+ 
+(most
+ 
+lenient)
+
+ 
+t_seg_5
+ 
+=
+ 
+0.80
+ 
+*
+ 
+(
+seg_float
+ 
+==
+ 
+5).
+float
+()
+ 
+#
+ 
+{descr}
+
+ 
+seg_threshold
+ 
+=
+ 
+(
+t_seg_0
+ 
++
+ 
+t_seg_1
+ 
++
+ 
+t_seg_2
+
+ 
++
+ 
+t_seg_3
+ 
++
+ 
+t_seg_4
+ 
++
+ 
+t_seg_5
+)
+
+ 
+#
+ 
+Per-segment
+ 
+reward
+ 
+weights.
+
+ 
+w_seg_0
+ 
+=
+ 
+1.0
+ 
+*
+ 
+(
+seg_float
+ 
+==
+ 
+0).
+float
+()
+ 
+#
+ 
+{descr}
+
+ 
+w_seg_1
+ 
+=
+ 
+1.0
+ 
+*
+ 
+(
+seg_float
+ 
+==
+ 
+1).
+float
+()
+ 
+#
+ 
+{descr}
+
+ 
+w_seg_2
+ 
+=
+ 
+1.2
+ 
+*
+ 
+(
+seg_float
+ 
+==
+ 
+2).
+float
+()
+ 
+#
+ 
+{descr}
+
+ 
+w_seg_3
+ 
+=
+ 
+0.8
+ 
+*
+ 
+(
+seg_float
+ 
+==
+ 
+3).
+float
+()
+ 
+#
+ 
+{descr}
+
+ 
+w_seg_4
+ 
+=
+ 
+1.5
+ 
+*
+ 
+(
+seg_float
+ 
+==
+ 
+4).
+float
+()
+ 
+#
+ 
+{descr}
+
+ 
+w_seg_5
+ 
+=
+ 
+0.5
+ 
+*
+ 
+(
+seg_float
+ 
+==
+ 
+5).
+float
+()
+ 
+#
+ 
+{descr}
+
+ 
+seg_weight
+ 
+=
+ 
+(
+w_seg_0
+ 
++
+ 
+w_seg_1
+ 
++
+ 
+w_seg_2
+
+ 
++
+ 
+w_seg_3
+ 
++
+ 
+w_seg_4
+ 
++
+ 
+w_seg_5
+)
+
+ 
+pass_margin
+ 
+=
+ 
+0.05
+
+ 
+is_block
+ 
+=
+ 
+(
+a
+ 
+==
+ 
+1).
+float
+()
+
+ 
+is_pass
+ 
+=
+ 
+(
+a
+ 
+==
+ 
+0).
+float
+()
+
+ 
+#
+ 
+BLOCK:
+ 
+hinge
+ 
+reward
+ 
+above
+ 
+threshold;
+ 
+penalty
+ 
+far
+ 
+below
+ 
+it.
+
+ 
+block_reward
+ 
+=
+ 
+torch
+.
+clamp
+(
+conf_score
+ 
+-
+ 
+seg_threshold
+,
+ 
+min
+=0.0)
+
+ 
+block_pen_thr
+ 
+=
+ 
+seg_threshold
+ 
+-
+ 
+pass_margin
+ 
+-
+ 
+0.15
+
+ 
+block_penalty
+ 
+=
+ 
+torch
+.
+clamp
+(
+block_pen_thr
+ 
+-
+ 
+conf_score
+,
+ 
+min
+=0.0)
+ 
+*
+ 
+2.0
+
+ 
+r_block
+ 
+=
+ 
+block_reward
+ 
+-
+ 
+block_penalty
+
+ 
+#
+ 
+PASS:
+ 
+hinge
+ 
+reward
+ 
+below
+ 
+threshold;
+ 
+penalty
+ 
+far
+ 
+above
+ 
+it.
+
+ 
+pass_reward
+ 
+=
+ 
+torch
+.
+clamp
+(
+seg_threshold
+ 
+-
+ 
+conf_score
+,
+ 
+min
+=0.0)
+
+ 
+pass_penalty
+ 
+=
+ 
+torch
+.
+clamp
+(
+
+ 
+conf_score
+ 
+-
+ 
+(
+seg_threshold
+ 
++
+ 
+pass_margin
+),
+ 
+min
+=0.0)
+ 
+*
+ 
+2.0
+
+ 
+r_pass
+ 
+=
+ 
+pass_reward
+ 
+-
+ 
+pass_penalty
+
+ 
+r_base
+ 
+=
+ 
+is_block
+ 
+*
+ 
+r_block
+ 
++
+ 
+is_pass
+ 
+*
+ 
+r_pass
+
+ 
+#
+ 
+Strong
+ 
+step-0
+ 
+bias
+ 
+to
+ 
+drive
+ 
+early
+ 
+(pre-auth)
+ 
+blocking.
+
+ 
+if
+ 
+current_step
+ 
+==
+ 
+0:
+
+ 
+step_mult
+,
+ 
+block_boost
+ 
+=
+ 
+1.8,
+ 
+is_block
+ 
+*
+ 
+0.5
+
+ 
+else
+:
+
+ 
+step_mult
+,
+ 
+block_boost
+ 
+=
+ 
+1.0,
+ 
+0.0
+
+ 
+r_blocked
+ 
+=
+ 
+seg_weight
+ 
+*
+ 
+(
+r_base
+ 
+*
+ 
+step_mult
+ 
++
+ 
+block_boost
+)
+
+ 
+reward
+ 
+=
+ 
+torch
+.
+where
+(
+blocked_mask
+ 
+==
+ 
+1.0,
+ 
+r_blocked
+,
+ 
+reward
+)
+
+ 
+return
+ 
+torch
+.
+clamp
+(
+reward
+,
+ 
+min
+=-2.0,
+ 
+max
+=2.0)
+
+Listing 1: 
+Best dual-stream reward (iteration 25), anonymized. 
+{descr}
+ marks a redacted buyer-segment descriptor.
+
+Appendix C 
+Prompt Design
+
+This appendix reproduces the natural-language templates that drive the LLM
+reward-design loop (Figure 
+1
+). Two runtime placeholders
+are filled programmatically before each query:
+
+{task_reward_signature_string_baseline}
+ is replaced by the
+validated 4-argument SS reward (the Stream 1 starting point), and
+
+{task_reward_signature_string}
+ by the running best-so-far
+19-argument dual-stream reward. Proprietary specifics are anonymized to match the main
+body: the concrete buyer-cohort and payment-instrument 
+category names
+ are
+replaced by generic lifecycle / instrument classes, and the absolute per-cohort
+dollar-weighted fraud rates injected as “statistics context” are replaced by
+normalized relative-risk indices spanning roughly an order of magnitude across
+cohorts (absolute rates withheld). The integer 
+byr_segment
+ codes below
+are the raw model enumeration, an arbitrary and 
+non
+ risk-sorted ordering. The
+four legacy risk-model heads are denoted 
+–
+, following the same
+anonymization used by 
+Qu et al. (2025)
+ (their internal fraud-typology
+names are withheld).
+All other text is verbatim, with non-ASCII math glyphs rendered in ASCII
+(
+in
+, 
+x
+,
+
+->
+, 
+~
+).
+
+C.1 
+Dual-Stream Task Description
+
+The dual-stream task prompt frames the two-population problem and enumerates
+the reward signals available on blocked, censored rows.
+
+⬇
+
+Design
+ 
+a
+ 
+reward
+ 
+function
+ 
+that
+ 
+enables
+ 
+the
+ 
+RL
+ 
+agent
+ 
+to
+ 
+make
+ 
+more
+ 
+effective
+
+two
+-
+step
+ 
+fraud
+-
+blocking
+ 
+decisions
+ 
+for
+ 
+improved
+ 
+performance
+ 
+on
+ 
+the
+ 
+held
+-
+out
+
+evaluation
+ 
+population
+,
+ 
+compared
+ 
+to
+ 
+the
+ 
+baseline
+ 
+GBM
+ 
+score
+ 
+at
+ 
+step
+ 
+0.
+
+The
+ 
+training
+ 
+data
+ 
+contains
+ 
+TWO
+ 
+types
+ 
+of
+ 
+samples
+:
+
+(1)
+ 
+LABELED
+ 
+samples
+ 
+(
+is_blocked
+ 
+==
+ 
+0.0):
+
+ 
+Transactions
+ 
+approved
+ 
+by
+ 
+the
+ 
+legacy
+ 
+system
+.
+ 
+Actual
+ 
+fraud
+ 
+label
+ 
+is
+ 
+known
+
+ 
+(
+target
+ 
+in
+ 
+{0,
+ 
+1}).
+ 
+Apply
+ 
+standard
+ 
+Lagrangian
+ 
+precision
+/
+recall
+ 
+reward
+
+ 
+logic
+,
+ 
+identical
+ 
+to
+ 
+the
+ 
+labeled
+-
+only
+ 
+baseline
+.
+ 
+Legacy
+ 
+scores
+ 
+are
+ 
+0.0
+ 
+for
+ 
+these
+
+ 
+rows
+ 
+--
+ 
+ignore
+ 
+them
+.
+ 
+byr_segment
+ 
+and
+ 
+pymnt_inst
+ 
+are
+ 
+0
+ 
+here
+ 
+--
+ 
+ignore
+.
+
+(2)
+ 
+BLOCKED
+ 
+samples
+ 
+(
+is_blocked
+ 
+==
+ 
+1.0):
+
+ 
+Transactions
+ 
+blocked
+ 
+by
+ 
+the
+ 
+legacy
+ 
+system
+.
+ 
+Actual
+ 
+fraud
+ 
+label
+ 
+is
+
+ 
+UNOBSERVABLE
+ 
+(
+target
+ 
+==
+ 
+-1).
+ 
+Use
+ 
+these
+ 
+signals
+ 
+to
+ 
+estimate
+ 
+the
+ 
+reward
+
+ 
+for
+ 
+the
+ 
+agent
+’
+s
+ 
+action
+:
+
+ 
+Legacy
+ 
+model
+ 
+scores
+ 
+(1-1000
+ 
+scale
+;
+ 
+PRA
+ 
+at
+ 
+step
+ 
+0,
+ 
+PA
+ 
+at
+ 
+step
+ 
+1):
+
+ 
+legacy_g1_
+{
+h1
+,
+ 
+h2
+,
+ 
+h3
+,
+ 
+h4
+}
+ 
+--
+ 
+legacy
+ 
+gen
+-1
+ 
+GBM
+ 
+scores
+
+ 
+legacy_g2_
+{
+h1
+,
+ 
+h2
+,
+ 
+h3
+,
+ 
+h4
+}
+ 
+--
+ 
+legacy
+ 
+gen
+-2
+ 
+GBM
+ 
+scores
+
+ 
+Newest
+ 
+GBM
+ 
+scores
+ 
+(0-1
+ 
+scale
+,
+ 
+step
+-
+appropriate
+):
+
+ 
+newest_
+{
+h1
+,
+ 
+h2
+,
+ 
+h3
+,
+ 
+h4
+}
+ 
+--
+ 
+current
+ 
+production
+ 
+GBM
+ 
+scores
+
+ 
+SCALE
+ 
+NOTE
+:
+ 
+legacy
+ 
+scores
+ 
+are
+ 
+1-1000,
+ 
+newest
+ 
+are
+ 
+0-1.
+ 
+Normalise
+ 
+before
+
+ 
+comparison
+:
+ 
+legacy_g1_h1
+ 
+/
+ 
+1000.0
+ 
+~
+ 
+newest_h1
+ 
+range
+.
+ 
+Example
+:
+ 
+legacy_g1_h1
+
+ 
+>
+ 
+700
+ 
+is
+ 
+equivalent
+ 
+to
+ 
+newest_h1
+ 
+>
+ 
+0.7.
+
+ 
+HOW
+ 
+TO
+ 
+INTERPRET
+ 
+SCORE
+ 
+SIGNALS
+:
+
+ 
+-
+ 
+Both
+ 
+legacy
+ 
+and
+ 
+newest
+ 
+HIGH
+ 
+->
+ 
+strong
+ 
+fraud
+ 
+evidence
+ 
+->
+ 
+reward
+ 
+blocking
+
+ 
+-
+ 
+Legacy
+ 
+HIGH
+,
+ 
+newest
+ 
+LOW
+ 
+->
+ 
+possible
+ 
+over
+-
+block
+ 
+->
+ 
+discount
+ 
+reward
+
+ 
+-
+ 
+Both
+ 
+scores
+ 
+LOW
+ 
+->
+ 
+likely
+ 
+legacy
+ 
+false
+ 
+pos
+ 
+->
+ 
+reward
+ 
+passing
+
+ 
+-
+ 
+gen
+-1
+ 
+and
+ 
+gen
+-2
+ 
+agreeing
+ 
+HIGH
+ 
+adds
+ 
+more
+ 
+confidence
+ 
+than
+ 
+either
+ 
+alone
+
+ 
+Context
+ 
+tensors
+ 
+(
+blocked
+ 
+stream
+ 
+only
+;
+ 
+0
+ 
+for
+ 
+labeled
+ 
+rows
+):
+
+ 
+byr_segment
+ 
+:
+ 
+int64
+ 
+buyer
+-
+segment
+ 
+code
+ 
+(
+label
+-
+anonymized
+ 
+generic
+
+ 
+lifecycle
+ 
+classes
+;
+ 
+arbitrary
+,
+ 
+non
+ 
+risk
+-
+sorted
+ 
+enumeration
+):
+
+ 
+0
+ 
+=
+ 
+established
+,
+ 
+regularly
+ 
+active
+ 
+buyer
+
+ 
+1
+ 
+=
+ 
+occasional
+ 
+buyer
+
+ 
+2
+ 
+=
+ 
+long
+-
+dormant
+ 
+before
+ 
+recent
+ 
+purchase
+ 
+(
+historically
+ 
+over
+-
+blocked
+)
+
+ 
+3
+ 
+=
+ 
+new
+ 
+account
+,
+ 
+limited
+ 
+history
+ 
+(
+high
+ 
+legacy
+ 
+block
+ 
+rate
+)
+
+ 
+4
+ 
+=
+ 
+guest
+ 
+checkout
+ 
+(
+no
+ 
+account
+ 
+login
+)
+
+ 
+5
+ 
+=
+ 
+unknown
+
+ 
+pymnt_inst
+ 
+:
+ 
+int64
+ 
+payment
+-
+instrument
+ 
+code
+ 
+(
+instrument
+ 
+class
+ 
+only
+;
+
+ 
+brands
+ 
+and
+ 
+regions
+ 
+withheld
+):
+
+ 
+0
+ 
+=
+ 
+credit
+ 
+card
+ 
+1
+ 
+=
+ 
+debit
+ 
+card
+
+ 
+2
+ 
+=
+ 
+mobile
+ 
+wallet
+ 
+A
+ 
+3
+ 
+=
+ 
+mobile
+ 
+wallet
+ 
+B
+
+ 
+4
+ 
+=
+ 
+regional
+ 
+real
+-
+time
+ 
+bank
+ 
+transfer
+
+ 
+5
+ 
+=
+ 
+direct
+ 
+bank
+-
+account
+ 
+debit
+
+ 
+Dollar
+-
+weighted
+ 
+fraud
+ 
+rates
+ 
+per
+ 
+segment
+,
+ 
+payment
+ 
+method
+,
+ 
+and
+ 
+their
+
+ 
+combination
+ 
+are
+ 
+provided
+ 
+in
+ 
+the
+ 
+injected
+ 
+statistics
+ 
+context
+ 
+(
+the
+
+ 
+normalized
+ 
+relative
+-
+risk
+ 
+form
+;
+ 
+absolute
+ 
+rates
+ 
+withheld
+).
+
+GOAL
+:
+
+ 
+Drive
+ 
+the
+ 
+RL
+ 
+agent
+ 
+to
+ 
+block
+ 
+more
+ 
+high
+-
+value
+ 
+fraud
+ 
+at
+ 
+step
+ 
+0
+ 
+(
+pre
+-
+auth
+)
+
+ 
+than
+ 
+step
+ 
+1
+ 
+(
+post
+-
+auth
+),
+ 
+and
+ 
+improve
+ 
+dollar
+-
+weighted
+ 
+precision
+ 
+at
+ 
+target
+
+ 
+recall
+ 
+on
+ 
+the
+ 
+evaluation
+ 
+population
+.
+ 
+The
+ 
+blocked
+-
+stream
+ 
+reward
+ 
+should
+ 
+not
+
+ 
+destabilise
+ 
+labeled
+-
+stream
+ 
+learning
+ 
+--
+ 
+keep
+ 
+stream
+-2
+ 
+reward
+ 
+magnitudes
+
+ 
+comparable
+ 
+to
+ 
+stream
+-1
+ 
+(
+use
+ 
+wgt
+ 
+weighting
+ 
+for
+ 
+both
+).
+
+Listing 2: 
+Dual-stream task description prompt (anonymized, ASCII).
+
+C.2 
+Code-Output Instruction (19-Argument Contract)
+
+The code-output prompt pins the exact function signature, the TorchScript
+constraint, and the extraction format.
+
+⬇
+
+Your
+ 
+reward
+ 
+function
+ 
+should
+ 
+use
+ 
+useful
+ 
+variables
+ 
+from
+ 
+the
+ 
+code
+ 
+framework
+ 
+as
+
+inputs
+.
+ 
+As
+ 
+a
+ 
+reference
+,
+ 
+below
+ 
+are
+ 
+validated
+ 
+reward
+ 
+functions
+ 
+designed
+ 
+for
+
+labeled
+-
+data
+ 
+transactions
+ 
+only
+ 
+(
+Stream
+ 
+1,
+ 
+is_blocked
+==0.0).
+ 
+They
+ 
+use
+ 
+only
+ 
+4
+
+arguments
+ 
+(
+current_step
+,
+ 
+action
+,
+ 
+target
+,
+ 
+wgt
+)
+ 
+and
+ 
+do
+ 
+NOT
+ 
+handle
+ 
+blocked
+
+samples
+ 
+--
+ 
+use
+ 
+them
+ 
+as
+ 
+a
+ 
+starting
+ 
+point
+ 
+for
+ 
+the
+ 
+Stream
+ 
+1
+ 
+logic
+ 
+only
+,
+ 
+then
+
+design
+ 
+the
+ 
+Stream
+ 
+2
+ 
+reward
+ 
+(
+blocked
+ 
+samples
+,
+ 
+is_blocked
+==1.0)
+ 
+yourself
+,
+ 
+using
+
+the
+ 
+legacy
+ 
+scores
+,
+ 
+newest
+ 
+GBM
+ 
+scores
+,
+ 
+byr_segment
+,
+ 
+and
+ 
+pymnt_inst
+:
+
+‘‘‘
+python
+ 
+{
+task_reward_signature_string_baseline
+}
+ 
+‘‘‘
+
+The
+ 
+best
+ 
+full
+ 
+dual
+-
+stream
+ 
+reward
+ 
+function
+ 
+(
+both
+ 
+streams
+)
+ 
+found
+ 
+so
+ 
+far
+ 
+is
+:
+
+‘‘‘
+python
+ 
+{
+task_reward_signature_string
+}
+ 
+‘‘‘
+
+Since
+ 
+the
+ 
+reward
+ 
+function
+ 
+will
+ 
+be
+ 
+compiled
+ 
+with
+ 
+TorchScript
+,
+ 
+ensure
+ 
+the
+ 
+code
+
+is
+ 
+TorchScript
+-
+compatible
+ 
+(
+use
+ 
+torch
+ 
+tensors
+,
+ 
+not
+ 
+numpy
+).
+ 
+Ensure
+ 
+any
+ 
+new
+
+tensor
+ 
+or
+ 
+variable
+ 
+is
+ 
+on
+ 
+the
+ 
+same
+ 
+device
+ 
+as
+ 
+the
+ 
+inputs
+.
+ 
+The
+ 
+output
+ 
+must
+ 
+be
+:
+
+ 
+(1)
+ 
+the
+ 
+completed
+ 
+reward
+ 
+function
+.
+
+ 
+(2)
+ 
+the
+ 
+reward
+ 
+code
+ 
+must
+ 
+use
+ 
+this
+ 
+exact
+ 
+19-
+argument
+ 
+signature
+:
+
+ 
+"
+def
+ 
+get_reward
+(
+current_step
+,
+ 
+action
+,
+ 
+target
+,
+ 
+wgt
+,
+ 
+is_blocked
+,
+
+ 
+legacy_g1_h1
+,
+ 
+legacy_g1_h2
+,
+ 
+legacy_g1_h3
+,
+ 
+legacy_g1_h4
+,
+
+ 
+legacy_g2_h1
+,
+ 
+legacy_g2_h2
+,
+ 
+legacy_g2_h3
+,
+ 
+legacy_g2_h4
+,
+
+ 
+newest_h1
+,
+ 
+newest_h2
+,
+ 
+newest_h3
+,
+ 
+newest_h4
+,
+
+ 
+byr_segment
+,
+ 
+pymnt_inst
+):"
+
+ 
+--
+ 
+all
+ 
+19
+ 
+arguments
+ 
+are
+ 
+required
+ 
+and
+ 
+must
+ 
+match
+ 
+exactly
+.
+
+ 
+(3)
+ 
+the
+ 
+code
+ 
+output
+ 
+must
+ 
+be
+ 
+formatted
+ 
+as
+ 
+"‘‘‘
+python
+ 
+...
+ 
+‘‘‘".
+
+ 
+(4)
+ 
+if
+ 
+you
+ 
+define
+ 
+extra
+ 
+helper
+ 
+functions
+,
+ 
+output
+ 
+them
+ 
+completely
+ 
+in
+ 
+the
+
+ 
+same
+ 
+code
+ 
+block
+.
+
+ 
+(5)
+ 
+code
+ 
+and
+ 
+annotations
+ 
+must
+ 
+be
+ 
+consistent
+.
+
+ 
+(6)
+ 
+output
+ 
+only
+ 
+the
+ 
+reward
+-
+function
+ 
+code
+ 
+at
+ 
+the
+ 
+beginning
+ 
+of
+ 
+the
+ 
+response
+,
+
+ 
+for
+ 
+ease
+ 
+of
+ 
+extraction
+.
+
+ 
+(7)
+ 
+use
+ 
+the
+ 
+backslash
+ 
+(\)
+ 
+as
+ 
+a
+ 
+line
+ 
+continuation
+ 
+where
+ 
+one
+ 
+logic
+ 
+line
+ 
+is
+
+ 
+split
+ 
+across
+ 
+physical
+ 
+lines
+.
+
+ 
+(8)
+ 
+always
+ 
+add
+ 
+"
+import
+ 
+torch
+"
+ 
+as
+ 
+the
+ 
+first
+ 
+line
+ 
+of
+ 
+the
+ 
+code
+ 
+block
+.
+
+Listing 3: 
+Code-output instruction prompt (anonymized, ASCII). The two backtick-fenced placeholders are filled at runtime.
+
+C.3 
+Reward-Signature Argument Reference
+
+The reward-signature reference is the per-argument documentation the model
+conditions on; a full example reward is given as Listing 
+1
+
+(Appendix 
+B
+).
+
+⬇
+
+current_step
+ 
+:
+ 
+int
+ 
+--
+ 
+0
+ 
+=
+ 
+pre
+-
+auth
+ 
+(
+PRA
+,
+ 
+all
+ 
+txns
+);
+ 
+1
+ 
+=
+ 
+post
+-
+auth
+ 
+(
+PA
+,
+ 
+only
+
+ 
+txns
+ 
+passed
+ 
+at
+ 
+step
+ 
+0)
+
+action
+ 
+:
+ 
+Tensor
+ 
+(
+N
+,)
+ 
+int64
+ 
+--
+ 
+0=
+pass
+,
+ 
+1=
+block
+
+target
+ 
+:
+ 
+Tensor
+ 
+(
+N
+,)
+ 
+int64
+ 
+--
+ 
+0=
+legit
+,
+ 
+1=
+fraud
+,
+ 
+-1=
+blocked
+ 
+(
+unknown
+)
+
+wgt
+ 
+:
+ 
+Tensor
+ 
+(
+N
+,)
+ 
+float
+ 
+--
+ 
+dollar
+ 
+weight
+ 
+=
+ 
+usd_amt
+ 
+x
+ 
+sample_weight
+
+is_blocked
+ 
+:
+ 
+Tensor
+ 
+(
+N
+,)
+ 
+float
+ 
+--
+ 
+1.0
+ 
+=
+ 
+legacy
+-
+blocked
+ 
+(
+no
+ 
+ground
+ 
+truth
+);
+
+ 
+0.0
+ 
+=
+ 
+labeled
+ 
+approved
+
+Legacy
+ 
+scores
+ 
+(1-1000
+ 
+scale
+,
+ 
+original
+ 
+production
+ 
+scale
+,
+ 
+NOT
+ 
+normalised
+),
+ 
+one
+
+per
+ 
+GBM
+ 
+head
+ 
+{
+h1
+,
+ 
+h2
+,
+ 
+h3
+,
+ 
+h4
+}
+ 
+for
+ 
+each
+ 
+legacy
+ 
+generation
+ 
+{
+g1
+,
+ 
+g2
+}:
+
+ 
+legacy_g1_h1
+ 
+..
+ 
+legacy_g1_h4
+ 
+,
+ 
+legacy_g2_h1
+ 
+..
+ 
+legacy_g2_h4
+
+ 
+--
+ 
+score
+ 
+at
+ 
+the
+ 
+current
+ 
+step
+’
+s
+ 
+checkpoint
+ 
+(
+PRA
+ 
+at
+ 
+step
+ 
+0,
+ 
+PA
+ 
+at
+ 
+step
+ 
+1).
+
+ 
+For
+ 
+labeled
+ 
+rows
+ 
+(
+is_blocked
+==0)
+ 
+these
+ 
+are
+ 
+0.0.
+ 
+Legacy
+ 
+scores
+ 
+are
+ 
+NOISY
+
+ 
+evidence
+:
+ 
+the
+ 
+block
+ 
+decision
+ 
+followed
+ 
+complex
+ 
+threshold
+ 
+rules
+ 
+that
+ 
+these
+
+ 
+scores
+ 
+only
+ 
+partially
+ 
+encode
+.
+
+Newest
+ 
+GBM
+ 
+scores
+ 
+(0-1
+ 
+normalised
+;
+ 
+also
+ 
+used
+ 
+as
+ 
+policy
+ 
+input
+):
+
+ 
+newest_h1
+,
+ 
+newest_h2
+,
+ 
+newest_h3
+,
+ 
+newest_h4
+ 
+--
+ 
+current
+-
+step
+ 
+scores
+.
+
+Context
+ 
+(
+blocked
+ 
+stream
+ 
+only
+;
+ 
+0
+ 
+for
+ 
+labeled
+ 
+rows
+):
+
+ 
+byr_segment
+ 
+:
+ 
+int64
+ 
+buyer
+-
+segment
+ 
+code
+ 
+(
+generic
+ 
+lifecycle
+ 
+classes
+;
+ 
+arbitrary
+,
+
+ 
+non
+ 
+risk
+-
+sorted
+ 
+enumeration
+):
+
+ 
+0=
+established
+-
+active
+ 
+1=
+occasional
+ 
+2=
+long
+-
+dormant
+ 
+(
+historically
+
+ 
+over
+-
+blocked
+ 
+--
+ 
+use
+ 
+conservatively
+)
+ 
+3=
+new
+-
+account
+ 
+(
+high
+ 
+legacy
+ 
+block
+
+ 
+rate
+ 
+--
+ 
+watch
+ 
+false
+ 
+positives
+)
+ 
+4=
+guest
+-
+checkout
+ 
+5=
+unknown
+
+ 
+pymnt_inst
+ 
+:
+ 
+int64
+ 
+payment
+-
+instrument
+ 
+code
+ 
+(
+class
+ 
+only
+;
+ 
+brands
+/
+regions
+
+ 
+withheld
+):
+ 
+0=
+credit
+ 
+card
+ 
+1=
+debit
+ 
+card
+ 
+2=
+mobile
+ 
+wallet
+ 
+A
+
+ 
+3=
+mobile
+ 
+wallet
+ 
+B
+ 
+4=
+regional
+ 
+bank
+ 
+transfer
+ 
+(
+mostly
+ 
+low
+-
+risk
+)
+
+ 
+5=
+direct
+ 
+bank
+-
+account
+ 
+debit
+
+Score
+-
+scale
+ 
+bridging
+ 
+(
+legacy
+ 
+1-1000
+ 
+vs
+ 
+newest
+ 
+0-1):
+ 
+normalise
+ 
+legacy
+,
+ 
+e
+.
+g
+.
+
+ 
+legacy_g1_h1_norm
+ 
+=
+ 
+legacy_g1_h1
+ 
+/
+ 
+1000.0
+ 
+;
+ 
+threshold
+ 
+700/1000
+ 
+=
+ 
+0.7.
+
+Useful
+ 
+derived
+ 
+quantities
+ 
+(
+blocked
+ 
+stream
+):
+
+ 
+score_agreement_h1
+ 
+=
+ 
+1.0
+ 
+-
+ 
+abs
+(
+newest_h1
+ 
+-
+ 
+legacy_g1_h1_norm
+)
+
+ 
+#
+ 
+1.0
+ 
+=
+ 
+agree
+,
+ 
+0.0
+ 
+=
+ 
+maximally
+ 
+disagree
+
+ 
+risk_level
+ 
+=
+ 
+newest_h1
+*0.5
+ 
++
+ 
+(
+legacy_g1_h1_norm
+ 
++
+ 
+legacy_g2_h1_norm
+)*0.25
+
+ 
+#
+ 
+newer
+ 
+GBM
+ 
+weighted
+ 
+higher
+;
+ 
+clamp
+ 
+to
+ 
+[0,1]
+
+Design
+ 
+principles
+:
+
+ 
+STREAM
+ 
+1
+ 
+(
+is_blocked
+==0.0):
+ 
+standard
+ 
+Lagrangian
+ 
+precision
+/
+recall
+ 
+reward
+,
+
+ 
+identical
+ 
+to
+ 
+the
+ 
+labeled
+-
+only
+ 
+baseline
+;
+ 
+target
+ 
+in
+ 
+{0,1};
+ 
+ignore
+ 
+legacy
+ 
+scores
+ 
+and
+ 
+context
+.
+
+ 
+STREAM
+ 
+2
+ 
+(
+is_blocked
+==1.0):
+ 
+target
+==-1
+ 
+(
+unobservable
+).
+ 
+Reward
+ 
+from
+
+ 
+(
+a
+)
+ 
+legacy
+/
+newest
+ 
+agreement
+ 
+->
+ 
+strong
+ 
+fraud
+ 
+signal
+;
+
+ 
+(
+b
+)
+ 
+disagreement
+ 
+(
+legacy
+ 
+high
+,
+ 
+newest
+ 
+low
+)
+ 
+->
+ 
+possible
+ 
+over
+-
+block
+ 
+->
+ 
+discount
+;
+
+ 
+(
+c
+)
+ 
+both
+ 
+low
+ 
+->
+ 
+likely
+ 
+legacy
+ 
+false
+ 
+positive
+ 
+->
+ 
+reward
+ 
+passing
+;
+
+ 
+(
+d
+)
+ 
+condition
+ 
+on
+ 
+byr_segment
+ 
+and
+ 
+pymnt_inst
+.
+
+TorchScript
+:
+ 
+use
+ 
+torch
+.*
+ 
+(
+not
+ 
+numpy
+);
+ 
+cast
+ 
+integer
+ 
+comparisons
+ 
+to
+ 
+float
+,
+
+ 
+e
+.
+g
+.
+ 
+(
+byr_segment
+ 
+==
+ 
+2).
+float
+();
+ 
+torch
+.
+clamp
+ 
+/
+ 
+abs
+ 
+/
+ 
+where
+ 
+are
+ 
+safe
+.
+
+Return
+:
+ 
+reward
+ 
+#
+ 
+Tensor
+ 
+(
+N
+,)
+ 
+or
+ 
+(
+N
+,1),
+ 
+aggregated
+ 
+externally
+.
+
+Listing 4: 
+Condensed 19-argument reward-signature reference (anonymized, ASCII).
+
+Appendix D 
+Overall Precision–Recall Curve
+
+Table 
+3
+ gives the full swept operating curve for both LLM-designed agents on the
+held-out April–July 2026 window, extending beyond the three targets of
+Table 
+1
+. Across the rows spanning recall 
+–
+, which contains the
+reported band, DS attains higher $precision at comparable $recall; outside that span—below
+
+ and above 
+, where neither agent is intended to operate—the ordering is mixed.
+
+Table 3: 
+Full swept curve on the held-out April–July 2026 window for 
+SS
+ (labeled-only)
+and 
+DS
+ (dual-stream). Each row is one aligned operating point, ordered by increasing
+$Recall; the two agents’ achieved recalls differ slightly, so each agent’s pair should be read
+together rather than compared column-wise. Baseline values at the three reported targets are in
+Table 
+1
+.
+
+SS
+
+DS
+
+$Recall
+
+$Prec
+
+$Recall
+
+$Prec
+
+0.5773
+
+0.6788
+
+0.5012
+
+0.6690
+
+0.5773
+
+0.6788
+
+0.5646
+
+0.6629
+
+0.6256
+
+0.6565
+
+0.6117
+
+0.6479
+
+0.6513
+
+0.6120
+
+0.6594
+
+0.6394
+
+0.7016
+
+0.5886
+
+0.7107
+
+0.6183
+
+0.7513
+
+0.5581
+
+0.7548
+
+0.5825
+
+0.8001
+
+0.5041
+
+0.8007
+
+0.5515
+
+0.8530
+
+0.4400
+
+0.8510
+
+0.4636
+
+0.9027
+
+0.3295
+
+0.9011
+
+0.3592
+
+0.9553
+
+0.1581
+
+0.9517
+
+0.1349
+
