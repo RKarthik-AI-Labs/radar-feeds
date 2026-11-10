@@ -1,0 +1,2399 @@
+Agentic Attribution of Cloud Resource Ownership
+https://arxiv.org/abs/2611.11340
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+Agentic Attribution of Cloud Resource Ownership
+
+Tiltan Gilat
+
+  
+
+Gal Engelberg
+
+  
+
+Ariel Zadok
+
+  
+
+Leon Goldberg
+
+Affiliation: 
+Sola Security
+
+Affiliation: 
+Corresponding author: gal.e@sola.security
+
+Abstract
+
+Security tools raise findings across cloud environments, and AI agents now investigate and prioritize them. A finding is still resolved by people: it has to reach the people responsible for fixing it and accountable for the resource it concerns. Ownership is the organizational context that decides who that is. Where recorded, it is declared by hand in configuration management databases or owner tags and goes stale unless kept current; accounts are shared, and automation creates much of the infrastructure. The knowledge sits in work records, code history, audit logs and identity directories, encoded in each organization’s own conventions. Recovering it poses four challenges: the signal is scattered across sources, none of them authoritative; the conventions that carry it differ between organizations; reaching an owner takes multi-hop links; and those related to a resource differ in the strength of their relation. We define ownership as a set of entities, people or teams, each related to the resource by one of five patterns ordered by strength. We present a reference architecture for agentic ownership attribution that derives ownership from these records instead of declaring it: it profiles an organization offline into tested signal procedures and an ownership playbook, then attributes each resource with a coordinator agent and parallel investigators, with confidence computed by rules. On 100 resources of 50 Amazon Web Services (AWS) resource types in one organization, we pool the architecture’s candidates with those of an unprimed general-purpose agent and verify every evidence piece against the records. The architecture reaches 92.1% weighted recall and 86.6% weighted precision, against 54.8% and 77.4%, at 0.55 times the agent’s cost per unit of coverage. The difference lies in people who build and change resources without an explicit owner, found through work records and code history.
+
+ 
+
+ 
+
+K
+eywords
+ Ownership attribution  
+
+Security remediation  
+
+Organizational context  
+
+Cloud security  
+
+LLM agents  
+
+Evaluation without ground truth
+
+1 
+Introduction
+
+Security programs run on findings. Posture management, vulnerability scanners and detection tools raise them across cloud environments, each attached to a resource, and AI agents now investigate and prioritize them 
+[
+1
+, 
+2
+]
+. A finding is still resolved by people: it has to reach the people responsible for fixing it and accountable for the resource, who decide whether an exposure is intended, have it fixed or accept the risk. Who they are is 
+organizational context
+, knowledge of what an organization’s assets mean to it that changes the correct security decision: the same finding on two identically configured resources goes to different people, depending on who owns each 
+[
+3
+]
+. Misallocation is costly. In a vendor survey of 300 cybersecurity and IT professionals, about half spend at least as much time coordinating remediation, including identifying owners, as analyzing risk 
+[
+4
+]
+, and more than 20,000 released cloud resources that remained referenced have been found hijacked 
+[
+5
+]
+.
+
+Yet ownership is rarely recorded reliably. Where it is recorded, it is declared: configuration management databases (CMDBs) and asset inventories hold owner fields 
+[
+6
+]
+ that people fill in by hand or copy from other declared records 
+[
+7
+]
+. The declaration ages as the most suitable owner changes over time 
+[
+8
+]
+, and CMDB tooling has to measure how many records have gone stale 
+[
+9
+]
+. Owner tags are missing or inconsistent; in the organization evaluated here, the standard owner and team tags are not in use at all. Accounts are shared, and automation creates much of the infrastructure. The knowledge sits instead in the records people leave as they work: the cloud audit log, the identity center, work tracking, code hosting and the identity provider. We call this 
+implicit ownership
+, ownership that these records hold but the resource does not; it is the ownership instance of the 
+organizational context gap
+ 
+[
+3
+]
+.
+
+Recovering implicit ownership poses four challenges. The signal is scattered (C1): each source holds a partial, sometimes outdated trace, and none is authoritative. Conventions are organization-specific (C2): one organization encodes the owner in a tag, another in a resource name, a third only in tickets, so fixed rules do not transfer. Links are multi-hop (C3): a tag leads to a deployment stack, a repository, its pull requests, their authors and finally a current employee. Relations differ in strength (C4): the engineer who built a resource and a person who made a single commit to a library it uses should not weigh equally.
+
+Existing work addresses neighboring questions. Software engineering measures code ownership from contribution shares 
+[
+10
+, 
+11
+]
+, and triage assigns transient work items from historical assignments 
+[
+12
+, 
+13
+]
+. The closest academic precedent we found suggests owners for internal software assets at Facebook 
+[
+8
+]
+. Products record or infer one owner per resource or finding, usually a team 
+[
+14
+, 
+15
+, 
+16
+]
+, and none of those we reviewed publishes an evaluation method.
+
+Formally, an organization integrates a set of sources 
+, and for a resource 
+ the task is to return its ownership set 
+: each entity 
+, a person or a team, that records in 
+ relate to 
+, the evidence pieces 
+ that cite those records, and a confidence 
+. The relation pattern 
+, read from 
+, decides how much 
+ counts. Non-human identities, such as service accounts and roles used by software, and people no longer active in the organization are never members of 
+.
+
+This paper makes two contributions. First, we define ownership as a typed set of entities, people and teams: five relation patterns, ordered by strength, name the nature of each entity’s tie to a resource. Second, we present a reference architecture for agentic ownership attribution that derives ownership from the records the organization already keeps, instead of a field that people must keep current. Running on a data layer that relates the organization’s records across platforms, it profiles each organization offline into 
+signal procedures
+, tested lookups from a resource to a person or team, and an 
+ownership playbook
+, the guidance its agents read. It then attributes each resource with a coordinator agent and parallel investigators, while code checks each conclusion and computes confidence by rules.
+
+The evaluation follows the pooling practice of information retrieval 
+[
+17
+]
+. The candidates of the architecture and of an unprimed general-purpose agent are pooled. The agent is Claude Code 
+[
+18
+]
+, run through the Claude Agent SDK 
+[
+19
+]
+ on Claude Sonnet 5.5 
+[
+20
+]
+, the model of the architecture’s inference agents, with direct read-only access to the organization’s live platforms and no knowledge of the organization. In the pool, every evidence piece is verified against the records, and every verified owner is weighted by relation pattern. The evaluation covers 100 resources of 50 Amazon Web Services (AWS) resource types 
+[
+21
+]
+ in one organization, and the discussion answers each challenge from its results.
+
+Section 
+2
+ reviews related work, Section 
+3
+ defines ownership, Section 
+4
+ presents the architecture, Section 
+5
+ reports the evaluation, and Section 
+6
+ discusses the results and their limits.
+
+2 
+Related Work
+
+Organizational context for security agents.
+
+Our prior work develops the context that security agents reason over when they investigate and prioritize findings. An asset intelligence layer turns heterogeneous security data into asset-level abstractions such as blast radius and business and data criticality 
+[
+1
+]
+. Benchmarks measure agents that investigate identity posture in a live identity environment 
+[
+22
+]
+ and across eight vendor platforms 
+[
+23
+]
+, and an open framework benchmarks agents that investigate enterprise security posture 
+[
+24
+]
+. On live cloud investigations, a context layer resolved offline covers more of a pooled answer set than general-purpose coding agents given read-only access to the same live AWS environment 
+[
+2
+]
+. Organizational context is defined for security reasoning and extracted as claims from what people write (evaluated on policies, audit reports and architecture documents), carried with their evidence and bound to the assets they concern 
+[
+3
+]
+. That work names ownership as organizational context and notes that part of it can be inferred from machine state. This paper defines ownership as a typed set of entities and recovers it, for each resource, from the organization’s operational records.
+
+Ownership in software engineering.
+
+Software engineering treats ownership mainly as a measurement: the proportion of a component’s changes that one developer made. 
+Bird et al. [10]
+ relate such measures to failures in Windows Vista and Windows 7; replications confirm the relation in some settings 
+[
+25
+]
+ and find it weak in others 
+[
+26
+]
+. The measured owner depends on the operationalization. Adding review activity shows that most developers who contribute to a module authored no code in it and only reviewed its changes 
+[
+27
+]
+, and commit-based and line-based measures yield different owner sets 
+[
+28
+]
+. Declared ownership of code paths, through CODEOWNERS files 
+[
+29
+, 
+30
+]
+ or OWNERS files kept current by activity rules 
+[
+31
+]
+, assigns reviewers for code. These works define, measure or declare the ownership of code. The object here is a deployed resource, and the relation is established across systems that code-ownership measures do not read.
+
+Expert finding and work-item triage.
+
+Expertise location answers who knows about a part of a system: from change-management data 
+[
+32
+]
+, from a model of organizational expertise referral 
+[
+33
+]
+, and from authorship combined with interaction in the development environment 
+[
+34
+]
+. Enterprise expert finding ranks people for a topic through person–document associations, whose strength is the central modeling choice 
+[
+35
+, 
+36
+]
+; reviewer recommendation 
+[
+37
+]
+ and enterprise socio-technical graphs 
+[
+38
+]
+ apply the same idea at scale. Bug triage maps a new report to a developer learned from past assignments 
+[
+39
+, 
+12
+]
+ and models reassignment as tossing graphs 
+[
+40
+]
+. Incident triage routes incidents in online services to the responsible team 
+[
+13
+, 
+41
+, 
+42
+]
+; LLM agents now perform root-cause analysis that names responsibilities 
+[
+43
+]
+ and multi-agent incident triage 
+[
+44
+]
+. In all of these, the object is a topic or a transient work item and the output is the person or team to consult or to act next; standing ownership of a persistent resource has no assignment history to learn from.
+
+Ownership of assets, services and data.
+
+Ahlgren et al. [8]
+ describe ownership management for internal software assets at Facebook, now Meta (source files, warehouse tables, configurations), where a deployed system mines internal records at scale with machine learning; they set out the open problems of the task. Configuration management databases, for which no common understanding of what constitutes one has been established 
+[
+45
+]
+, store ownership as declared attributes 
+[
+6
+]
+, and their tooling scores stale or incomplete records rather than inferring the owner 
+[
+9
+]
+. Dataset catalogs crawl owners as metadata and propagate them across related datasets 
+[
+46
+]
+, and data governance designs owner and steward roles as responsibility matrices 
+[
+47
+, 
+48
+]
+. Measurement studies document the exposure created by resources that outlive their owners’ attention 
+[
+49
+, 
+5
+]
+. Our search found no peer-reviewed work that attributes deployed cloud resources to people.
+
+Industry approaches.
+
+Products approach resource ownership through four mechanisms. Cloud providers govern declared metadata: tag policies standardize keys and values 
+[
+50
+]
+, tagging guidance defines separate owner tags for separate responsibilities 
+[
+51
+]
+, and ownership labels are described as a common way to identify responsible teams 
+[
+52
+]
+; remediation platforms resolve one owner from such declarations in a fixed order of trust, a manual override, possibly inherited from an account or network, before a CMDB record and owner tags 
+[
+53
+]
+. Creator provenance is recorded from control-plane events 
+[
+54
+, 
+55
+, 
+56
+]
+ as the principal that issued the create call, which is often a role session or a pipeline. Vendors describe code-to-cloud tracing that links resources derived from infrastructure-as-code and container images to repositories, commits and developers 
+[
+57
+, 
+58
+, 
+59
+, 
+60
+]
+. Owner inference goes further. Datadog’s Ownership Agent 
+[
+15
+]
+ ranks evidence from owner tags, configured preferences, the service catalog, audit-log creators and naming, and returns one suggested owner with a confidence, an explanation and its evidence; organization-specific guidance is written by hand as a preferences table 
+[
+61
+]
+. Brinqa 
+[
+16
+]
+ predicts typed owner attributes with supervised models trained on existing assignments, Zafran 
+[
+62
+]
+ describes an agent that cites its evidence and abstains when the evidence is insufficient, and developer portals 
+[
+63
+, 
+64
+]
+ suggest owner teams from repository activity and linked work-tracking data.
+
+Together, these lines of work place ownership in the organizational context that security judgments depend on, establish it as a consequential construct in software engineering, supply activity-based ways to rank people for an artifact, and show that owner inference is in commercial demand. What is missing is attribution with four properties: it treats the ownership of a deployed resource as a set of people and teams whose relations differ in kind and strength; it combines the organization’s operational records for each resource; it learns where ownership signals live in a given organization instead of requiring them to be written by hand; and its accuracy is measured by a published method. These are the properties that 
+implicit ownership
+ requires.
+
+3 
+Ownership Definition
+
+An owner of a resource is an entity, a person or a team, whose relation to the resource is supported by the organization’s records. The definition makes ownership a set rather than a single value, and it makes the relation, not the entity, the unit that has to be justified. Each member of the set carries a 
+relation pattern
+, which names the nature of the entity’s tie to the resource (Table 
+1
+).
+
+Explicit owner and direct work form the strongest level. An explicit owner is named on the resource itself, in its name or recorded metadata, or is shown by a recorded action to have created it. Direct work covers the people who build, change, run or answer for the resource, or for the thing it exists for. The weaker patterns, in decreasing strength, are indirect work, the same activities on the resource’s surroundings where the link is inferred; relies on it, use of or dependence on the resource; and peripheral, a weak link such as a mention.
+
+The boundary between direct and indirect work separates the people who answer for a resource from those who answer for its surroundings. Work is direct when the thing the person or team works on is the reason the resource exists. Maintaining the database service that a compute node exists to run is direct work on the node; administering the cloud account in which the node runs is indirect work. A resource that exists for an environment, such as the environment’s own certificate, is direct work for the person who runs that environment.
+
+Five rules govern the patterns.
+
+1.
+
+Patterns name behaviors, not data sources, so a relation recorded in a source the definition did not anticipate still has a place.
+
+2.
+
+A pattern is read from the evidence that establishes the relation; assigning it requires no further investigation.
+
+3.
+
+Creating, changing, maintaining, operating and being responsible for a resource are one level; the builder is not ranked above the operator.
+
+4.
+
+Breadth of scope matters only relative to the other people related to the same resource. When nobody does direct work on a resource, indirect work is the strongest relation it has, and it is graded as such.
+
+5.
+
+Non-human identities are not owners. A deployment pipeline, an infrastructure-as-code role or a service principal points to the run it performed. The run points to a branch, commit or ticket, and the people on those records are the candidates.
+
+The order encodes a judgment about allocation. The strongest level holds the entities a finding on the resource should reach: those named as answering for it and those who build and run it. Missing one of them is a larger error than missing a person who once mentioned the resource. The evaluation turns this order into weights.
+
+Existing ownership models characterize the owner: by artifact, owner and degree of ownership 
+[
+11
+]
+, or by declared role, as owned by, managed by and supported by 
+[
+6
+]
+, as one ultimate owner 
+[
+14
+]
+, or as several owners of named types 
+[
+65
+, 
+66
+]
+. The relation patterns instead type and grade the tie that the records establish between an entity and one resource, so the same entity can be the explicit owner of one resource and a peripheral link to another. Rule 
+5
+ corresponds to delegation in provenance models, where an agent acts on behalf of another who retains some responsibility 
+[
+67
+]
+.
+
+Table 1: 
+Relation patterns.
+
+Pattern
+
+Definition
+
+Strength
+
+Explicit owner
+
+The entity’s name, username or email appears in the resource’s name or in metadata recorded on it, or a recorded action shows the entity created it
+
+Highest
+
+Direct work
+
+Builds, changes, runs or answers for this resource, or for the thing it exists for
+
+Highest
+
+Indirect work
+
+Builds, changes, runs or answers for something around the resource (its environment, the infrastructure beneath it, related resources); the link to this resource is inferred
+
+Intermediate
+
+Relies on it
+
+Uses the resource or its system, builds on top of it, or reports problems while using it
+
+Low
+
+Peripheral
+
+A weak link (a mention, a look-alike), or no pattern fits
+
+Lowest
+
+Non-human identity
+
+Service account, machine user, role used by software
+
+Not an owner
+
+4 
+Reference Architecture
+
+The architecture treats ownership attribution as an investigation over the organization’s records, carried out by an agent whose action space is a set of tools (Figure 
+1
+). Three principles shape it. First, judgment and guarantees are separated: language models decide where to look and how to read what they find, while deterministic code tests their proposals, decides whether a conclusion is admitted and combines evidence scores into a confidence. Second, organization-specific knowledge is compiled once: what can be learned about an organization’s conventions is turned offline into tools, so that per-resource reasoning is spent only on what cannot be pre-computed. Third, every claim is grounded: each owner in the output carries the records that relate them to the resource, with facts kept apart from inferences.
+
+Enterprise security brain.
+
+All agents and tools read the 
+enterprise security brain
+, the cross-platform security data layer of our prior work 
+[
+1
+, 
+2
+, 
+3
+]
+. It integrates each platform’s records in one read-only store, relates them in an asset graph before any question arrives, so that an identity-provider account already points to the cloud role it assumes, and holds organizational context beside the graph 
+[
+3
+]
+. Relational context of this kind raised agent answer correctness by about 34% relative in our cross-vendor benchmark 
+[
+23
+]
+, and it lets questions over a whole population be answered against the complete inventory rather than a sample 
+[
+2
+]
+.
+
+Offline: compiling the organization into tools.
+
+Profiling agents learn how one organization records ownership (C2) and compile it into two tools. The first is a set of 
+signal procedures
+, executable lookups from a resource to a person or team. Each procedure starts as a hypothesis that an agent proposes about the organization, for example that the value of a 
+stack
+ tag names a repository whose pull-request authors work on the resource, and becomes a tool only after code, running it on the organization’s own data, finds that it reaches people, generalizes beyond the values it was built from and behaves as declared. A procedure is defined over keys and joins, not over particular values, so one procedure serves every resource that carries the key. A hypothesis the data refutes is revised or dismissed. Accepted procedures are executed for every resource ahead of time as 
+pre-computed signals
+, so the deterministic part of attribution is paid once, and each carries a reliability prior derived from its known weaknesses. Signals differ in what they assert: a 
+direct
+ signal names one person, as an owner tag holding 
+alice@example.com
+ does; a 
+supportive
+ signal points toward owners, as a stack tag does; and 
+chain segments
+ compose into multi-hop chains (C3). The second tool is the 
+ownership playbook
+, the declarative complement to the procedures: written guidance on which tags are reliable, how logins map to people and which leads are dead ends, which turns profiling from a one-off analysis into context read for every resource.
+
+Online: an agentic search for evidence.
+
+Inference for one resource is a search over the evidence the brain can produce, run by one investigation agent in a loop of reasoning, tool calls and observation 
+[
+68
+]
+. The agent first infers what the resource belongs to, its 
+context
+: a load balancer named 
+payments-api-prod-alb
+ belongs to the payments API in production, so 
+payments
+ and 
+api
+ become search terms for tickets and code (C1, C3). It reads the compiled tools and uses live read-only queries for what they do not cover, such as tickets that mention the payments API. Open leads are pursued in parallel by investigator sub-agents that run the same loop, in the orchestrator–worker pattern of recent multi-agent systems 
+[
+69
+, 
+70
+]
+. Two behaviors keep the search broad rather than greedy: every role holder on a matching record (assignee, reporter, author, reviewer) is registered, not only its leader, and automation is read as delegation, so a pipeline that created the resource is followed to the commit or ticket behind it (rule 
+5
+). Every 
+evidence piece
+ separates what the records show from what is inferred from them: 
+the person is the assignee of a ticket that names the stack
+ is a fact, 
+the person therefore works on the resource
+ an inference.
+
+Invariants and confidence.
+
+Acceptance is governed by invariants enforced in code rather than by the model’s judgment. A conclusion is admitted only if it rests on evidence the agent has observed, every failed lookup was retried or explained, and every person it mentions is attributed or ruled out; otherwise it is returned for another round. Confidence is never stated by the model: investigators score each evidence piece, and fixed rules combine these scores and the procedures’ priors into a confidence per entity. The output is the ownership set 
+: each entity, its evidence and its confidence, from which the relation pattern is read (rule 
+2
+).
+
+Profiling agents 
+
+Pre-computed signals and playbook
+
+route 
+stack
+ 
+ repo 
+ PR authors, tested on the data
+
+stack=payments-api
+
+ 4 people
+
+Resource
+
+Investigation agent 
+
+Ownership set
+
+payments-api-prod-alb
+
+context: payments API, production
+
+alice@example.com
+:
+
+2 evidence pieces, high
+
+Enterprise security brain
+
+the organization’s records, related across platforms
+
+builds
+tool calls
+rule
+checks
+reads
+live queries
+OFFLINE
+ 
+per organization
+ONLINE
+ 
+per resource
+language model
+data
+  agent loop
+example
+
+Figure 1: 
+Agentic reference architecture: an investigation agent and its tools, one built offline, with an example at each step.
+
+5 
+Evaluation
+
+We evaluate the ownership set the architecture returns for each resource against the set returned by an unprimed baseline agent. No ground-truth ownership map exists, so both are scored against a pool of their verified candidates. Three criteria apply, each with its metrics: 
+coverage
+, whether a system finds the entities the records relate to the resource, measured by weighted recall and by success rate, the share of resources with a verified owner; 
+correctness
+, whether what it proposes is supported by the records, measured by weighted precision and rejected candidates; and 
+cost
+, measured by cost per resource and per unit of weighted recall.
+
+For a resource, let 
+ be its verified candidates, 
+ the candidates proposed by system 
+, 
+ the rejected candidates of 
+, 
+ the weight of the relation pattern of candidate 
+, and 
+ the restriction to people. The primary metrics are
+
+(1)
+
+Weighted recall is the share of the pool’s verified weight a system found; in weighted precision each verified person earns its weight and each rejected candidate costs a full 1. The weights turn the strength order of Section 
+3
+ into numbers, in the manner of graded relevance 
+[
+71
+]
+: explicit owner and direct work 1.0, indirect work 0.5, relies on it 0.25, peripheral 0.1. When a resource has no direct worker, indirect work counts 1.0 (rule 
+4
+); when it has a verified explicit owner, direct work counts 0.75, indirect work 0.25 and weaker links 0. Values are micro-averaged, so each owner counts once, and only people are scored.
+
+5.1 
+Experiment design
+
+Resources.
+
+Resources are drawn from a real-life production environment of one organization. Of the 244 AWS resource types we classified, 105 are 
+ownable
+, meaning a person or team would create, deploy, manage or answer for their instances; inherited records, platform metadata, findings and platform-wide configuration are excluded. Each resource is assigned a 
+signal level
+ by how many of its applicable signal procedures hold a value for it: rich (at least half), thin (fewer), or metadata only and opaque (none). A stratified selection draws 100 resources of 50 ownable types, two per type, spread over signal levels, avoiding near-duplicate copies of one stack and confirming that each still exists.
+
+Data sources.
+
+Six sources hold the records that relate people to resources, and they play four roles. 
+Resource state
+: the AWS resource inventory describes each resource by its name, tags, configuration and relations to other resources (59,309 resources of ownable types in one account and 18 regions); these descriptors are where an investigation starts. 
+Activity
+: the AWS audit log records who created, changed or tagged a resource, over the last 90 days. 
+Work
+: Jira records who reported, planned and carried out work through ticket roles and text (16,590 tickets in 18 projects over two and a half years), and GitHub records who wrote and reviewed code through pull requests and commits (10,005 pull requests in 44 repositories over two years). 
+Identity
+: Okta, the identity provider, holds the canonical directory of people with their employment status (73 people), and the AWS identity center (75 people and the roles they act through) and GitHub membership (51 members) link cloud principals and code-hosting logins to these people. Both systems access them read-only.
+
+Systems.
+
+The architecture reads the enterprise security brain, into which the sources are ingested and related ahead of time. Its investigation and procedure-construction agents run on Claude Sonnet 5.5 
+[
+20
+]
+, and tag triage and playbook writing on Claude Sonnet 4.6 
+[
+72
+]
+. The baseline agent is Claude Code 
+[
+18
+]
+ run through the Claude Agent SDK 
+[
+19
+]
+ on Claude Sonnet 5.5, given only the resource identifier and read-only access to the live platforms through the AWS and GitHub command-line interfaces (CLIs), the Jira API and a monitoring API, within 30 turns and 20 minutes per resource. It receives no ownership definition, strategy or knowledge of the organization, so it measures what an unprimed agent achieves with direct access, as in our earlier comparison with coding agents 
+[
+2
+]
+.
+
+Pool construction.
+
+The candidates of both systems for a resource are merged into one pool by canonical email, following the pooling practice of information retrieval 
+[
+17
+, 
+73
+]
+. Because the baseline agent contributes candidates the architecture did not find, the pool does not rest on the system under test alone. Recall against a pool is relative recall 
+[
+74
+]
+: it ranks systems reliably and bounds true recall from above, since owners no system found remain invisible 
+[
+75
+]
+.
+
+Evaluation pipeline.
+
+The pool passes four stages (Figure 
+2
+). People who have left the organization or are unknown to its directories are rejected. A judge on Claude Sonnet 5.5 then verifies each evidence piece on its own: it sees the cited records retrieved afresh, may consult the integrated copy and the live platforms alike, and decomposes the claim, as in atomic-fact evaluation 
+[
+76
+, 
+77
+]
+, into claimed facts, each confirmed, contradicted or not shown by a verbatim excerpt, and inferences, which are listed but never judged. Absence of data is never a contradiction, and the judge never sees either system’s confidence. A candidate is 
+verified
+ when at least one piece is confirmed and none contradicted, 
+rejected
+ when the reverse holds, and 
+insufficient
+ otherwise. Each verified person is then assigned a relation pattern by Claude Sonnet 4.6, with three votes combined per person, and weighted. The judge matched all 9 calibration cases in each of 2 runs and all 23 hand-labeled borderline candidates; no agreement study with human annotators was made. Example 1 follows three resources through the pipeline.
+
+Architecture
+
+Baseline agent
+
+Pool candidates by identity
+
+Reject people outside the organization
+
+Verify each evidence piece against the records
+
+Classify relation and weight
+
+Score each system against the pool
+
+Figure 2: 
+Evaluation pipeline.
+
+Example 1: three resources, their verified owners and the weights that score them
+
+Resource
+Verified owner
+Weight
+Proposed by
+Architecture
+Baseline agent
+Weighted recall
+Architecture
+Baseline agent
+
+Person A
+
+direct work
+
+1.0
+
+Person B
+
+direct work
+
+1.0
+
+Person C
+
+direct work
+
+1.0
+
+Person D
+
+direct work
+
+1.0
+
+Person E
+
+indirect work
+
+0.5
+
+Person F
+
+explicit owner
+
+1.0
+
+Person G
+
+direct work
+
+0.75
+
+VPN gateway
+
+shared instance
+
+tag: deployment stack
+
+owner recorded: none
+
+Wildcard certificate
+
+shared
+
+owner recorded: none
+
+Serverless function
+
+name carries a person’s handle
+
+100%
+ 3.0/3.0
+33% 1.0/3.0
+67%
+ 1.0/1.5
+33% 0.5/1.5
+100%
+ 1.75/1.75
+57% 1.0/1.75
+
+The gateway records no owner: all three people are reached through tickets and pull requests, Person C only as the reporter of the right-sizing ticket and its parent epic, a role the investigators register on every matching record. On the certificate each system finds one person, and the weights separate them: the person who works on it counts twice the person who works around it. The function’s name gives both systems its explicit owner; only the architecture also finds the colleague in direct work, whose weight drops from 1.0 to 0.75 (dashed) because an explicit owner exists.
+
+5.2 
+Results
+
+Table 
+2
+ summarizes the results by criterion. The architecture leads on coverage and weighted precision and costs less per unit of coverage; the paragraphs below take the criteria in turn, and coverage is broken down by relation, source and kind of resource.
+
+Coverage.
+
+The architecture reaches 92.1% weighted recall against 54.8% for the baseline agent (93.3% against 68.5% macro-averaged), and proposes a verified owner for 99 of 100 resources against 89. Of the 230 verified person–resource pairs in the pool, 98 were found by both systems, 100 by the architecture only and 32 by the baseline agent only.
+
+By relation
+ (Table 
+3
+). Both systems find the person named on the resource, 47 and 48 of 49 explicit owners. The difference is direct work: the architecture finds 131 of 141 people against 53, and 117 of 123 against 47 on resources without an explicit owner.
+
+By source
+ (Table 
+4
+). The added owners are found beyond the resource. Code history backs 46% of the architecture’s verified owners against 2%, person directories 68% against 17%, and tickets 65% against 52%. The baseline agent reads GitHub through its CLI, yet none of its verified owners rests on its own lookups there; its few code-history links are pull requests named in Jira tickets.
+
+Owners found only by the baseline agent.
+ Of these 32 people, 20 are weaker links (indirect work, relies on it or peripheral), and the most common routes to them are free-text ticket search (14 people) and neighboring resources (11). The architecture reached 11 of the 32 during its investigation without proposing them and never reached the other 21.
+
+By kind of resource
+ (Table 
+5
+). Across resource categories, the architecture’s weighted recall stays between 88% and 95%, against 44% to 72% for the baseline agent. It does not fall with less pre-computed signal: 90% on rich resources, 96% on thin ones and 94% where no procedure applies. Categories hold 13 to 21 resources, and no significance is claimed.
+
+Correctness.
+
+Weighted precision is 86.6% against 77.4% (89.5% against 81.3% macro-averaged). Few proposals of either system are rejected, 12 against 10, of which 8 each by the directory check, so the baseline agent’s lower weighted precision reflects fewer and weaker owners rather than more errors. The judge decided 250 of the 265 pooled candidates (94%).
+
+Cost.
+
+Costs are computed from the recorded token counts at uncached list prices 
+[
+78
+]
+ and cover per-resource attribution; profiling, run once per organization, is not included. A resource costs $0.63 with the architecture (about 190K input and 25K output tokens) and $0.68 with the baseline agent (about 320K input and 4K output tokens). Per unit of weighted recall, the cost is $0.68 against $1.24, so the architecture delivers coverage at 0.55 times the baseline agent’s cost.
+
+Table 2: 
+Results by criterion (micro-averaged, 99 scored resources).
+
+Criterion
+
+Metric
+
+Architecture
+
+Baseline agent
+
+Coverage
+
+Weighted recall
+
+92.1%
+
+54.8%
+
+Success rate
+
+99 of 100
+
+89 of 100
+
+Correctness
+
+Weighted precision
+
+86.6%
+
+77.4%
+
+Rejected candidates
+
+12
+
+10
+
+Cost
+
+Per resource, uncached list prices
+
+$0.63
+
+$0.68
+
+Per resource, per unit of weighted recall
+
+$0.68
+
+$1.24
+
+Table 3: 
+Verified owners by relation pattern.
+
+Relation
+
+Pool
+
+Architecture
+
+Baseline agent
+
+Explicit owner
+
+49
+
+47
+
+48
+
+Direct work
+
+141
+
+131
+
+53
+
+   on resources without an explicit owner
+
+123
+
+117
+
+47
+
+Indirect work, relies on it, peripheral
+
+40
+
+20
+
+29
+
+Total
+
+230
+
+198
+
+130
+
+Table 4: 
+Share of verified owners backed by confirmed evidence from each source.
+
+Source
+
+Architecture (198)
+
+Baseline agent (130)
+
+Cloud resource metadata: tags, names, linked resources
+
+81%
+
+75%
+
+Person directories
+
+68%
+
+17%
+
+Work-tracking tickets
+
+65%
+
+52%
+
+Pull requests and commits
+
+46%
+
+2%
+
+Code-hosting logins, teams and repositories
+
+28%
+
+3%
+
+Cloud audit log activity
+
+18%
+
+29%
+
+Table 5: 
+Weighted recall by resource category and signal level (one network, rich resource has no verified owner and is not scored).
+
+Resources
+
+Architecture
+
+Baseline agent
+
+Data and storage
+
+21
+
+95%
+
+44%
+
+Compute and containers
+
+20
+
+94%
+
+59%
+
+Security and secrets
+
+14
+
+93%
+
+66%
+
+Network foundation
+
+18
+
+89%
+
+45%
+
+Events, messaging and operations
+
+13
+
+89%
+
+72%
+
+Traffic and APIs
+
+14
+
+88%
+
+61%
+
+Rich
+
+60
+
+90%
+
+54%
+
+Thin
+
+17
+
+96%
+
+66%
+
+Metadata only or opaque
+
+23
+
+94%
+
+50%
+
+6 
+Discussion
+
+Each challenge posed in the introduction maps to a result. 
+Scattered signal (C1):
+ the owners the architecture adds are found in systems other than the resource itself; code history backs 46% of its verified owners against 2%, and person directories 68% against 17%. 
+Organization-specific conventions (C2):
+ recall does not fall where no signal procedure applies (94% against 90% on rich resources); whether profiling transfers to a second organization is untested. 
+Multi-hop links (C3):
+ of the 88 direct workers that only the architecture found, 68 rest on evidence citing the resource’s own stack, service or component descriptors, which context inference turns into search terms, and 42 on a ticket together with its pull request or commit. 
+Relation strength (C4):
+ under the pattern weights, the advantage lies in direct work (131 of 141 people against 53), while few proposals of either system are rejected (12 and 10).
+
+The gap is largest where ownership is not written down. On resources with an explicit owner, both systems find the named person; on resources without one, the architecture finds 117 of 123 direct workers against 47. Derived ownership adds most where declared ownership is absent.
+
+The evaluation has limits that its design bounds. It covers one organization, with one cloud provider and 100 resources. The architecture learns an organization’s ownership conventions by profiling its data rather than from rules written for it, but how well profiling works on other organizations is untested. No source is a CMDB, so derived ownership is not compared with declared ownership. Recall is measured against the owners that the two systems found together, so owners neither system found are not counted and true recall may be lower than reported; the comparison between the two systems remains reliable, as it does for pooled evaluation in information retrieval 
+[
+75
+]
+.
+
+Future work extends the evaluation along three axes: more organizations, to test how well profiling learns conventions it has not seen; more cloud providers, Microsoft Azure and Google Cloud, whose resource models and audit records differ from those of AWS; and more data sources, including CMDBs, service catalogs, on-call schedules and monitoring systems such as Datadog, so that derived ownership can be compared with declared ownership and drawn from a wider set of records. Each axis tests the same claim: that ownership can be derived from the records an organization already keeps.
+
+7 
+Conclusion
+
+Ownership is the organizational context that decides which people a security finding reaches: those responsible for fixing it and accountable for the resource it concerns. Declared ownership ages, and in the evaluated organization most ownership was implicit, held in work records, code history, audit logs and identity directories rather than on the resource.
+
+This paper made two contributions. First, it defined ownership as a set of entities, people and teams, typed by five relation patterns ordered by strength. Second, it presented a reference architecture for agentic ownership attribution: offline, it profiles an organization into tested signal procedures and an ownership playbook; online, an investigation agent with parallel investigators attributes each resource, while code checks its conclusions and computes its confidence.
+
+On 100 resources of 50 AWS types, the architecture reaches 92.1% weighted recall and 86.6% weighted precision against a pool shared with an unprimed agent, which reaches 54.8% and 77.4%, and it delivers coverage at 0.55 times that agent’s cost. The evidence places the difference in people who build and change resources without an explicit owner, found through work records and code history. Whether it holds in other organizations is the next question.
+
+References
+
+[1]
+
+Gal Engelberg, Leon Goldberg, Konstantin Koutsyi, Boris Plotnikov, Tiltan
+Gilat, and Ben Benhemo.
+
+AI Native Asset Intelligence.
+
+arXiv preprint arXiv:2605.09115, 2026a.
+
+URL 
+https://arxiv.org/abs/2605.09115
+.
+
+[2]
+
+Leon Goldberg, Gal Engelberg, Eden Yavin, Elad Elouz, Ariel Zadok, and
+Konstantin Koutsyi.
+
+Coding Agents Aren’t Enough! Evaluating an Enterprise Security Brain
+for Agentic Cloud Investigations.
+
+arXiv preprint arXiv:2609.30345, 2026.
+
+URL 
+https://arxiv.org/abs/2609.30345
+.
+
+[3]
+
+Eden Yavin, Ariel Zadok, Gal Engelberg, Elad Elouz, and Leon Goldberg.
+
+Organizational Context for the Enterprise Security Brain.
+
+arXiv preprint arXiv:2610.12540, 2026a.
+
+URL 
+https://arxiv.org/abs/2610.12540
+.
+
+[4]
+
+Seemplicity.
+
+2026 State of Exposure Management: Operational strain, remediation
+bottlenecks and the evolving role of AI.
+
+Survey of 300 U.S. cybersecurity and IT professionals conducted by
+Sapio Research, 2026.
+
+URL
+
+https://go.seemplicity.io/hubfs/PDF%20Files%20(ebooks,%20files,%20docs,%20infographics)/Seemplicity_2026%20State%20of%20Exposure%20Management_Research%20Report.pdf
+.
+
+Accessed 2026-11-01.
+
+[5]
+
+Jens Frieß, Tobias Gattermayer, Nethanel Gelernter, Haya Schulmann, and
+Michael Waidner.
+
+Cloudy with a Chance of Cyberattacks: Dangling Resources Abuse on
+Cloud Platforms.
+
+In 
+21st USENIX Symposium on Networked Systems Design and
+Implementation (NSDI 24)
+, pages 1977–1994, Santa Clara, CA, 2024. USENIX
+Association.
+
+ISBN 978-1-939133-39-7.
+
+URL
+
+https://www.usenix.org/conference/nsdi24/presentation/friess
+.
+
+Preprint: arXiv:2403.19368.
+
+[6]
+
+ServiceNow.
+
+CMDB table property descriptions.
+
+ServiceNow product documentation (Brazil release), 2026.
+
+URL
+
+https://www.servicenow.com/docs/r/servicenow-platform/configuration-management-database-cmdb/cmdb-table-property-descriptions.html
+.
+
+Accessed 2026-11-01.
+
+[7]
+
+Nucleus Security.
+
+Teams with assets.
+
+Nucleus help center (Automation), 2026.
+
+URL 
+https://help.nucleussec.com/docs/teams-with-assets
+.
+
+Accessed 2026-11-01.
+
+[8]
+
+John Ahlgren, Maria Eugenia Berezin, Kinga Bojarczuk, Elena Dulskyte, Inna
+Dvortsova, Johann George, Natalija Gucevska, Mark Harman, Shan He, Ralf
+Lämmel, Erik Meijer, Silvia Sapora, and Justin Spahr-Summers.
+
+Ownership at Large: Open Problems and Challenges in Ownership
+Management.
+
+In 
+Proceedings of the 28th International Conference on Program
+Comprehension (ICPC ’20), Industry Track
+, pages 406–410. ACM, 2020.
+
+doi: 
+10.1145/3387904.3389293
+.
+
+Preprint: arXiv:2004.07352.
+
+[9]
+
+ServiceNow.
+
+CMDB Health KPIs and metrics.
+
+ServiceNow product documentation (Zurich release), 2025.
+
+URL
+
+https://www.servicenow.com/docs/r/zurich/servicenow-platform/configuration-management-database-cmdb/r_CMDBHealthMetrics.html
+.
+
+Accessed 2026-11-01.
+
+[10]
+
+Christian Bird, Nachiappan Nagappan, Brendan Murphy, Harald Gall, and Premkumar
+Devanbu.
+
+Don’t touch my code! Examining the effects of ownership on software
+quality.
+
+In 
+Proceedings of the 19th ACM SIGSOFT Symposium and the 13th
+European Conference on Foundations of Software Engineering (ESEC/FSE ’11)
+,
+pages 4–14, Szeged, Hungary, 2011. ACM.
+
+doi: 
+10.1145/2025113.2025119
+.
+
+[11]
+
+Umme Ayman Koana, Quang Hy Le, Shadikur Rahman, Chris Carlson, Francis Chew,
+and Maleknaz Nayebi.
+
+Examining ownership models in software teams: A systematic
+literature review and a replication study.
+
+Empirical Software Engineering
+, 29(6):155,
+2024.
+
+doi: 
+10.1007/s10664-024-10538-5
+.
+
+[12]
+
+John Anvik, Lyndon Hiew, and Gail C. Murphy.
+
+Who should fix this bug?
+
+In 
+Proceedings of the 28th International Conference on Software
+Engineering (ICSE ’06)
+, pages 361–370, Shanghai, China, 2006. ACM.
+
+doi: 
+10.1145/1134285.1134336
+.
+
+[13]
+
+Junjie Chen, Xiaoting He, Qingwei Lin, Yong Xu, Hongyu Zhang, Dan Hao, Feng
+Gao, Zhangwei Xu, Yingnong Dang, and Dongmei Zhang.
+
+An Empirical Investigation of Incident Triage for Online Service
+Systems.
+
+In 
+2019 IEEE/ACM 41st International Conference on Software
+Engineering: Software Engineering in Practice (ICSE-SEIP)
+, pages 111–120.
+IEEE, 2019.
+
+doi: 
+10.1109/ICSE-SEIP.2019.00020
+.
+
+[14]
+
+The Backstage Authors.
+
+Descriptor Format of Catalog Entities.
+
+Backstage documentation (Software Catalog), 2026.
+
+URL
+
+https://backstage.io/docs/features/software-catalog/descriptor-format/
+.
+
+Accessed 2026-11-01.
+
+[15]
+
+Datadog.
+
+Ownership Agent.
+
+Datadog Cloud Security documentation, 2026a.
+
+URL
+
+https://docs.datadoghq.com/security/cloud_security_management/review_remediate/ownership_agent/
+.
+
+Accessed 2026-11-01.
+
+[16]
+
+Brinqa.
+
+Attribution Agent.
+
+Brinqa Documentation v12, 2026.
+
+URL 
+https://docs.brinqa.com/docs/attribution-agent
+.
+
+Accessed 2026-11-01.
+
+[17]
+
+Karen Spärck Jones and C. J. van Rijsbergen.
+
+Report on the need for and provision of an ‘ideal’ information
+retrieval test collection.
+
+British Library Research and Development Report 5266, Computer
+Laboratory, University of Cambridge, 1975.
+
+URL
+
+https://www.cl.cam.ac.uk/archive/ksj21/ksjdigipapers/ksjbib3.html
+.
+
+[18]
+
+Anthropic.
+
+Claude Code Overview.
+
+Claude Code documentation, 2026a.
+
+URL 
+https://code.claude.com/docs/en/overview
+.
+
+Accessed 2026-11-04.
+
+[19]
+
+Anthropic.
+
+Agent SDK Overview.
+
+Claude Code documentation, 2026b.
+
+URL 
+https://code.claude.com/docs/en/agent-sdk/overview
+.
+
+Accessed 2026-11-04.
+
+[20]
+
+Anthropic.
+
+System Card: Claude Sonnet 5.5.
+
+Anthropic system card, September 2026c.
+
+URL 
+https://www.anthropic.com/claude-sonnet-5-5-system-card
+.
+
+Accessed 2026-11-04.
+
+[21]
+
+Amazon Web Services.
+
+AWS Resource and Property Types Reference.
+
+AWS CloudFormation Template Reference, 2026a.
+
+URL
+
+https://docs.aws.amazon.com/AWSCloudFormation/latest/TemplateReference/aws-template-resource-type-ref.html
+.
+
+Accessed 2026-11-04.
+
+[22]
+
+Gal Engelberg, Konstantin Koutsyi, Leon Goldberg, Reuven Elezra, Idan Pinto,
+Tal Moalem, Shmuel Cohen, and Yoni Weintrob.
+
+Sola-Visibility-ISPM: Benchmarking Agentic AI for Identity Security
+Posture Management Visibility.
+
+arXiv preprint arXiv:2601.07880, 2026b.
+
+URL 
+https://arxiv.org/abs/2601.07880
+.
+
+[23]
+
+Eden Yavin, Gal Engelberg, Konstantin Koutsyi, Leon Goldberg, and Gal Baron.
+
+Cross-Vendor Sola ISPM Benchmark: Evaluating Agentic AI for
+Federated Identity Security Reasoning.
+
+arXiv preprint arXiv:2606.02674, 2026b.
+
+URL 
+https://arxiv.org/abs/2606.02674
+.
+
+[24]
+
+Gal Engelberg, Michael Arenzon, and Leon Goldberg.
+
+Open Security Benchmark: Towards Autonomous Enterprise Cyber
+Defense.
+
+arXiv preprint arXiv:2607.27288, 2026c.
+
+URL 
+https://arxiv.org/abs/2607.27288
+.
+
+[25]
+
+Michaela Greiler, Kim Herzig, and Jacek Czerwonka.
+
+Code Ownership and Software Quality: A Replication Study.
+
+In 
+2015 IEEE/ACM 12th Working Conference on Mining Software
+Repositories (MSR)
+, pages 2–12. IEEE, 2015.
+
+doi: 
+10.1109/MSR.2015.8
+.
+
+[26]
+
+Matthieu Foucault, Jean-Rémy Falleri, and Xavier Blanc.
+
+Code ownership in open-source software.
+
+In 
+Proceedings of the 18th International Conference on
+Evaluation and Assessment in Software Engineering (EASE ’14)
+, pages
+39:1–39:9. ACM, 2014.
+
+doi: 
+10.1145/2601248.2601283
+.
+
+[27]
+
+Patanamon Thongtanunam, Shane McIntosh, Ahmed E. Hassan, and Hajimu Iida.
+
+Revisiting code ownership and its relationship with software quality
+in the scope of modern code review.
+
+In 
+Proceedings of the 38th International Conference on Software
+Engineering (ICSE ’16)
+, pages 1039–1050. ACM, 2016.
+
+doi: 
+10.1145/2884781.2884852
+.
+
+[28]
+
+Patanamon Thongtanunam and Chakkrit Tantithamthavorn.
+
+Code Ownership: The Principles, Differences, and Their Associations
+with Software Quality.
+
+In 
+2024 IEEE 35th International Symposium on Software
+Reliability Engineering (ISSRE)
+, pages 379–390. IEEE, 2024.
+
+doi: 
+10.1109/ISSRE62328.2024.00044
+.
+
+Preprint: arXiv:2408.12807.
+
+[29]
+
+GitHub.
+
+About code owners.
+
+GitHub Docs, 2026.
+
+URL
+
+https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+.
+
+Accessed 2026-11-01.
+
+[30]
+
+Jai Lal Lulla, Raula Gaikovina Kula, and Christoph Treude.
+
+Automated Code Review Assignments: An Alternative Perspective of
+Code Ownership on GitHub.
+
+arXiv preprint arXiv:2512.05551, 2025.
+
+URL 
+https://arxiv.org/abs/2512.05551
+.
+
+[31]
+
+The Chromium Authors.
+
+Code Reviews.
+
+Chromium Docs, section on OWNERS files, 2026.
+
+URL
+
+https://chromium.googlesource.com/chromium/src/+/HEAD/docs/code_reviews.md
+.
+
+Accessed 2026-11-01.
+
+[32]
+
+Audris Mockus and James D. Herbsleb.
+
+Expertise Browser: a quantitative approach to identifying
+expertise.
+
+In 
+Proceedings of the 24th International Conference on Software
+Engineering (ICSE 2002)
+, pages 503–512. IEEE, 2002.
+
+doi: 
+10.1109/ICSE.2002.1007994
+.
+
+[33]
+
+David W. McDonald and Mark S. Ackerman.
+
+Expertise recommender: a flexible recommendation system and
+architecture.
+
+In 
+Proceedings of the 2000 ACM Conference on Computer Supported
+Cooperative Work (CSCW ’00)
+, pages 231–240. ACM, 2000.
+
+doi: 
+10.1145/358916.358994
+.
+
+[34]
+
+Thomas Fritz, Jingwen Ou, Gail C. Murphy, and Emerson Murphy-Hill.
+
+A degree-of-knowledge model to capture source code familiarity.
+
+In 
+Proceedings of the 32nd ACM/IEEE International Conference on
+Software Engineering – Volume 1 (ICSE ’10)
+, pages 385–394. ACM, 2010.
+
+doi: 
+10.1145/1806799.1806856
+.
+
+[35]
+
+Krisztian Balog, Leif Azzopardi, and Maarten de Rijke.
+
+Formal models for expert finding in enterprise corpora.
+
+In 
+Proceedings of the 29th Annual International ACM SIGIR
+Conference on Research and Development in Information Retrieval (SIGIR ’06)
+,
+pages 43–50. ACM, 2006.
+
+doi: 
+10.1145/1148170.1148181
+.
+
+[36]
+
+Krisztian Balog, Yi Fang, Maarten de Rijke, Pavel Serdyukov, and Luo Si.
+
+Expertise Retrieval.
+
+Foundations and Trends in Information Retrieval
+, 6(2–3):127–256, 2012.
+
+doi: 
+10.1561/1500000024
+.
+
+[37]
+
+Patanamon Thongtanunam, Chakkrit Tantithamthavorn, Raula Gaikovina Kula,
+Norihiro Yoshida, Hajimu Iida, and Ken-ichi Matsumoto.
+
+Who should review my code? A file location-based code-reviewer
+recommendation approach for Modern Code Review.
+
+In 
+2015 IEEE 22nd International Conference on Software
+Analysis, Evolution, and Reengineering (SANER)
+, pages 141–150. IEEE, 2015.
+
+doi: 
+10.1109/SANER.2015.7081824
+.
+
+[38]
+
+Chandra Maddila, Suhas Shanbhogue, Apoorva Agrawal, Thomas Zimmermann, Chetan
+Bansal, Nicole Forsgren, Divyanshu Agrawal, Kim Herzig, and Arie van Deursen.
+
+Nalanda: a socio-technical graph platform for building software
+analytics tools at enterprise scale.
+
+In 
+Proceedings of the 30th ACM Joint European Software
+Engineering Conference and Symposium on the Foundations of Software
+Engineering (ESEC/FSE ’22), Industry Track
+, pages 1246–1256. ACM, 2022.
+
+doi: 
+10.1145/3540250.3558949
+.
+
+Preprint: arXiv:2110.08403.
+
+[39]
+
+Davor Čubranić and Gail C. Murphy.
+
+Automatic bug triage using text categorization.
+
+In 
+Proceedings of the Sixteenth International Conference on
+Software Engineering and Knowledge Engineering (SEKE’04)
+, pages 92–97.
+Knowledge Systems Institute, 2004.
+
+URL
+
+https://www.cs.ubc.ca/labs/spl/papers/2004/seke04-bugzilla.html
+.
+
+[40]
+
+Gaeul Jeong, Sunghun Kim, and Thomas Zimmermann.
+
+Improving bug triage with bug tossing graphs.
+
+In 
+Proceedings of the 7th Joint Meeting of the European
+Software Engineering Conference and the ACM SIGSOFT Symposium on the
+Foundations of Software Engineering (ESEC/FSE ’09)
+, pages 111–120. ACM,
+2009.
+
+doi: 
+10.1145/1595696.1595715
+.
+
+[41]
+
+Phuong Pham, Vivek Jain, Lukas Dauterman, Justin Ormont, and Navendu Jain.
+
+DeepTriage: Automated Transfer Assistance for Incidents in Cloud
+Services.
+
+In 
+Proceedings of the 26th ACM SIGKDD International Conference
+on Knowledge Discovery & Data Mining (KDD ’20)
+, pages 3281–3289. ACM,
+2020.
+
+doi: 
+10.1145/3394486.3403380
+.
+
+[42]
+
+Jiaqi Gao, Nofel Yaseen, Robert MacDavid, Felipe Vieira Frujeri, Vincent Liu,
+Ricardo Bianchini, Ramaswamy Aditya, Xiaohang Wang, Henry Lee, David Maltz,
+Minlan Yu, and Behnaz Arzani.
+
+Scouts: Improving the Diagnosis Process Through Domain-customized
+Incident Routing.
+
+In 
+Proceedings of the Annual Conference of the ACM Special
+Interest Group on Data Communication on the Applications, Technologies,
+Architectures, and Protocols for Computer Communication (SIGCOMM ’20)
+, pages
+253–269. ACM, 2020.
+
+doi: 
+10.1145/3387514.3405867
+.
+
+[43]
+
+Zefan Wang, Zichuan Liu, Yingying Zhang, Aoxiao Zhong, Jihong Wang, Fengbin
+Yin, Lunting Fan, Lingfei Wu, and Qingsong Wen.
+
+RCAgent: Cloud Root Cause Analysis by Autonomous Agents with
+Tool-Augmented Large Language Models.
+
+In 
+Proceedings of the 33rd ACM International Conference on
+Information and Knowledge Management (CIKM ’24)
+, pages 4966–4974. ACM,
+2024.
+
+doi: 
+10.1145/3627673.3680016
+.
+
+Preprint: arXiv:2310.16340.
+
+[44]
+
+Zhaoyang Yu, Aoyang Fang, Minghua Ma, Jaskaran Singh Walia, Chaoyun Zhang, Shu
+Chi, Ze Li, Murali Chintalapati, Xuchao Zhang, Rujia Wang, Chetan Bansal,
+Saravan Rajmohan, Qingwei Lin, Shenglin Zhang, Dan Pei, and Pinjia He.
+
+Triangle: Empowering Incident Triage with Multi-Agent.
+
+In 
+2025 40th IEEE/ACM International Conference on Automated
+Software Engineering (ASE)
+, pages 674–686. IEEE, 2025.
+
+doi: 
+10.1109/ASE63991.2025.00062
+.
+
+Research Papers track (experience paper).
+
+[45]
+
+Michael Brenner, Markus Garschhammer, Martin Sailer, and Thomas Schaaf.
+
+CMDB – Yet Another MIB? On Reusing Management Model Concepts in
+ITIL Configuration Management.
+
+In Radu State, Sven van der Meer, Declan O’Sullivan, and Tom Pfeifer,
+editors, 
+Large Scale Management of Distributed Systems (DSOM 2006)
+,
+volume 4269 of 
+Lecture Notes in Computer Science
+, pages 269–280.
+Springer, 2006.
+
+doi: 
+10.1007/11907466_25
+.
+
+[46]
+
+Alon Halevy, Flip Korn, Natalya F. Noy, Christopher Olston, Neoklis Polyzotis,
+Sudip Roy, and Steven Euijong Whang.
+
+Goods: Organizing Google’s Datasets.
+
+In 
+Proceedings of the 2016 International Conference on
+Management of Data (SIGMOD ’16)
+, pages 795–806. ACM, 2016.
+
+doi: 
+10.1145/2882903.2903730
+.
+
+[47]
+
+Kristin Weber, Boris Otto, and Hubert Österle.
+
+One Size Does Not Fit All—A Contingency Approach to Data
+Governance.
+
+Journal of Data and Information Quality
+, 1(1):1–27, 2009.
+
+doi: 
+10.1145/1515693.1515696
+.
+
+[48]
+
+Vijay Khatri and Carol V. Brown.
+
+Designing data governance.
+
+Communications of the ACM
+, 53(1):148–152,
+2010.
+
+doi: 
+10.1145/1629175.1629210
+.
+
+[49]
+
+Daiping Liu, Shuai Hao, and Haining Wang.
+
+All Your DNS Records Point to Us: Understanding the Security Threats
+of Dangling DNS Records.
+
+In 
+Proceedings of the 2016 ACM SIGSAC Conference on Computer
+and Communications Security (CCS ’16)
+, pages 1414–1425. ACM, 2016.
+
+doi: 
+10.1145/2976749.2978387
+.
+
+[50]
+
+Amazon Web Services.
+
+Tag policies.
+
+AWS Organizations User Guide, 2026b.
+
+URL
+
+https://docs.aws.amazon.com/organizations/latest/userguide/orgs_manage_policies_tag-policies.html
+.
+
+Accessed 2026-11-01.
+
+[51]
+
+Amazon Web Services.
+
+Best Practices for Tagging AWS Resources.
+
+AWS Whitepaper, March 30, 2023.
+
+URL
+
+https://docs.aws.amazon.com/whitepapers/latest/tagging-best-practices/tagging-best-practices.html
+.
+
+Accessed 2026-11-01.
+
+[52]
+
+Google Cloud.
+
+Overview of labels.
+
+Google Cloud Resource Manager documentation, 2026.
+
+URL
+
+https://docs.cloud.google.com/resource-manager/docs/labels-overview
+.
+
+Accessed 2026-11-01.
+
+[53]
+
+Morgan Moncrief.
+
+How Tamnoon Determines Cloud Asset Ownership.
+
+Tamnoon Blog, July 27, 2026.
+
+URL 
+https://www.tamnoon.io/blog/cloud-asset-ownership
+.
+
+Accessed 2026-11-08.
+
+[54]
+
+Amazon Web Services.
+
+Using AWS-generated tags.
+
+AWS Billing User Guide, 2026c.
+
+URL
+
+https://docs.aws.amazon.com/awsaccountbilling/latest/aboutv2/aws-tags.html
+.
+
+Accessed 2026-11-01.
+
+[55]
+
+Microsoft.
+
+SystemData Class (azure.mgmt.web.types).
+
+Azure SDK for Python reference, 2026.
+
+URL
+
+https://learn.microsoft.com/en-us/python/api/azure-mgmt-web/azure.mgmt.web.types.systemdata?view=azure-python
+.
+
+Accessed 2026-11-01.
+
+[56]
+
+Cloud Custodian Project.
+
+EC2 - auto-tag aws userName on resources.
+
+Cloud Custodian documentation, 2026.
+
+URL
+
+https://cloudcustodian.io/docs/aws/examples/ec2-auto-tag-user.html
+.
+
+Accessed 2026-11-01.
+
+[57]
+
+Wiz.
+
+The Foundation Modern AppSec Is Still Missing: Code to Cloud,
+Rebuilt the Right Way.
+
+Wiz Blog, October 17, 2025.
+
+URL
+
+https://www.wiz.io/blog/the-missing-link-in-code-to-cloud-visibility-is-finally-here
+.
+
+Accessed 2026-11-01.
+
+[58]
+
+Orca Security.
+
+Coming Full Circle: Tracing Cloud Security Issues Back to Code
+Origins.
+
+Orca Security Blog, April 5, 2023.
+
+URL
+
+https://orca.security/resources/blog/tracing-cloud-security-issues-with-cloud-to-dev-capabilities/
+.
+
+Accessed 2026-11-01.
+
+[59]
+
+Palo Alto Networks.
+
+Traceability and Tagging.
+
+Prisma Cloud documentation (Application Security), 2026.
+
+URL
+
+https://docs.prismacloud.io/content-collections/application-security/risk-management/monitor-and-manage-code-build/traceability-and-tagging
+.
+
+Accessed 2026-11-01.
+
+[60]
+
+Bridgecrew (Palo Alto Networks).
+
+Yor: Extensible auto-tagger for your IaC files.
+
+GitHub repository README, open-source project, 2026.
+
+URL 
+https://github.com/bridgecrewio/yor
+.
+
+Accessed 2026-11-01.
+
+[61]
+
+Datadog.
+
+Set Up Ownership Preferences.
+
+Datadog Cloud Security documentation, 2026b.
+
+URL
+
+https://docs.datadoghq.com/security/cloud_security_management/review_remediate/ownership_preferences/
+.
+
+Accessed 2026-11-01.
+
+[62]
+
+Zafran Security.
+
+Agentic Asset Ownership: Automating for Faster Remediation.
+
+Zafran Blog, September 1, 2026.
+
+URL
+
+https://www.zafran.io/resources/agentic-asset-ownership-automating-for-faster-remediation
+.
+
+Accessed 2026-11-01.
+
+[63]
+
+Cortex.
+
+Assigning owners to entities.
+
+Cortex documentation, 2026.
+
+URL
+
+https://docs.cortex.io/ingesting-data-into-cortex/entities-overview/entities/ownership/assigning-owners-to-entities
+.
+
+Accessed 2026-11-01.
+
+[64]
+
+Atlassian.
+
+Assign a component owner.
+
+Compass Cloud documentation, 2026.
+
+URL
+
+https://support.atlassian.com/compass/docs/assign-a-component-owner/
+.
+
+Accessed 2026-11-01.
+
+[65]
+
+Datadog.
+
+Entity Model.
+
+Datadog Internal Developer Portal documentation, 2026c.
+
+URL
+
+https://docs.datadoghq.com/internal_developer_portal/catalog/entity_model/
+.
+
+Accessed 2026-11-01.
+
+[66]
+
+DataHub Project.
+
+Custom Ownership Types.
+
+DataHub documentation (v1.8.0), 2026.
+
+URL 
+https://docs.datahub.com/docs/ownership/ownership-types
+.
+
+Accessed 2026-11-01.
+
+[67]
+
+Luc Moreau and Paolo Missier.
+
+PROV-DM: The PROV Data Model.
+
+W3C Recommendation, April 30, 2013.
+
+URL 
+https://www.w3.org/TR/2013/REC-prov-dm-20130430/
+.
+
+Accessed 2026-11-01.
+
+[68]
+
+Shunyu Yao, Jeffrey Zhao, Dian Yu, Nan Du, Izhak Shafran, Karthik Narasimhan,
+and Yuan Cao.
+
+ReAct: Synergizing Reasoning and Acting in Language Models.
+
+In 
+The Eleventh International Conference on Learning
+Representations (ICLR)
+, 2023.
+
+URL 
+https://arxiv.org/abs/2210.03629
+.
+
+[69]
+
+Adam Fourney, Gagan Bansal, Hussein Mozannar, Cheng Tan, Eduardo Salinas,
+Erkang Zhu, Friederike Niedtner, Grace Proebsting, Griffin Bassman, Jack
+Gerrits, Jacob Alber, Peter Chang, Ricky Loynd, Robert West, Victor Dibia,
+Ahmed Awadallah, Ece Kamar, Rafah Hosn, and Saleema Amershi.
+
+Magentic-One: A Generalist Multi-Agent System for Solving Complex
+Tasks.
+
+arXiv preprint arXiv:2411.04468, 2024.
+
+URL 
+https://arxiv.org/abs/2411.04468
+.
+
+[70]
+
+Jeremy Hadfield, Barry Zhang, Kenneth Lien, Florian Scholz, Jeremy Fox, and
+Daniel Ford.
+
+How we built our multi-agent research system.
+
+Anthropic Engineering blog, June 13, 2025.
+
+URL
+
+https://www.anthropic.com/research/multi-agent-research-system
+.
+
+Accessed 2026-11-01.
+
+[71]
+
+Kalervo Järvelin and Jaana Kekäläinen.
+
+Cumulated gain-based evaluation of IR techniques.
+
+ACM Transactions on Information Systems
+, 20(4):422–446, 2002.
+
+doi: 
+10.1145/582415.582418
+.
+
+[72]
+
+Anthropic.
+
+System Card: Claude Sonnet 4.6.
+
+Anthropic system card, February 2026d.
+
+URL 
+https://www.anthropic.com/claude-sonnet-4-6-system-card
+.
+
+Accessed 2026-11-04.
+
+[73]
+
+Donna Harman.
+
+Overview of the First Text REtrieval Conference (TREC-1).
+
+In Donna K. Harman, editor, 
+The First Text REtrieval Conference
+(TREC-1)
+, number 500-207 in NIST Special Publication, pages 1–20. National
+Institute of Standards and Technology, 1993.
+
+URL
+
+https://www-nlpir.nist.gov/projects/irlib/pubs/sp500207/sp500207_text/01_009.txt
+.
+
+[74]
+
+Sarah J. Clarke and Peter Willett.
+
+Estimating the recall performance of Web search engines.
+
+Aslib Proceedings
+, 49(7):184–189, 1997.
+
+doi: 
+10.1108/eb051463
+.
+
+[75]
+
+Justin Zobel.
+
+How reliable are the results of large-scale information retrieval
+experiments?
+
+In 
+Proceedings of the 21st Annual International ACM SIGIR
+Conference on Research and Development in Information Retrieval (SIGIR ’98)
+,
+pages 307–314. ACM, 1998.
+
+doi: 
+10.1145/290941.291014
+.
+
+[76]
+
+Sewon Min, Kalpesh Krishna, Xinxi Lyu, Mike Lewis, Wen-tau Yih, Pang Koh, Mohit
+Iyyer, Luke Zettlemoyer, and Hannaneh Hajishirzi.
+
+FActScore: Fine-grained Atomic Evaluation of Factual Precision in
+Long Form Text Generation.
+
+In 
+Proceedings of the 2023 Conference on Empirical Methods in
+Natural Language Processing (EMNLP)
+, pages 12076–12100, Singapore, 2023.
+Association for Computational Linguistics.
+
+doi: 
+10.18653/v1/2023.emnlp-main.741
+.
+
+URL 
+https://aclanthology.org/2023.emnlp-main.741/
+.
+
+[77]
+
+Jerry Wei, Chengrun Yang, Xinying Song, Yifeng Lu, Nathan Hu, Jie Huang, Dustin
+Tran, Daiyi Peng, Ruibo Liu, Da Huang, Cosmo Du, and Quoc V. Le.
+
+Long-form factuality in large language models.
+
+In 
+Advances in Neural Information Processing Systems 37
+(NeurIPS 2024), Main Conference Track
+, pages 80756–80827, 2024.
+
+doi: 
+10.52202/079017-2567
+.
+
+URL
+
+https://proceedings.neurips.cc/paper_files/paper/2024/hash/937ae0e83eb08d2cb8627fe1def8c751-Abstract-Conference.html
+.
+
+Preprint: arXiv:2403.18802.
+
+[78]
+
+Anthropic.
+
+Pricing.
+
+Claude Platform documentation, 2026e.
+
+URL 
+https://platform.claude.com/docs/en/about-claude/pricing
+.
+
+Accessed 2026-11-04.
+
