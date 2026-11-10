@@ -1,7 +1,7 @@
 # Paper candidates — 2026-11-10 (IST)
 
-Generated 2026-11-10 07:48 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
-Totals: 35 new topic matches · 20 other new cs.IR · 47 seen in earlier runs.
+Generated 2026-11-10 08:27 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Totals: 35 new topic matches · 20 other new cs.IR · 44 seen in earlier runs.
 Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
 
 ## New papers matching your topics (35), highest score first
@@ -290,6 +290,14 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 
 > Studies of online political discourse commonly infer public opinion through stance analysis while implicitly assuming that observed user participation is authentic. Meanwhile, studies focusing on detecting manipulative participation are typically modeling it as a binary phenomenon, overlooking the varying degrees to which users may engage in coordinated or inauthentic behavior. This study proposes a continuous modeling approach for manipulative participation and examines its integration with stance analysis. Using online discourse on the 2024 Street Animal Law in Türkiye as a case study, we collected a dataset comprising 7,320,574 tweets from 537,994 users. From this corpus, 301 users were selected through a high-information sampling strategy and manually annotated by domain experts using a 10-criterion rubric that yields user-level continuous manipulative participation scores. Evaluation under a unified user-level cross-validation protocol showed that the proposed framework accurately estimates both manipulative participation and user stance, with gradient boosting methods providing the best manipulative participation estimates and BERTurk achieving the highest stance classification performance. External validation on an independently annotated user set demonstrated good generalization performance. The findings support modeling manipulative participation as a continuous construct rather than a binary label, providing a more informative basis for computational analyses of the relationship between manipulative participation and stance in online political discourse.
 
+### Learning Heterogeneous Tactile Representation for General Dexterous Manipulation
+- arXiv 2611.12806 · v1 2026-11-09 00:00 UTC · 
+- Authors: Bing Han, Yichuan Peng, Haoyu Dong, Yuanmeng Hu et al.
+- Topics: Manipulation · score 6 · found via HF daily papers
+- Link: https://arxiv.org/abs/2611.12806
+
+> Tactile sensing is an indispensable modality for contact-rich dexterous manipulation, a capability that hints at the ultimate frontiers of embodied intelligence. However, commercially available tactile sensors are still at a relatively early stage of development, with each type of sensor offering irreplaceable strengths alongside its own drawbacks. A key challenge is thus to free tactile understanding from sensor-specific physics, so that embodied models can effectively leverage heterogeneous tactile data. To this end, we develop LingBot-Touch, a tactile foundation model characterized by the following properties. (i) Our model yields a unified representation across different tactile sensors (i.e., piezoresistive, magnetic, and visuotactile sensors), and is easily extensible to new sensor types. (ii) The resulting tactile tokens are plug-and-play: they can be seamlessly integrated into policy models across paradigms, from diffusion policy to vision-language-action (VLA) models such as π_{0.5} and LingBot-VLA, consistently enhancing manipulation dexterity. (iii) Extensive experiments, spanning simulation and real-robot deployments across multiple hardware platforms, demonstrate that our tactile representation substantially benefits complex manipulation tasks while maintaining strong computational efficiency. We believe the findings in this work demonstrate the potential of leveraging cross-sensor data to scale tactile learning, and offer encouraging insights for the design of future hardware and embodied models.
+
 ### Decoupled Asynchronous System for Humanoids (DASH): Latency-Agnostic Scaling of Vision-Language-Action Models for Humanoid Manipulation
 - arXiv 2611.11854v1 · v1 2026-11-09 04:23 UTC · cs.RO, cs.AI
 - Authors: Bingzhang Wang, Nathan Zhao, Jialeng Ni, Jiajin Zheng et al.
@@ -327,16 +335,8 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 
 > We present SadaqahStories, a parallel English-Arabic corpus of 41 illustrated four-page stories about charitable giving in Islam (Sadaqah, Zakat and Waqf), written for readers aged 7 to 18. The stories were first drafted with large language model (LLM) assistance, then audited against hadith collections, Qur'an references and historical sources, and finally rewritten for children and signed off by an Islamic scholar. Every story carries an evidence label and links to its sources. We release all three versions of each story (AI-assisted draft, audited text, final child-oriented text) together with the correction log, so the corpus can be used to study how AI drafts of religious and historical content go wrong. The audit found substantive errors in 39 of the 41 drafts. The most frequent were unsupported specific details (dates, figures, prices, names), invented quotations, institutions or anecdotes, and conflation of separate events or people; six drafts contained errors in the wording, grading or ruling of a religious text. Rewriting cut the estimated Flesch-Kincaid grade of the English text from 14.0 to 6.1. We also release an 81-entry charity lexicon covering Modern Standard Arabic and Qatari Arabic, and describe the free, account-free website that serves the corpus (https://sadaqahjourney.com).
 
-### GeoMind: A Benchmark for Spatial Understanding in Robotic Manipulation
-- arXiv 2611.12175v1 · v1 2026-11-09 10:28 UTC · cs.RO, cs.AI
-- Authors: Jinghe Wang, Xinrui Cao, Duo Wu, Chenghao Gu et al.
-- Topics: Manipulation · score 6 · found via cs.AI
-- Link: https://arxiv.org/abs/2611.12175
-- Full text: data/fulltext/2611.12175.txt
-
-> Robotic manipulation has advanced rapidly in mapping visual observations and language instructions to actions. However, reliable manipulation in open-world environments requires robust spatial understanding: the ability to identify targets in complex layouts (spatial reasoning) and adapt to scenes that continuously evolve through interaction (spatial memory). Yet existing embodied benchmarks fall short in evaluating spatial understanding: they often introduce strong visual cues that bypass spatial reasoning, and focus on static scenes that offer little insight into an agent's capacity for spatial memory. To address this gap, we introduce GeoMind, a systematic benchmark for structured spatial understanding through tabletop manipulation. GeoMind comprises 54 evaluated task variants organized around spatial reasoning and spatial memory. It also incorporates a scalable pipeline that automates the generation and annotation of task instances with verified targets and executable interactions. Extensive evaluations across diverse embodied agents reveal their consistent weaknesses in spatial understanding. Our findings highlight that these agents struggle to track identities after spatial changes and convert relational or geometric constraints into executable actions. We release the GeoMind benchmark at https://github.com/Notfound-JH/GEOMIND-benchmark.git.
-
-## More new topic matches, lower score, title only (9)
+## More new topic matches, lower score, title only (10)
+- GeoMind: A Benchmark for Spatial Understanding in Robotic Manipulation — https://arxiv.org/abs/2611.12175 (score 6; Manipulation)
 - Bridging Task Planning and Execution for Language-Conditioned Bimanual Manipulation — https://arxiv.org/abs/2611.12409 (score 6; Manipulation)
 - A Tool for Anonymized Clinical Knowledge Retrieval and Speaker Interaction Analysis of Healthcare Tele-mentoring Sessions — https://arxiv.org/abs/2611.10922 (score 5; Citation & source selection, RAG (generic))
 - Multi-Modal Agricultural Document Understanding at the DAGRI Task — https://arxiv.org/abs/2611.11886 (score 5; Query fan-out)
@@ -369,14 +369,12 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - NIFT-SQL: Customer-Supervised Table Scoring for Enterprise Text-to-SQL Retrieval — https://arxiv.org/abs/2611.12731
 - The Narrative Gap: Can LLMs Help Us Navigate Diverse Narratives Across Languages? — https://arxiv.org/abs/2611.12750
 
-## Already listed on an earlier day, still inside the look-back window (47)
-- The Popular Get More Popular: Auditing Brand Bias in Generative Search — https://arxiv.org/abs/2611.07614 (score 22)
+## Already listed on an earlier day, still inside the look-back window (44)
 - What Matters for LLM Persona Simulation: Signal Form in Cold-Start E-Commerce Advertising — https://arxiv.org/abs/2611.08840 (score 19)
 - CORE: Coarse-to-Fine Search with Context Management for Deep Research — https://arxiv.org/abs/2611.07859 (score 14)
 - Functional Dependency beyond Similarity: Hierarchical Decomposition of Training Data Attribution in Music Generative Models — https://arxiv.org/abs/2611.08839 (score 13)
 - MARS: Training Multilingual Search Agents for Retriever-Free Evidence Acquisition — https://arxiv.org/abs/2611.09090 (score 11)
 - On Agentic Manipulation Policies — https://arxiv.org/abs/2611.09892 (score 11)
-- Beyond Instruction Override: Benchmarking Indirect Prompt Injection with Task-Tampering Attacks — https://arxiv.org/abs/2611.07640 (score 10)
 - Generative Search and Recommendation at Shopify — https://arxiv.org/abs/2611.08804 (score 10)
 - BMMS: Policy-Conditioned Measurement of Behavioral Compliance in Language Models — https://arxiv.org/abs/2611.09147 (score 9)
 - Cutpurse: Decomposing Explanation-Guided Model Extraction on Tabular Data — https://arxiv.org/abs/2611.09375 (score 9)
@@ -394,7 +392,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Notwithstanding Anything to the Contrary, Ignore All Instructions: Measuring Prompt Injection Guards on Legal Contract Review Attacks — https://arxiv.org/abs/2611.08834 (score 6)
 - MemoryDojo: Benchmarking Poisoning Through LLM Agent Memory — https://arxiv.org/abs/2611.09721 (score 6)
 - Grasp-TAGS: Task-Aware Grasp Selection via Critic Distillation for Prehensile Loco-Manipulation — https://arxiv.org/abs/2611.09864 (score 6)
-- MEMOIR: A Training-Free Memory Lifecycle for Long-Horizon LLM Agents — https://arxiv.org/abs/2611.07631 (score 4)
 - What the Middleman Delivers: Answer Behavior, Tool Permissions, and Billed Usage in LLM API Relays — https://arxiv.org/abs/2611.07650 (score 4)
 - Decision Models as Retrieval Gates Against Injection and Pollution — https://arxiv.org/abs/2611.08325 (score 4)
 - Structure and Lineage Evidence for Vietnamese Statutory Article Retrieval on DRiLL — https://arxiv.org/abs/2611.09200 (score 4)
