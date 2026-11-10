@@ -1,6 +1,6 @@
 # News candidates — 2026-11-10 (IST)
 
-Generated 2026-11-10 07:41 UTC. Showing 233 items first seen in the last 18 h or published in the last 30 h; 93 older items from the 3-day window are only in news.json.
+Generated 2026-11-10 07:48 UTC. Showing 232 items first seen in the last 18 h or published in the last 30 h; 93 older items from the 3-day window are only in news.json.
 Each item appears once, in the first section it matches. Dates are as reported by the source ("date unknown" = page with no date).
 
 ## By priority topic
@@ -25,16 +25,16 @@ Each item appears once, in the first section it matches. Dates are as reported b
 
 ### Ads (11)
 - [2026-11-10 06:03 UTC] Google’s AI Mode Will Soon Show Ads Even in Your Follow-Up Questions — CNET — (Google News link; search the headline) · Ads, GEO/AEO · +1 other hits
-- [2026-11-10 04:58 UTC] Amazon Lets Advertisers Use ChatGPT Via OpenAI Partnership 09/11/2026 — MediaPost — (Google News link; search the headline) · Ads
 - [2026-11-09 20:57 UTC] Microsoft Advertising overhauls interface after advertiser complaints — PPC Land — https://ppc.land/microsoft-advertising-overhauls-interface-after-advertiser-complaints/ · Ads
 - [2026-11-09 20:32 UTC] StackAdapt advertisers can now buy ads on 150+ audio publishers via SoundCast — PPC Land — https://ppc.land/stackadapt-advertisers-can-now-buy-ads-on-150-audio-publishers-via-soundcast/ · Ads · +1 other hits
 - [2026-11-09 19:56 UTC] Brainlabs warns Meta's AI creative could leave brands unsure what worked — PPC Land — https://ppc.land/brainlabs-warns-metas-ai-creative-could-leave-brands-unsure-what-worked/ · Brand/product recommendation, Ads
 - [2026-11-09 17:51 UTC] Google AI Mode multiturn ads are now rolling out — Search Engine Land — https://searchengineland.com/google-ai-mode-multiturn-ads-are-now-rolling-out-501176 · Ads, GEO/AEO · +4 other hits
 - [2026-11-09 12:51 UTC] Google AI Mode Multiturn Ads Are Live - Follow-Up Query Ads — Search Engine Roundtable — https://www.seroundtable.com/google-ai-mode-multiturn-ads-42478.html · Ads, GEO/AEO · +2 other hits
-- [2026-11-09 12:31 UTC] Bing Ads At Top Of AI Mode Results — Search Engine Roundtable — https://www.seroundtable.com/bing-ads-top-ai-mode-results-42479.html · Ads, Brand/product recommendation, GEO/AEO · +1 other hits
+- [2026-11-09 12:31 UTC] Bing Ads At Top Of AI Mode Results — Search Engine Roundtable — https://www.seroundtable.com/bing-ads-top-ai-mode-results-42479.html · Ads, Brand/product recommendation, GEO/AEO · +2 other hits
 - [2026-11-09 12:21 UTC] Google Ads AI-Generated Summaries Above & Within Ads — Search Engine Roundtable — https://www.seroundtable.com/google-ads-ai-generated-summaries-42482.html · Ads
 - [2026-11-09 12:05 UTC] Google Ads New Asset Activity Section — Search Engine Roundtable — https://www.seroundtable.com/google-ads-asset-activity-section-42481.html · Ads
 - [2026-11-09 09:41 UTC] How to Block Google Search Ads and AI Overviews Instantly — PaidFreeDroid — (Google News link; search the headline) · Ads, GEO/AEO · +1 other hits
+- [2026-11-09 03:21 UTC] #e4mXplains: As AI redraws the search market, Reddit wants a share of the advertising pie — Exchange4Media — (Google News link; search the headline) · (already listed on an earlier day) · Ads
 
 ### Search / AEO / GEO (21)
 - [2026-11-09 23:25 UTC] Google Search's AI Mode Now Handles Restaurant Reservations, Partners with Gurunavi and Ikyu — BigGo Finance — (Google News link; search the headline) · GEO/AEO
@@ -59,13 +59,13 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-08 22:14 UTC] Perplexity Teammates AI agents for ongoing work — NeoTeo — (Google News link; search the headline) · GEO/AEO
 - [2026-11-08 17:01 UTC] BRD Media Medical Practice Marketing Data: 1,720 Meta Leads, 15 Treatment Packages, $76,500 At One Chicago Clinic — MENAFN — https://menafn.com/1111936239/BRD-Media-Medical-Practice-Marketing-Data-1720-Meta-Leads-15-Treatment-Packages-76500-At-One-Chicago-Clinic
 
-### Model & lab launches (news search) (57)
+### Model & lab launches (news search) (56)
 - [2026-11-10 05:52 UTC] Moonshot AI rents Nvidia’s top AI chips in China, documents show — The Economic Times — https://www.msn.com/en-in/news/other/moonshot-ai-rents-nvidia-s-top-ai-chips-in-china-documents-show/ar-AA2h6GXm · +1 other hits
 - [2026-11-10 05:43 UTC] OpenAI releases GPT 6.1 Terra — BotHub — (Google News link; search the headline)
 - [2026-11-10 05:18 UTC] Meta Launches Muse Ember AI Model: How it challenges OpenAI's GPT-6 Luna and Anthropic's Claude Haiku 5.5 — Zee Business — https://www.msn.com/en-in/news/other/meta-launches-muse-ember-ai-model-how-it-challenges-openais-gpt-6-luna-and-anthropics-claude-haiku-55/ar-AA2h6YrY · GEO/AEO · +1 other hits
 - [2026-11-10 04:56 UTC] Anthropic Releases Claude Fable 5.2, Mythos 5.2: Here’s What’s New — NDTV Profit — (Google News link; search the headline)
 - [2026-11-10 04:41 UTC] Anthropic launches Claude Fable 5.2 and Mythos 5.2 ahead of planned IPO — Storyboard18 — (Google News link; search the headline)
-- [2026-11-10 04:33 UTC] OpenAI Introduces 35-Second Kill Switch to Halt Rogue AI Agents — KuCoin — https://www.kucoin.com/news/flash/openai-introduces-35-second-kill-switch-to-halt-rogue-ai-agents · +1 other hits
+- [2026-11-10 04:33 UTC] OpenAI Introduces 35-Second Kill Switch to Halt Rogue AI Agents — KuCoin — (Google News link; search the headline)
 - [2026-11-10 03:45 UTC] Muse Wonder vs Kimi K4: one is on sale, one is a rumour — OrcaRouter — (Google News link; search the headline)
 - [2026-11-10 03:32 UTC] Anthropic launches Claude Fable 5.2, Mythos 5.2 with faster performance and stronger coding capabilities — The Times of India — (Google News link; search the headline)
 - [2026-11-10 03:08 UTC] Grok hits 99.9% accuracy spotting rocket debris for SpaceX — Crypto Briefing — (Google News link; search the headline)
@@ -74,21 +74,19 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-10 01:04 UTC] Google cuts Gemini Omni’s 720p video price by 30% and adds 15-second clips — EdTech Innovation Hub — https://www.edtechinnovationhub.com/news/google-cuts-gemini-omnis-720p-video-price-by-30-and-adds-15-second-clips · +1 other hits
 - [2026-11-09 23:42 UTC] Google Cloud Releases Pathways Runtime for Large-Scale AI Training and Inference — HPCwire — (Google News link; search the headline)
 - [2026-11-09 23:24 UTC] Anthropic Launches Claude Fable 5.2 and Claude Mythos 5.2 With Faster, Cheaper Pricing: 16 outlets compared — NewsCord — (Google News link; search the headline)
-- [2026-11-09 23:00 UTC] Can you study for the Third-Class Chief Electrical Engineer Examination with Generative AI? We tested it by having OpenAI, Grok, and Claude solve 10 past exam questions — note — https://note.com/denkenlab/n/nd14e25d22e56?hl=en
 - [2026-11-09 22:37 UTC] Anthropic introduces two new Claude AI models: What Fable 5.2 and Mythos 5.2 can do — News9Live on MSN — https://www.msn.com/en-in/news/other/anthropic-introduces-two-new-claude-ai-models-what-fable-52-and-mythos-52-can-do/ar-AA2h7qpm · GEO/AEO
 - [2026-11-09 22:18 UTC] Meta takes on OpenAI and Anthropic with Muse Ember AI model: Features, benchmarks and pricing — Mint — https://www.livemint.com/ai/meta-takes-on-openai-and-anthropic-with-muse-ember-ai-model-features-benchmarks-and-pricing-11794289940494.html · GEO/AEO
 - [2026-11-09 22:04 UTC] DeepSeek Harness' new Creator Mode creates plugins from prompts — Mashable — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-11-09 21:59 UTC] Meta’s Muse Ember, Muse Spark 1.3, and Muse Wonder land on Google Cloud — Crypto Briefing — https://cryptobriefing.com/meta-muse-models-google-cloud/ · +1 other hits
 - [2026-11-09 21:06 UTC] Anthropic launches Claude Fable 5.2 and Mythos 5.2 with improved coding, reasoning and AI research capabilities — Moneycontrol — https://www.moneycontrol.com/technology/anthropic-launches-claude-fable-5-2-and-mythos-5-2-with-improved-coding-reasoning-and-ai-research-capabilities-article-14076008.html · GEO/AEO
-- [2026-11-09 21:02 UTC] Anthropic debuts Claude Fable, Mythos 5.2 models, priced 20% below OpenAI’s GPT-6 Astra — Fortune — https://www.msn.com/en-ca/technology/artificial-intelligence/anthropic-debuts-claude-fable-mythos-5-2-models-priced-20-below-openai-s-gpt-6-astra/ar-AA2h5X42 · +1 other hits
+- [2026-11-09 21:02 UTC] Anthropic debuts Claude Fable, Mythos 5.2 models, priced 20% below OpenAI’s GPT-6 Astra — Fortune — https://www.msn.com/en-au/technology/tech-companies/anthropic-debuts-claude-fable-mythos-5-2-models-priced-20-below-openai-s-gpt-6-astra/ar-AA2h5X42 · +2 other hits
 - [2026-11-09 19:42 UTC] Reindeer Launches on Google Cloud Marketplace, Expanding Collaboration with Google Cloud to Help Enterprises Move Agentic AI into Core Operations — PR Newswire — (Google News link; search the headline)
 - [2026-11-09 19:38 UTC] Anthropic Launches Claude Fable 5.2 and Mythos 5.2 — MacRumors — (Google News link; search the headline) · +1 other hits
-- [2026-11-09 19:35 UTC] Anthropic releases two new Claude models and cuts prices 20% — Quartz — (Google News link; search the headline)
 - [2026-11-09 19:31 UTC] OpenAI puts ChatGPT Enterprise on AWS Marketplace, letting companies buy it through Amazon billing — MLQ.ai — (Google News link; search the headline)
 - [2026-11-09 19:24 UTC] Anthropic releases new Mythos and Fable models amid RSI concerns — TechCrunch AI — https://techcrunch.com/2026/11/09/anthropic-releases-new-mythos-and-fable-models-amid-rsi-concerns/ · +1 other hits
 - [2026-11-09 19:04 UTC] Anthropic debuts Claude Fable 5.2 and Mythos 5.2 models as IPO nears — Yahoo Finance — (Google News link; search the headline)
 - [2026-11-09 19:03 UTC] Grok at SpaceX: 5 Details That Matter on FOD Detection — BASENOR - Tesla Accessories — https://www.basenor.com/blogs/news/grok-at-spacex-5-details-that-matter-on-fod-detection · +1 other hits
-- [2026-11-09 19:00 UTC] Anthropic releases first frontier models since Amodei's call for slowdown as IPO buzz builds — CNBC — (Google News link; search the headline)
+- [2026-11-09 19:00 UTC] Anthropic releases first frontier models since Amodei's call for slowdown as IPO buzz builds — CNBC — https://www.cnbc.com/2026/11/09/anthropic-claude-fable-5-2-mythos-5-2.html · +1 other hits
 - [2026-11-09 19:00 UTC] Anthropic launches new Claude Fable and Mythos 5.2 models — The Verge — https://www.theverge.com/ai-artificial-intelligence/1030005/anthropic-claude-fable-mythos-5-2 · +1 other hits
 - [2026-11-09 18:51 UTC] Grok nears 100 million monthly active users as xAI’s chatbot keeps climbing — Crypto Briefing — https://cryptobriefing.com/grok-nears-100-million-monthly-users/ · +1 other hits
 - [2026-11-09 16:17 UTC] Days before he got an offer from Meta, to lead the company's AI lab, Alexandr Wang sent Mark Zuckerberg a — The Times of India — (Google News link; search the headline)
@@ -96,9 +94,8 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-09 16:12 UTC] Google Releases Gemini 4 Argon, Showcasing 1M Output Tokens and Advanced Agentic Reasoning — OODA Loop — (Google News link; search the headline)
 - [2026-11-09 16:05 UTC] FlowX.AI & Google Take Mission-Critical AI Agents From Pilot to Production — Yahoo Finance Australia — (Google News link; search the headline)
 - [2026-11-09 16:00 UTC] OpenAI launches Codex edition ModRetro Chromatic gaming handheld that lets users play self-made games: All details — Digit — https://www.digit.in/news/gaming/openai-launches-codex-edition-modretro-chromatic-gaming-handheld-that-lets-users-play-self-made-games-all-details.html
+- [2026-11-09 16:00 UTC] Anthropic launches Claude Fable 5.2 and Mythos 5.2 with lower prices — Tbreak — https://tbreak.com/claude-fable-5-2-mythos-5-2-launch/
 - [2026-11-09 16:00 UTC] Anthropic Releases Claude Fable 5.2 and Mythos 5.2 With Faster AI Reasoning and Coding — lapaasvoice.com — https://lapaasvoice.com/anthropic-releases-claude-fable-5-2-and-mythos-5-2-with-faster-ai-reasoning-and-coding/
-- [2026-11-09 16:00 UTC] Claude Fable 5.2 And Mythos 5.2 Explained: Anthropic’s AI Models Take On Tasks Beyond Coding — Mashable India — https://in.mashable.com/tech/115951/claude-fable-52-and-mythos-52-explained-anthropics-ai-models-take-on-tasks-beyond-coding · GEO/AEO
-- [2026-11-09 16:00 UTC] Anthropic limits Claude Fable 5.2’s ability to speed development of new AI models — ForkLog — https://forklog.com/en/anthropic-limits-claude-fable-5-2s-ability-to-speed-development-of-new-ai-models/ · GEO/AEO
 - [2026-11-09 16:00 UTC] Gemini Teen Lawsuit Tests 1 Chatbot Law at School [2026] — shattered.io — https://shattered.io/gemini-teen-lawsuit-companion-chatbot-law-school-chromebook-2026/
 - [2026-11-09 15:47 UTC] Google Releases Gemini 4 Argon for Robotics Control, Simulation, and Policy Improvement — infoq.com — (Google News link; search the headline)
 - [2026-11-09 14:50 UTC] AI Price Prediction: Dogecoin Is in a Death Cross at $0.07. We Asked Grok Where DOGE Could End 2026 — 24/7 Wall St. — https://247wallst.com/investing/cryptocurrency/2026/11/09/ai-price-prediction-dogecoin-is-in-a-death-cross-at-0-07-we-asked-grok-where-doge-could-end-2026/
@@ -106,11 +103,13 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-09 14:14 UTC] Qwen 4 Beats Deepseek 4.1 Flash in Web Tasks on Half the Tokens — Geeky Gadgets — https://www.geeky-gadgets.com/qwen-4-preview-first-look/ · +3 other hits
 - [2026-11-09 12:29 UTC] OpenAI releases GPT-6 Cyber for authorised security testing — varindia — (Google News link; search the headline)
 - [2026-11-09 12:25 UTC] DeepSeek API Pricing vs Mistral Large 4 [2026] — shattered.io — (Google News link; search the headline) · +1 other hits
+- [2026-11-09 11:09 UTC] Anthropic Launches New Models Ahead Of IPO: Claude Fable 5.2, Mythos 5.2 — NDTV — https://www.ndtv.com/world-news/anthropic-launches-powerful-new-models-claude-fable-5-2-and-mythos-5-2-ahead-of-ipo-12305314
 - [2026-11-09 11:00 UTC] Weekly Recap: Alibaba AI investment and Apple Qwen integration plans — TradingView — (Google News link; search the headline)
 - [2026-11-09 08:56 UTC] Alibaba's Qwen Office 2.0 launches with industry-first multi-person Agent collaboration, cloud tasks keep running after PC shutdown — BigGo Finance — (Google News link; search the headline)
 - [2026-11-09 08:51 UTC] Mazda’s Highest-Rated Compact SUV Officially Gets Google Gemini — CarBuzz — https://carbuzz.com/mazda-cx5-google-gemini-2026/
 - [2026-11-09 08:20 UTC] Apple unveils HALO, a Unitree G1 robot run by a Mac mini and Qwen — Pasquale Pillitteri — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-11-09 08:16 UTC] Days before he got an offer from Meta, to lead the company's AI lab, Alexandr Wang sent Mark Zuckerberg a 'long note' whose first principle was that he does not need a lot of ... — The Times of India — https://timesofindia.indiatimes.com/technology/tech-news/days-before-he-got-an-offer-from-meta-to-lead-the-companys-ai-lab-alexandr-wang-sent-mark-zuckerberg-a-long-note-whose-first-principle-was-that-he-does-not-need-a-lot-of-people-as-what-matters-is-/articleshow/135687588.cms
+- [2026-11-09 07:18 UTC] Musk Promises Overnight Grok Bot Fix After Usage Complaints — FourWeekMBA — (Google News link; search the headline)
 - [2026-11-09 06:14 UTC] Apple Intelligence registered in China for use on iPads and Macs — The Next Web — https://thenextweb.com/news/apple-intelligence-china-ipad-mac-registration
 - [2026-11-09 05:03 UTC] Google Messages launches major homepage overhaul: integrates Gemini shortcut, restructures pinned and bottom search — AIBase — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-11-09 03:53 UTC] DeepSeek's Harness Framework reaches 1.54 million DAU in three months, with daily token usage exceeding 92 trillion. — KuCoin — (Google News link; search the headline) · (already listed on an earlier day)
@@ -160,10 +159,10 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-09 13:53 UTC] Our Take From The Gartner® Market Overview for Bot Protection and Management Solutions 2026 — DataDome — (Google News link; search the headline)
 - [2026-11-09 13:15 UTC] - Perplexity — Perplexity — (Google News link; search the headline) · (already listed on an earlier day) · GEO/AEO
 - [2026-11-09 13:00 UTC] Don’t wait for the SEO report to tell clients something’s wrong — Search Engine Land — (Google News link; search the headline) · GEO/AEO
+- [2026-11-09 13:00 UTC] Performance management Archives — Search Engine Land — (Google News link; search the headline)
 - [2026-11-09 10:56 UTC] Demo Center — HUMAN Security — (Google News link; search the headline)
 - [2026-11-09 08:02 UTC] Gartner Survey Finds 42% of CMOs Are Monitoring Brand Misinformation in AI-Generated Content — Gartner — (Google News link; search the headline) · (already listed on an earlier day) · Brand/product recommendation
 - [2026-11-09 04:36 UTC] Fervo Energy Company Stock Price: Quote, Forecast, Splits & News (FRVO) — Perplexity — (Google News link; search the headline) · GEO/AEO
-- [2026-11-09 02:29 UTC] - Search Engine Land — Search Engine Land — (Google News link; search the headline) · (already listed on an earlier day)
 
 ## Other items from source feeds
 
