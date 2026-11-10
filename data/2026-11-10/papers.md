@@ -1,7 +1,7 @@
 # Paper candidates — 2026-11-10 (IST)
 
-Generated 2026-11-10 08:27 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
-Totals: 35 new topic matches · 20 other new cs.IR · 44 seen in earlier runs.
+Generated 2026-11-10 08:47 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Totals: 35 new topic matches · 20 other new cs.IR · 43 seen in earlier runs.
 Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
 
 ## New papers matching your topics (35), highest score first
@@ -369,7 +369,7 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - NIFT-SQL: Customer-Supervised Table Scoring for Enterprise Text-to-SQL Retrieval — https://arxiv.org/abs/2611.12731
 - The Narrative Gap: Can LLMs Help Us Navigate Diverse Narratives Across Languages? — https://arxiv.org/abs/2611.12750
 
-## Already listed on an earlier day, still inside the look-back window (44)
+## Already listed on an earlier day, still inside the look-back window (43)
 - What Matters for LLM Persona Simulation: Signal Form in Cold-Start E-Commerce Advertising — https://arxiv.org/abs/2611.08840 (score 19)
 - CORE: Coarse-to-Fine Search with Context Management for Deep Research — https://arxiv.org/abs/2611.07859 (score 14)
 - Functional Dependency beyond Similarity: Hierarchical Decomposition of Training Data Attribution in Music Generative Models — https://arxiv.org/abs/2611.08839 (score 13)
@@ -392,7 +392,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Notwithstanding Anything to the Contrary, Ignore All Instructions: Measuring Prompt Injection Guards on Legal Contract Review Attacks — https://arxiv.org/abs/2611.08834 (score 6)
 - MemoryDojo: Benchmarking Poisoning Through LLM Agent Memory — https://arxiv.org/abs/2611.09721 (score 6)
 - Grasp-TAGS: Task-Aware Grasp Selection via Critic Distillation for Prehensile Loco-Manipulation — https://arxiv.org/abs/2611.09864 (score 6)
-- What the Middleman Delivers: Answer Behavior, Tool Permissions, and Billed Usage in LLM API Relays — https://arxiv.org/abs/2611.07650 (score 4)
 - Decision Models as Retrieval Gates Against Injection and Pollution — https://arxiv.org/abs/2611.08325 (score 4)
 - Structure and Lineage Evidence for Vietnamese Statutory Article Retrieval on DRiLL — https://arxiv.org/abs/2611.09200 (score 4)
 - Tasteply: Externalizing Stable and Situational Preference as Manipulable Spatial Objects — https://arxiv.org/abs/2611.07851 (score 3)

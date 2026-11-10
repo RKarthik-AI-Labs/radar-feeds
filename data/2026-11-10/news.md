@@ -1,6 +1,6 @@
 # News candidates — 2026-11-10 (IST)
 
-Generated 2026-11-10 08:27 UTC. Showing 231 items first seen in the last 18 h or published in the last 30 h; 96 older items from the 3-day window are only in news.json.
+Generated 2026-11-10 08:47 UTC. Showing 238 items first seen in the last 18 h or published in the last 30 h; 95 older items from the 3-day window are only in news.json.
 Each item appears once, in the first section it matches. Dates are as reported by the source ("date unknown" = page with no date).
 
 ## By priority topic
@@ -24,7 +24,7 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-09 05:01 UTC] As publishers await click data, Google’s AI visibility push complicates the opt-out decision — Digiday — (Google News link; search the headline) · Crawl
 - [2026-11-08 22:57 UTC] Gemini product video creation costs $0.07 per second — AI training opt-outs for company websites to be unified across providers — note — https://note.com/firm_heron5527/n/n0c13cd396054?hl=en · Crawl
 
-### Ads (13)
+### Ads (12)
 - [2026-11-10 06:03 UTC] Google’s AI Mode Will Soon Show Ads Even in Your Follow-Up Questions — CNET — (Google News link; search the headline) · Ads, GEO/AEO · +1 other hits
 - [2026-11-10 04:58 UTC] Amazon Lets Advertisers Use ChatGPT Via OpenAI Partnership 09/11/2026 — MediaPost — (Google News link; search the headline) · Ads
 - [2026-11-09 20:57 UTC] Microsoft Advertising overhauls interface after advertiser complaints — PPC Land — https://ppc.land/microsoft-advertising-overhauls-interface-after-advertiser-complaints/ · Ads
@@ -37,10 +37,10 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-09 12:05 UTC] Google Ads New Asset Activity Section — Search Engine Roundtable — https://www.seroundtable.com/google-ads-asset-activity-section-42481.html · Ads
 - [2026-11-09 09:41 UTC] How to Block Google Search Ads and AI Overviews Instantly — PaidFreeDroid — (Google News link; search the headline) · Ads, GEO/AEO · +1 other hits
 - [2026-11-09 08:24 UTC] Anthropic must face lawsuit over Claude subscription marketing — Reuters — https://www.reuters.com/legal/government/anthropic-must-face-lawsuit-over-claude-subscription-marketing-2026-11-09/ · Ads
-- [2026-11-09 03:21 UTC] #e4mXplains: As AI redraws the search market, Reddit wants a share of the advertising pie — Exchange4Media — (Google News link; search the headline) · (already listed on an earlier day) · Ads
 
-### Search / AEO / GEO (22)
+### Search / AEO / GEO (23)
 - [2026-11-10 08:02 UTC] What banks and insurers can learn from retailers about AI visibility — Bizcommunity — (Google News link; search the headline)
+- [2026-11-10 05:58 UTC] Track your Google rankings and AI visibility in one place for life for $69 — Mashable — https://mashable.com/tech/nov-9-seoagent-lifetime-subscription · GEO/AEO, Clicks & measurement · +1 other hits
 - [2026-11-09 23:25 UTC] Google Search's AI Mode Now Handles Restaurant Reservations, Partners with Gurunavi and Ikyu — BigGo Finance — (Google News link; search the headline) · GEO/AEO
 - [2026-11-09 22:28 UTC] AI Overviews cut a French site's daily clicks from 750 to 400, Gabe finds — PPC Land — https://ppc.land/ai-overviews-cut-a-french-sites-daily-clicks-from-750-to-400-gabe-finds/ · GEO/AEO · +1 other hits
 - [2026-11-09 20:00 UTC] Paid Search Is Moving Up The Funnel – Google Admits AI Mode Pays Less — Search Engine Journal — https://www.searchenginejournal.com/paid-search-is-moving-up-the-funnel-google-admits-ai-mode-pays-less/595875/ · GEO/AEO · +1 other hits
@@ -59,17 +59,18 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-09 08:29 UTC] 7 Questions to Ask Before Hiring a GEO Agency — Techno FAQ — https://technofaq.org/posts/2026/11/7-questions-to-ask-before-hiring-a-geo-agency/ · Citation & source selection, GEO/AEO
 - [2026-11-09 08:15 UTC] AI Visibility Alone Won’t Win Consumer Trust, Asian Communications Leaders Warn — BusinessToday Malaysia — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-11-09 07:59 UTC] Best Reddit SEO Agencies for AI Visibility: Nicely Network Recognised by Expert Consumers — PR Newswire — https://www.prnewswire.com/news-releases/best-reddit-seo-agencies-for-ai-visibility-nicely-network-recognised-by-expert-consumers-302933346.html · GEO/AEO
-- [2026-11-09 04:03 UTC] Track your Google rankings and AI visibility in one place for life for $69 — Mashable — https://mashable.com/tech/nov-9-seoagent-lifetime-subscription · GEO/AEO, Clicks & measurement
 - [2026-11-09 00:59 UTC] Google’s AI Features Sent One Site An Estimated 21% Of Its Clicks — Search Engine Journal — https://www.searchenginejournal.com/googles-ai-features-sent-one-site-an-estimated-21-of-its-clicks/596267/ · GEO/AEO
 - [2026-11-08 22:14 UTC] Perplexity Teammates AI agents for ongoing work — NeoTeo — (Google News link; search the headline) · GEO/AEO
+- [2026-11-08 17:01 UTC] BRD Media Medical Practice Marketing Data: 1,720 Meta Leads, 15 Treatment Packages, $76,500 At One Chicago Clinic — MENAFN — https://menafn.com/1111936239/BRD-Media-Medical-Practice-Marketing-Data-1720-Meta-Leads-15-Treatment-Packages-76500-At-One-Chicago-Clinic
 
-### Model & lab launches (news search) (56)
-- [2026-11-10 05:58 UTC] Anthropic announces Claude Fable 5.2 and Mythos 5.2. They'e already solved black hole physics problems. — Mashable — (Google News link; search the headline)
+### Model & lab launches (news search) (60)
+- [2026-11-10 08:03 UTC] Anthropic announces Claude Fable 5.2 and Mythos 5.2. They'e already solved black hole physics problems. — Mashable — (Google News link; search the headline)
 - [2026-11-10 05:52 UTC] Moonshot AI rents Nvidia’s top AI chips in China, documents show — The Economic Times — https://www.msn.com/en-in/news/other/moonshot-ai-rents-nvidia-s-top-ai-chips-in-china-documents-show/ar-AA2h6GXm · +1 other hits
 - [2026-11-10 05:43 UTC] OpenAI releases GPT 6.1 Terra — BotHub — (Google News link; search the headline)
 - [2026-11-10 05:18 UTC] Meta Launches Muse Ember AI Model: How it challenges OpenAI's GPT-6 Luna and Anthropic's Claude Haiku 5.5 — Zee Business — (Google News link; search the headline) · GEO/AEO
 - [2026-11-10 04:41 UTC] Anthropic launches Claude Fable 5.2 and Mythos 5.2 ahead of planned IPO — Storyboard18 — (Google News link; search the headline)
 - [2026-11-10 04:33 UTC] OpenAI Introduces 35-Second Kill Switch to Halt Rogue AI Agents — KuCoin — (Google News link; search the headline)
+- [2026-11-10 04:26 UTC] Anthropic launches new Claude Fable 5.2, Mythos models before IPO — Gulf News — (Google News link; search the headline)
 - [2026-11-10 03:45 UTC] Muse Wonder vs Kimi K4: one is on sale, one is a rumour — OrcaRouter — (Google News link; search the headline)
 - [2026-11-10 03:32 UTC] Anthropic launches Claude Fable 5.2, Mythos 5.2 with faster performance and stronger coding capabilities — The Times of India — https://timesofindia.indiatimes.com/technology/tech-news/anthropic-launches-claude-fable-5-2-mythos-5-2-with-faster-performance-and-stronger-coding-capabilities/articleshow/135698029.cms · GEO/AEO · +1 other hits
 - [2026-11-10 03:11 UTC] CXMT chairman's reported DeepSeek investment spotlights China's semiconductor capital network — digitimes — (Google News link; search the headline)
@@ -78,21 +79,21 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-10 01:33 UTC] Nota optimizes Kimi K3.1 Pro to cut GPU costs by up to 20% — Chosunbiz — (Google News link; search the headline)
 - [2026-11-10 01:25 UTC] OpenAI launches Control Room with a powerful 35-second kill switch for rogue agents — Interesting Engineering — (Google News link; search the headline)
 - [2026-11-10 01:04 UTC] Google cuts Gemini Omni’s 720p video price by 30% and adds 15-second clips — EdTech Innovation Hub — https://www.edtechinnovationhub.com/news/google-cuts-gemini-omnis-720p-video-price-by-30-and-adds-15-second-clips · +1 other hits
-- [2026-11-10 00:16 UTC] China’s Moonshot AI rents advanced Nvidia chips: Bloomberg — Seeking Alpha — https://seekingalpha.com/news/4669531-chinas-moonshot-ai-rents-advanced-nvidia-chips-bloomberg
+- [2026-11-10 00:16 UTC] China’s moonshot AI rents advanced Nvidia chips: Bloomberg — Seeking Alpha on MSN — https://www.msn.com/en-us/news/other/china-s-moonshot-ai-rents-advanced-nvidia-chips-bloomberg/ar-AA2h7mlY
 - [2026-11-10 00:15 UTC] Anthropic Launches Claude Mythos 5.2 and Fable 5.2 Amid AI Concerns — Analytics Insight — https://www.analyticsinsight.net/news/anthropic-launches-claude-mythos-52-and-fable-52-amid-ai-concerns
+- [2026-11-10 00:12 UTC] Nanbeige vs. Qwen: 33B Agent Lead Meets 27B Local Champ — Intelligent Living — https://www.intelligentliving.co/nanbeige-vs-qwen-33b-agent-lead/ · Brand/product recommendation
 - [2026-11-10 00:03 UTC] OpenAI launches Codex edition ModRetro Chromatic gaming handheld that lets users play self-made games — Digit — https://www.digit.in/news/gaming/openai-launches-codex-edition-modretro-chromatic-gaming-handheld-that-lets-users-play-self-made-games-all-details.html
+- [2026-11-09 23:55 UTC] Claude Fable 5.2 and Claude Mythos 5.2: Anthropic introduces two new Claude 5.2 models for advanced coding, cybersecurity — The Statesman on MSN — https://www.msn.com/en-in/news/other/claude-fable-52-and-claude-mythos-52-anthropic-introduces-two-new-claude-52-models-for-advanced-coding-cybersecurity/ar-AA2h7V7O
 - [2026-11-09 23:50 UTC] Meta launches new AI model Muse Ember, cheaper than OpenAI and Anthropic rivals: Here's what it can do — Times Now on MSN — https://www.msn.com/en-in/technology/artificial-intelligence/meta-launches-new-ai-model-muse-ember-cheaper-than-openai-and-anthropic-rivals-here-s-what-it-can-do/ar-AA2h6P64 · GEO/AEO
 - [2026-11-09 23:42 UTC] Google Cloud Releases Pathways Runtime for Large-Scale AI Training and Inference — HPCwire — (Google News link; search the headline)
-- [2026-11-09 23:24 UTC] Anthropic Launches Claude Fable 5.2 and Claude Mythos 5.2 With Faster, Cheaper Pricing: 16 outlets compared — NewsCord — (Google News link; search the headline)
 - [2026-11-09 22:37 UTC] Anthropic introduces two new Claude AI models: What Fable 5.2 and Mythos 5.2 can do — News9Live on MSN — https://www.msn.com/en-in/news/other/anthropic-introduces-two-new-claude-ai-models-what-fable-52-and-mythos-52-can-do/ar-AA2h7qpm · GEO/AEO
 - [2026-11-09 22:18 UTC] Meta takes on OpenAI and Anthropic with Muse Ember AI model: Features, benchmarks and pricing — Mint — https://www.livemint.com/ai/meta-takes-on-openai-and-anthropic-with-muse-ember-ai-model-features-benchmarks-and-pricing-11794289940494.html · GEO/AEO
 - [2026-11-09 22:04 UTC] DeepSeek Harness' new Creator Mode creates plugins from prompts — Mashable — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-11-09 21:59 UTC] Meta’s Muse Ember, Muse Spark 1.3, and Muse Wonder land on Google Cloud — Crypto Briefing — https://cryptobriefing.com/meta-muse-models-google-cloud/ · +1 other hits
 - [2026-11-09 21:06 UTC] Anthropic launches Claude Fable 5.2 and Mythos 5.2 with improved coding, reasoning and AI research capabilities — Moneycontrol — https://www.moneycontrol.com/technology/anthropic-launches-claude-fable-5-2-and-mythos-5-2-with-improved-coding-reasoning-and-ai-research-capabilities-article-14076008.html · GEO/AEO
-- [2026-11-09 21:02 UTC] Anthropic debuts Claude Fable, Mythos 5.2 models, priced 20% below OpenAI’s GPT-6 Astra — Fortune — https://www.msn.com/en-ca/technology/artificial-intelligence/anthropic-debuts-claude-fable-mythos-5-2-models-priced-20-below-openai-s-gpt-6-astra/ar-AA2h5X42 · +2 other hits
+- [2026-11-09 21:02 UTC] Anthropic debuts Claude Fable, Mythos 5.2 models, priced 20% below OpenAI’s GPT-6 Astra — Fortune — (Google News link; search the headline) · +1 other hits
 - [2026-11-09 19:42 UTC] Reindeer Launches on Google Cloud Marketplace, Expanding Collaboration with Google Cloud to Help Enterprises Move Agentic AI into Core Operations — PR Newswire — (Google News link; search the headline)
 - [2026-11-09 19:38 UTC] Anthropic Launches Claude Fable 5.2 and Mythos 5.2 — MacRumors — (Google News link; search the headline) · +1 other hits
-- [2026-11-09 19:31 UTC] OpenAI puts ChatGPT Enterprise on AWS Marketplace, letting companies buy it through Amazon billing — MLQ.ai — (Google News link; search the headline)
 - [2026-11-09 19:24 UTC] Anthropic releases new Mythos and Fable models amid RSI concerns — TechCrunch AI — https://techcrunch.com/2026/11/09/anthropic-releases-new-mythos-and-fable-models-amid-rsi-concerns/ · +1 other hits
 - [2026-11-09 19:04 UTC] Anthropic debuts Claude Fable 5.2 and Mythos 5.2 models as IPO nears — Yahoo Finance — (Google News link; search the headline)
 - [2026-11-09 19:03 UTC] Grok at SpaceX: 5 Details That Matter on FOD Detection — BASENOR - Tesla Accessories — https://www.basenor.com/blogs/news/grok-at-spacex-5-details-that-matter-on-fod-detection · +1 other hits
@@ -103,12 +104,15 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-09 16:16 UTC] Google releases Gemini 4 Argon for robot control and simulation — news.lavx.hu — (Google News link; search the headline)
 - [2026-11-09 16:12 UTC] Google Releases Gemini 4 Argon, Showcasing 1M Output Tokens and Advanced Agentic Reasoning — OODA Loop — (Google News link; search the headline)
 - [2026-11-09 16:05 UTC] FlowX.AI & Google Take Mission-Critical AI Agents From Pilot to Production — Yahoo Finance Australia — (Google News link; search the headline)
+- [2026-11-09 16:00 UTC] OpenAI Launches Control Room to Stop Rogue AI Research Workloads Within 35 Seconds — lapaasvoice.com — https://lapaasvoice.com/openai-launches-control-room-to-stop-rogue-ai-research-workloads-within-35-seconds/
 - [2026-11-09 16:00 UTC] Anthropic Releases Claude Fable 5.2 and Mythos 5.2 With Faster AI Reasoning and Coding — lapaasvoice.com — https://lapaasvoice.com/anthropic-releases-claude-fable-5-2-and-mythos-5-2-with-faster-ai-reasoning-and-coding/
 - [2026-11-09 16:00 UTC] Gemini Teen Lawsuit Tests 1 Chatbot Law at School [2026] — shattered.io — https://shattered.io/gemini-teen-lawsuit-companion-chatbot-law-school-chromebook-2026/
 - [2026-11-09 15:47 UTC] Google Releases Gemini 4 Argon for Robotics Control, Simulation, and Policy Improvement — infoq.com — (Google News link; search the headline)
+- [2026-11-09 15:07 UTC] OpenAI launches Control Room: A new ‘kill switch’ to stop AI models within 35 seconds — News9Live — https://www.news9live.com/technology/artificial-intelligence/openai-control-room-ai-kill-switch-35-seconds-3023268 · GEO/AEO
 - [2026-11-09 14:50 UTC] AI Price Prediction: Dogecoin Is in a Death Cross at $0.07. We Asked Grok Where DOGE Could End 2026 — 24/7 Wall St. — https://247wallst.com/investing/cryptocurrency/2026/11/09/ai-price-prediction-dogecoin-is-in-a-death-cross-at-0-07-we-asked-grok-where-doge-could-end-2026/
 - [2026-11-09 14:20 UTC] Anthropic Introduces New Fable 5.2 and Mythos 5.2 AI Models — CNET — https://www.cnet.com/tech/anthropic-introduces-new-fable-5-2-and-mythos-5-2-ai-models/ · GEO/AEO
 - [2026-11-09 14:14 UTC] Qwen 4 Beats Deepseek 4.1 Flash in Web Tasks on Half the Tokens — Geeky Gadgets — https://www.geeky-gadgets.com/qwen-4-preview-first-look/ · +3 other hits
+- [2026-11-09 14:11 UTC] DeepSeek Harness Adoption Reaches 1.54 Million Daily Users, the Company Says — remio — (Google News link; search the headline)
 - [2026-11-09 12:29 UTC] OpenAI releases GPT-6 Cyber for authorised security testing — varindia — (Google News link; search the headline)
 - [2026-11-09 12:25 UTC] DeepSeek API Pricing vs Mistral Large 4 [2026] — shattered.io — (Google News link; search the headline) · +1 other hits
 - [2026-11-09 11:00 UTC] Weekly Recap: Alibaba AI investment and Apple Qwen integration plans — TradingView — (Google News link; search the headline)
@@ -121,7 +125,7 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-09 02:53 UTC] ChatGPT Images 2.6: OpenAI Introduces GIFs, Reference Images, and 50% Faster Performance — Basic Tutorials — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-11-08 14:56 UTC] AI Morning Paper | November 9: Qwen teases next model, Claude and Muse rethink memory handling — note — https://note.com/xmatome/n/nc5ec0206dd2a?hl=en · GEO/AEO
 
-### B2B buyer AI / adoption (19)
+### B2B buyer AI / adoption (21)
 - [2026-11-10 07:18 UTC] Gartner Says Aligning AI Value, Risk and Safety Is Now the Top Challenge for CIOs — Technology For You — (Google News link; search the headline) · +1 other hits
 - [2026-11-10 03:46 UTC] iGrow Ranks Vienna B2B Marketing Agencies by Qualified Enquiries — openPR.com — (Google News link; search the headline)
 - [2026-11-10 02:01 UTC] AI infrastructure spending outpaces returns, Forrester warns of supplier risk — ET Datacenters — (Google News link; search the headline)
@@ -136,6 +140,8 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-09 15:59 UTC] Does LLM Now Mean Large Liability Model? — Forrester — (Google News link; search the headline)
 - [2026-11-09 11:35 UTC] Your Next Client Won't Google You: 94% of B2B Buyers Use AI When They Buy. — Urbanize LA — (Google News link; search the headline) · +1 other hits
 - [2026-11-09 09:30 UTC] PromethistAI Takes Its Relational Agents to US Banks and Insurers — The Tennessean — https://www.tennessean.com/press-release/story/259542/promethistai-takes-its-relational-agents-to-us-banks-and-insurers/
+- [2026-11-09 08:19 UTC] Feedvisor Expands Agentis Platform to Boost Amazon B2B Growth — Sourcing Journal on MSN — https://www.msn.com/en-us/news/other/feedvisor-expands-agentis-platform-to-boost-amazon-b2b-growth/ar-AA2h4Lma · Brand/product recommendation
+- [2026-11-09 05:33 UTC] If half of your subordinates become AI agents, what will managers be evaluated on? — comemo.nikkei — https://comemo.nikkei.com/n/n435902d66f63?hl=en
 - [2026-11-09 05:02 UTC] B2B CTV tactics that go beyond brand awareness — MarTech — https://martech.org/b2b-ctv-tactics-that-go-beyond-brand-awareness/ · Brand/product recommendation
 - [2026-11-09 05:00 UTC] AI Agents Are a Solution Looking for a Problem — Bloomberg.com — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-11-09 04:15 UTC] ROI From Your AI Agents Isn't About Costs — Forbes — https://www.forbes.com/councils/forbestechcouncil/2026/11/09/roi-from-your-ai-agents-isnt-about-costs/
@@ -143,12 +149,12 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-08 16:00 UTC] Your Competitor Is Writing Your Product Comparison Page - Here’s How to One-Up Them — HackerNoon — https://hackernoon.com/your-competitor-is-writing-your-product-comparison-page-heres-how-to-one-up-them · Citation & source selection
 
 ### Sites with no usable feed (via Google News site: search) (19)
-- [2026-11-10 05:22 UTC] Perplexity — Perplexity — (Google News link; search the headline) · (already listed on an earlier day) · GEO/AEO · +1 other hits
 - [2026-11-10 02:58 UTC] Teammates work for you — Perplexity — (Google News link; search the headline) · (already listed on an earlier day) · GEO/AEO
 - [2026-11-09 19:15 UTC] State of Agentic Traffic – October 2026: Meta and OpenAI now account for 90% of agentic traffic — HUMAN Security — (Google News link; search the headline)
 - [2026-11-09 17:45 UTC] SEO for manufacturers: Definition, benefits, and top tactics — Search Engine Land — (Google News link; search the headline) · GEO/AEO
 - [2026-11-09 16:32 UTC] Gartner IT Symposium/Xpo 2026 Barcelona: Day 1 Highlights — Gartner — (Google News link; search the headline)
 - [2026-11-09 16:17 UTC] Introducing Perplexity Frontier Research — Perplexity — (Google News link; search the headline) · GEO/AEO
+- [2026-11-09 16:11 UTC] Meta AI — AI at Meta — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-11-09 16:00 UTC] Website migrations can hurt SEO even when URLs don’t change — Search Engine Land — (Google News link; search the headline) · GEO/AEO
 - [2026-11-09 16:00 UTC] Contentful Archives — Search Engine Land — (Google News link; search the headline)
 - [2026-11-09 15:12 UTC] Perplexity AI — Perplexity — (Google News link; search the headline) · (already listed on an earlier day) · GEO/AEO
@@ -159,13 +165,14 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-09 13:57 UTC] Orchestrator Models & Pricing — Perplexity — (Google News link; search the headline) · GEO/AEO
 - [2026-11-09 13:53 UTC] Our Take From The Gartner® Market Overview for Bot Protection and Management Solutions 2026 — DataDome — (Google News link; search the headline)
 - [2026-11-09 13:00 UTC] Don’t wait for the SEO report to tell clients something’s wrong — Search Engine Land — (Google News link; search the headline) · GEO/AEO
-- [2026-11-09 13:00 UTC] Performance management Archives — Search Engine Land — (Google News link; search the headline)
 - [2026-11-09 10:56 UTC] Demo Center — HUMAN Security — (Google News link; search the headline)
 - [2026-11-09 08:02 UTC] Gartner Survey Finds 42% of CMOs Are Monitoring Brand Misinformation in AI-Generated Content — Gartner — (Google News link; search the headline) · (already listed on an earlier day) · Brand/product recommendation
+- [2026-11-09 04:46 UTC] Perplexity — Perplexity — (Google News link; search the headline) · (already listed on an earlier day) · GEO/AEO · +1 other hits
 
 ## Other items from source feeds
 
-### Labs (official feeds + trackers) (30)
+### Labs (official feeds + trackers) (31)
+- [2026-11-10 09:00 UTC] Closing the AI guidance gap in education — OpenAI News — https://openai.com/index/closing-ai-guidance-gap-education
 - [2026-11-10 07:28 UTC] Introducing Our Smallest, Most Efficient Model: Muse Ember — Simon Willison — https://simonwillison.net/2026/Nov/10/muse-ember/
 - [2026-11-10 07:25 UTC] SoftBank reports Q2 net loss of $7B vs. a ~$15.8B profit a year ago, on ~$14B revenue vs. ~$12.8B est. as tech selloff weighs on results; shares close up 13.9% (Jenny Lee/CNBC) — Techmeme — https://www.techmeme.com/261110/p4#a261110p4
 - [2026-11-10 06:45 UTC] GeniosAI, which develops AI software for financial analysis and modeling, raised $19.1M across seed and Series A rounds; FactSet led the Series A (Ryan Lawler/Axios) — Techmeme — https://www.techmeme.com/261110/p3#a261110p3
