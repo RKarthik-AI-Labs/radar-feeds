@@ -1,7 +1,7 @@
 # Paper candidates — 2026-11-11 (IST)
 
-Generated 2026-11-11 07:46 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
-Totals: 18 new topic matches · 11 other new cs.IR · 82 seen in earlier runs.
+Generated 2026-11-11 08:16 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Totals: 18 new topic matches · 11 other new cs.IR · 78 seen in earlier runs.
 Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
 
 ## New papers matching your topics (18), highest score first
@@ -194,7 +194,7 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Point-in-Time Encoders for Earnings Calls — https://arxiv.org/abs/2611.14325
 - FERN: Cross-Benchmark Table Retrieval for Text-to-SQL with Frozen Retrievers and Learned Ranking — https://arxiv.org/abs/2611.14477
 
-## Already listed on an earlier day, still inside the look-back window (82)
+## Already listed on an earlier day, still inside the look-back window (78)
 - Can the Confidence and Decisions of System 1 Models Be Trusted? An Explainability and Perturbation Audit of Jev-Style Decision Models — https://arxiv.org/abs/2611.12521 (score 14)
 - TS-GEAR: Taobao Shangou GEnerative Ad Retrieval — https://arxiv.org/abs/2611.12180 (score 13)
 - CHO-Bench: How Do Context Hints Affect Ad Rankings in LLM Advertising? — https://arxiv.org/abs/2611.11955 (score 12)
@@ -210,11 +210,8 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Cutpurse: Decomposing Explanation-Guided Model Extraction on Tabular Data — https://arxiv.org/abs/2611.09375 (score 9)
 - Least-Privilege Auditing of Agent Tool Calls with Intent Graphs and Reasoning-Guided Escalation — https://arxiv.org/abs/2611.11305 (score 9)
 - State Media at Retrieval Time: A Large-Scale Audit of Russian State-Aligned Sources in AI Chatbot Responses — https://arxiv.org/abs/2611.11727 (score 9)
-- CARGO: Causal Attribution and Responsibility-Guided Preventive Safe Multi-Agent Reinforcement Learning for Cooperative Driving — https://arxiv.org/abs/2611.09139 (score 8)
 - FOSCAR: Accelerating Decode Attention over 2- and 4-Bit KV Caches through Affine Folding — https://arxiv.org/abs/2611.09722 (score 8)
 - SituRecBench: Evaluating Frontier Models as Situated Recommendation Assistants in 3D Environments — https://arxiv.org/abs/2611.10349 (score 8)
-- Can open citation data detect citation stacking? An audit against Clarivate's journal suppressions — https://arxiv.org/abs/2611.10471 (score 8)
-- Do links to retracted papers predict future retractions? An out-of-sample test on the open biomedical citation graph — https://arxiv.org/abs/2611.10474 (score 8)
 - Hybrid Product Search Without the Copy: Lexical, Semantic and Filtered Retrieval Served Directly from a Data Lake — https://arxiv.org/abs/2611.11031 (score 8)
 - ScrapeBench: Evaluating Legal Compliance of AI Agents in Website Scraping — https://arxiv.org/abs/2611.11306 (score 8)
 - SkillCODER: Towards Auditing and Attribution of Copyright Infringement in LLM Agent Skills — https://arxiv.org/abs/2611.11308 (score 8)
