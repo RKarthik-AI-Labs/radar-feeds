@@ -1,7 +1,7 @@
 # Paper candidates — 2026-11-11 (IST)
 
-Generated 2026-11-11 07:16 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
-Totals: 18 new topic matches · 11 other new cs.IR · 83 seen in earlier runs.
+Generated 2026-11-11 07:46 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Totals: 18 new topic matches · 11 other new cs.IR · 82 seen in earlier runs.
 Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
 
 ## New papers matching your topics (18), highest score first
@@ -194,11 +194,10 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Point-in-Time Encoders for Earnings Calls — https://arxiv.org/abs/2611.14325
 - FERN: Cross-Benchmark Table Retrieval for Text-to-SQL with Frozen Retrievers and Learned Ranking — https://arxiv.org/abs/2611.14477
 
-## Already listed on an earlier day, still inside the look-back window (83)
+## Already listed on an earlier day, still inside the look-back window (82)
 - Can the Confidence and Decisions of System 1 Models Be Trusted? An Explainability and Perturbation Audit of Jev-Style Decision Models — https://arxiv.org/abs/2611.12521 (score 14)
 - TS-GEAR: Taobao Shangou GEnerative Ad Retrieval — https://arxiv.org/abs/2611.12180 (score 13)
 - CHO-Bench: How Do Context Hints Affect Ad Rankings in LLM Advertising? — https://arxiv.org/abs/2611.11955 (score 12)
-- MARS: Training Multilingual Search Agents for Retriever-Free Evidence Acquisition — https://arxiv.org/abs/2611.09090 (score 11)
 - On Agentic Manipulation Policies — https://arxiv.org/abs/2611.09892 (score 11)
 - Slim Foundation Models for Latency-Critical Recommendation Serving — https://arxiv.org/abs/2611.11013 (score 11)
 - PCG-RAG: Progressive Compositional Grounding for Retrieval-Augmented Generation in Complex Web Question Answering — https://arxiv.org/abs/2611.11113 (score 11)
