@@ -1,0 +1,3065 @@
+TIB: Sample-wise Tempered Information Bottleneck for Multimodal Attribution beyond Alignment Assumption
+https://arxiv.org/abs/2611.12997
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+TIB: Sample-wise Tempered Information Bottleneck for Multimodal Attribution
+
+beyond Alignment Assumption
+
+Qiming Huang
+
+  
+
+Peixi Liu
+
+  
+
+Jianbo Jiao
+
+Affiliation: 
+The MIx group
+, School of Computer Science, University of Birmingham
+
+Affiliation: 
+{qxh366, pxl416}@student.bham.ac.uk, j.jiao@bham.ac.uk
+
+Abstract
+
+Multimodal (
+e.g. 
+vision–language, in this work) attribution aims to interpret the models without access to ground-truth explanatory supervision. Existing multimodal attribution methods typically rely on paired modalities as proxy supervision, implicitly assuming that image–text pairs are semantically aligned. Information bottleneck (IB)–based attribution methods follow this general paradigm and instantiate it through a global sufficiency–compression objective. In realistic multimodal datasets, however, this assumption is frequently violated due to partial semantic misalignment and unreliable cross-modal correspondences. Through theoretical analysis, we show that, under such misalignment, information-bottleneck-based attribution objectives exhibit a structural limitation: by assuming equal reliability across all proxy supervision signals, they induce posterior over-contraction and forced explanations. To address this issue, we propose TIB, a sample-wise 
+T
+empered 
+I
+nformation 
+B
+ottleneck framework that adaptively modulates attribution strength according to cross-modal reliability, without assuming semantic alignment. Extensive experiments on controlled benchmarks and large-scale datasets show the effectiveness of the proposed approach, while also validating the identified failure mode. Project page: 
+https://qiming-huang.github.io/TIB/
+.
+
+“Love all, trust a few, do wrong to none.”
+ 
+
+William Shakespeare
+
+1 
+Introduction
+
+Recent advances in multimodal learning, exemplified by large-scale vision–language models such as CLIP 
+[
+21
+]
+, have enabled powerful joint representations across diverse modalities and achieved strong performance on tasks such as image–text retrieval and visual question answering. As these models increasingly serve as general-purpose foundations, it becomes essential to understand which modalities and components contribute to their predictions.
+
+This growing demand has motivated increasing interest in multimodal attribution, which aims to explain model predictions by identifying salient elements across different modalities. Unlike unimodal settings—where unimodal attribution can be evaluated against well-defined supervision signals such as class labels for images or next-token prediction for language models—multimodal attribution lacks explicit ground-truth explanations. Consequently, existing approaches typically operate on paired multimodal samples and implicitly assume cross-modal consistency, treating one modality as a proxy ground truth to attribute or explain the other 
+[
+26
+, 
+8
+, 
+20
+, 
+32
+, 
+37
+]
+.
+
+However, this assumption of cross-modal consistency is inherently fragile. As shown in Fig. 
+1
+, in most real scenarios, multimodal data, paired modalities may be missed, replaced, or only weakly correlated. Empirical studies on large-scale video–text datasets report that over 50% of purportedly aligned clip–caption pairs are in fact misaligned 
+[
+16
+]
+. Such conditions are widely studied in multimodal learning and formally defined as 
+multimodal misalignment
+ 
+[
+5
+, 
+3
+]
+. While prior work has extensively examined how misalignment affects representation learning, either as detrimental noise 
+[
+14
+, 
+30
+]
+ or as a form of regularization 
+[
+33
+, 
+17
+, 
+7
+]
+, its implications for multimodal attribution remain largely underexplored. From the perspective of attribution, this raises a fundamental question: 
+Does multimodal misalignment systematically affect the stability and reliability of multimodal attribution?
+
+In light of this, we aim to study multimodal attribution through an information-theoretic lens. In detail, we analyse the attribution objectives derived from the information bottleneck (IB) principle under a unified misalignment data generation assumption (see Assump. 
+3.1
+). Under this assumption, multimodal pairs are drawn from a mixture of aligned and misaligned components. We then characterise IB-style attribution objectives as enforcing representational sufficiency with respect to the entire data mixture, without distinguishing aligned from misaligned samples. However, the mutual information between modalities conditioned on misalignment is generally non-zero, despite the absence of genuine semantic correspondence. Consequently, the sufficiency constraint inevitably allocates representation capacity to such spurious cross-modal dependencies, diverting explanatory capacity toward noise and leading to increasingly concentrated and unstable attribution maps.
+
+Through experimental analysis, we reveal that this failure mode is not an artefact of optimisation or hyperparameter choices, but a structural limitation of standard homoscedastic bottleneck formulations. In particular, homoscedastic information bottlenecks impose a trade-off between sufficiency and compression across all samples, treating aligned and misaligned pairs as equally reliable under the unified data generation assumption. As a result, attribution objectives cannot adapt to heterogeneity in cross-modal reliability. Besides, explanatory learning remains driven by uniform fitting pressure even when semantic sufficiency becomes statistically degenerate. In contrast, we show that stable multimodal attribution under misalignment becomes attainable by adopting heteroscedastic information bottlenecks, named as Tempered Information Bottleneck (TIB), which allows effective information capacity to vary across samples. This flexibility enables the attribution objective to suppress contributions from misaligned components within samples, while preserving explanatory capacity for their reliably aligned semantic content.
+
+Figure 1: 
+Qualitative comparison of multimodal attribution under completely aligned (top: 
+✓
+) and misaligned (bottom: 
+✗
+) image–text pairs. Our method suppresses attribution on completely mismatched image–text pairs.
+
+Beyond theoretical analysis, we empirically validate our approach on a synthetic benchmark that allows precise control over the structure and severity of misalignment, enabling systematic evaluation of attribution behaviour. Our contributions are summarised as follows:
+
+•
+
+We study multimodal attribution from an information bottleneck (IB) perspective under a unified misalignment data generation assumption, and show that classical IB objectives are contaminated by multimodal misalignment pressure.
+
+•
+
+We propose a heteroscedastic bottleneck, TIB, that enables more robust multimodal attribution by adaptively suppressing misaligned components while preserving reliably aligned semantic content.
+
+•
+
+We validate the proposed approach on both synthetic and real-world multimodal datasets, including a controllable misalignment benchmark for systematic evaluation.
+
+2 
+Related Work
+
+Unimodal Interpretability Methods.
+
+Traditional interpretability methods were primarily developed for unimodal deep learning models and face significant limitations when applied to multimodal architectures. Early gradient-based approaches, such as Saliency Maps, compute input-output gradients to highlight important regions in the input. However, they are highly sensitive to noise and often produce low-resolution or unstable explanations. Grad-CAM 
+[
+26
+]
+ improves upon this by using gradients of class-specific activation maps in convolutional layers, resulting in more focused and human-interpretable heatmaps. LIME 
+[
+22
+]
+ adopts a black-box approach by perturbing the input and fitting a local surrogate model, offering model-agnostic explanations. Despite its generality, LIME may fail on complex models due to its reliance on local linearity assumptions. More recent attribution methods, such as AGI 
+[
+19
+]
+ and MFABA 
+[
+36
+]
+, utilise adversarial perturbations to generate more robust saliency maps. These approaches satisfy formal interpretability criteria like Sensitivity and Implementation Invariance 
+[
+29
+]
+, offering theoretical guarantees.
+
+Nevertheless, most of these methods are designed for unimodal tasks and require access to downstream task labels or internal gradients, making them less suitable for large-scale vision-language models. Attempts to extend such methods to the multimodal setting—such as CLIP—face challenges due to architectural differences and a lack of task-specific supervision. As shown in our experiments, these methods often fail to provide meaningful explanations when applied directly to multimodal models.
+
+Multimodal Interpretability Methods
+
+CLIP 
+[
+21
+]
+ learns joint image-text representations by training separate encoders on large-scale image-text pairs, aligning the two modalities in a shared embedding space. This design enables zero-shot transfer, allowing the model to perform various tasks based solely on natural language prompts, without requiring task-specific annotations. In related open-world settings, semantic ambiguity complicates the evaluation of open-vocabulary segmentation 
+[
+10
+]
+. However, the complexity of multimodal reasoning raises the need for interpretability to ensure that the model’s predictions are based on semantically meaningful features. Improvements in zero-shot action recognition through atypical video data 
+[
+28
+]
+ further highlight the potential of multimodal interpretability to reveal which visual and textual cues support generalisation to unseen actions. Investigating CLIP’s interpretability is thus crucial to determine whether it captures genuine vision-language associations or exploits spurious correlations.
+
+A range of methods have been proposed to interpret vision-language pre-trained models, yet many introduce limitations in fidelity, scalability, or practicality. M2IB 
+[
+32
+]
+ applies a multimodal information bottleneck to filter irrelevant features, but increases architectural complexity. COCOA 
+[
+13
+]
+ modifies Integrated Gradients with contrastive learning, requiring additional positive and negative samples that may introduce irrelevant context. TEXTSPAN 
+[
+6
+]
+ relies on constructing sample-specific sets or selecting neighbours in embedding space, making it dependent on external data and less generalizable. LICO 
+[
+12
+]
+ retrains models to maintain cross-modal alignment, but its explanations apply to the altered model, not the original one, and are affected by training randomness. FALCON 
+[
+11
+]
+ explains individual features via highly activating examples, but lacks per-instance interpretability. PIDReg 
+[
+15
+]
+, a PID-based method, seeks to improve interpretability by decomposing information across modalities on a multimodal regression task. FIxLIP 
+[
+2
+]
+ introduces faithful interaction explanations of CLIP and SigLIP models, offering a game-theoretic perspective on interpreting image–text similarity.
+
+Recent work 
+[
+1
+]
+ provides a comprehensive review of multimodal attribution methods, but largely focuses on fixed paired settings and does not account for multimodal misalignment arising from the data generation process itself. In practice, many existing interpretability methods for vision–language models rely on strong assumptions, such as clean image–text alignment, access to contrastive examples, or task-specific supervision, and often require additional sampling, surrogate retraining, or architectural modifications, which limit their robustness and practicality. As a result, when image–text pairs are noisy or mismatched, these methods may still produce forced explanations, undermining the reliability of the interpretability results, as illustrated in Fig. 
+1
+. By contrast, our method does not assume reliable modality alignment or strict pairwise correspondence; instead, it employs a soft alignment mechanism that adapts to varying degrees of semantic consistency, yielding more effective and credible multimodal attribution under misalignment.
+
+Figure 2: 
+Conceptual visualisation of our multimodal data generation assumption. We assume that each multimodal pair contains both semantically 
+aligned
+ and 
+misaligned
+ information.
+
+3 
+Contamination in the
+Multimodal Attribution Objective
+
+The Information Bottleneck (IB).
+
+The IB seeks to learn a representation that preserves the information in the input that is essential for a downstream task, while discarding irrelevant or redundant content 
+[
+31
+]
+. Given an input variable 
+, a target variable 
+, and a representation 
+, the IB objective is formulated as
+
+(1)
+
+where 
+ denotes mutual information and 
+ is a Lagrange multiplier that governs the trade-off between task-relevant sufficiency and information compression. To analyse the objective contamination arising in multimodal attribution, we first provide the following definition.
+
+Assumption 3.1
+ 
+(Multimodal Mixture Data Generative Model)
+.
+
+Let 
+ and 
+ denote two modalities, and let 
+ be a paired sample. We assume that the multimodal pairs are generated from a mixture of 
+ latent components determined by the latent semantic space, indexed by an indicator 
+, with mixture weights 
+ satisfying 
+. The joint distribution is given by:
+
+(2)
+
+where 
+ denotes the aligned semantic component induced solely by the shared state 
+, with mixture weight 
+. The distributions 
+ denote heterogeneous misaligned semantic components associated with different subsets or modes of the misalignment factors 
+, and 
+ are their normalised mixture weights satisfying 
+. Consequently, the total proportion of cross-modal misalignment is 
+. A conceptual visualisation is shown in Fig. 
+2
+.
+
+Theorem 3.2
+ 
+(Decomposition of the Contamination IB Fitting Objective)
+.
+
+Under Assumption 
+3.1
+, the fitting term in the standard Information Bottleneck objective in Eq. 
+1
+ admits the following exact decomposition, which explicitly characterises the contributions of aligned and misaligned samples to the information captured by the representation:
+
+(3)
+
+Here, 
+ captures the useful semantic fitting pressure induced by aligned multimodal pairs, 
+ represents the direct fitting contribution arising from misaligned samples, and 
+ characterises the Latent-State dependence introduced by the latent mixture state 
+. Therefore, although the standard IB objective treats all samples uniformly, its fitting term is in fact jointly shaped by aligned supervision, contamination from misaligned pairs, and the dependence structure induced by the hidden alignment state. See appendix 
+E.1
+ for full derivation.
+
+Figure 3: 
+Illustration of the IB fitting decomposition under misalignment. Top: mild contamination. Bottom: severe contamination. As contamination increases, the estimated optimisation direction deviates further from the semantic optimum.
+
+Proposition 3.3
+ 
+(Contaminated Fitting Pressure in the Global IB Objective)
+.
+
+Maximising the global objective
+
+ does not optimise the aligned semantic term in isolation. Instead, up to the compression penalty 
+, the objective assigns fitting pressure to all components appearing in this decomposition: the aligned semantic fitting term 
+, the direct contamination term 
+, and the latent-state dependence term 
+.
+
+In particular, as conceptually illustrated in Fig. 
+3
+, when 
+, the objective rewards representations that preserve dependencies under the aligned component 
+. When 
+ and 
+, it also rewards representations that preserve statistical dependencies within the misaligned component 
+, even when these dependencies arise from sampling bias, annotation noise, or accidental correlations rather than genuine cross-modal semantics. Moreover, when 
+, the objective is additionally affected by mixture-induced coupling between the representation 
+, the target modality 
+, and the unobserved assignment variable 
+.
+
+Remark 3.4
+ 
+(Implicit aligned-regime assumption in existing multimodal attribution methods)
+.
+
+When 
+, the data distribution reduces to the fully aligned regime. In this case, the fitting objective reduces to the aligned semantic term alone, without direct contamination or latent-state dependence. 
+Most existing multimodal attribution methods are implicitly developed under this ideal setting
+, as they assume that paired modalities provide reliable proxy supervision without explicitly accounting for cross-modal misalignment. We further provide a variational-inference perspective on objective contamination in Section 
+D.3
+, offering additional theoretical insights into how cross-modal misalignment affects the optimisation of the Information Bottleneck objective.
+
+4 
+Contamination Mitigation through Uncertainty Modeling
+
+Having identified that the failure of the classical IB objective originates from the decomposition above, we next seek a surrogate mechanism that can play a role analogous to the unobserved latent state 
+. Since 
+ is not directly accessible, such a mechanism should modulate the fitting pressure in a sample-adaptive manner, so as to avoid indiscriminate fitting under severe multimodal misalignment.
+
+To this end, we first reformulate the objective itself rather than the architecture, replacing uniform fitting pressure with a sample-wise tempered objective in which each sample is weighted according to its estimated reliability. We realise this adaptive weighting through input-dependent predictive variance. We describe its parameterisation, including the variance-prediction network, in Sec. 
+4.2
+.
+
+4.1 
+Practical realisation via heteroscedastic variational inference
+
+To realise the sample-adaptive objective introduced above, we adopt a heteroscedastic Gaussian predictive model
+
+(4)
+
+together with an IB posterior 
+ and prior 
+. Here, 
+ denotes the variational predictive distribution, 
+ is the prediction mean produced from the bottleneck representation 
+, and 
+ is an input-dependent predictive variance that quantifies the estimated uncertainty of sample 
+, see Sec. 
+4.2
+ for more details. The matrix 
+ denotes the 
+-dimensional identity matrix, where 
+ is the dimension of the target 
+. Under this formulation, samples with higher predicted variance are considered less reliable and exert weaker fitting pressure during optimisation.
+
+Using a Monte Carlo estimator with 
+ samples
+
+,
+and combining the likelihood term with the KL regularizer,
+the resulting empirical objective to minimise is
+
+(5)
+
+The detailed derivation of Eq. (
+5
+)
+from the heteroscedastic Gaussian likelihood in Eq. (
+4
+)
+is provided in Appendix 
+E.4
+. Equivalently, this objective can be interpreted as applying a sample-wise temperature to the log-likelihood term, where the effective temperature is controlled by 
+, with an additional regularisation term that prevents the predicted variance from being inflated without bound. Under this view, the likelihood contribution of each sample is adaptively tempered according to its predicted uncertainty, allowing less reliable samples to exert weaker influence on the optimisation process. To emphasise this uncertainty-aware adjustment of fitting strength, we refer to the resulting formulation as a 
+Tempered Information Bottleneck (TIB)
+.
+
+Stabilised weighting.
+
+However, heteroscedastic likelihoods scale gradients by the inverse predicted variance.
+Following the variance-weighted objective of 
+-NLL 
+[
+25
+]
+,
+we introduce an exponent 
+
+and denote the stop-gradient operator with the brackets 
+. For each sample, we draw 
+ and weight the objective by 
+,
+so that the predicted variance acts as a multiplicative factor on the gradient. Therefore, our final objective function is formulated as follows:
+
+(6)
+
+4.2 
+Implementation
+
+Input-dependent predictive variance
+
+Let 
+ denote the intermediate feature representation at layer 
+. Following the heteroscedastic construction in 
+[
+18
+]
+, we introduce a variance-prediction branch to model input-dependent uncertainty. Consistent with the objective in Sec. 4.1, we use a scalar predictive variance for each sample, rather than a feature-wise variance vector. We therefore define a variance prediction network 
+ that outputs a positive variance 
+:
+
+(7)
+
+Here, 
+ denotes the hidden activation of the variance-prediction branch, and 
+ and 
+ are learnable parameters. The exponential activation ensures that the predicted variance remains strictly positive. This variance quantifies the overall data-dependent uncertainty associated with the input sample 
+ and serves as the implementation-level counterpart of the predictive variance.
+
+Multimodal Attribution Mask Modeling
+
+To learn the attribution map from modality 
+ to modality 
+, we follow the multimodal information bottleneck framework 
+[
+32
+]
+ and introduce a parameterised mask mapping 
+ to control the information retained in the latent representation. Specifically, the mask acts on the intermediate representation 
+, and the resulting stochastic latent variable is constructed by injecting the predictive variance introduced above into the reparameterisation of 
+:
+
+(8)
+
+where 
+ is isotropic Gaussian noise, 
+ denotes the Hadamard product, and 
+ is the sample-dependent predictive standard deviation induced by the variance prediction network. In this design, a mask value of 
+ preserves the original feature, whereas a mask value of 
+ replaces that dimension with uncertainty-aware noise. For each input 
+, the model learns which features to mask (via 
+) and how much noise to inject (via 
+). The variance 
+ quantifies uncertainty in cross-modal reliability for sample 
+, reflecting how reliably modality 
+ can explain modality 
+.
+
+5 
+Experiments
+
+The implementation and model design details are provided in appendix 
+C.1
+. In our experiments, we investigate the following questions and draw the corresponding conclusions:
+
+Sec. 
+5.2
+: Do real-world multimodal datasets conform to our assumption?
+
+Largely yes.
+ The similarity-distribution evidence and appendix analyses support our heterogeneous-mixture assumption; at the same time, we do not claim that it fully captures the complexity of real-world data, which may involve even richer heterogeneity.
+
+Sec. 
+5.3
+: Why does the classical homoscedastic IB objective fail under multimodal misalignment?
+
+Because
+ uniform fitting pressure forces the model to fit both aligned and misaligned pairs indiscriminately, leading to unstable and over-confident attribution behaviour. 
+Why can TIB avoid this failure?
+ TIB may mitigate it by providing a more informative sample-wise reliability signal than the imperfect reliability ordering induced by homoscedastic weighting, allowing it to better identify lower-risk samples and achieve improved selective-risk behaviour.
+
+Sec. 
+5.4
+ and Sec. 
+5.5
+: Real-world attribution and ablation studies.
+
+TIB achieves better attribution performance on real-world multimodal datasets.
+ We further investigate how predictive variance distinguishes challenging but aligned samples from genuinely misaligned ones, and examine how different variance parameterisations and modelling choices affect attribution robustness and reliability.
+
+5.1 
+Datasets
+
+Synthetic Misalignment Data
+
+To construct a controlled benchmark for multimodal misalignment, we generate synthetic image–text pairs under Assumption 
+3.1
+ from Flickr8k 
+[
+9
+]
+ and RefCOCO 
+[
+34
+]
+. For each image, we pair one aligned caption with two misaligned captions, corresponding to 
+selective bias
+ and 
+perturbation bias
+. Full construction details are provided in Appendix 
+F
+.
+
+Figure 4: 
+GMM fit on a sampled subset of LAION-400M.
+
+Large-scale Multimodal Datasets
+
+In addition to the carefully controlled synthetic misalignment benchmark, we further evaluate our method on large-scale, publicly available image–caption datasets to demonstrate its effectiveness on real-world multimodal data. Specifically, we use Conceptual Captions 3M (CC3M) 
+[
+27
+]
+, Flickr8k 
+[
+9
+]
+ and LAION-400M 
+[
+23
+]
+, all of which consist of web-scale image–text pairs collected with minimal manual filtering. Due to the large scale and inherent imbalance of these datasets, we aim to study attribution behaviour under realistic data distributions rather than exhaustively attributing on the full scale. We use a fixed random seed to uniformly sample 5,000 image–caption pairs from each dataset for evaluation.
+
+5.2 
+Empirical validation of the data assumption
+
+We examine whether real-world multimodal datasets exhibit the heterogeneous mixture structure described in Assumption 
+3.1
+, rather than a single fully aligned regime. Specifically, we assess whether the observed image–text pairs are better characterised by a dominant aligned component and heterogeneous misaligned components, as illustrated in Fig. 
+4
+. As a representative example, we analyse a sampled subset of LAION-400M 
+[
+23
+]
+, a large-scale and noisy image–caption dataset. We use image–text cosine similarity as a proxy for the latent alignment state 
+, where higher similarity indicates a pair is more likely to be aligned. We then fit a Gaussian mixture model to the empirical similarity distribution and use BIC to select the number of components. The component with the highest mean is treated as the aligned mode, and the remaining components as misaligned modes. The fitted mixture structure supports our assumption that real-world multimodal data are better characterised by heterogeneous aligned and misaligned components than by a fully aligned regime.
+
+We extend the same analysis to CC3M 
+[
+27
+]
+ and Flickr8k 
+[
+9
+]
+, with detailed results provided in Appendix 
+D.1
+. The findings reveal similar heterogeneous mixture structures across these datasets, providing further empirical support for our assumption. This consistency further supports the heterogeneous-mixture assumption across multimodal datasets of varying scales and characteristics.
+
+5.3 
+Does the Classical IB Objective Fail under Multimodal Misalignment?
+
+We examine the mechanism of heteroscedastic gating in
+Fig. 
+5
+. Panels (a,b) show the relationship
+between predicted variance 
+ and attribution-mask
+gradient magnitude 
+
+under 
+ and 
+, respectively.
+The heteroscedastic and homoscedastic bottlenecks exhibit distinct gradient profiles, highlighting how sample-dependent predictive variance influences gradient magnitudes and modulates the optimisation of attribution masks. Panel (c) further shows that the variance distribution of synthetically misaligned pairs shifts towards higher values than that of aligned pairs, indicating greater predictive uncertainty under cross-modal misalignment. Together, these findings highlight how learned variance captures cross-modal unreliability and results in uncertainty-aware attribution.
+
+Figure 5: 
+Mechanistic analysis of heteroscedastic gating (
+).
+ (a,b) Relation between predicted variance 
+ and attribution-mask gradient magnitude 
+ under 
+ and 
+, comparing heteroscedastic and homoscedastic bottlenecks. Heteroscedastic IB (TIB) shows variance-dependent gradient flow, whereas homoscedastic IB (classical IB) does not. (c) Predicted variance is consistently larger for misaligned than aligned pairs, indicating higher uncertainty.
+
+Figure 6: 
+Risk–coverage curves for uncertainty-based
+reliability ranking. Lower is better.
+
+This failure can be traced to incorrect reliability ordering induced by homoscedastic weighting.
+ As shown in Fig. 
+6
+, we evaluate different reliability-ranking strategies using a risk–coverage curve. Samples are first ordered from most to least reliable under each strategy. We then compute the average attribution risk over the retained prefix of this ordering as the coverage increases from 0 to 1. Lower curves indicate better reliability ordering because they retain lower-risk samples at smaller coverage. Thus, at coverage 
+, the plotted value corresponds to the mean attribution risk of the top 20% of selected samples.
+
+The compared ranking strategies have the following meanings. 
+Oracle
+ uses the ground-truth risk itself as the ranking score and therefore represents the ideal upper bound on selection quality. 
+TIB
+ ranks samples by the learned uncertainty score and corresponds to our method. 
+Fixed-type Weight
+ ranks samples using coarse-grained group averages defined by caption type and perturbation slot, serving as a structured baseline. 
+Random
+ applies a random ordering and therefore represents a baseline with no reliable selection ability. 
+Inverted Reliability
+ reverses the reliability ranking induced by TIB and serves as a counterexample or lower-bound reference. We observe that TIB consistently approaches the oracle ordering and clearly outperforms the coarse-grained and random baselines, whereas inverted reliability leads to substantially higher selective risk. This confirms that attribution failure under misalignment is primarily driven by incorrect reliability ordering: once unreliable samples are down-weighted or deferred, attribution quality is substantially improved.
+
+Table 1: 
+Ground-truth attribution evaluation on the
+synthetic RefCOCO benchmark.
+
+We apply the same synthetic caption protocol to RefCOCO and report IoU (
+) as mean 
+ standard deviation across five random seeds. Coloured cells indicate caption types using the corresponding
+curve colours.
+
+Caption type
+
+Grad-CAM 
+[
+26
+]
+
+RISE 
+[
+20
+]
+
+M2IB 
+[
+32
+]
+
+Fast-IG 
+[
+8
+]
+
+Chefer 
+[
+4
+]
+
+Grad-ECLIP 
+[
+35
+]
+
+FIxLIP 
+[
+2
+]
+
+NIB 
+[
+37
+]
+
+Ours (TIB)
+
+Aligned
+
+Selective-bias
+
+Perturbation-bias
+
+Table 2: 
+Quantitative comparison of interpretability methods
+across vision–language benchmarks.
+
+Results are reported as 
+ with acceptance
+rate 
+. Main values report full-sample means; subscripts report
+accepted-sample means at acceptance rate.
+
+Dataset
+
+Metric
+
+Grad-CAM 
+[
+26
+]
+
+M2IB 
+[
+32
+]
+
+NIB 
+[
+37
+]
+
+Ours (TIB)
+
+Drop / Incr.
+
+cc3M-I
+
+Drop
+
+8.07
+6.02
+
+1.11
+1.04
+
+1.03
+0.95
+
+1.00
+0.91
+
+cc3M-I
+
+Incr
+
+7.20
+10.21
+
+37.20
+39.43
+
+38.80
+41.90
+
+41.21
+44.77
+
+cc3M-T
+
+Drop
+
+1.79
+1.24
+
+0.90
+0.85
+
+1.13
+1.04
+
+1.10
+0.96
+
+cc3M-T
+
+Incr
+
+33.90
+35.12
+
+37.80
+40.07
+
+40.50
+43.74
+
+41.11
+44.11
+
+Flickr8k-I
+
+Drop
+
+9.19
+7.23
+
+1.59
+1.49
+
+1.49
+1.37
+
+1.19
+1.13
+
+Flickr8k-I
+
+Incr
+
+5.10
+10.22
+
+27.50
+29.15
+
+28.30
+30.56
+
+30.50
+32.78
+
+Grounding
+
+RefCOCO
+
+vDrop
+
+1.98
+1.55
+
+0.84
+0.79
+
+0.72
+0.66
+
+0.74
+0.65
+
+RefCOCO
+
+vIncr
+
+46.38
+49.22
+
+45.52
+48.25
+
+48.16
+52.01
+
+51.20
+55.22
+
+RefCOCO
+
+tDrop
+
+1.97
+1.33
+
+1.02
+0.96
+
+1.21
+1.11
+
+1.00
+0.90
+
+RefCOCO
+
+tIncr
+
+37.20
+40.65
+
+41.16
+43.63
+
+41.88
+45.23
+
+45.17
+48.53
+
+RefCOCO
+
+mIoU
+
+8.89
+10.32
+
+14.20
+15.05
+
+11.96
+12.92
+
+16.26
+18.11
+
+ROAR
+
+cc3M-I
+
+i2t-oc
+
+57.01
+60.12
+
+48.96
+51.90
+
+58.98
+63.70
+
+60.76
+66.95
+
+cc3M-I
+
+i2t-co
+
+57.33
+62.42
+
+68.20
+72.29
+
+57.98
+62.62
+
+69.99
+75.87
+
+Flickr8k-T
+
+t2i-oc
+
+65.21
+69.23
+
+68.75
+72.88
+
+64.34
+69.49
+
+71.85
+79.04
+
+5.4 
+How does TIB perform on attribution over real-world multimodal datasets?
+
+Table 
+1
+ shows that TIB achieves the
+highest IoU across aligned, selective-bias, and perturbation-bias
+captions on the synthetic RefCOCO benchmark, supporting its
+attribution robustness under caption bias.
+
+As shown in Table 
+2
+, we report attribution performance on real-world multimodal datasets under two evaluation settings: 
+full evaluation
+ on all samples and 
+filtered evaluation
+ on samples selected by the learned predictive variance 
+. The filtered setting retains samples with lower predicted variance, 
+e.g. 
+those considered more reliable, to assess attribution quality under a reliability-aware protocol. We evaluate all methods using three metric families: Drop/Incr. 
+[
+32
+]
+, grounding metrics, and ROAR-style 
+[
+32
+]
+ similarity metrics (
+i2c
+; see Appendix 
+C.2
+ for details). In Table 
+2
+, 
+ denotes the
+mean metric over accepted samples. We rank samples by increasing
+predictive variance 
+ and retain the lowest-variance
+80% at acceptance rate 
+, excluding the remaining 20%
+with higher estimated uncertainty. Each entry reports the
+full-sample mean as the main value and the accepted-sample mean
+as the subscript. This evaluates attribution quality on samples
+considered more reliable by the learned uncertainty.
+
+5.5 
+Ablation study
+
+Predictive variance captures cross-modal reliability through
+conditional fitting along 
+, with
+
+. Although 
+ is parameterised
+from 
+, its uncertainty head receives supervision from 
+
+through the fitting objective. High predictive variance may therefore indicate either challenging but valid cross-modal correspondence or persistent semantic incompatibility caused by misalignment. Fig. 
+7
+ investigates this distinction by examining how predictive variance responds to matching difficulty and how different variance parameterisations affect the identification of misaligned samples.
+
+Figure 7: 
+Predictive variance analysis.
+
+(a–b)
+ Reducible uncertainty in hard-but-aligned pairs versus persistent uncertainty in misaligned pairs.
+
+(c–d)
+ Discriminability of misalignment under different variance parameterisations.
+
+To isolate matching difficulty from misalignment, we construct
+a hard-but-aligned benchmark using CC3M images. An LLM rewrites
+each original caption twice with progressively increasing
+semantic ambiguity while preserving image–text alignment,
+yielding three caption levels. For example, “A busy bus station”
+is rewritten as “A public transport hub crowded with commuters”
+and then “A transit hub where numerous travellers are waiting,
+boarding, or moving between buses.” The final caption is used
+as the hard-but-aligned sample. In Fig. 
+7
+(a), the variance of
+hard-but-aligned samples decreases substantially with more
+optimisation steps, whereas perturbed samples retain high
+variance over the tested budgets. The panel (b) shows that larger models also reduce variance for
+hard-but-aligned samples, supporting the distinction between
+reducible matching difficulty and persistent misalignment. And the panels (c,d) show that 
+ separates aligned, selective,
+and perturbed samples more clearly than 
+,
+supporting its use for identifying cross-modal unreliability.
+
+Table 3: 
+Ablation of variance modelling in TIB.
+
+Each entry reports 
+
+relative to the default TIB setting with learned 
+.
+Negative 
+ and positive
+
+ indicate performance degradation.
+
+Setting
+
+Aligned
+
+Selective
+
+Perturbation
+
+Random 
+
+Fixed 
+
+Inverted learned 
+
+w/o stop-gradient
+
+w/o variance regularisation
+
+Table 
+3
+ reports performance changes
+relative to the default TIB with learned 
+. Random or
+fixed variance consistently degrades performance, while inverting
+the learned variance is especially harmful for selective and
+perturbed samples. Removing stop-gradient or variance
+regularisation also reduces performance, supporting the
+proposed sample-wise uncertainty modelling.
+
+Additional experiments are provided in the appendix to further
+examine TIB’s sensitivity and attribution behaviour. We analyse
+the effects of 
+ on attribution performance
+(Fig. 
+10
+) and investigate a
+
+-free variant that reduces reliance on explicit trade-off
+parameter selection (Appendix 
+D.2
+). We also provide attribution map visualisations
+(Figs. 
+11
+, 
+12
+, and
+
+13
+) to complement the quantitative results and
+illustrate attribution behaviour under different image–text
+alignment conditions.
+
+6 
+Conclusion
+
+In this paper, we investigated multimodal attribution from an information bottleneck (IB) perspective under cross-modal misalignment, revealing how violations of conventional alignment assumptions introduce spurious cross-modal dependencies into standard IB objectives. Such contamination can distort the optimisation process, leading to over-confident and unstable attribution explanations that fail to reflect genuine image–text correspondence. To address this limitation, we propose a sample-wise heteroscedastic information bottleneck that explicitly models predictive uncertainty and adaptively adjusts fitting strength according to cross-modal reliability. By reducing the influence of unreliable image–text pairs, TIB mitigates the effects of misalignment on attribution optimisation. Our theoretical analysis and extensive experiments on synthetic benchmarks and large-scale real-world datasets showed that the proposed TIB effectively suppresses fitting to misaligned image–text pairs. These findings highlighted the importance of incorporating data-dependent uncertainty into information bottleneck objectives for reliable multimodal interpretability.
+
+Acknowledgements
+
+This project is partially supported by an Amazon Research Award, the Doctoral Studentship from the University of Birmingham College of Engineering and Physical Sciences and the China Scholarship Council (Grant No. 202408060321).
+The computations in this research were partially performed using the Baskerville Tier 2 HPC service. Baskerville was funded by the EPSRC and UKRI through the World Class Labs scheme (EP\T022221\1) and the Digital Research Infrastructure programme (EP\W032244\1) and is operated by Advanced Research Computing at the University of Birmingham.
+
+References
+
+[1]
+
+C. Agarwal
+ (2025)
+
+Rethinking explainability in the era of multimodal ai
+.
+
+arXiv preprint arXiv:2506.13060
+.
+
+Cited by: 
+§2
+.
+
+[2]
+
+H. Baniecki, M. Muschalik, F. Fumagalli, B. Hammer, E. Hüllermeier, and P. Biecek
+ (2025)
+
+Explaining similarity in vision-language encoders with weighted banzhaf interactions
+.
+
+In 
+Advances in Neural Information Processing Systems
+,  
+D. Belgrave, C. Zhang, H. Lin, R. Pascanu, P. Koniusz, M. Ghassemi, and N. Chen (Eds.)
+,
+
+Vol. 
+38, Main Conference
+, 
+pp. 54529–54566
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+,
+
+Table 1
+.
+
+[3]
+
+Y. Cai, Y. Liu, E. Gao, T. Jiang, Z. Zhang, A. van den Hengel, and J. Q. Shi
+ (2025)
+
+On the value of cross-modal misalignment in multimodal representation learning
+.
+
+In 
+Advances in Neural Information Processing Systems (NeurIPS)
+,
+
+Cited by: 
+§1
+.
+
+[4]
+
+H. Chefer, S. Gur, and L. Wolf
+ (2021)
+
+Generic attention-model explainability for interpreting bi-modal and encoder-decoder transformers
+.
+
+In 
+Proceedings of the IEEE/CVF International Conference on Computer Vision
+,
+
+pp. 397–406
+.
+
+Cited by: 
+Table 1
+.
+
+[5]
+
+C. Chen, J. Qi, X. Liu, K. Bin, R. Fu, X. Hu, and P. Zhong
+ (2024)
+
+Weakly misalignment-free adaptive feature alignment for uavs-based multimodal object detection
+.
+
+In 
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition
+,
+
+pp. 26836–26845
+.
+
+Cited by: 
+§1
+.
+
+[6]
+
+Y. Gandelsman, A. Efros, and J. Steinhardt
+ (2024)
+
+Interpreting clip’s image representation via text-based decomposition
+.
+
+In 
+International conference on learning representations
+,
+
+Vol. 
+2024
+, 
+pp. 18395–18416
+.
+
+Cited by: 
+§2
+.
+
+[7]
+
+S. Gupta, S. Sundaram, C. Wang, S. Jegelka, and P. Isola
+ (2026)
+
+Better together: leveraging unpaired multimodal data for stronger unimodal models
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Vol. 
+2026
+, 
+pp. 73970–74025
+.
+
+Cited by: 
+§1
+.
+
+[8]
+
+R. Hesse, S. Schaub-Meyer, and S. Roth
+ (2021)
+
+Fast axiomatic attribution for neural networks
+.
+
+Advances in Neural Information Processing Systems
+ 
+34
+, 
+pp. 19513–19524
+.
+
+Cited by: 
+§1
+,
+
+Table 1
+.
+
+[9]
+
+M. Hodosh, P. Young, and J. Hockenmaier
+ (2013)
+
+Framing image description as a ranking task: data, models and evaluation metrics
+.
+
+Journal of Artificial Intelligence Research
+ 
+47
+, 
+pp. 853–899
+.
+
+Cited by: 
+§5.1
+,
+
+§5.1
+,
+
+§5.2
+.
+
+[10]
+
+Q. Huang, H. Hu, and J. Jiao
+ (2025)
+
+Revisit the open nature of open vocabulary semantic segmentation
+.
+
+In 
+The Thirteenth International Conference on Learning Representations
+,
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+[11]
+
+N. Kalibhat, S. Bhardwaj, C. B. Bruss, H. Firooz, M. Sanjabi, and S. Feizi
+ (2023)
+
+Identifying interpretable subspaces in image representations
+.
+
+In 
+International Conference on Machine Learning
+,
+
+pp. 15623–15638
+.
+
+Cited by: 
+§2
+.
+
+[12]
+
+Y. Lei, Z. Li, Y. Li, J. Zhang, and H. Shan
+ (2023)
+
+LICO: explainable models with language-image consistency
+.
+
+In 
+Advances in Neural Information Processing Systems
+,  
+A. Oh, T. Naumann, A. Globerson, K. Saenko, M. Hardt, and S. Levine (Eds.)
+,
+
+Vol. 
+36
+, 
+pp. 61870–61887
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+[13]
+
+C. Lin, H. Chen, C. Kim, and S. Lee
+ (2023)
+
+Contrastive corpus attribution for explaining representations
+.
+
+In 
+The Eleventh International Conference on Learning Representations
+,
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+[14]
+
+Y. Liu, K. Zhang, X. Ren, Y. Huang, J. Jin, Y. Qin, R. Su, R. Xu, Y. Yu, and W. Zhang
+ (2024)
+
+Alignrec: aligning and training in multimodal recommendations
+.
+
+In 
+Proceedings of the 33rd ACM International Conference on Information and Knowledge Management
+,
+
+pp. 1503–1512
+.
+
+Cited by: 
+§1
+.
+
+[15]
+
+Z. Ma and S. Yu
+ (2025)
+
+Explainable multimodal regression via information decomposition
+.
+
+arXiv preprint arXiv:2512.22102
+.
+
+Cited by: 
+§2
+.
+
+[16]
+
+A. Miech, D. Zhukov, J. Alayrac, M. Tapaswi, I. Laptev, and J. Sivic
+ (2019)
+
+HowTo100M: learning a text-video embedding by watching hundred million narrated video clips
+.
+
+In 
+Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV)
+,
+
+Cited by: 
+§1
+.
+
+[17]
+
+R. Nakada, H. I. Gulluk, Z. Deng, W. Ji, J. Zou, and L. Zhang
+ (2023)
+
+Understanding multimodal contrastive learning and incorporating unpaired data
+.
+
+In 
+International Conference on Artificial Intelligence and Statistics
+,
+
+pp. 4348–4380
+.
+
+Cited by: 
+§1
+.
+
+[18]
+
+D.A. Nix and A.S. Weigend
+ (1994)
+
+Estimating the mean and variance of the target probability distribution
+.
+
+In 
+Proceedings of 1994 IEEE International Conference on Neural Networks (ICNN’94)
+,
+
+Vol. 
+1
+, 
+pp. 55–60 vol.1
+.
+
+External Links: 
+Document
+
+Cited by: 
+§4.2
+.
+
+[19]
+
+D. Pan, X. Li, and D. Zhu
+ (2021)
+
+Explaining deep neural network models with adversarial gradient integration
+.
+
+In 
+Thirtieth International Joint Conference on Artificial Intelligence (IJCAI)
+,
+
+Cited by: 
+§2
+.
+
+[20]
+
+V. Petsiuk, A. Das, and K. Saenko
+ (2018)
+
+RISE: randomized input sampling for explanation of black-box models
+.
+
+In 
+Proceedings of the British Machine Vision Conference
+,
+
+Cited by: 
+§1
+,
+
+Table 1
+.
+
+[21]
+
+A. Radford, J. W. Kim, C. Hallacy, A. Ramesh, G. Goh, S. Agarwal, G. Sastry, A. Askell, P. Mishkin, J. Clark, 
+et al.
+ (2021)
+
+Learning transferable visual models from natural language supervision
+.
+
+In 
+International conference on machine learning
+,
+
+pp. 8748–8763
+.
+
+Cited by: 
+§C.1
+,
+
+§1
+,
+
+§2
+.
+
+[22]
+
+M. T. Ribeiro, S. Singh, and C. Guestrin
+ (2016)
+
+" Why should i trust you?" explaining the predictions of any classifier
+.
+
+In 
+Proceedings of the 22nd ACM SIGKDD international conference on knowledge discovery and data mining
+,
+
+pp. 1135–1144
+.
+
+Cited by: 
+§2
+.
+
+[23]
+
+C. Schuhmann, R. Vencu, R. Beaumont, R. Kaczmarczyk, C. Mullis, A. Katta, T. Coombes, J. Jitsev, and A. Komatsuzaki
+ (2021)
+
+Laion-400m: open dataset of clip-filtered 400 million image-text pairs
+.
+
+arXiv preprint arXiv:2111.02114
+.
+
+Cited by: 
+§5.1
+,
+
+§5.2
+.
+
+[24]
+
+K. Schulz, L. Sixt, F. Tombari, and T. Landgraf
+ (2020)
+
+Restricting the flow: information bottlenecks for attribution
+.
+
+In 
+International Conference on Learning Representations
+,
+
+External Links: 
+Link
+
+Cited by: 
+§C.1
+.
+
+[25]
+
+M. Seitzer, A. Tavakoli, D. Antic, and G. Martius
+ (2022)
+
+On the pitfalls of heteroscedastic uncertainty estimation with probabilistic neural networks
+.
+
+In 
+International Conference on Learning Representations
+,
+
+External Links: 
+Link
+
+Cited by: 
+§4.1
+.
+
+[26]
+
+R. R. Selvaraju, M. Cogswell, A. Das, R. Vedantam, D. Parikh, and D. Batra
+ (2017)
+
+Grad-cam: visual explanations from deep networks via gradient-based localization
+.
+
+In 
+Proceedings of the IEEE International Conference on Computer Vision (ICCV)
+,
+
+Cited by: 
+Appendix G
+,
+
+§1
+,
+
+§2
+,
+
+Table 1
+,
+
+Table 2
+.
+
+[27]
+
+P. Sharma, N. Ding, S. Goodman, and R. Soricut
+ (2018)
+
+Conceptual captions: a cleaned, hypernymed, image alt-text dataset for automatic image captioning
+.
+
+In 
+Proceedings of the 56th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)
+,
+
+pp. 2556–2565
+.
+
+Cited by: 
+Appendix G
+,
+
+§5.1
+,
+
+§5.2
+.
+
+[28]
+
+Q. Sun, Q. Huang, Y. Yang, H. Wang, and J. Jiao
+ (2025)
+
+What can we learn from Harry Potter? an exploratory study of visual representation learning from atypical videos
+.
+
+In 
+36th British Machine Vision Conference
+,
+
+External Links: 
+2508.21770
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+[29]
+
+M. Sundararajan, A. Taly, and Q. Yan
+ (2017)
+
+Axiomatic attribution for deep networks
+.
+
+In 
+International conference on machine learning
+,
+
+pp. 3319–3328
+.
+
+Cited by: 
+§2
+.
+
+[30]
+
+T. Tao, G. Wang, Y. Lao, P. Chen, J. Liu, L. Lin, K. Yu, and X. Liang
+ (2024)
+
+AlignMiF: geometry-aligned multimodal implicit field for lidar-camera joint synthesis
+.
+
+In 
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)
+,
+
+pp. 21230–21240
+.
+
+Cited by: 
+§1
+.
+
+[31]
+
+N. Tishby, F. C. Pereira, and W. Bialek
+ (2000)
+
+The information bottleneck method
+.
+
+arXiv preprint physics/0004057
+.
+
+Cited by: 
+§3
+.
+
+[32]
+
+Y. Wang, T. G. Rudner, and A. G. Wilson
+ (2023)
+
+Visual explanations of image-text representations via multi-modal information bottleneck attribution
+.
+
+Advances in Neural Information Processing Systems
+ 
+36
+, 
+pp. 16009–16027
+.
+
+Cited by: 
+§C.1
+,
+
+Appendix G
+,
+
+§1
+,
+
+§2
+,
+
+§4.2
+,
+
+§5.4
+,
+
+Table 1
+,
+
+Table 2
+.
+
+[33]
+
+C. Wu, Y. Tian, H. Yu, H. Wang, P. Morgado, Y. H. Hu, and L. Yang
+ (2023)
+
+Why is prompt tuning for vision-language models robust to noisy labels?
+.
+
+In 
+Proceedings of the IEEE/CVF International Conference on Computer Vision
+,
+
+pp. 15488–15497
+.
+
+Cited by: 
+§1
+.
+
+[34]
+
+L. Yu, P. Poirson, S. Yang, A. C. Berg, and T. L. Berg
+ (2016)
+
+Modeling context in referring expressions
+.
+
+In 
+European conference on computer vision
+,
+
+pp. 69–85
+.
+
+Cited by: 
+§5.1
+.
+
+[35]
+
+C. Zhao, K. Wang, J. H. Hsiao, and A. B. Chan
+ (2026)
+
+ Grad-ECLIP: Gradient-Based Visual and Textual Explanations for CLIP 
+.
+
+IEEE Transactions on Pattern Analysis & Machine Intelligence
+ 
+48
+ (
+11
+), 
+pp. 14002–14019
+.
+
+External Links: 
+ISSN 1939-3539
+,
+
+Document
+,
+
+Link
+
+Cited by: 
+§C.2
+,
+
+Table 1
+.
+
+[36]
+
+Z. Zhu, H. Chen, J. Zhang, X. Wang, Z. Jin, M. Xue, D. Zhu, and K. R. Choo
+ (2024)
+
+MFABA: a more faithful and accelerated boundary-based attribution method for deep neural networks
+.
+
+In 
+Proceedings of the AAAI Conference on Artificial Intelligence
+,
+
+Vol. 
+38
+, 
+pp. 17228–17236
+.
+
+Cited by: 
+§2
+.
+
+[37]
+
+Z. Zhu, Z. Jin, J. Zhang, N. Yang, J. Huang, J. Zhou, and F. Chen
+ (2025)
+
+Narrowing information bottleneck theory for multimodal image-text representations interpretability
+.
+
+In 
+Proceedings of the International Conference on Learning Representations
+,
+
+Cited by: 
+Appendix G
+,
+
+§1
+,
+
+Table 1
+,
+
+Table 2
+.
+
+Appendix Contents
+
+Appendix A 
+Limitation
+
+Our analysis relies on a simplified mixture-based misalignment model that distinguishes only between aligned and misaligned components. While this abstraction is sufficient to reveal the contamination mechanism in IB-style attribution, real-world multimodal misalignment can be more complex (
+e.g. 
+partial, hierarchical, or temporal misalignment), which is not explicitly modelled here. Nevertheless, we believe this simplified formulation captures the essential source of misalignment and is sufficient to highlight the non-negligible impact of misaligned data on multimodal attribution.
+
+Appendix B 
+Broader impacts
+
+Many existing multimodal attribution methods implicitly assume that paired modalities in real-world datasets are well aligned and can serve as a reliable proxy supervision for explanation. In practice, however, large-scale multimodal data are often collected with minimal filtering and contain substantial semantic misalignment. Under such conditions, attribution methods may produce over-confident or forced explanations driven by spurious cross-modal correlations, reducing the reliability and stability of interpretability results and limiting their practical usefulness.
+
+This work highlights the potential risks of applying attribution methods under unrealistic alignment assumptions and emphasises the importance of accounting for data quality and uncertainty when interpreting multimodal models. The proposed analysis operates as a post-hoc interpretability framework and does not introduce new predictive capabilities or application domains. We do not anticipate specific societal risks arising directly from this work beyond those already associated with the use of large-scale multimodal models.
+
+Appendix C 
+Experimental and model details
+
+C.1 
+Model implementation details
+
+For all experiments, we follow the identical setup as M2IB 
+[
+32
+]
+ and use a pretrained CLIP model with ViT-B/32 
+[
+21
+]
+ as the image encoder and a 12-layer self-attention Transformer as the text encoder. We use the pretrained weights from 
+openai/clip-vit-base-patch32
+. For each image–caption pair, we insert an information bottleneck into a selected layer of each encoder and train the bottleneck using the same setup as the per-sample bottleneck in the original IBA 
+[
+24
+]
+. Specifically, each sample is duplicated five times to stabilise training, and the bottleneck is optimised for 10 iterations using Adam with a learning rate of 0.01. We observe no significant performance differences across different learning rates or larger numbers of training steps. We set 
+ to 0.1 in all experiments. We use the ninth layer for attribution, following M2IB. All experiments were conducted on a single NVIDIA GeForce RTX 4090 GPU, equipped with an Intel Core i9-13900K CPU (24 cores, 32 threads) and approximately 64 GB of system memory. The software environment was configured with Python 3.11.14, PyTorch 2.9.0 (CUDA 12.8), and Transformers 5.5.4. We used this hardware and software configuration consistently across experiments to ensure a uniform evaluation environment.
+
+Implementation of the predictive-variance bottleneck.
+
+In implementation, the input modality is first passed through its corresponding encoder, and the intermediate representation at layer 
+ is used as the bottleneck input, 
+i.e. 
+ 
+. Based on this representation, we jointly learn an attribution mask branch and a predictive-variance branch. The mask branch outputs the feature-wise attribution mask 
+ with the same shape as 
+, while the variance branch predicts a sample-wise scalar variance 
+ and its corresponding standard deviation 
+. Since 
+ is defined per sample, it is broadcast to match the dimensionality of the intermediate feature tensor before noise injection. The stochastic bottleneck variable is then constructed as
+
+which preserves features with high mask values while replacing suppressed features with uncertainty-scaled Gaussian noise, allowing the model to adaptively control feature retention and perturbation according to the estimated sample-wise uncertainty.
+
+C.2 
+Evaluation metrics for real-world multimodal attribution
+
+We evaluate real-world multimodal attribution using three groups of metrics: ROAR, Drop/Incr., and grounding. For ROAR, we follow the evaluation protocol of M2IB with a unified percentile-based threshold across modalities. Specifically, we remove the top 25% most important features, corresponding to the 75th percentile of the attribution scores. For images, the selected pixels are replaced with the channel mean, whereas for text, the selected tokens are replaced with the blank token. The corrupted sample is then evaluated by the relative similarity drop between the original and corrupted image–text similarities, where a larger drop indicates that the removed features are more important. For ROAR retraining, we fine-tune the CLIP backbone rather than the MLP head, using an 80/20 train–validation split for 50 epochs with a learning rate of 
+.
+
+For Drop and Incr., we follow the definitions introduced in Grad-CAM++ and adopt the same percentile-based thresholding strategy as above. Features are perturbed one modality at a time. Drop measures how much the model confidence decreases after removing regions considered unimportant, where lower values indicate better attribution quality. Incr. measures the proportion of samples for which restricting the input to only the explained regions increases the model confidence, where higher values are preferred.
+
+For grounding, we compute the intersection-over-union (IoU) between the binarised attribution map and the ground-truth mask. The attribution map is first normalised to 
+ and then binarised with a threshold of 0.5, which provides a balanced decision boundary between salient and non-salient regions. In addition, the insertion and deletion curves are computed following the official implementation of Grad-ECLIP 
+[
+35
+]
+.
+
+Appendix D 
+Additional Experiments
+
+D.1 
+Do Real-World Multimodal Data Support Our Assumption?
+
+Figure 8: 
+Directional structure of real-world multimodal data.
+ Structural analysis on CC3M and Flickr8k shows that, even when paired retrieval remains strong, the feature space still exhibits substantial heterogeneity in local dispersion and cluster organisation, providing empirical support for our mixture-based multimodal misalignment assumption.
+
+Similarity-distribution evidence.
+
+As shown in Fig. 
+8
+, CC3M and Flickr8K display distinct similarity-distribution patterns, providing direct empirical evidence that real-world multimodal data are not well described by a single homogeneous alignment regime. The fitted distributions indicate that datasets differ in their observable mixture patterns: some are better captured by a more concentrated dominant mode, whereas others exhibit clearer multi-component structure. Although the BIC-selected GMM contains only one or two observable components, this should be interpreted cautiously because the analysis is performed on the one-dimensional cosine-similarity projection. Such a projection inevitably compresses the underlying high-dimensional semantic structure, so distinct latent misalignment factors may overlap and appear as merged observable modes. Therefore, the fitted component number should be viewed as a coarse observable proxy rather than the exact number of latent semantic sources. Importantly, the fact that different datasets favour different mixture structures already argues against a universal single-alignment regime and is consistent with our heterogeneous mixture assumption.
+
+Table 4: 
+Structural analysis of multimodal feature-space heterogeneity across datasets.
+ Higher entropy and cluster variance indicate greater local dispersion, while silhouette score measures cluster separability. Paired Top-
+ reflects local image–text alignment through paired-caption retrieval. Despite high retrieval accuracy, substantial feature-space heterogeneity persists across datasets, supporting the proposed mixture-based misalignment assumption.
+
+Dataset
+
+Entropy 
+
+Sim Std 
+
+Text Consistency 
+
+Cluster Var 
+
+Silhouette 
+
+Paired Top-
+ 
+
+Flickr8k
+
+0.758
+
+0.017
+
+0.637
+
+0.191
+
+0.219
+
+0.967
+
+CC3M
+
+0.730
+
+0.017
+
+0.670
+
+0.172
+
+0.280
+
+0.933
+
+LAION400M
+
+0.445
+
+0.024
+
+0.564
+
+0.236
+
+0.224
+
+0.972
+
+Feature-space structural evidence.
+
+Table 
+4
+ provides complementary evidence from the joint embedding space. 
+Entropy
+ measures local semantic diversity, with higher values indicating multiple semantic modes; 
+Text Consistency
+ captures agreement among neighbouring captions; 
+Cluster Var
+ measures feature-cluster dispersion; 
+Silhouette
+ quantifies cluster separability; and 
+Paired Top-
+ measures local image–text alignment through paired-caption retrieval. As shown in Table 
+4
+, all datasets exhibit strong paired retrieval, indicating largely preserved local alignment. However, non-trivial entropy, imperfect text consistency, and distinct cluster structures reveal persistent feature-space heterogeneity. Dataset-level differences further support this observation: CC3M exhibits stronger cluster separability, suggesting more structured semantic components, whereas LAION400M shows greater cluster variance and lower text consistency, reflecting noisier cross-modal correspondence. Together, these findings suggest that multimodal data are 
+locally aligned but globally heterogeneous
+, supporting our mixture-based assumption.
+
+Figure 9: 
+Roles of 
+ and 
+ in TIB.
+ 
+ controls the bottleneck capacity, while 
+ controls the uncertainty-based split strength after compression.
+
+D.2 
+Analysis of the roles of 
+ and 
+
+As illustrated in Fig. 
+9
+, 
+ and 
+ play distinct roles in TIB. The parameter 
+ controls the overall bottleneck capacity, namely how much raw information is retained after compression, whereas 
+ governs the uncertainty-aware split strength applied to the compressed representation. In this sense, 
+ determines the global information budget, while 
+ modulates how the retained information is adaptively redistributed under sample-wise uncertainty. To further examine the effect of 
+, we additionally conduct an ablation study in which different values of 
+ are compared under a fixed 
+, as shown in Fig. 
+10
+.
+
+We further analyse the sensitivity of TIB to the trade-off parameter 
+ through a best-versus-default study. Specifically, in the 
+Default
+ setting, all methods use 
+, following the standard M2IB configuration; in the 
+Best
+ setting, 
+ is selected from a logarithmic grid 
+. Across this range, TIB remains near-optimal and exhibits a visibly flatter performance curve, indicating substantially lower sensitivity to the precise choice of 
+. We attribute this behaviour to the adaptive predictive variance 
+, which enables sample-wise information scaling and therefore reduces reliance on a single global trade-off parameter.
+
+We also consider whether TIB admits a 
+-free interpretation. A related idea was introduced by NIB, which defines a narrowing bottleneck as 
+, with 
+, and proves that for 
+, the mutual information satisfies 
+. This establishes a monotonic information path from a fully closed bottleneck (
+) to a fully open one (
+), thereby allowing attribution to be defined through path integration without explicitly choosing 
+.
+
+To extend this idea to TIB, two modifications are required: first, adopting the same path-integral formulation for attribution; and second, replacing the homoscedastic Gaussian channel with the heteroscedastic one induced by our predictive variance. This distinction is theoretically important. In NIB, the channel 
+ with input-independent 
+ is a standard Gaussian channel, under which the monotonicity and 
+-free narrowing results hold directly. In contrast, under the input-dependent heteroscedastic noise used in TIB, 
+i.e. 
+, these guarantees no longer hold in a strict sense because the noise scale itself may carry sample-specific information and hence introduce potential information leakage. Nevertheless, if such leakage is sufficiently controlled, the standard assumptions approximately hold, making the NIB-style 
+-free argument a reasonable approximation.
+
+Empirically, however, the heteroscedastic design still proves beneficial: it captures cross-modal reliability more effectively and leads to improved stability and attribution quality in practice. For example, compared with NIB, the heteroscedastic variant consistently improves both Incr. (
+) and Drop (
+) scores across all three benchmarks: on CC3M from 
+ to 
+, on Flickr8k from 
+ to 
+, and on RefCOCO from 
+ to 
+. These results suggest that, even though the formal 
+-free guarantee becomes weaker under heteroscedasticity, the resulting formulation is more effective in capturing sample-wise reliability in multimodal attribution.
+
+Figure 10: 
+-sensitivity analysis.
+ TIB remains near-optimal over a wide range of 
+, showing lower sensitivity than competing methods.
+
+D.3 
+Understanding objective contamination from a variational inference perspective
+
+We now construct a variational surrogate for the contaminated IB objective
+by introducing an encoder 
+ and a variational decoder 
+.
+Recall from Theorem 
+3.2
+ that
+
+Applying the Barber–Agakov bound (see 
+E.3
+)
+to the sufficiency terms 
+ and 
+,
+together with a prior 
+ for the compression term,
+yields the following homoscedastic variational objective:
+
+(9)
+
+The detailed derivation is provided in 
+E.2
+.
+The interaction-information term 
+ remains in the full theoretical formulation as a structural-coupling component. This objective corresponds to a homoscedastic variational realisation
+of the pairwise contaminated IB formulation, where all samples are implicitly treated with uniform confidence.
+
+Induced interference and amplification of contamination
+
+The variational objective in Eq. (
+9
+)
+does not directly optimise the true mutual information.
+Instead, for each 
+, the following identity holds:
+
+(10)
+
+where the KL term quantifies the mismatch
+between the true conditional distribution 
+
+and the variational decoder 
+. Since this mismatch penalty is nonnegative, maximising the expected log-likelihood in Eq. (
+9
+) implicitly trades off against this approximation error. Under misalignment, the conditional distribution 
+ is typically more heterogeneous and less predictable, which makes the mismatch penalty larger and harder to minimise. As a result, the variational relaxation systematically amplifies the influence of misaligned samples, thereby reinforcing the contaminated fitting pressure identified in Proposition 
+3.3
+.
+
+Appendix E 
+Proofs
+
+E.1 
+Decomposition of the Contamination IB Fitting Objective
+
+Theorem E.1
+ 
+(Exact decomposition of the fitting objective)
+.
+
+Let 
+, 
+, and 
+ be random variables defined on a common probability space. Suppose that the marginal distribution of the latent semantic variable 
+ admits the mixture representation
+
+(11)
+
+where 
+, 
+, and 
+. Define the aligned semantic fitting term by
+
+(12)
+
+and define the direct contamination term by
+
+(13)
+
+Then the mutual information objective admits the following exact decomposition:
+
+(14)
+
+Proof.
+
+We begin with the standard definition of the interaction information among the three random variables 
+, 
+, and 
+:
+
+(15)
+
+Rearranging (
+15
+) gives
+
+(16)
+
+Thus, it remains to decompose the conditional mutual information term 
+ under the assumed semantic mixture model.
+
+By the definition of conditional mutual information as an expectation over the conditioning variable, we have
+
+(17)
+
+For a discrete semantic variable 
+, this can be written explicitly as
+
+(18)
+
+The continuous case follows identically, with sums replaced by the corresponding integrals.
+
+Substituting the mixture representation in (
+11
+) into (
+18
+) yields
+
+(19)
+
+The second equality follows solely from the linearity of summation and expectation.
+
+The first term in (
+19
+) is precisely the aligned semantic fitting term defined in (
+12
+):
+
+(20)
+
+Similarly, the second term is precisely the weighted contribution of the heterogeneous misaligned semantic components defined in (
+13
+):
+
+(21)
+
+Combining (
+19
+), (
+20
+), and (
+21
+), we obtain the exact conditional decomposition
+
+(22)
+
+Finally, substituting (
+22
+) into (
+16
+) gives
+
+(23)
+
+which is exactly the decomposition in (
+14
+). The three summands correspond respectively to aligned semantic fitting, direct contamination, and latent-state dependence. This completes the proof.
+∎
+
+Remark E.2
+.
+
+The notation 
+ in (
+12
+) should be understood as the expectation of the conditional mutual information 
+ under the aligned semantic marginal 
+. Thus, it is a distribution-indexed semantic fitting quantity rather than an unconditional mutual information computed under a full joint law 
+.
+
+E.2 
+Variational Relaxation of the Contaminated IB Objective
+
+In this appendix, we derive a variational surrogate for the contaminated IB objective.
+From Theorem 
+3.2
+, the fitting term admits the exact decomposition
+
+(24)
+
+where 
+ denotes the latent alignment state.
+The term 
+ corresponds to direct fitting contamination induced by misaligned samples,
+while 
+ captures higher-order latent-state dependence induced by the latent mixture assignment.
+
+Therefore, the full contaminated IB objective is
+
+(25)
+
+For notational simplicity, we consider a single effective misaligned component
+
+, 
+i.e.
+
+The extension to multiple misaligned modes follows directly by linearity.
+
+Thus, the contaminated IB objective becomes
+
+(26)
+
+where
+
+is the mixture distribution and 
+ denotes the encoder.
+
+The interaction-information term 
+ is retained explicitly in the theoretical formulation as a structural-coupling component, but is not directly variationally relaxed in the practical surrogate objective derived below.
+
+We denote the encoder by 
+ and the variational decoder by 
+.
+
+Exact decomposition and variational lower bound for 
+
+Let 
+ denote the aligned/misaligned component.
+By definition,
+
+(27)
+
+Introduce a variational decoder 
+.
+Using the identity
+
+(28)
+
+and taking expectation over 
+ yields the 
+exact
+ decomposition
+
+(29)
+
+Since the gap term 
+, we obtain the Barber–Agakov lower bound:
+
+(30)
+
+Moreover, with 
+ and 
+,
+
+(31)
+
+Exact decomposition and variational upper bound for 
+
+Under the mixture 
+, the mutual information admits
+
+(32)
+
+Introduce a prior 
+. A standard decomposition gives
+
+(33)
+
+Since 
+, we obtain the variational upper bound
+
+(34)
+
+where the nonnegative term 
+ is another 
+gap / interference
+ introduced by the variational relaxation.
+
+Variational inference for 
+ and the induced interference terms
+
+First note that the pairwise fitting terms in Eq. (
+26
+) can be combined as
+
+(35)
+
+Applying Eq. (
+29
+) to both 
+ yields
+
+(36)
+
+where 
+.
+
+For the compression term, by Eq. (
+33
+),
+
+(37)
+
+Dropping the nonnegative gap yields the standard variational relaxation in Eq. (
+34
+).
+
+Combining Eqs. (
+36
+) and (
+37
+), and retaining the latent-state dependence term explicitly, we obtain:
+
+(38)
+
+where the tightness is controlled by the nonnegative gap terms
+
+and 
+.
+
+Maximising 
+ with respect to 
+ and 
+ therefore provides a tractable variational optimisation objective for the pairwise contaminated IB terms.
+Meanwhile, the additional interaction-information term 
+ remains in the full theoretical objective as the residual structural-coupling component induced by the latent mixture process.
+
+This recovers the homoscedastic VIB objective presented in Eq. (
+9
+) of the main text.
+
+Remark (where heteroscedasticity enters).
+
+The derivation above holds for 
+any
+ choice of decoder family 
+.
+Under mixture-induced misalignment, the conditional 
+ is intrinsically heterogeneous,
+suggesting that a constant-noise (homoscedastic) likelihood can be statistically misspecified.
+A minimal relaxation is to allow input-dependent uncertainty, 
+e.g.
+
+(39)
+
+which induces a sample-wise temperature 
+ that scales the effective fitting strength.
+This observation motivates the heteroscedastic bottleneck formulation in the main text.
+
+E.3 
+Barber–Agakov bound
+
+In this appendix, we provide the variational derivations used.
+We first recall the Barber–Agakov bound and then derive the explicit decomposition
+in Eq. (
+10
+), which underlies the variational surrogate in Eq. (
+9
+).
+
+Lemma E.3
+ 
+(Barber–Agakov bound)
+.
+
+Let 
+ be any joint distribution and let 
+ be any conditional density
+such that 
+ whenever 
+.
+Then
+
+(40)
+
+where 
+ is the entropy of 
+ under 
+.
+Moreover, the gap admits the exact expression
+
+(41)
+
+Proof.
+
+By the definition of mutual information,
+
+(42)
+
+We now add and subtract 
+ inside the first expectation:
+
+(43)
+
+For the second term, using the tower property and the definition of KL divergence,
+
+(44)
+
+Plugging Eqs. (
+43
+) and (
+44
+) into (
+42
+) yields
+
+(45)
+
+which is exactly Eq. (
+41
+). Dropping the nonnegative KL term gives the bound
+in Eq. (
+40
+). This concludes the proof.
+∎
+
+Corollary E.4
+ 
+(Explicit BA decomposition under 
+)
+.
+
+For each 
+, applying Lemma 
+E.3
+ to 
+ yields
+
+(46)
+
+where 
+ is the joint induced by 
+ and
+
+.
+
+Proof.
+
+Under 
+ and encoder 
+, the joint over 
+ is
+
+ and thus
+
+.
+Substituting this into Eq. (
+41
+) in Lemma 
+E.3
+ gives Eq. (
+46
+).
+∎
+
+From the contaminated objective to a variational inference
+
+We now derive the variational surrogate in Eq. (
+9
+)
+starting from the contaminated objective.
+Recall
+
+(47)
+
+Step 1: Variational lower bounds for the sufficiency terms.
+
+Since 
+, the sufficiency terms can be rewritten as
+
+,
+with nonnegative coefficients.
+
+Applying Corollary 
+E.4
+ and dropping the nonnegative mismatch KL terms
+
+ yields for each 
+,
+
+(48)
+
+The last term 
+ depends only on the data distribution,
+hence it is constant w.r.t. the learnable parameters and can be omitted from optimisation.
+
+Step 2: Variational upper bound for the compression term.
+
+For the compression term, using 
+
+with the aggregated posterior 
+,
+and introducing a prior 
+ gives the standard inequality
+
+(49)
+
+where the inequality follows from the non-negativity of the KL divergence 
+.
+
+Step 3: Collecting terms under the mixture distribution.
+
+Because 
+, the weighted combination of the
+log-likelihood expectations in Eq. (
+48
+) reduces to an expectation under
+
+.
+Up to additive constants independent of 
+ and 
+, we obtain the homoscedastic variational
+surrogate:
+
+(50)
+
+which matches Eq. (
+9
+) in the main text.
+
+Accounting for the interaction information 
+.
+
+To clarify the relation between the original objective and its
+variational surrogate, let 
+ denote the
+mixture-component indicator, with
+
+ and 
+.
+Under the joint distribution
+
+,
+the weighted sufficiency terms satisfy
+
+(51)
+
+where 
+ denotes
+the three-way interaction information.
+
+Importantly, this term is not assumed to vanish.
+Using the exact variational decompositions underlying
+Eqs. (
+48
+) and
+(
+49
+), we obtain
+
+(52)
+
+where 
+ is induced by the mixture distribution
+
+. Thus, the interaction-information contribution is accounted for
+through the constant 
+ and the nonnegative
+variational gap 
+, rather than being assumed zero.
+Consequently, Eq. (
+50
+) provides a valid
+variational lower bound, up to an additive constant, of the
+original contaminated objective, although the two objectives
+are not generally equivalent.
+∎
+
+E.4 
+Derivation of the Empirical Heteroscedastic VIB Objective
+
+In this appendix, we derive the empirical objective in Eq. (
+5
+)
+from the heteroscedastic Gaussian predictive model in Eq. (
+4
+).
+
+Setup and notation
+
+Let 
+ be i.i.d. samples drawn from the mixture distribution 
+.
+We consider an IB encoder (posterior) 
+ and a prior 
+.
+The variational IB surrogate (to maximise) takes the form
+
+(53)
+
+We instantiate the decoder with a heteroscedastic isotropic Gaussian:
+
+(54)
+
+where 
+ and 
+.
+
+Log-likelihood of the heteroscedastic Gaussian
+
+By the definition of an isotropic Gaussian density,
+
+(55)
+
+Dropping the constant term 
+ (independent of all learnable variables),
+maximizing 
+ is equivalent to maximizing
+
+(56)
+
+From population objective to sample average
+
+We approximate the expectations in Eq. (
+53
+) by the empirical average over 
+:
+
+(57)
+
+Monte Carlo estimator over the bottleneck samples
+
+For each sample 
+, draw 
+ Monte Carlo samples 
+.
+Then
+
+(58)
+
+Substituting Eq. (
+56
+) into Eq. (
+58
+) yields
+
+(59)
+
+where we denote 
+ for brevity.
+
+Final empirical minimisation objective
+
+Since Eq. (
+57
+) is a maximization objective,
+we define the empirical loss to 
+minimize
+ as 
+.
+Combining Eqs. (
+57
+)–(
+59
+) gives
+
+(60)
+
+where 
+ denotes terms independent of learnable variables.
+Up to a constant scaling of the data-fit term (absorbed into 
+),
+Eq. (
+60
+) matches Eq. (
+5
+) by defining
+
+(61)
+
+or, more generally, letting 
+ denote any task-specific similarity
+whose variance-weighted form is implemented by the heteroscedastic likelihood.
+
+Remark (general task-specific loss).
+
+If the application uses a similarity-based log-likelihood (
+e.g. 
+cosine-based likelihood on normalised embeddings),
+the derivation remains identical: the heteroscedastic Gaussian contributes the universal term
+
+ and rescales the data-fit term by 
+,
+while the specific choice of 
+ changes only the inner estimator.
+This yields Eq. (
+5
+).
+
+Appendix F 
+Synthetic misalignment data generation
+
+Given an image and its original caption, we first extract a set of semantic components using rule-based matching over predefined vocabularies, including objects, entities, actions, attributes, and compositional phrases. Based on these extracted components, we generate two types of textual misalignment. 
+SELECTIVE BIAS
+ is constructed by randomly removing one to three semantic components with a weighted preference toward contextual information, resulting in captions that are fluent but semantically incomplete. 
+PERTURBATION BIAS
+ is constructed by replacing a single semantic component with another value from the same semantic category or a synonym, producing captions that remain grammatical but contain incorrect semantics. This procedure yields controlled and interpretable image–text misalignment without altering the visual content. The pseudocode is provided in Algorithm 
+1
+.
+
+Algorithm 1
+ 
+Constructing Misaligned Caption Triplets on Flickr8k
+
+Input:
+ 
+Image–caption pairs 
+,
+sample size 
+, alignment probability 
+,
+Gaussian parameters 
+,
+slot vocabulary 
+.
+
+Output:
+ 
+Triplets 
+.
+
+1
+
+Sample 
+ image--caption pairs;
+
+2
+
+;
+
+3
+
+foreach
+ 
+sampled pair 
+ 
+do
+
+ 
+ 
+  
+
+4
+
+;
+
+ 
+ 
+  
+
+5
+
+;
+
+ 
+ 
+  
+// 
+Sample alignment state and GMM strength 
+
+ 
+ 
+  
+
+6
+
+;
+
+ 
+ 
+  
+
+7
+
+if
+ 
+ 
+then
+
+ 
+ 
+   
+ 
+  
+
+8
+
+;
+
+ 
+ 
+  
+
+9
+
+else
+
+ 
+ 
+   
+ 
+  
+
+10
+
+;
+
+ 
+ 
+   
+ 
+  
+
+11
+
+;
+
+ 
+ 
+  
+
+12
+
+;
+
+ 
+ 
+  
+
+13
+
+if
+ 
+ 
+and
+ 
+ 
+then
+
+ 
+ 
+   
+ 
+  
+// 
+Type I: selective omission 
+
+ 
+ 
+   
+ 
+  
+
+14
+
+;
+
+ 
+ 
+   
+ 
+  
+
+15
+
+;
+
+ 
+ 
+   
+ 
+  
+// 
+Type II: semantic perturbation 
+
+ 
+ 
+   
+ 
+  
+
+16
+
+;
+
+ 
+ 
+   
+ 
+  
+
+17
+
+;
+
+ 
+ 
+  
+
+18
+
+;
+
+ 
+ 
+  
+
+19
+
+output
+ 
+;
+
+Appendix G 
+Visualisation
+
+We further provide additional qualitative comparisons of multimodal attribution maps in Figs. 
+11
+–
+13
+, using image–text pairs from the CC3M 
+[
+27
+]
+ dataset. For each pair, we visualise the attribution maps produced by Grad-CAM 
+[
+26
+]
+, M2IB 
+[
+32
+]
+, NIB 
+[
+37
+]
+, and TIB under the same image–text correspondence. These visualisations illustrate differences in attribution patterns across methods, particularly in how visual regions are associated with the semantic content of the captions. Compared with existing methods, TIB produces more spatially concentrated and less diffuse attribution maps, highlighting semantically relevant regions more precisely.
+
+Figure 11: 
+Qualitative comparison of multimodal attribution maps. The maps highlight image regions and text tokens contributing to predictions, illustrating how different methods attribute importance across modalities. More examples on the following pages.
+
+Figure 12: 
+Qualitative comparison of multimodal attribution maps (continued).
+
+Figure 13: 
+Qualitative comparison of multimodal attribution maps (continued).
+

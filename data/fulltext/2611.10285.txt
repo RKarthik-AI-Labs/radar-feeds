@@ -1,0 +1,2453 @@
+FAIDER: Fairness-Aware Item-Level Decoding for Large Language Model Recommenders
+https://arxiv.org/abs/2611.10285
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+FAIDER: Fairness-Aware Item-Level Decoding for Large Language Model Recommenders
+
+Ziwei Wu
+
+  
+
+Jingrui He
+
+Affiliation: 
+University of Illinois Urbana-Champaign
+
+Email: 
+ziweiwu2@illinois.edu
+
+  
+
+jingrui@illinois.edu
+
+Abstract
+
+Large language model (LLM) recommenders can produce semantically different recommendations when a user’s protected attribute changes, even if the interaction history remains fixed. Controlling this disparity is challenging when model weights and full-vocabulary logits are inaccessible. We propose 
+FAIDER
+ (Fairness-Aware Item-level DEcoding for Recommendation), which incorporates fairness into list construction by selecting complete item candidates rather than manipulating token-level logits or repeatedly repairing finished outputs. The central idea is to separate the operational criterion for a violation from how strongly generation is constrained. Conformal-inspired empirical calibration fixes a cross-group semantic-disparity threshold, while online decoding applies either hard filtering or a soft penalty adjusted through dual-inspired feedback to target a prescribed violation rate. Separately, we establish a pathwise guarantee: under a uniform enforceability assumption, the soft decoder’s empirical violation rate exceeds its target by at most 
+. Experiments across recommendation benchmarks and LLM backbones show that Soft 
+FAIDER
+ improves both measured semantic fairness and ranking quality over the evaluated prompt-repair baselines. It also generally achieves a more favorable fairness–utility balance than the hard variant, indicating that stricter per-recommendation constraints do not necessarily yield lower measured disparity.
+
+Keywords:
+ Fairness in recommendation; large language models; controlled decoding; conformal calibration; counterfactual disparity.
+
+1  Introduction
+
+Large language models (LLMs) make it possible to express recommendation as a
+language-based decision process. Text-to-text frameworks such as P5 unify
+recommendation tasks within a generative interface 
+[
+10
+]
+, while
+zero-shot rankers show that pretrained LLMs can rank candidates from interaction
+histories without recommendation-specific training 
+[
+14
+]
+. The
+broader generative recommendation literature uses this interface to connect
+behavioral context, item semantics, and natural-language requests
+
+[
+19
+]
+. Yet sensitivity to contextual language also creates a
+fairness concern: demographic information in a user profile can affect
+recommendation behavior even when the interaction history is held fixed
+
+[
+33
+, 
+21
+]
+.
+
+Fairness in recommendation encompasses distinct objectives, including provider
+exposure, consumer utility, and individual-level consistency
+
+[
+26
+, 
+28
+, 
+7
+]
+. Language-based
+systems introduce additional targets, such as fairness in personalized
+explanations 
+[
+30
+]
+. We focus on 
+minimal-attribute-change
+semantic stability
+: changing a protected attribute while holding a user’s
+interaction history fixed should not substantially alter the semantic content
+of the recommended items. This operational criterion concerns sensitivity to
+an input perturbation; it does not identify a structural causal counterfactual
+in the sense of 
+[
+18
+]
+. Nor should similarity
+between recommendation lists be equated with equal user benefit, a distinction
+highlighted by consumer-fairness evaluation 
+[
+6
+]
+. We
+therefore assess semantic disparity alongside recommendation quality.
+
+The available interventions depend on model access. Tuning-based frameworks
+adapt pretrained models to recommendation data 
+[
+4
+]
+, and UP5
+learns continuous prompts to address recommendation fairness
+
+[
+15
+]
+. Such approaches require a trainable component. We instead
+study a fixed recommender that exposes sampled item continuations and their
+log-probabilities, but not model weights or full-vocabulary logits. The design
+problem is to control recommendation behavior through the item proposals and
+scores available at inference time.
+
+One response is to revise prompts after inspecting generated outputs. FACTER
+combines conformal thresholding with prompt updates informed by previous
+fairness violations 
+[
+8
+]
+. More broadly, iterative
+self-refinement uses feedback on an initial response to guide subsequent
+revisions without additional model training 
+[
+22
+]
+.
+These approaches motivate inference-time intervention, but their feedback
+operates on outputs that have already been generated. We ask a complementary
+question: 
+can a fairness criterion guide which items are committed to a
+recommendation list as the list is being constructed?
+
+Decoding-time control offers a relevant starting point. 
+[
+5
+, 
+32
+, 
+20
+]
+ guide generation through hidden-state updates or adjustments to token distributions.
+Their control rules, however, are not directly available through an interface
+restricted to sampled item continuations and their likelihoods. Moreover, the
+semantic disparity of a recommendation list is evaluated over items, rather
+than isolated tokens. This motivates an item-level decision rule: evaluate
+each proposed item’s effect on the partial list, select a continuation, and
+condition subsequent generation on that commitment.
+
+We propose 
+FAIDER
+ (
+F
+airness-
+A
+ware 
+I
+tem-Level 
+DE
+coding for 
+R
+ecommendation),
+built around a separation between 
+the criterion for a violation
+ and
+
+the strength of its enforcement
+. Offline calibration fixes an empirical
+threshold on embedding-based cross-group disparity, a decoding surrogate for the paired attribute-change metric.
+During generation, the hard decoder
+filters candidates against this threshold and abstains if no feasible beam
+remains. The soft decoder instead balances candidate likelihood against
+disparity through a penalty whose weight is updated from observed violations.
+A violation thus changes how strongly the decoder intervenes, rather than
+changing the cutoff that determines whether a violation occurred. Keeping
+these roles separate provides a stable operational criterion while allowing
+the fairness–utility trade-off to adapt.
+
+This separation also exposes a statistical issue. Split conformal prediction
+gives calibrated thresholds a coverage interpretation when calibration and
+test scores are exchangeable
+
+[
+2
+]
+; related ideas extend to risk control and
+set-valued language generation
+
+[
+1
+, 
+24
+]
+. Our procedure uses the same
+calibration set to supply reference outputs and threshold-selection scores,
+while keeping the test set separate. This reference reuse does not
+automatically preserve the score exchangeability required by the standard
+argument; we therefore use the quantile as a conformal-inspired empirical
+cutoff, without claiming finite-sample test coverage.
+Adaptive decoding introduces an additional change to the output-selection
+mechanism.
+Motivated by feedback-based approaches to adaptive conformal inference and
+online risk control 
+[
+11
+, 
+9
+]
+, we analyze
+realized violations separately from offline calibration. Under an explicit
+uniform enforceability assumption on candidate pools and the selection rule,
+we establish a pathwise 
+ upper bound on the soft decoder’s excess
+empirical violation rate for arbitrary query sequences. The guarantee is
+conditional: selection alone cannot ensure compliance when acceptable
+continuations are unavailable.
+
+Experiments across recommendation benchmarks and LLM backbones show that
+Soft 
+FAIDER
+ improves measured semantic fairness and ranking quality over
+the evaluated prompt-repair baselines. Its generally more favorable fairness–utility balance than the hard variant also shows that stricter per-recommendation constraints do not necessarily yield lower measured
+disparity. Our contributions are:
+
+•
+
+Item-level generation control. We introduce a fairness-aware
+decoder for fixed LLM recommenders using item proposals and candidate
+likelihoods, without full-vocabulary logits, LLM retraining, or iterative
+prompt repair.
+
+•
+
+Separated calibration and enforcement. We combine a fixed
+empirical disparity threshold with hard and soft decoders, and establish
+a conditional pathwise violation-rate bound for the soft decoder through
+dual-inspired online feedback.
+
+•
+
+Empirical characterization of the trade-off. We compare
+fairness and ranking quality across recommendation benchmarks and LLM
+backbones, examining when soft penalties offer a more favorable balance
+than strict filtering.
+
+2  Related Work
+
+Fairness objectives and evaluation.
+
+Surveys organize fair recommendation by the stakeholders protected, the
+quantities compared, and the stage at which intervention occurs
+
+[
+7
+, 
+28
+, 
+16
+, 
+21
+]
+.
+Exposure-based approaches address the allocation of attention to ranked items
+
+[
+26
+]
+, whereas consumer-fairness evaluation considers
+whether recommendations serve users’ preferences equitably
+
+[
+6
+]
+. These objectives are not interchangeable with
+similarity between generated lists. Likewise, counterfactual fairness is
+defined relative to a causal model 
+[
+18
+]
+, rather
+than an attribute edit alone. Our focus is narrower: semantic stability under
+protected-attribute changes, assessed together with ranking quality. This
+criterion complements, rather than replaces, exposure-based, preference-aware,
+and causal notions of fairness.
+
+Fairness interventions for LLM recommendation.
+
+UP5 learns continuous prefix prompts through adversarial training to suppress
+sensitive information in user representations 
+[
+15
+]
+. COFFEE
+instead targets measure-specific counterfactual fairness in personalized
+explanation generation 
+[
+30
+]
+, addressing the quality of
+generated text rather than the semantic composition of item lists. FACTER is
+closer to our setting: it combines adaptive conformal thresholding with prompts
+updated from observed fairness violations, without retraining the recommender
+
+[
+8
+]
+. Iterative output refinement also appears in
+general-purpose methods such as Self-Refine 
+[
+22
+]
+,
+although its objective is not recommendation fairness. 
+FAIDER
+ uses a
+different intervention point. It neither learns prefix prompts nor revises
+completed lists through corrective prompting. Its soft variant uses observed
+list-level violations to adjust the penalty applied during item selection,
+while the calibrated disparity cutoff remains fixed.
+
+Controlled generation and the decision unit.
+
+PPLM steers generation by applying attribute gradients to hidden states
+
+[
+5
+]
+, while FUDGE uses predictions of future attributes
+to modify next-token probabilities 
+[
+32
+]
+. DExperts combines
+expert and anti-expert language-model scores 
+[
+20
+]
+, and
+GeDi derives token-level guidance from class-conditional language models
+
+[
+17
+]
+. These approaches demonstrate that a fixed base model
+can be steered at inference time, but their control rules operate through
+internal states or token distributions. 
+FAIDER
+ shares the idea of
+generation-time guidance while changing its unit of action: it scores
+complete item proposals through their effect on the partial recommendation
+list, commits one, and conditions subsequent proposals on that choice. This
+differs from re-ranking a completed list and requires candidate likelihoods,
+not an accessible full-vocabulary distribution or modifiable hidden states.
+
+Conformal calibration for generated outputs.
+
+Classical conformal prediction provides marginal coverage under
+exchangeability and appropriate score construction
+
+[
+29
+, 
+2
+]
+. Conformal risk control
+extends this principle to expected bounded monotone losses
+
+[
+1
+]
+. In language generation, Conformal Language
+Modeling calibrates sampling and filtering procedures to construct sets
+containing an acceptable response with a prescribed probability
+
+[
+24
+]
+. Such set-level guarantees differ from controlling
+the disparity of a single emitted recommendation list. Weighted conformal
+methods can accommodate covariate shift when the required likelihood-ratio
+information is available 
+[
+27
+]
+, but do not by
+themselves justify arbitrary changes to output selection. In 
+FAIDER
+,
+the same calibration examples supply both reference outputs and scores for
+threshold selection. We consequently use the quantile as a conformal-inspired
+empirical cutoff, not a finite-sample coverage guarantee. Adaptive selection
+of a single output is an additional reason that classical coverage results
+cannot simply be transferred to the decoder.
+
+Online feedback and violation control.
+
+Online methods complement marginal coverage with retrospective guarantees
+based on observed outcomes. Adaptive conformal inference adjusts calibration
+in response to coverage errors 
+[
+11
+]
+, while online risk
+control extends feedback-based regulation to broader losses
+
+[
+9
+]
+. Work on decaying step sizes further examines the
+relationship between long-run coverage and pointwise behavior
+
+[
+3
+]
+. Soft 
+FAIDER
+ uses a related feedback
+structure but updates a dual-inspired penalty weight while keeping the disparity
+threshold fixed. Its guarantee concerns the realized frequency of threshold
+violations and requires uniform enforceability of the candidate-selection
+rule. Neither offline calibration nor the existence of a feasible recommendation
+alone establishes that assumption. The resulting claim is conditional online
+control of recommendation generation, rather than an unconditional extension
+of conformal coverage to adaptively selected lists.
+
+3  Problem Setup
+
+Let 
+ denote a user context, such as an interaction history,
+
+ a protected attribute, and 
+ a recommendation
+represented as a ranked list of item names. A fixed LLM recommender defines
+
+. We assume access to sampled item continuations and
+their log-probabilities, but not to model weights or full-vocabulary logits.
+The selection rules below require candidate log-probabilities. A sample-only interface would require a different scoring rule.
+
+We write 
+ for a fixed text-embedding map into 
+,
+applied to the textual representations of user contexts and item lists.
+Context embeddings are compared with other contexts, and list embeddings
+with other lists.
+
+Definition 1
+ 
+(Minimal-attribute-change fairness)
+.
+
+A recommender satisfies minimal-attribute-change fairness at tolerance
+
+ if, for protected-attribute changes 
+
+with context fixed,
+
+.
+
+This criterion expresses the evaluation objective: 
+semantic stability
+
+when a protected attribute changes but the user context remains fixed.
+In the experiments, CFR 
+[
+8
+]
+ aggregates the corresponding embedding
+distances (
+Section
+ 
+6
+).
+
+4  Method: 
+FAIDER
+
+FAIDER
+ separates threshold selection from generation control. It has two stages: offline calibration and online decoding.
+Offline calibration constructs cross-group references and fixes an empirical
+disparity threshold. Online decoding then uses that threshold through either
+hard feasibility checks or an adaptive soft penalty during list construction.
+
+4.1  Offline Calibration with Cross-Group References
+
+Let 
+ be the calibration
+set, disjoint from the test set. For each calibration example, let 
+ denote its reference item. We define cross-group neighborhood and semantic disparity as below.
+
+Cross-group neighborhood.
+
+For any 
+, the set of calibration
+examples with similar contexts but a different protected attribute is
+
+(1)
+
+Semantic disparity.
+
+For a candidate output 
+, its disparity relative
+to cross-group references is
+
+(2)
+
+The maximum measures the largest semantic discrepancy within the selected
+cross-group neighborhood. It compares different users with similar contexts,
+rather than paired attribute changes for the same context. If the neighborhood
+is empty, the score is undefined. Deployment therefore requires a documented
+fallback, such as abstention or a broader similarity threshold. Our analysis
+assumes nonempty neighborhoods.
+
+Empirical quantile threshold.
+
+Using the same reference bank, we compute
+
+ for the calibration examples and select
+their upper empirical quantile at nominal level 
+ as 
+.
+The reference bank and 
+ remain fixed during test-time decoding.
+Although 
+ excludes each example from its own neighborhood,
+calibration outputs can still contribute to one another’s scores.
+
+The quantile construction is motivated by split conformal calibration
+
+[
+2
+]
+. Under exchangeability of calibration and new
+scores, its corrected order statistic
+
+, with 
+ and
+
+ when 
+, yields marginal exceedance probability at most
+
+. In our reference-reuse protocol, however, calibration outputs
+help construct the scores being calibrated, whereas a new output does not
+enter that reference bank. Calibration/test separation alone therefore does
+not establish the score exchangeability required by this argument.
+We treat the selected quantile as a 
+conformal-inspired empirical
+cutoff
+, without claiming distribution-free finite-sample test coverage for
+this construction. Adaptive decoding also changes the output-selection
+mechanism. The online bound in 
+Section
+ 
+5
+ is established separately,
+conditional on enforceability, and does not rely on offline coverage.
+
+Note that the item is the semantically correct unit. A recommendation’s unit of
+meaning is the item (“
+Blade Runner
+”), not the token. Our disparity 
+ is defined on item-list embeddings precisely because that
+is where semantic meaning lives. Controlling at the item level therefore matches the granularity the fairness notion is about. Instead, token-level control would regulate a list-level quantity at a level where it may not even be defined.
+
+1
+1
+
+1
+
+                
+                
+                
+                
+                
+                
+                
+              When full-vocabulary logits are available (open-weights or self-hosted models), the same penalty can be applied at the token level, 
+, in the style of controlled decoding 
+[
+5
+, 
+32
+]
+. We do not pursue this. It forfeits black-box compatibility and requires scoring partial generations, whose list-level disparity is ill-defined.
+
+4.2  Online Decoding
+
+Given 
+, 
+FAIDER
+ offers two operating points over the same
+item-proposal loop:
+
+•
+
+Hard 
+FAIDER
+: return a list only if its final disparity
+satisfies 
+; abstain when no feasible beam remains.
+
+•
+
+Soft 
+FAIDER
+: balance likelihood and disparity through an
+adaptive penalty, using completed-list violations to regulate its strength.
+
+4.2.1  Hard 
+FAIDER
+: Constrained Item Selection
+
+Hard 
+FAIDER
+ maintains a beam of partial recommendation lists.
+At each slot, it proposes next items, removes extensions whose disparity
+exceeds 
+, and retains the top-
+ feasible extensions by cumulative
+log-probability (
+Algorithm
+ 
+1
+). If no extension remains, the decoder
+abstains. A final score check ensures that every returned list satisfies the
+operational constraint 
+. Any optional fallback output must
+be identified separately and is not certified by this check.
+
+Prefix filtering is a search heuristic, not a feasibility-complete procedure.
+List-level embedding disparity need not be monotone as items are appended,
+so a rejected prefix could have led to a feasible complete list.
+The guarantee concerns returned lists, not the existence or discovery of a
+feasible list for every query, nor the evaluation criterion in 
+Definition
+ 
+1
+.
+
+Algorithm 1
+ 
+ Hard 
+FAIDER
+ (constrained beam search over items)
+
+0:
+
+                
+                
+               beam size 
+, threshold 
+, max items 
+,
+proposer 
+ProposeItems
+, embedder 
+
+1:
+
+                
+                
+               
+
+{(item list, logprob) pairs}
+
+2:
+
+                
+                
+               
+for
+ 
+ 
+to
+ 
+ 
+do
+
+3:
+
+                
+                
+                
+
+4:
+
+                
+                
+                
+for
+ all 
+ 
+do
+
+5:
+
+                
+                
+                 
+for
+ all 
+ 
+do
+
+6:
+
+                
+                
+                  
+;
+
+7:
+
+                
+                
+                  
+if
+ 
+ 
+then
+
+8:
+
+                
+                
+                   Add 
+
+to 
+
+9:
+
+                
+                
+                  
+end
+ 
+if
+
+10:
+
+                
+                
+                 
+end
+ 
+for
+
+11:
+
+                
+                
+                
+end
+ 
+for
+
+12:
+
+                
+                
+                
+if
+ 
+ 
+then
+
+13:
+
+                
+                
+                 
+return
+ ABSTAIN (infeasible beam)
+
+14:
+
+                
+                
+                
+end
+ 
+if
+
+15:
+
+                
+                
+                
+ top-
+ of
+
+ by logprob
+
+16:
+
+                
+                
+               
+end
+ 
+for
+
+17:
+
+                
+                
+               
+return
+ best list in 
+ if final 
+; otherwise ABSTAIN
+
+4.2.2  Soft 
+FAIDER
+ with Dual-Inspired Feedback
+
+Soft 
+FAIDER
+ permits individual threshold violations while targeting their
+frequency across queries. It samples 
+ candidate items at each slot and
+selects the one with the highest fairness-penalized score. The penalty weight
+
+ is held fixed while constructing query 
+’s list and updated
+once after that list is complete.
+
+Constrained objective.
+
+The following population-level objective motivates the controller. For a
+decoding policy 
+ producing 
+, write
+
+ for expectation over both queries and policy randomness:
+
+(3)
+
+This objective specifies the desired trade-off; the implemented decoder is
+an approximation, and the proved result concerns empirical violation
+frequency rather than an unconditional population-risk guarantee.
+
+Lagrangian and per-slot selection rule.
+
+Introducing a multiplier
+
+ gives
+
+.
+We use this formulation to motivate two approximations: replacing the
+violation indicator with raw disparity during selection, and making greedy
+item-level decisions over a finite proposal pool. For partial list 
+ and
+proposals 
+, the resulting rule is
+
+(4)
+
+Here 
+ appends an item, and 
+Join
+ converts the list to its
+textual representation. The surrogate provides a graded penalty, but its
+minimization is not equivalent to minimizing threshold violations.
+Likewise, greedy selection does not solve the full-list Lagrangian
+maximization. Fixed-
+ Soft 
+FAIDER
+ uses (
+4
+) with a
+constant penalty. The adaptive variant uses the feedback rule below:
+
+Online feedback update.
+
+After constructing the complete list 
+ for query 
+, we evaluate
+its threshold violation and update the penalty:
+
+(5)
+
+with step size 
+. A violation increases 
+ by
+
+. A non-violation decreases it by 
+, subject to
+projection onto the nonnegative half-line. The projection ensures
+nonnegativity, not complementary slackness or optimality of the policy.
+Because (
+4
+) is a surrogate greedy rule, we interpret
+(
+5
+) as 
+dual-inspired feedback
+, rather than exact dual
+subgradient optimization.
+
+The update is also motivated by adaptive conformal inference
+
+[
+11
+]
+, but adjusts enforcement strength while keeping
+the disparity cutoff fixed. Selection uses raw disparity, whereas feedback
+uses the completed list’s binary violation. 
+Algorithm
+ 
+2
+ summarizes the
+procedure. The conditional analysis in 
+Section
+ 
+5
+ bounds the empirical
+frequency of this binary event directly, without requiring an exact
+Lagrangian optimizer.
+
+Algorithm 2
+ 
+ Soft 
+FAIDER
+ with dual-inspired feedback (streaming)
+
+0:
+
+                  
+                  
+                 
+, embedder 
+, neighborhoods 
+,
+threshold 
+, target rate 
+, step 
+,
+init 
+, items 
+, proposals 
+
+1:
+
+                  
+                  
+                 
+for
+ each incoming query 
+, 
+ 
+do
+
+2:
+
+                  
+                  
+                  Build 
+;
+ 
+
+3:
+
+                  
+                  
+                  
+for
+ 
+ 
+to
+ 
+ 
+do
+
+4:
+
+                  
+                  
+                   Sample proposals
+
+5:
+
+                  
+                  
+                   
+for
+ 
+ 
+to
+ 
+ 
+do
+
+6:
+
+                  
+                  
+                    
+
+// raw disparity, same units as 
+
+7:
+
+                  
+                  
+                   
+end
+ 
+for
+
+8:
+
+                  
+                  
+                   
+;
+ 
+
+9:
+
+                  
+                  
+                  
+end
+ 
+for
+
+10:
+
+                  
+                  
+                  
+;
+ 
+
+11:
+
+                  
+                  
+                  
+
+// feedback update, 
+Eq.
+ 
+5
+
+12:
+
+                  
+                  
+                  
+emit
+ 
+
+13:
+
+                  
+                  
+                 
+end
+ 
+for
+
+Implementation conventions.
+
+We penalize raw disparity on the same scale as 
+, avoiding a
+step-dependent rescaling of 
+’s effect. Both threshold calibration
+and violation feedback use complete lists. Prefix scores guide selection
+only. We initialize 
+ through a warm-up on the calibration set
+before test evaluation.
+The reference bank and 
+ stay fixed throughout the evaluated stream.
+
+5  Theoretical Analysis
+
+We analyze how completed-list feedback regulates the empirical frequency of
+disparity violations. The argument separates a deterministic property of the
+update from a sufficient condition linking penalty strength to feasible
+outputs. It uses the cumulative-error and telescoping perspective of adaptive
+conformal inference 
+[
+11
+]
+, but here the updated variable
+controls decoding strength while the reference bank and threshold 
+
+remain fixed.
+
+Throughout, let 
+, 
+, and 
+ be fixed, and
+let 
+ be the completed list’s
+violation indicator. Write
+
+for the empirical violation frequency over the first 
+ queries.
+
+5.1  Feedback and Penalty Growth
+
+Lemma 1
+ 
+(Pathwise feedback bound)
+.
+
+For any realized binary violation sequence, the iterates of
+(
+5
+) satisfy, for every 
+,
+
+(6)
+
+Proof.
+
+Since 
+, the update gives
+
+.
+Rearranging and summing over 
+ yields
+
+Dividing by 
+ proves (
+6
+).
+∎
+
+This inequality requires neither enforceability nor a distributional
+assumption on the queries. It identifies penalty growth as the quantity
+governing excess violations: 
+ suffices for
+
+, while a uniformly bounded
+penalty yields an 
+ upper bound on the excess rate.
+The next step is to identify a sufficient condition for such boundedness.
+
+5.2  Conditional Finite-Horizon Control
+
+Assumption 1
+ 
+(Uniform enforceability)
+.
+
+There exists a finite 
+, independent of the horizon 
+,
+such that along the entire query and proposal sequence,
+
+This condition links penalty strength to final-list feasibility. It is not
+ensured by the feedback update alone. The existence of a feasible complete
+list is insufficient: a finite proposal pool may omit the required
+continuations, and greedy selection using raw disparity need not reach that
+list. With randomized proposals, the results below hold pathwise on
+realizations satisfying Assumption 
+1
+. An almost-sure conclusion would
+additionally require this condition to hold almost surely.
+
+Lemma 2
+ 
+(Bounded penalty)
+.
+
+Under Assumption 
+1
+, the iterates satisfy
+
+ for every 
+, where
+
+Proof.
+
+Projection ensures nonnegativity. For the upper bound, proceed by induction,
+starting from 
+.
+If 
+, then 
+ implies
+
+.
+If 
+, Assumption 
+1
+ gives 
+, and hence
+
+.
+Both cases preserve the bound.
+∎
+
+Proposition 1
+ 
+(Finite-horizon empirical violation control)
+.
+
+Under Assumption 
+1
+, for every 
+,
+
+(7)
+
+In particular, 
+.
+
+Proof.
+
+Apply 
+Lemma
+ 
+1
+ and substitute
+
+ from 
+Lemma
+ 
+2
+.
+The second inequality follows from 
+.
+∎
+
+Thus, enforceability supplies the boundedness needed to convert the general
+feedback inequality into finite-horizon rate control. Note that the result is one-sided: the violation frequency may remain below 
+, rather than converging to it. Its finite-horizon usefulness depends on the constants. An unknown or large 
+ can make the bound loose.
+
+Remark.
+
+The results concern empirical exceedances of the decoding surrogate’s
+threshold, not the paired attribute-change metric in 
+Definition
+ 
+1
+,
+recommendation utility, or population risk. They require neither offline
+conformal coverage nor exact Lagrangian optimization. No exchangeability
+assumption is needed, so the pathwise argument permits nonstationary or
+adversarial queries. The 
+ conclusion nevertheless requires uniform
+enforceability throughout the sequence, including after distribution shifts.
+
+6  Experiments
+
+6.1  Setup
+
+Datasets and evaluation protocol.
+
+Following 
+[
+8
+]
+, we evaluate on MovieLens-1M
+
+[
+13
+]
+ and Amazon Movies & TV
+
+[
+23
+]
+, with gender as the protected attribute.
+We split users into disjoint calibration and test sets in a 70/30 ratio.
+Held-out items provide the ground truth for recommendation evaluation.
+Calibration users supply both the cross-group reference outputs and the
+scores used to select 
+.
+Test users are excluded from reference-bank construction and threshold
+selection.
+
+Candidate-set implementation.
+
+Algorithm
+ 
+2
+ presents the sampling-based formulation, in which the LLM
+proposes candidate items. The reported experiments use a simplified
+candidate-set implementation: recommendations are constructed from supplied
+candidates instead of next-item proposals sampled from the LLM.
+Fairness-adjusted item selection operates over these supplied candidates.
+The results therefore evaluate control within a candidate set, not the
+LLM proposal-generation step in 
+Algorithm
+ 
+2
+.
+
+Decoding settings.
+
+We use beam width 
+ for Hard 
+FAIDER
+. Unless otherwise noted, the
+neighborhood similarity threshold is 
+, the feedback step
+size is 
+, and the target violation rate is 
+.
+The soft penalty is initialized through a warm-up on the calibration set
+before test evaluation. For CFR evaluation, we use decoding temperature
+zero when comparing recommendations under protected-attribute changes.
+
+Baselines.
+
+We compare with three methods. 
+Zero-Shot
+ 
+[
+14
+]
+
+uses the LLM without fairness control. 
+UP5
+ 
+[
+15
+]
+
+uses soft prompt tuning to address recommendation fairness.
+
+FACTER
+ 
+[
+8
+]
+ combines conformal thresholding
+with iterative prompt repair, providing a comparison with an intervention
+that operates through corrective prompting. We evaluate both 
+FAIDER
+
+variants: hard disparity constraints and a soft penalty adjusted through
+dual-inspired feedback.
+
+Models and embeddings.
+
+The recommendation backbones are Qwen3-8B 
+[
+31
+]
+ and
+Llama3.1-8B-Instruct 
+[
+12
+]
+.
+For embedding-based comparisons, we use the SentenceTransformer model
+paraphrase-mpnet-base-v2 
+[
+25
+]
+, fine-tuned on
+recommendation-specific data. Experiments run on NVIDIA A100 GPUs with
+80 GB of memory.
+
+Metrics.
+
+Recommendation quality is measured using Recall@10 and normalized
+discounted cumulative gain at rank 10 (NDCG@10). Recall@10 measures the
+fraction of held-out relevant items retrieved in the top ten recommendations.
+NDCG@10 additionally accounts for their ranking positions.
+We measure counterfactual disparity using CFR 
+[
+8
+]
+,
+the mean embedding shift between recommendation lists when a protected
+attribute changes while the user context remains fixed. Lower CFR indicates
+greater semantic stability under this attribute change.
+Higher Recall@10 and NDCG@10 and lower CFR are preferred.
+
+Table 1: 
+Recommendation quality and counterfactual disparity on MovieLens
+and Amazon. 
+FAIDER
+ results use the candidate-set implementation.
+The best and second-best reported values for each dataset and backbone
+are shown in 
+bold
+ and 
+underlined
+, respectively.
+
+Dataset
+
+Method
+
+Qwen3-8B
+
+Llama3.1-8B-Instruct
+
+Recall@10 
+
+NDCG@10 
+
+CFR 
+
+Recall@10 
+
+NDCG@10 
+
+CFR 
+
+MovieLens
+
+Zero-shot
+
+0.402
+
+0.458
+
+0.742
+
+0.358
+
+0.402
+
+0.701
+
+UP5
+
+0.381
+
+0.427
+
+0.613
+
+0.336
+
+0.374
+
+0.556
+
+FACTER
+
+0.389
+
+0.445
+
+0.591
+
+0.338
+
+0.382
+
+0.440
+
+Hard 
+FAIDER
+
+0.382
+
+0.432
+
+0.389
+
+0.333
+
+0.371
+
+0.398
+
+Soft 
+FAIDER
+
+0.390
+
+0.446
+
+0.474
+
+0.352
+
+0.397
+
+0.243
+
+Amazon
+
+Zero-shot
+
+0.317
+
+0.351
+
+0.814
+
+0.296
+
+0.312
+
+0.768
+
+UP5
+
+0.294
+
+0.328
+
+0.721
+
+0.261
+
+0.289
+
+0.672
+
+FACTER
+
+0.301
+
+0.339
+
+0.634
+
+0.277
+
+0.279
+
+0.581
+
+Hard 
+FAIDER
+
+0.297
+
+0.326
+
+0.574
+
+0.266
+
+0.283
+
+0.509
+
+Soft 
+FAIDER
+
+0.318
+
+0.347
+
+0.491
+
+0.297
+
+0.306
+
+0.411
+
+6.2  Main Results
+
+Table
+ 
+1
+ compares recommendation quality and counterfactual disparity
+across the two datasets and two LLM backbones. We have the following observations.
+
+Counterfactual fairness.
+
+Both variants have lower reported CFR than all three baselines in every
+dataset–backbone setting. Soft 
+FAIDER
+ achieves the lowest CFR in three
+of the four settings; Hard 
+FAIDER
+ achieves the lowest value on MovieLens
+with Qwen3-8B. Relative to FACTER, the soft variant reduces CFR by
+
+–
+. The improvement across both backbones and datasets
+supports the usefulness of incorporating a fairness signal into item
+selection within the evaluated candidate-set setting.
+
+Recommendation quality.
+
+Soft 
+FAIDER
+ has higher Recall@10 and NDCG@10 than FACTER in all four
+settings and the second-highest NDCG@10 among the compared methods in
+each setting. Its NDCG@10 remains close to Zero-Shot, while Recall@10 is
+lower on MovieLens and numerically similar on Amazon.
+The main benefit is therefore the joint improvement in measured fairness
+and ranking quality relative to prompt repair. Sometimes the soft 
+FAIDER
+ even achieves slightly better Recall than the naive baseline. This indicates that the LLM biasedly picks stereotypical items that are not what the user actually liked, and our method can help it.
+
+Comparison between Soft and Hard variants.
+
+The soft variant has higher Recall@10 and NDCG@10 than the hard variant
+throughout, and improves all three reported metrics in three settings.
+On MovieLens with Qwen3-8B, hard filtering instead achieves lower CFR
+(
+ versus 
+), at the cost of lower ranking quality.
+Thus, stricter enforcement does not consistently minimize the evaluation
+metric. This is consistent with the distinction between the reference-based
+decoding surrogate in Equation (
+2
+) and the paired attribute-change
+criterion in 
+Definition
+ 
+1
+: enforcing the former does not directly
+optimize the latter.
+
+6.3  Sensitivity Analysis
+
+Figure
+ 
+1
+ examines how neighborhood similarity and fixed
+penalty strength affect ranking quality and counterfactual disparity on
+MovieLens.
+
+Neighborhood similarity threshold 
+.
+
+Increasing 
+ restricts the reference neighborhood to cross-group
+users with more similar contexts. Across the tested range from 
+ to
+
+, CFR decreases from 
+ to 
+, while NDCG@10 decreases from
+
+ to 
+. Stricter context matching is therefore associated with
+lower measured disparity and a modest ranking-quality cost in this
+experiment. Unlike the penalty weight, this parameter changes which
+cross-group comparisons define the control score. The observed trend does
+not imply that narrower neighborhoods are uniformly preferable.
+
+Penalty strength 
+.
+
+We further evaluate the soft decoder with a fixed penalty strength to isolate the effect of 
+. As shown in the figure, increasing 
+ from 0 to 4 consistently reduces CFR, accompanied by a decrease in NDCG@10. In particular, CFR decreases substantially as 
+ increases, while the reduction in recommendation quality becomes more pronounced at larger penalty strengths. These results demonstrate a clear fairness–utility trade-off: stronger fairness penalties improve counterfactual fairness but may compromise ranking performance. Unlike the fixed-penalty variant, the dual-controlled variant dynamically adjusts 
+ in response to observed fairness violations to target a specified violation rate 
+.
+
+(a)
+ 
+Neighborhood threshold 
+.
+
+(b)
+ 
+Fixed penalty strength 
+.
+
+Figure 1
+: 
+Sensitivity analysis on MovieLens. Each panel reports NDCG@10
+and CFR as the indicated parameter varies; the right panel uses a
+constant penalty rather than online feedback adaptation.
+
+7  Conclusion
+
+We presented 
+FAIDER
+, an item-level framework for fairness-aware LLM
+recommendation that separates a fixed empirical disparity threshold from
+the strength of decoding-time control. It supports hard filtering and
+adaptive soft penalties without retraining the base recommender.
+Our analysis connects empirical violation control to penalty growth,
+yielding a conditional guarantee under uniform enforceability.
+Experiments suggest that soft control
+generally offers a more favorable balance between semantic stability and
+ranking quality than hard filtering. This finding highlights the distinction
+between satisfying a reference-based constraint and achieving the fairness
+objective used in evaluation. The broader implication is that decoding-time
+fairness should be assessed through its joint effects on semantic stability
+and recommendation quality, rather than through constraint satisfaction
+alone.
+
+References
+
+[1]
+
+A. N. Angelopoulos, S. Bates, A. Fisch, L. Lei, and T. Schuster
+ (2024)
+
+Conformal risk control
+.
+
+In 
+International Conference on Learning Representations
+,
+
+External Links: 
+Link
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+[2]
+
+A. N. Angelopoulos and S. Bates
+ (2023)
+
+A gentle introduction to conformal prediction and distribution-free uncertainty quantification
+.
+
+Foundations and Trends in Machine Learning
+ 
+16
+ (
+4
+), 
+pp. 494–591
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+,
+
+§2
+,
+
+§4.1
+.
+
+[3]
+
+A. N. Angelopoulos, R. Barber, and S. Bates
+ (2024)
+
+Online conformal prediction with decaying step sizes
+.
+
+In 
+Proceedings of the 41st International Conference on Machine Learning
+,
+
+PMLR
+, Vol. 
+235
+, 
+pp. 1616–1630
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+[4]
+
+K. Bao, J. Zhang, Y. Zhang, W. Wang, F. Feng, and X. He
+ (2023)
+
+TALLRec: an effective and efficient tuning framework to align large language model with recommendation
+.
+
+In 
+Proceedings of the 17th ACM Conference on Recommender Systems
+,
+
+pp. 1007–1014
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+.
+
+[5]
+
+S. Dathathri, A. Madotto, J. Lan, J. Hung, E. Frank, P. Molino, J. Yosinski, and R. Liu
+ (2020)
+
+Plug and play language models: a simple approach to controlled text generation
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Cited by: 
+§1
+,
+
+§2
+,
+
+footnote 1
+.
+
+[6]
+
+Y. Deldjoo and T. Di Noia
+ (2025)
+
+CFaiRLLM: consumer fairness evaluation in large-language model recommender system
+.
+
+ACM Transactions on Intelligent Systems and Technology
+ 
+16
+ (
+6
+), 
+pp. 1–31
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+[7]
+
+Y. Deldjoo, D. Jannach, A. Bellogin, A. Difonzo, and D. Zanzonelli
+ (2024)
+
+Fairness in recommender systems: research landscape and future directions
+.
+
+User Modeling and User-Adapted Interaction
+ 
+34
+, 
+pp. 59–108
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+[8]
+
+A. Fayyazi, M. Kamal, and M. Pedram
+ (2025)
+
+FACTER: fairness-aware conformal thresholding and prompt engineering for enabling fair llm-based recommender systems
+.
+
+In 
+Forty-second International Conference on Machine Learning
+,
+
+Cited by: 
+§1
+,
+
+§2
+,
+
+§3
+,
+
+§6.1
+,
+
+§6.1
+,
+
+§6.1
+.
+
+[9]
+
+S. Feldman, L. Ringel, S. Bates, and Y. Romano
+ (2023)
+
+Achieving risk control in online learning settings
+.
+
+Transactions on Machine Learning Research
+.
+
+External Links: 
+Link
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+[10]
+
+S. Geng, S. Liu, Z. Fu, Y. Ge, and Y. Zhang
+ (2022)
+
+Recommendation as language processing (RLP): a unified pretrain, personalized prompt & predict paradigm (P5)
+.
+
+In 
+Proceedings of the 16th ACM Conference on Recommender Systems
+,
+
+pp. 299–315
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+.
+
+[11]
+
+I. Gibbs and E. Candes
+ (2021)
+
+Adaptive conformal inference under distribution shift
+.
+
+Advances in Neural Information Processing Systems
+ 
+34
+, 
+pp. 1660–1672
+.
+
+Cited by: 
+§1
+,
+
+§2
+,
+
+§4.2.2
+,
+
+§5
+.
+
+[12]
+
+A. Grattafiori, A. Dubey, A. Jauhri, A. Pandey, A. Kadian, A. Al-Dahle, A. Letman, A. Mathur, A. Schelten, A. Vaughan, 
+et al.
+ (2024)
+
+The llama 3 herd of models
+.
+
+arXiv preprint arXiv:2407.21783
+.
+
+Cited by: 
+§6.1
+.
+
+[13]
+
+F. M. Harper and J. A. Konstan
+ (2015)
+
+The movielens datasets: history and context
+.
+
+Acm transactions on interactive intelligent systems (tiis)
+ 
+5
+ (
+4
+), 
+pp. 1–19
+.
+
+Cited by: 
+§6.1
+.
+
+[14]
+
+Y. Hou, J. Zhang, Z. Lin, H. Lu, R. Xie, J. McAuley, and W. X. Zhao
+ (2024)
+
+Large language models are zero-shot rankers for recommender systems
+.
+
+In 
+European Conference on Information Retrieval
+,
+
+pp. 364–381
+.
+
+Cited by: 
+§1
+,
+
+§6.1
+.
+
+[15]
+
+W. Hua, Y. Ge, S. Xu, J. Ji, Z. Li, and Y. Zhang
+ (2024)
+
+Up5: unbiased foundation model for fairness-aware recommendation
+.
+
+In 
+Proceedings of the 18th Conference of the European Chapter of the Association for Computational Linguistics (Volume 1: Long Papers)
+,
+
+pp. 1899–1912
+.
+
+Cited by: 
+§1
+,
+
+§2
+,
+
+§6.1
+.
+
+[16]
+
+D. Jin, L. Wang, H. Zhang, Y. Zheng, W. Ding, F. Xia, and S. Pan
+ (2023)
+
+A survey on fairness-aware recommender systems
+.
+
+Information Fusion
+ 
+100
+, 
+pp. 101906
+.
+
+External Links: 
+Document
+
+Cited by: 
+§2
+.
+
+[17]
+
+B. Krause, A. D. Gotmare, B. McCann, N. S. Keskar, S. Joty, R. Socher, and N. F. Rajani
+ (2021)
+
+GeDi: generative discriminator guided sequence generation
+.
+
+In 
+Findings of EMNLP
+,
+
+pp. 4929–4952
+.
+
+External Links: 
+Document
+
+Cited by: 
+§2
+.
+
+[18]
+
+M. J. Kusner, J. Loftus, C. Russell, and R. Silva
+ (2017)
+
+Counterfactual fairness
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+[19]
+
+L. Li, Y. Zhang, D. Liu, and L. Chen
+ (2024)
+
+Large language models for generative recommendation: a survey and visionary discussions
+.
+
+In 
+Proceedings of LREC-COLING
+,
+
+pp. 10146–10159
+.
+
+External Links: 
+Link
+
+Cited by: 
+§1
+.
+
+[20]
+
+A. Liu, M. Sap, X. Lu, S. Swayamdipta, C. Bhagavatula, N. A. Smith, and Y. Choi
+ (2021)
+
+DExperts: decoding-time controlled text generation with experts and anti-experts
+.
+
+In 
+Proceedings of ACL-IJCNLP
+,
+
+pp. 6691–6706
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+[21]
+
+S. Ma, C. Y. Chen, B. Li, P. Chen, S. Hsu, and Y. Chen
+ (2026)
+
+Rethinking fairness in llm-based recommender systems: a survey
+.
+
+In 
+Findings of the Association for Computational Linguistics: EMNLP 2026
+,
+
+pp. 25277–25296
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+[22]
+
+A. Madaan, N. Tandon, P. Gupta, S. Hallinan, L. Gao, S. Wiegreffe, U. Alon, N. Dziri, S. Prabhumoye, Y. Yang, S. Gupta, B. P. Majumder, K. Hermann, S. Welleck, A. Yazdanbakhsh, and P. Clark
+ (2023)
+
+Self-Refine: iterative refinement with self-feedback
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+Vol. 
+36
+, 
+pp. 46534–46594
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+[23]
+
+J. McAuley, C. Targett, Q. Shi, and A. Van Den Hengel
+ (2015)
+
+Image-based recommendations on styles and substitutes
+.
+
+In 
+Proceedings of the 38th international ACM SIGIR conference on research and development in information retrieval
+,
+
+pp. 43–52
+.
+
+Cited by: 
+§6.1
+.
+
+[24]
+
+V. Quach, A. Fisch, T. Schuster, A. Yala, J. H. Sohn, T. S. Jaakkola, and R. Barzilay
+ (2024)
+
+Conformal language modeling
+.
+
+In 
+International Conference on Learning Representations
+,
+
+External Links: 
+Link
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+[25]
+
+N. Reimers and I. Gurevych
+ (2019)
+
+Sentence-bert: sentence embeddings using siamese bert-networks
+.
+
+In 
+Proceedings of the 2019 conference on empirical methods in natural language processing and the 9th international joint conference on natural language processing (EMNLP-IJCNLP)
+,
+
+pp. 3982–3992
+.
+
+Cited by: 
+§6.1
+.
+
+[26]
+
+A. Singh and T. Joachims
+ (2018)
+
+Fairness of exposure in rankings
+.
+
+In 
+Proceedings of the 24th ACM SIGKDD International Conference on Knowledge Discovery and Data Mining
+,
+
+External Links: 
+Link
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+[27]
+
+R. J. Tibshirani, R. F. Barber, E. J. Candès, and A. Ramdas
+ (2019)
+
+Conformal prediction under covariate shift
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+Vol. 
+32
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+[28]
+
+B. Vassøy and H. Langseth
+ (2024)
+
+Consumer-side fairness in recommender systems: a systematic survey of methods and evaluation
+.
+
+Artificial Intelligence Review
+ 
+57
+ (
+101
+).
+
+External Links: 
+Document
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+[29]
+
+V. Vovk, A. Gammerman, and G. Shafer
+ (2005)
+
+Algorithmic learning in a random world
+.
+
+ 
+Springer
+.
+
+External Links: 
+Document
+
+Cited by: 
+§2
+.
+
+[30]
+
+N. Wang, Q. Li, X. Shi, Y. Wu, Z. Xu, H. Xia, H. Hao, and S. Yu
+ (2023)
+
+COFFEE: counterfactual fairness for personalized text generation in explainable recommendation
+.
+
+In 
+Proceedings of the 2023 Conference on Empirical Methods in Natural Language Processing
+,
+
+pp. 13258–13275
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+[31]
+
+A. Yang, A. Li, B. Yang, B. Zhang, B. Hui, B. Zheng, B. Yu, C. Gao, C. Huang, C. Lv, 
+et al.
+ (2025)
+
+Qwen3 technical report
+.
+
+arXiv preprint arXiv:2505.09388
+.
+
+Cited by: 
+§6.1
+.
+
+[32]
+
+K. Yang and D. Klein
+ (2021)
+
+FUDGE: controlled text generation with future discriminators
+.
+
+In 
+Proceedings of the 2021 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies
+,
+
+pp. 3511–3535
+.
+
+Cited by: 
+§1
+,
+
+§2
+,
+
+footnote 1
+.
+
+[33]
+
+J. Zhang, K. Bao, Y. Zhang, W. Wang, F. Feng, and X. He
+ (2023)
+
+Is chatgpt fair for recommendation? evaluating fairness in large language model recommendation
+.
+
+In 
+Proceedings of the 17th ACM Conference on Recommender Systems
+,
+
+pp. 993–999
+.
+
+Cited by: 
+§1
+.
+

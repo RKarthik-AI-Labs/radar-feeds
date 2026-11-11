@@ -1,0 +1,2781 @@
+Structured Kernel Surrogate Models for Multimodal Attribution
+https://arxiv.org/abs/2611.13198
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+Structured Kernel Surrogate Models for
+
+Multimodal Attribution
+
+Ziniu Zhang
+
+†
+†
+thanks: 
+Equal contribution.
+
+Affiliation: 
+Northeastern University
+
+Affiliation: 
+Boston, MA
+
+  
+
+Zhenshuo Zhang
+1
+1
+footnotemark: 
+
+1
+
+Affiliation: 
+Northeastern University
+
+Affiliation: 
+Boston, MA
+
+  
+
+Jianglin Lu
+
+Affiliation: 
+Northeastern University
+
+Affiliation: 
+Boston, MA
+
+  
+
+Ruoxuan Xiong
+
+Affiliation: 
+Emory University
+
+Affiliation: 
+Atlanta, GA
+
+  
+
+Yun Fu
+
+Affiliation: 
+Northeastern University
+
+Affiliation: 
+Boston, MA
+
+  
+
+Hongyang R. Zhang
+
+Affiliation: 
+Northeastern University
+
+Affiliation: 
+Boston, MA
+
+Abstract
+
+We study the problem of 
+cross-sample modality attribution
+, which involves measuring how one modality in one sample affects the learning outcome in other multimodal samples. This problem is crucial in a multimodal system because a data modality (such as a text description) may be redundant for one sample (a self-explanatory image), but the same data modality would otherwise be uniquely informative for another sample, or informative when combined with other modalities. Prior work focuses on influence estimation at the level of one sample, and it remains an open question how one should capture the interactions across both samples and modalities. To capture scenarios like the above, we propose 
+structured kernel surrogate
+ models, which are surrogate mappings from both samples and modalities to the prediction outcome when they are trained together. We design an algorithm, 
+SKS
+, which applies kernel ridge regression with a structured, compositional kernel on the selection states of individual samples and modalities. Specifically, the kernel function multiplies kernel-based similarity scores between every pair of data modalities for one sample and a pair of two samples. Additionally, we design a gradient-based estimation algorithm to efficiently estimate the structured kernel surrogate model. We evaluate our approach on two multimodal benchmarks, spanning a range of data modalities including satellite images, road networks, text, audio, and tabular data. We find that 
+SKS
+ achieves 
+ higher correlation with the true prediction outcomes than existing methods. In downstream data selection, 
+SKS
+ improves the average accuracy by 
+ over baselines. Models with data selected by 
+SKS
+ have lower Hessian traces, indicating a flatter loss surface. Using 
+SKS
+ to select satellite images identifies road segments, where accident scenes commonly occur, as opposed to background images.
+
+1 
+Introduction
+
+Data in the form of multiple modalities are widely available in many domains. For example, in transportation, satellite images capturing road segments, traffic statistics such as traffic volume, and weather statistics can jointly be used to make accurate predictions on accident risks 
+[
+27
+, 
+47
+]
+. Autonomous self-driving vehicles integrate visual cues and sounds from the surrounding environment to provide safety-critical navigation 
+[
+1
+]
+. While multimodal systems have scaled up in terms of both model size and complexity, their internal mechanisms remain highly complex 
+[
+46
+]
+ (one concrete example where susceptible models may be brittle to feature representations is spurious correlations 
+[
+44
+]
+). Thus, understanding how different modalities interact and impact predictions is central to providing meaningful interpretations to multimodal systems.
+
+Compared to a unimodal system, data influences a multimodal system at different granularities. In this vein, the problem of cross-sample modality interaction can be related to earlier literature on multi-view learning. For instance, 
+[
+7
+]
+ use relationships estimated from unlabeled paired data to regularize predictors and encourage agreement across views (see also a follow-up work 
+[
+32
+]
+).
+Another related concept built on partial information decomposition characterizes redundant, unique, or synergistic information in the presence of heterogeneous data modalities, under different combinations 
+[
+19
+, 
+5
+]
+.
+While these existing works describe what information is present across modalities,
+the question of how individual samples and their modalities affect prediction remains open: is there an efficient algorithm for measuring the effect of adding or removing one modality from an individual sample on model performance?
+
+Prior work in the literature of influence estimation studies the effect of adding or removing an individual example on model predictions. Existing methods, including influence functions 
+[
+9
+]
+, datamodels 
+[
+29
+]
+, and linear and kernel surrogate methods 
+[
+13
+, 
+46
+]
+, have considered the estimation problem both for individual samples and for groups (or sets) of samples. These existing works primarily focus on unimodal settings. In particular, the effect of adding or removing one modality from a sample can depend on how it interacts with other samples and modalities through a shared network or optimization procedure. The problem of estimating the influence of individual samples in multimodal learning remains open.
+
+Figure 1
+: 
+Overview of our proposed approach. We design a structured compositional kernel by multiplying both sample-level and modality-level RBF kernel similarity scores, given by 
+ and 
+ (with bandwidth parameters 
+ and 
+, respectively). Then, we fit a surrogate model mapping the selection states to their loss outcomes using kernel ridge regression on 
+ pairs of randomly sampled selections and their corresponding loss outcomes (after fitting a model). Lastly, we estimate the influence score of one sample-modality pair 
+ under a binary mask 
+ by subtracting the test losses under 
+ and 
+, which retain and remove this modality in the sample, with all other entries of 
+ fixed. A positive score indicates that removing this pair 
+ is detrimental. On the right, we give examples of satellite images retained and excluded based on their influence scores. Our approach correctly identifies the road segments from the top panel, where accident scenes often occur, and estimates a higher influence score for these segments compared to the background images from the bottom panel.
+
+These gaps motivate us to introduce 
+structured kernel surrogate
+ models, or 
+SKS
+ for short, for capturing cross-sample modality interaction with modality missingness and nonlinear relationships. The entire framework is illustrated in Figure 
+1
+. 
+SKS
+ considers perturbations of the dataset in which some samples are included or removed, and some modalities are retained or masked within each included sample. For each such sampling, the corresponding target is the loss of the model based on the perturbed dataset. 
+SKS
+ then learns this selection-to-loss map using kernel ridge regression with a structured radial basis function (RBF) kernel. The kernel separates sample-level participation from within-sample modality composition, which crucially allows for missing data modalities. Moreover, it captures nonlinear interactions across samples and modalities. An implication of this work is thus connecting the literature on influence estimation in multimodal learning to concepts in causal inference (such as difference-in-differences and modality missingness 
+[
+22
+, 
+23
+]
+).
+
+We evaluate 
+SKS
+ on the multimodal traffic accident prediction benchmark 
+MMTraCE
+ 
+[
+47
+]
+ and the standard multimodal benchmark MultiBench 
+[
+21
+]
+. We first measure attribution quality using the linear data modeling score (LDS). Compared with the strongest baseline, 
+SKS
+ improves the per-task relative LDS by 
+ on 
+MMTraCE
+ and 
+ on MultiBench. We then evaluate whether these attributions can guide downstream data selection. Under a fixed top-
+ vision-modality selection budget, 
+SKS
+ improves the average accuracy by 
+ on 
+MMTraCE
+ and by 
+ on MultiBench over the strongest baseline. Similar gains are observed when the selected modality is changed to tabular information. Finally, we analyze the generalization behavior of models from data selected by 
+SKS
+. The selected data lead to strong cross-state generalization and a smoother loss surface than competing attribution methods. This shows better robustness of the resulting models using 
+SKS
+.
+
+In summary, our contributions are threefold. First, we propose 
+SKS
+, a 
+structured kernel surrogate
+ model that separates sample-level and modality-level selection to learn the nonlinear subset-to-loss mapping. We provide a sample complexity bound for the surrogate.
+Second, 
+SKS
+ achieves the highest LDS across six MultiBench tasks, improving over the strongest baseline by 
+ in per-task relative LDS on average, with the largest gains on MOSI and Sarcasm. It also improves downstream test accuracy on MultiBench by 
+ on average.
+Third, on spatiotemporal traffic accident prediction across six US states, 
+SKS
+ improves LDS by 
+ over the strongest baseline. For downstream data selection, it improves average test accuracy by 
+. The learned attributions are also interpretable: 
+SKS
+ assigns higher scores to satellite images with visible road infrastructure than to vegetation-dominated tiles. Models trained on data selected by 
+SKS
+ show strong cross-state transferability. The loss sharpness analysis further shows that they achieve the lowest Hessian trace against baselines.
+The code repository for reproducing the empirical findings can be found at 
+https://github.com/VirtuosoResearch/Multimodal-attribution-SKS-code
+.
+
+2 
+Preliminaries
+
+Let 
+ denote a multimodal dataset sampled from an unknown distribution 
+, where 
+ is the multimodal input with 
+ modalities, and 
+ is the output. For exposition, we focus on the two-modality setting 
+. In traffic accident prediction, for example, each sample may represent a road segment, modeled as an edge in a road network graph. The two modalities can consist of a satellite image of the segment and tabular features such as traffic volume.
+We learn a multimodal network 
+ on selected samples and selected modalities within each sample. The global selection state is represented by the binary matrix
+
+where 
+ means that modality 
+ of sample 
+ is retained and 
+ means that it is removed. Thus, column 
+ of 
+ indicates which modalities are retained in sample 
+, and row 
+ indicates which samples retain modality 
+. The extension to more than two modalities is straightforward and is discussed in detail in Appendix 
+A.3
+. We define
+
+In particular, 
+ if at least one modality of sample 
+ is retained, and 
+ if the entire sample is removed.
+
+For sample 
+, the masked loss is denoted as 
+. We require at least one sample to retain at least one modality, so 
+. We define the empirical loss under 
+ as the average loss over all samples:
+
+The learned parameters 
+ generally depend nonlinearly on 
+. Changing a modality in one sample changes the corresponding sample’s contribution to the objective and, through shared parameter updates, can further affect how the model uses information from other samples.
+
+We characterize the effect of a selection 
+ by the expected risk of the resulting model under the test distribution 
+:
+
+Our goal is to characterize how perturbing a single entry of 
+, corresponding to retaining or removing one modality of one sample, affects the resulting test loss 
+.
+
+Problem statement.
+
+We introduce an attribution score to measure how one modality of an individual sample affects the test loss. For modality 
+ in sample 
+, let 
+ and 
+ be obtained from 
+ by setting 
+ to 
+ and 
+, respectively, keeping all other entries unchanged. We define the influence score of modality 
+ in sample 
+ at 
+ as
+
+(1)
+
+ measures the change in test loss caused by removing modality 
+ from sample 
+ and keeping other sample and modality choices unchanged. A positive value indicates that retaining the modality in this sample reduces the test loss. We note that this is dependent on the binary mask matrix 
+. This formulation raises two questions:
+
+•
+
+First, how can we estimate the nonlinear mapping from the binary masks of samples and modalities specified by 
+ to the loss outcome 
+?
+
+•
+
+Second, how can we use the surrogate model to efficiently estimate the influence score for each modality of an individual sample?
+
+The next section proposes a detailed methodology to answer the two questions.
+
+3 
+Our Approach
+
+We address the two questions in turn.
+We first introduce a structured kernel surrogate to model the mapping from 
+ to 
+, with a structured similarity that separately accounts for sample participation and modality composition.
+We then recover the attribution scores through finite differences of the fitted surrogate.
+
+3.1 
+Designing Kernel Surrogate Models
+
+To estimate the mapping from 
+ to 
+, we model how individual samples and their modalities interact and jointly affect the test loss. These interactions arise at two levels: sample-level interaction and modality-level interaction. We model these two types of interactions separately using two RBF kernels. We then combine the two kernels to form a structured design that captures interactions among samples and modalities. We utilize the standard RBF kernel with squared Euclidean distance.
+1
+1
+
+1
+
+              
+              
+              
+            We provide both a justification for the RBF kernel and an ablation of alternative kernel choices in Appendix 
+B.4
+.
+
+A compositional kernel.
+
+Given two binary mask matrices 
+, we first quantify their sample-level similarity by comparing 
+ and 
+ using an RBF kernel with bandwidth 
+:
+
+Since 
+ are binary, the squared distance counts the samples whose participation differs between the two states.
+
+For each sample 
+ that is selected in both 
+ and 
+, we compare 
+ and 
+ to measure how similarly the modalities of this sample are selected across the two states. We define this modality-level similarity using an RBF kernel with bandwidth 
+:
+
+We then combine the sample-level and modality-level kernel similarity scores to define the structured similarity between 
+ and 
+:
+
+Restricting the product to samples that are present in both 
+ and 
+ separates sample removal from modality changes within a retained sample. If a sample is absent in either 
+ or 
+, its difference is captured by the sample-level component 
+ and does not contribute an additional modality-level term.
+
+This design allows 
+ to capture interactions between samples. It also captures interactions between modalities within a sample and across samples. For two modalities, 
+ is positive semidefinite if 
+ and 
+. Under these conditions, 
+ is a valid kernel. We give the proposition and proof in Appendix 
+A.2
+.
+
+Algorithm 1
+ 
+ Estimating Structured Kernel Surrogate (
+SKS
+) Models for Multimodal Attribution
+
+Input:
+ 
+ randomly sampled selections 
+ and their evaluation loss outcomes based on corresponding selections 
+
+Require:
+
+Sample-level RBF bandwidth 
+, modality-level RBF bandwidth 
+, reference selection matrix 
+, ridge regression penalty 
+
+Output:
+ Surrogate model and estimated influence scores
+
+1:
+
+/* Stage 1: calculate the kernel and solve a kernel ridge regression problem 
+*/
+
+2:
+
+for
+ 
+ 
+do
+
+3:
+
+                
+                
+                
+
+4:
+
+                
+                
+                
+
+5:
+
+end
+ 
+for
+
+6:
+
+7:
+
+8:
+
+9:
+
+/* Stage 2: calculate the estimated influence scores 
+*/
+
+10:
+
+for
+ each 
+ and 
+ 
+do
+
+11:
+
+                
+                
+                
+ modify 
+ by setting 
+ and 
+ respectively
+
+12:
+
+                
+                
+                
+
+13:
+
+end
+ 
+for
+
+14:
+
+return
+ 
+, 
+
+3.2 
+Surrogate Modeling of Sample-Modality Interaction
+
+Given a valid kernel, we then fit a surrogate model that predicts the test loss from 
+. We then estimate the attribution of each modality in each sample using finite differences. Each difference compares the predicted losses with the modality added and removed, where all other entries of 
+ remain fixed.
+
+Surrogate modeling.
+
+Let 
+ denote the reproducing kernel Hilbert space (RKHS) induced by the structured kernel 
+. Given 
+ sampled selection states 
+ with measured test losses 
+, we fit a kernel ridge regression surrogate 
+[
+46
+]
+ by optimizing over candidate functions 
+, where 
+ predicts the test loss associated with state 
+:
+
+Let 
+ denote the Gram matrix over the 
+ sampled selection states, whose 
+-th entry is 
+. Let 
+ and 
+. The closed-form solution is given by
+
+Influence estimation.
+
+Given a reference selection state 
+, we estimate the attribution using the fitted surrogate 
+. For modality 
+ in sample 
+,
+the estimated attribution is
+
+We compute the finite difference with all other entries fixed at their values in 
+. The attribution depends on which other samples and modalities are retained, and it can reflect interactions with those samples and modalities.
+
+For the surrogate 
+, the 
+ samples are drawn independently from the same selection procedure, and their observed losses equal 
+. Assume that the function 
+ belongs to 
+ and satisfies 
+. We show the following statement.
+
+Proposition 1
+.
+
+For any 
+ and 
+, there exist universal constants 
+ such that, if
+
+,
+then, with probability at least 
+ over the sampled selections,
+
+This result bounds the surrogate’s prediction error in terms of the number of sampled selections and the regularization parameter. We defer the proof to Appendix 
+A.1
+.
+
+3.3 
+Efficient Estimation
+
+For scalability, fitting the surrogate does not require retraining the model for every selection state. Inspired by the first-order approximation in previous works 
+[
+16
+, 
+25
+, 
+29
+]
+, we linearize the multimodal model around a checkpoint learned on all samples and modalities using a first-order approximation. Let 
+ denote this checkpoint, and 
+ denote the model output for sample 
+ under the modality selection 
+. For the parameter 
+ close to 
+, we use the first-order Taylor approximation
+
+(2)
+
+where 
+ is the gradient with respect to 
+ and 
+ denotes the approximation error. We compute and cache both the model output and gradient for each selection 
+.
+In Appendix 
+B.2
+, we empirically evaluate 
+ and find it to be small in the estimation. The objective under 
+ can be approximated by
+
+(3)
+
+Thus, the loss associated with each sampled 
+ can be estimated by optimizing the linearized objective, without retraining the original multimodal model from scratch. We report the computational speedup achieved by this approximation in Appendix 
+B.2
+.
+
+Figure 2
+: 
+Overview of surrogate-guided data selection on 
+MMTraCE
+.
+Each node represents a road-network sample with tabular and vision modalities. The structured kernel surrogate assigns an attribution score to each node image. We keep the vision information for the top-
+ scored nodes.
+
+4 
+Experiments
+
+Our experiments investigate two key questions.
+First, how does 
+SKS
+ compare with existing attribution methods and surrogate-based methods on multimodal attribution benchmarks?
+Second, can the attributions produced by 
+SKS
+ be used for downstream data selection?
+We evaluate these questions on MultiBench and 
+MMTraCE
+.
+The results show that 
+SKS
+ achieves the best attribution performance across multiple tasks, and that data selected by 
+SKS
+ leads to the highest downstream accuracy under a fixed selection budget.
+We further show through ablation studies that 
+SKS
+ is robust to kernel bandwidth choices and generalizes across different modalities and selection rates.
+
+4.1 
+Experimental Setup
+
+Datasets.
+ We first evaluate our framework on the spatiotemporal traffic accident prediction task 
+MMTraCE
+ 
+[
+47
+]
+. It contains a US state-level road network, accompanied by weather, traffic volume, satellite images, and longitudinal accident records from six states. It covers tabular and vision modalities, and the objective is to predict accident occurrences on a target edge. Then, we evaluate on six real-world tasks in MultiBench 
+[
+21
+]
+: UR-FUNNY (Humor), MUStARD (Sarcasm), CMU-MOSI (Mosi), CMU-MOSEI (Mosei), AV-MNIST (Avmnist), MM-IMDB (Imdb). These datasets cover diverse modalities, including text, audio, vision, and tabular data.
+
+Baselines.
+ We compare our method with data attribution methods including Influence functions 
+[
+9
+]
+, TracIn 
+[
+31
+]
+, Trak 
+[
+29
+]
+, DSIR 
+[
+39
+]
+, LESS 
+[
+38
+]
+, and BIF 
+[
+10
+]
+. Lastly, we compare our approach with linear surrogate models 
+[
+13
+]
+.
+
+Evaluation.
+ We denote the evaluated sampling states by
+
+, with corresponding test losses 
+. The predicted test loss from an attribution method is defined as 
+. We first evaluate the LDS score for all methods. It is defined as the Spearman correlation coefficient between the predicted ranking and the real ranking: 
+. A higher LDS score indicates that the attribution method better recovers the ranking of subset-level test losses.
+
+Then, we frame data selection as a downstream evaluation of attribution methods under an asymmetric setting. The model uses all data from the first modality and only a 
+ subset from the second modality. Each attribution method scores samples in the second modality, and we select the top 
+ as the retained subset. We then fit the multimodal model with the complete first modality and the selected second-modality subset, and evaluate it on a standard test set. We add an illustrative example in Figure 
+2
+ for better understanding.
+
+4.2 
+Experimental Results
+
+Attribution results.
+
+As shown in Table 
+1
+, 
+SKS
+ achieves the highest LDS score across both 
+MMTraCE
+ and MultiBench. Compared with the strongest baseline, 
+SKS
+ improves the per-task relative LDS by 
+ on 
+MMTraCE
+ and by 
+ on MultiBench. The gains are especially large on more challenging multimodal tasks, such as Mosi and Sarcasm, where linear attribution is less able to capture nonlinear subset-level effects. These results show that structured nonlinear surrogate modeling is important for recovering the ranking of subset-level test losses in multimodal prediction.
+
+Table 1
+: 
+Results on multimodal attribution across 
+MMTraCE
+ and MultiBench. We report LDS scores for six 
+MMTraCE
+ states and six MultiBench tasks. All results are reported as the mean and standard deviation over three independent runs.
+
+Methods
+
+DE
+
+MA
+
+MD
+
+NV
+
+MT
+
+IA
+
+Influence functions
+
+TracIn
+
+Trak
+
+BIF
+
+Linear surrogates
+
+SKS
+ (Algorithm 
+1
+)
+
+Methods
+
+Avmnist
+
+Humor
+
+Imdb
+
+Mosei
+
+Mosi
+
+Sarcasm
+
+Influence functions
+
+TracIn
+
+Trak
+
+BIF
+
+Linear surrogates
+
+SKS
+ (Algorithm 
+1
+)
+
+Data selection results.
+
+Given the strong attribution performance, we further evaluate 
+SKS
+ on downstream data selection. Under the fixed top-
+ vision-modality selection budget, 
+SKS
+ achieves the best test accuracy on both 
+MMTraCE
+ and MultiBench, as shown in Table 
+2
+. Compared with the strongest baseline for each state, 
+SKS
+ improves the average accuracy by 
+ on 
+MMTraCE
+. On MultiBench, 
+SKS
+ also improves over the strongest baseline for each task by 
+ on average, with the largest gain on AV-MNIST. These results show that the learned sample-modality attributions can effectively guide downstream data selection across both traffic prediction and general multimodal benchmarks.
+
+4.3 
+Ablation Studies
+
+Ablation for the data attribution.
+
+We ablate the surrogate modeling methods in 
+SKS
+. We test the performance of the flat surrogate kernel instead of the structured kernel. As shown in Figure 
+3(a)
+, 
+SKS
+ performs better than the flat surrogate kernel on DE, MA, and MD, with a 
+ LDS improvement. Similar results are found on MultiBench, and we defer the results to Figure 
+5(a)
+.
+We then ablate the sample-level bandwidth 
+ and the modality-level bandwidth 
+ of the structured surrogate on 
+MMTraCE
+. Across a broad range of bandwidth values, the LDS score remains stable.
+
+Table 2
+: 
+Test accuracy of data selection methods on 
+MMTraCE
+ 
+[
+47
+]
+ and MultiBench 
+[
+21
+]
+. Each approach selects the top 
+ vision-modality samples under a fixed selection budget, and we report the mean and standard deviation over three independent runs.
+
+Methods
+
+DE
+
+MA
+
+MD
+
+NV
+
+MT
+
+IA
+
+Influence functions
+
+DSIR
+
+TracIn
+
+Trak
+
+BIF
+
+LESS
+
+Linear surrogate models
+
+SKS
+ (Algorithm 
+1
+)
+
+Methods
+
+Avmnist
+
+Humor
+
+Imdb
+
+Mosei
+
+Mosi
+
+Sarcasm
+
+Influence functions
+
+DSIR
+
+TracIn
+
+Trak
+
+BIF
+
+LESS
+
+Linear surrogate models
+
+SKS
+ (Algorithm 
+1
+)
+
+Ablation analysis on data selection.
+
+For data selection, we conduct two ablation studies on the 
+MMTraCE
+ dataset.
+First, we change the selected modality from vision to tabular information while keeping the same top-
+ selection budget.
+As shown in Figure 
+3(b)
+, the accuracy drops noticeably compared with vision selection in Table 
+2
+. This indicates that tabular information is more critical for traffic accident prediction than satellite vision features.
+
+SKS
+ still performs the best on DE, MA, and MD, with a 
+ accuracy improvement. This shows that the learned attribution remains effective across different modalities. We defer the ablation results for the rest of the states to Figure 
+5(b)
+.
+
+Second, we vary the selection rate for the selected modality.
+Figure 
+3(c)
+ shows that accuracy improves as the selection rate increases, but the gain gradually saturates at larger budgets. This suggests that the most useful samples are selected early, and that additional samples yield diminishing returns.
+
+4.4 
+Local Geometric Measures
+
+Next, we evaluate the cross-state generalization results of applying 
+SKS
+ on 
+MMTraCE
+. Specifically, we learn the model on one source state using the downsampled data selected by 
+SKS
+ and test it on each target state. As shown in Figure 
+3(d)
+, the selected subsets generalize well across different source-target pairs. Among the source states, models based on MT data achieve stronger average performance than those based on DE or MA data, with an average accuracy of 
+. This shows that the selected MT subset may contain more transferable information for cross-state accident prediction.
+
+Then, we assess model generalization through loss sharpness. A flatter loss landscape suggests that the selected subset induces a model less sensitive to small input perturbations and more likely to generalize across states. Since directly computing the Hessian trace is expensive, we estimate it by adding small isotropic Gaussian noise and measuring the expected loss increase.
+
+We use the trace of the Hessian matrix of the model for evaluating the generalization ability 
+[
+6
+, 
+43
+]
+. We compare the model from different states in MMTraCE with the data selected by different attribution methods. As shown in Table 
+3
+, 
+SKS
+ not only achieves the lowest test loss, but also has the lowest Hessian trace value. This shows that the model on data selected by 
+SKS
+ generalizes better than models on data selected by other attribution methods.
+
+Table 3
+: 
+The Hessian trace and test loss of the model based on Delaware, Massachusetts, Maryland, and Nevada. We compare 
+SKS
+ against several attribution methods including influence functions 
+[
+9
+]
+, TracIn 
+[
+31
+]
+, Trak 
+[
+29
+]
+ and BIF 
+[
+10
+]
+.
+
+Methods
+
+DE
+
+MA
+
+MD
+
+NV
+
+Metric
+
+Trace
+
+Loss
+
+Trace
+
+Loss
+
+Trace
+
+Loss
+
+Trace
+
+Loss
+
+Influence functions
+
+TracIn
+
+Trak
+
+BIF
+
+SKS
+ (Algorithm 
+1
+)
+
+(a)
+ 
+Compositional kernel
+
+(b)
+ 
+Data modality
+
+(c)
+ 
+Selection rate
+
+(d)
+ 
+Cross-state generalization
+
+Figure 3
+: 
+Ablation studies on the 
+MMTraCE
+ dataset 
+[
+47
+]
+. Figure 
+3(a)
+ evaluates surrogate modeling by comparing the LDS of 
+SKS
+ with the flat kernel on Delaware, Massachusetts, and Maryland. Figure 
+3(b)
+ studies the effect of data modalities. We retain all visual data, select 
+ of the tabular data using each method, and report the resulting test accuracy. Figure 
+3(c)
+ evaluates selection rates ranging from 
+ to 
+ and reports the test accuracy on Delaware. Figure 
+3(d)
+ evaluates cross-state generalization by fitting the model on one state and directly testing it on another state.
+
+5 
+Related Work
+
+Multimodal representation learning.
+
+Multimodal learning relies on relationships between information sources to improve prediction. Different modalities can compensate for missing or unreliable information 
+[
+42
+]
+ and provide context needed to interpret one another 
+[
+41
+, 
+50
+]
+. Learning these relationships provides a basis for constructing useful representations and reducing the number of samples required 
+[
+7
+]
+.
+
+[
+2
+]
+ show that answering questions about past conversations requires connecting visual details with facts introduced in other dialogue turns. It is important for multi-step search 
+[
+26
+]
+, since evidence from one modality can guide what to retrieve from another.
+The reliability of these relationships also matters. 
+[
+33
+]
+ model uncertainty in image-text alignment to capture whether the available information supports a connection between their meanings.
+
+These relationships guide representation learning by identifying which information should be preserved and how it should be organized. For example, semantic correspondence between language and vision guides representations to emphasize visual content relevant to the text and bring their meanings into alignment 
+[
+3
+, 
+8
+]
+. To connect representations to prediction, deep supervision makes representations themselves predictive rather than relying solely on the final output 
+[
+11
+]
+, and knowledge transfer through representations supplies localization information missing from target labels 
+[
+34
+]
+.
+
+Missing information and temporal changes also shape what representations need to capture. The absence of one modality can itself carry information, so representations should account for what is missing as well as what is observed 
+[
+22
+]
+. For evolving states, this missingness information helps refine estimates based on past observations, so that representations can track changes at each time step 
+[
+23
+]
+. Beyond using observations to track changing states, representations can model how feedback drives subsequent changes 
+[
+28
+]
+.
+
+Algorithms for influence estimation.
+
+The problem of influence estimation aims to quantify how individual examples affect predictions. Classical influence functions 
+[
+9
+]
+ estimate the effect of upweighting or removing one sample through a local second-order approximation. However, estimating inverse Hessian-vector products is still expensive for large models. To reduce computation, gradient similarity across checkpoints avoids explicit Hessian computation 
+[
+31
+]
+, and model linearization with random projections enables attribution at larger scales 
+[
+29
+]
+. Other than computational efficiency, attribution also raises the question of whether estimated importance rankings are reliable. For feature attribution, 
+[
+4
+]
+ address this question by testing whether differences in estimated scores support the reported rankings despite sampling uncertainty.
+
+This type of influence analysis also extends naturally from quantifying individual examples to entire evaluation tasks.
+In multi-task learning, joint training can improve or hurt a task’s performance depending on the tasks’ input distributions and sample sizes 
+[
+36
+, 
+40
+]
+. 
+[
+13
+]
+ use surrogate models to estimate the effects of different task combinations on performance, identifying
+which combinations lead to positive or negative transfer. Then, 
+[
+12
+, 
+14
+]
+ use estimated transfer relationships to identify task groups that benefit from joint training.
+The cost of comparing combinations motivates first-order approximations of fine-tuning performance 
+[
+17
+, 
+48
+]
+. These estimates inform both which tasks to group during optimization 
+[
+45
+, 
+18
+]
+ and where they should share parameters within a model 
+[
+15
+, 
+49
+]
+. Theoretical analysis in the setting of high-dimensional linear regression shows when learning a shared linear model on source and target data improves target-task prediction compared with fitting the model on target data alone
+
+[
+40
+]
+.
+
+Information-theoretic perspectives on multimodal learning.
+
+Information-theoretic analyses relate the benefits of multimodal learning to how predictive information is distributed across modalities. Shared information allows unlabeled paired data to constrain learning 
+[
+32
+]
+, and bounds on information available only through joint observation quantify the potential gains from combining modalities 
+[
+20
+]
+. Beyond information content, analyses of data augmentation distinguish gains from expanded data coverage and regularization 
+[
+37
+]
+. Complementary optimization work addresses the tradeoff between data reuse and the distribution mismatch induced by repeated updates 
+[
+35
+]
+. These perspectives characterize conditions for effective data use, but do not directly quantify how individual samples and their modalities affect test performance.
+
+6 
+Conclusion
+
+We study cross-sample modality attribution in multimodal learning. We propose a new algorithm that estimates the subset-to-loss response while preserving the hierarchy between sample participation and within-sample modality composition. We further apply the learned sample-modality attributions to downstream data selection. Across 
+MMTraCE
+ and MultiBench, our approach consistently improves over prior work in terms of attribution quality and data selection accuracy. Further geometric analysis shows that models trained on data selected by our proposed algorithm have a lower Hessian trace, suggesting a flatter loss surface and better generalization.
+
+Acknowledgment
+
+This work received financial support from NSF award IIS-2412008 and a startup fund from Northeastern University.
+Ziniu Zhang and Zhenshuo Zhang received additional financial support from Northeastern University’s Khoury PhD fellowships.
+R. Xiong is supported in part by the URC award at Emory University.
+
+References
+
+[1]
+
+A. Balasingam, J. Chandler, C. Li, Z. Zhang, and H. Balakrishnan
+ (2024)
+
+Drivetrack: a benchmark for long-range point tracking in real-world videos
+.
+
+In 
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition
+,
+
+pp. 22488–22497
+.
+
+Cited by: 
+§1
+.
+
+[2]
+
+Y. Bei, T. Wei, X. Ning, Y. Zhao, Z. Liu, X. Lin, Y. Zhu, H. Hamann, J. He, and H. Tong
+ (2026)
+
+Mem-gallery: benchmarking multimodal long-term conversational memory for mllm agents
+.
+
+In 
+Proceedings of the 64th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)
+,
+
+pp. 40750–40784
+.
+
+Cited by: 
+§5
+.
+
+[3]
+
+Z. Chen, X. Zhang, H. Xu, J. Xie, and Z. Tu
+ (2026)
+
+Cvp: central-peripheral vision-inspired multimodal model for spatial reasoning
+.
+
+In 
+IEEE/CVF Winter Conference on Applications of Computer Vision (WACV)
+,
+
+pp. 2295–2305
+.
+
+Cited by: 
+§5
+.
+
+[4]
+
+J. Goldwasser and G. Hooker
+ (2025)
+
+Statistical significance of feature importance rankings
+.
+
+In 
+Conference on Uncertainty in Artificial Intelligence
+,
+
+pp. 1476–1496
+.
+
+Cited by: 
+§5
+.
+
+[5]
+
+S. Gupta, S. Sundaram, C. Wang, S. Jegelka, and P. Isola
+ (2025)
+
+Better together: leveraging unpaired multimodal data for stronger unimodal models
+.
+
+arXiv preprint arXiv:2510.08492
+.
+
+Cited by: 
+§1
+.
+
+[6]
+
+H. Ju, D. Li, and H. R. Zhang
+ (2022)
+
+Robust fine-tuning of deep neural networks with hessian-based generalization guarantees
+.
+
+In 
+International conference on machine learning
+,
+
+pp. 10431–10461
+.
+
+Cited by: 
+§4.4
+.
+
+[7]
+
+S. M. Kakade and D. P. Foster
+ (2007)
+
+Multi-view regression via canonical correlation analysis
+.
+
+In 
+International Conference on Computational Learning Theory
+,
+
+pp. 82–96
+.
+
+Cited by: 
+§1
+,
+
+§5
+.
+
+[8]
+
+Z. Khan and Y. Fu
+ (2023)
+
+Contrastive alignment of vision to language through parameter-efficient transfer learning
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Cited by: 
+§5
+.
+
+[9]
+
+P. W. Koh and P. Liang
+ (2017)
+
+Understanding black-box predictions via influence functions
+.
+
+In 
+International conference on machine learning
+,
+
+pp. 1885–1894
+.
+
+Cited by: 
+Appendix B
+,
+
+§1
+,
+
+§4.1
+,
+
+Table 3
+,
+
+Table 3
+,
+
+§5
+.
+
+[10]
+
+P. A. Kreer, W. Wu, M. Adam, Z. Furman, and J. Hoogland
+ (2026)
+
+Bayesian influence functions for hessian-free data attribution
+.
+
+In 
+International Conference on Learning Representations (ICLR)
+,
+
+Cited by: 
+Appendix B
+,
+
+§4.1
+,
+
+Table 3
+,
+
+Table 3
+.
+
+[11]
+
+C. Lee, S. Xie, P. Gallagher, Z. Zhang, and Z. Tu
+ (2015)
+
+Deeply-supervised nets
+.
+
+In 
+Artificial Intelligence and Statistics
+,
+
+pp. 562–570
+.
+
+Cited by: 
+§5
+.
+
+[12]
+
+D. Li, H. Ju, A. Sharma, and H. R. Zhang
+ (2023)
+
+Boosting multitask learning on graphs through higher-order task affinities
+.
+
+In 
+ACM SIGKDD Conference on Knowledge Discovery and Data Mining (KDD)
+,
+
+pp. 1213–1222
+.
+
+Cited by: 
+§5
+.
+
+[13]
+
+D. Li, H. Nguyen, and H. R. Zhang
+ (2023)
+
+Identification of negative transfers in multitask learning using surrogate models
+.
+
+Transactions on Machine Learning Research
+.
+
+Cited by: 
+§1
+,
+
+§4.1
+,
+
+§5
+.
+
+[14]
+
+D. Li, A. Sharma, and H. R. Zhang
+ (2024)
+
+Scalable multitask learning using gradient-based estimation of task affinity
+.
+
+In 
+Proceedings of the 30th ACM SIGKDD Conference on Knowledge Discovery and Data Mining
+,
+
+pp. 1542–1553
+.
+
+Cited by: 
+§5
+.
+
+[15]
+
+D. Li, Z. Zhang, M. Duan, E. Dobriban, and H. R. Zhang
+ (2025)
+
+Efficiently learning branching networks for multitask algorithmic reasoning
+.
+
+arXiv preprint arXiv:2512.01113
+.
+
+Cited by: 
+§5
+.
+
+[16]
+
+D. Li, Z. Zhang, L. Wang, and H. R. Zhang
+ (2024)
+
+Scalable fine-tuning from multiple data sources: a first-order approximation approach
+.
+
+In 
+Findings of the Association for Computational Linguistics: EMNLP 2024
+,
+
+pp. 5608–5623
+.
+
+Cited by: 
+§3.3
+.
+
+[17]
+
+D. Li, Z. Zhang, L. Wang, and H. R. Zhang
+ (2025)
+
+Efficient ensemble for fine-tuning language models on multiple datasets
+.
+
+In 
+Annual Meeting of the Association for Computational Linguistics (ACL)
+,
+
+pp. 25347–25364
+.
+
+Cited by: 
+§5
+.
+
+[18]
+
+D. Li, Z. Zhang, L. Wang, and H. R. Zhang
+ (2026)
+
+MoPLEx: estimating plackett-luce mixture models for multi-objective alignment
+.
+
+In 
+Conference on Empirical Methods in Natural Language Processing
+,
+
+Cited by: 
+§5
+.
+
+[19]
+
+P. P. Liang, Y. Cheng, X. Fan, C. K. Ling, S. Nie, R. Chen, Z. Deng, N. Allen, R. Auerbach, F. Mahmood, R. Salakhutdinov, and L. Morency
+ (2023)
+
+Quantifying & modeling multimodal interactions: an information decomposition framework
+.
+
+Advances in Neural Information Processing Systems
+ 
+36
+, 
+pp. 27351–27393
+.
+
+Cited by: 
+§1
+.
+
+[20]
+
+P. P. Liang, C. K. Ling, Y. Cheng, A. Obolenskiy, Y. Liu, R. Pandey, A. Wilf, L. Morency, and R. Salakhutdinov
+ (2024)
+
+Multimodal learning without labeled multimodal data: guarantees and applications
+.
+
+In 
+The Twelfth International Conference on Learning Representations
+,
+
+Cited by: 
+§5
+.
+
+[21]
+
+P. P. Liang, Y. Lyu, X. Fan, Z. Wu, Y. Cheng, J. Wu, L. Chen, P. Wu, M. A. Lee, Y. Zhu, R. Salakhutdinov, and L. Morency
+ (2021)
+
+Multibench: multiscale benchmarks for multimodal representation learning
+.
+
+Advances in neural information processing systems
+ 
+2021
+ (
+DB1
+), 
+pp. 1
+.
+
+Cited by: 
+§1
+,
+
+§4.1
+,
+
+Table 2
+,
+
+Table 2
+.
+
+[22]
+
+Z. Liang, Z. Pan, and R. Xiong
+ (2025)
+
+Causal representation learning from multimodal clinical records under non-random modality missingness
+.
+
+In 
+Proceedings of the 2025 Conference on Empirical Methods in Natural Language Processing
+,
+
+pp. 28779–28796
+.
+
+Cited by: 
+§1
+,
+
+§5
+.
+
+[23]
+
+Z. Liang, Z. Pan, and R. Xiong
+ (2026)
+
+Learning dynamic representations and policies from multimodal clinical time-series with informative missingness
+.
+
+In 
+Findings of the Association for Computational Linguistics: ACL 2026
+,
+
+pp. 26363–26392
+.
+
+Cited by: 
+§1
+,
+
+§5
+.
+
+[24]
+
+P. Lu, S. Mishra, T. Xia, L. Qiu, K. Chang, S. Zhu, O. Tafjord, P. Clark, and A. Kalyan
+ (2022)
+
+Learn to explain: multimodal reasoning via thought chains for science question answering
+.
+
+Advances in Neural Information Processing Systems (NeurIPS)
+ 
+35
+, 
+pp. 2507–2521
+.
+
+Cited by: 
+§B.2
+.
+
+[25]
+
+S. Malladi, A. Wettig, D. Yu, D. Chen, and S. Arora
+ (2023)
+
+A kernel-based view of language model fine-tuning
+.
+
+In 
+International Conference on Machine Learning (ICML)
+,
+
+pp. 23610–23641
+.
+
+Cited by: 
+§3.3
+.
+
+[26]
+
+X. Ning, D. Fu, T. Wei, M. Ai, J. Zou, T. Li, H. Tong, Y. Zhu, H. Hamann, and J. He
+ (2026)
+
+MC-search: evaluating and enhancing multimodal agentic search with structured long reasoning chains
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Cited by: 
+§5
+.
+
+[27]
+
+A. Nippani, D. Li, H. Ju, H. Koutsopoulos, and H. Zhang
+ (2023)
+
+Graph neural networks for road safety modeling: datasets and evaluations for accident analysis
+.
+
+Advances in neural information processing systems
+ 
+36
+, 
+pp. 52009–52032
+.
+
+Cited by: 
+§1
+.
+
+[28]
+
+Z. Pan, Z. Liang, and R. Xiong
+ (2026)
+
+Two-sided state-space models for sequential recommendation with non-random multimodal review feedback
+.
+
+arXiv preprint arXiv:2609.00165
+.
+
+Cited by: 
+§5
+.
+
+[29]
+
+S. M. Park, K. Georgiev, A. Ilyas, G. Leclerc, and A. Mądry
+ (2023)
+
+TRAK: attributing model behavior at scale
+.
+
+In 
+Proceedings of the 40th International Conference on Machine Learning
+,
+
+pp. 27074–27113
+.
+
+Cited by: 
+Appendix B
+,
+
+§1
+,
+
+§3.3
+,
+
+§4.1
+,
+
+Table 3
+,
+
+Table 3
+,
+
+§5
+.
+
+[30]
+
+T. Poggio and F. Girosi
+ (1990)
+
+Networks for approximation and learning
+.
+
+Proceedings of the IEEE
+ 
+78
+ (
+9
+), 
+pp. 1481–1497
+.
+
+Cited by: 
+§B.4
+.
+
+[31]
+
+G. Pruthi, F. Liu, S. Kale, and M. Sundararajan
+ (2020)
+
+Estimating training data influence by tracing gradient descent
+.
+
+Advances in Neural Information Processing Systems
+ 
+33
+, 
+pp. 19920–19930
+.
+
+Cited by: 
+Appendix B
+,
+
+§4.1
+,
+
+Table 3
+,
+
+Table 3
+,
+
+§5
+.
+
+[32]
+
+K. Sridharan and S. M. Kakade
+ (2008)
+
+An information theoretic framework for multi-view learning
+.
+
+In 
+COLT
+,
+
+pp. 403–414
+.
+
+Cited by: 
+§1
+,
+
+§5
+.
+
+[33]
+
+G. Sun, Y. Bai, X. Yang, Y. Fang, Y. Fu, and Z. Tao
+ (2024)
+
+Aligning out-of-distribution web images and caption semantics via evidential learning
+.
+
+In 
+Proceedings of the ACM Web Conference 2024
+,
+
+pp. 2271–2281
+.
+
+Cited by: 
+§5
+.
+
+[34]
+
+Y. Wang, R. Guerrero, and V. Pavlovic
+ (2023)
+
+D2F2WOD: learning object proposals for weakly-supervised object detection via progressive domain adaptation
+.
+
+In 
+IEEE/CVF Winter Conference on Applications of Computer Vision (WACV)
+,
+
+pp. 22–31
+.
+
+Cited by: 
+§5
+.
+
+[35]
+
+Z. Wang, Z. Wang, J. Fu, X. Qu, Q. Cheng, S. Tang, M. Zhang, and X. Huo
+ (2025)
+
+Slow-fast policy optimization: reposition-before-update for llm reasoning
+.
+
+arXiv preprint arXiv:2510.04072
+.
+
+Cited by: 
+§5
+.
+
+[36]
+
+S. Wu, H. R. Zhang, and C. Ré
+ (2020)
+
+Understanding and improving information transfer in multi-task learning
+.
+
+ICLR
+.
+
+Cited by: 
+§5
+.
+
+[37]
+
+S. Wu, H. Zhang, G. Valiant, and C. Ré
+ (2020)
+
+On the generalization effects of linear transformations in data augmentation
+.
+
+In 
+International conference on machine learning
+,
+
+pp. 10410–10420
+.
+
+Cited by: 
+§5
+.
+
+[38]
+
+M. Xia, S. Malladi, S. Gururangan, S. Arora, and D. Chen
+ (2024)
+
+Less: selecting influential data for targeted instruction tuning
+.
+
+In 
+International Conference on Machine Learning (ICML)
+,
+
+Cited by: 
+Appendix B
+,
+
+§4.1
+.
+
+[39]
+
+S. M. Xie, S. Santurkar, T. Ma, and P. S. Liang
+ (2023)
+
+Data selection for language models via importance resampling
+.
+
+Advances in Neural Information Processing Systems (NeurIPS)
+ 
+36
+, 
+pp. 34201–34227
+.
+
+Cited by: 
+Appendix B
+,
+
+§4.1
+.
+
+[40]
+
+F. Yang, H. R. Zhang, S. Wu, C. Ré, and W. J. Su
+ (2025)
+
+Precise high-dimensional asymptotics for quantifying heterogeneous transfers
+.
+
+Journal of Machine Learning Research (JMLR)
+ 
+26
+ (
+113
+), 
+pp. 1–88
+.
+
+Cited by: 
+§5
+.
+
+[41]
+
+J. Yang, J. Gao, Y. Zhang, X. Chen, and A. Waibel
+ (2001)
+
+An automatic sign recognition and translation system
+.
+
+In 
+Proceedings of the 2001 workshop on Perceptive user interfaces
+,
+
+pp. 1–8
+.
+
+Cited by: 
+§5
+.
+
+[42]
+
+J. Yang, X. Zhu, R. Gross, J. Kominek, Y. Pan, and A. Waibel
+ (1999)
+
+Multimodal people id for a multimedia meeting browser
+.
+
+In 
+Proceedings of the seventh ACM international conference on Multimedia (Part 1)
+,
+
+pp. 159–168
+.
+
+Cited by: 
+§5
+.
+
+[43]
+
+H. R. Zhang, D. Li, and H. Ju
+ (2024)
+
+Noise stability optimization for finding flat minima: a hessian-based regularization approach
+.
+
+Transactions on Machine Learning Research
+.
+
+Cited by: 
+§4.4
+.
+
+[44]
+
+M. Zhang, N. S. Sohoni, H. R. Zhang, C. Finn, and C. Re
+ (2022)
+
+Correct-n-contrast: a contrastive approach for improving robustness to spurious correlations
+.
+
+In 
+Proceedings of the 39th International Conference on Machine Learning
+,
+
+Proceedings of Machine Learning Research
+, Vol. 
+162
+, 
+pp. 26484–26516
+.
+
+Cited by: 
+§1
+.
+
+[45]
+
+Z. Zhang, M. Duan, Y. Ye, and H. R. Zhang
+ (2025)
+
+Scalable multi-objective and meta reinforcement learning via gradient estimation
+.
+
+arXiv preprint arXiv:2511.12779
+.
+
+Cited by: 
+§5
+.
+
+[46]
+
+Z. Zhang, M. Duan, and H. Zhang
+ (2026)
+
+Efficient estimation of kernel surrogate models for task attribution
+.
+
+In 
+International Conference on Learning Representations (ICLR)
+,
+
+Vol. 
+2026
+, 
+pp. 61822–61848
+.
+
+Cited by: 
+§B.4
+,
+
+§1
+,
+
+§1
+,
+
+§3.2
+.
+
+[47]
+
+Z. Zhang, M. Duan, H. Koutsopoulos, and H. R. Zhang
+ (2026)
+
+Learning multimodal embeddings for traffic accident prediction and causal estimation
+.
+
+In 
+Proceedings of the 32nd ACM SIGKDD Conference on Knowledge Discovery and Data Mining V. 1
+,
+
+pp. 2901–2912
+.
+
+Cited by: 
+§1
+,
+
+§1
+,
+
+Figure 3
+,
+
+Figure 3
+,
+
+§4.1
+,
+
+Table 2
+,
+
+Table 2
+.
+
+[48]
+
+Z. Zhang, Z. Zhang, D. Li, L. Wang, J. Dy, and H. R. Zhang
+ (2025)
+
+Linear-time demonstration selection for in-context learning via gradient estimation
+.
+
+In 
+Proceedings of the 2025 Conference on Empirical Methods in Natural Language Processing
+,
+
+pp. 16470–16488
+.
+
+Cited by: 
+§5
+.
+
+[49]
+
+Z. Zhang, Z. Zhang, R. Xiong, G. Cooperman, and H. R. Zhang
+ (2026)
+
+Long-context demonstration selection using state space models
+.
+
+In 
+Findings of the Association for Computational Linguistics: EMNLP 2026
+,
+
+Cited by: 
+§5
+.
+
+[50]
+
+Y. Zhao, T. Wei, J. Zou, X. Ning, Y. Bei, L. Chen, S. Rana, W. H. Yang, H. Tong, and J. He
+ (2026)
+
+PAPERMIND: benchmarking agentic reasoning and critique over scientific papers in multimodal llms
+.
+
+In 
+Findings of the Association for Computational Linguistics: ACL 2026
+,
+
+pp. 10457–10474
+.
+
+Cited by: 
+§5
+.
+
+Appendix A 
+Omitted Materials from Section 
+3
+
+We first introduce the notations.
+Let 
+ denote a training dataset of 
+ samples, where 
+ contains 
+ input modalities and 
+ is the corresponding output. The selection state matrix 
+ specifies which modalities are retained in each sample, and 
+ indicates which samples retain at least one modality under 
+. We write 
+ for the multimodal model with parameters 
+, 
+ for the per-sample loss, and 
+ for the test loss of the model trained under 
+.
+
+The RBF kernels 
+ and 
+, with bandwidths 
+ and 
+, measure similarity in sample participation and within-sample modality selection, respectively. Combining these kernels gives the structured kernel 
+ for two different selections. Let 
+ be the reproducing kernel Hilbert space induced by 
+, we fit a surrogate function 
+ using 
+ sampled combinations of retained samples and modalities. In kernel ridge regression, 
+ is the Gram matrix with entries 
+, 
+ contains the kernel similarity between a query selection state 
+ and the 
+ sampled states, and 
+ controls the ridge regularization.
+
+For a selection state 
+, 
+ denotes the attribution of modality 
+ in sample 
+. These attribution values are used to rank and select sample-modality pairs for downstream model training.
+
+Finally, we use 
+ as the Gram matrix over its nonzero 
+-modality states. The constant 
+ bounds the RKHS norm of the mapping 
+, so that 
+. We use 
+ to denote the error introduced by the first-order approximation.
+
+A.1 
+Proof of Proposition 
+1
+
+Proof.
+
+Since 
+ minimizes the kernel ridge regression objective over
+
+, its objective value cannot exceed that obtained by
+choosing 
+. Thus,
+
+where the last inequality uses the assumption
+
+.
+Thus,
+
+By the triangle inequality, together with 
+ and the assumption 
+, we obtain
+
+Since 
+ are independent, 
+, and
+
+for a sufficiently large universal constant 
+, the operator Bernstein inequality bounds the expected squared error by the empirical squared error and a regularization term. Specifically, with probability at least 
+, simultaneously for every 
+,
+
+Applying this inequality to 
+ and using the bounds above yields
+
+This proves the claim with 
+.
+∎
+
+A.2 
+Positive Semidefiniteness of the Structured Kernel
+
+We use 
+ to measure similarity between different selections and fit a loss predictor through kernel ridge regression. To establish its validity as a kernel, for a sample 
+, let 
+ be the Gram matrix indexed by the nonzero modality states 
+, with entries
+
+Let 
+ denote the all-ones vector.
+
+Proposition 2
+.
+
+The structured design 
+ is positive semidefinite over all sample and modality selections if
+
+Proof.
+
+To analyze the positive semidefiniteness of 
+, we first rewrite 
+ into an equivalent product form over the samples. Since the first term is
+
+and the second term is
+
+we have the alternative formulation of 
+
+Since 
+ is a product over samples, 
+ is positive semidefinite if the factor corresponding to each sample is positive semidefinite. Fix a sample 
+. The 
+-th factor in the product measures the similarity between the modality selections 
+ and 
+ for this sample. Ordering the possible columns with the zero vector first, followed by all nonzero binary vectors, gives the Gram matrix
+
+where 
+ is the all-ones vector and 
+ is indexed by the nonzero columns 
+, with entries
+
+Since 
+ is the Gram matrix of an RBF kernel on distinct points, it is positive definite for 
+. By the Schur complement, the block matrix above is positive semidefinite if and only if
+
+which is equivalent to
+
+Under this condition, the factor corresponding to sample 
+ is positive semidefinite over all possible columns 
+. Since 
+ is a product of these factors, it is also positive semidefinite.
+
+∎
+
+Thus, kernel ridge regression has a unique solution for any finite collection of sampled selections and any positive regularization parameter.
+
+A.3 
+Extensions
+
+Our structured kernel surrogate naturally extends from two modalities to 
+ modalities by defining the global sample-modality selection state as
+
+where 
+ if modality 
+ of sample 
+ is retained, and 
+ otherwise. The column 
+ specifies the modalities retained in sample 
+, and 
+ indicates whether this sample retains at least one modality.
+
+The structured kernel retains the same form as in the two-modality case. The sample-level kernel measures the distance between 
+ and 
+, and the modality-level kernel measures the distance between the corresponding 
+-dimensional states 
+ and 
+. The positive semidefiniteness condition changes only through the local state space. Specifically, 
+ now covers the 
+ nonzero modality states in 
+. The structured kernel is positive semidefinite if
+
+, and 
+
+Under this condition, 
+SKS
+ extends directly to 
+ modalities using the same kernel ridge regression and attribution procedures.
+
+Appendix B 
+Omitted Experimental Details and Results
+
+Models and hyperparameters.
+
+For MultiBench, we use the cross-attention network to fuse the pre-computed modality embeddings provided by the datasets. The hyperparameters are listed in Table 
+4
+.
+For 
+MMTraCE
+, we use a three-layer GNN encoder and an MLP predictor. The vision embedding is fetched by pretrained CLIP and ViT models. We report the hyperparameters in Table 
+5
+.
+
+The models we use for validating the first-order approximation are
+
+Qwen2-VL-2B
+,
+
+Qwen3-VL-8B
+,
+
+Qwen3-VL-30B-A3B
+,
+and 
+Llama-3.2-11B-Vision
+.
+All the experiments are conducted on one NVIDIA RTX A6000 GPU and one NVIDIA B200 GPU. For both 
+MMTraCE
+ and MultiBench, we fit the surrogate model using 
+ pairs of selections and crossponding losses 
+.
+
+Table 4
+: 
+Hyperparameters of the Cross-Attention model.
+
+Hyperparameter
+
+Value
+
+Projection dimension
+
+Number of attention heads
+
+Number of layers
+
+Batch size
+
+Dropout probability
+
+Number of epochs
+
+Learning rate
+
+Optimizer
+
+AdamW
+
+Weight decay
+
+Table 5
+: 
+Hyperparameters of the GNN model used in 
+MMTraCE
+.
+
+Hyperparameter
+
+Value
+
+Number of GNN layers
+
+Number of Classifier layers
+
+Batch size
+
+Hidden dimension
+
+Dropout probability
+
+Number of epochs
+
+Learning rate
+
+Optimizer
+
+AdamW
+
+Weight decay
+
+Since instance-level selections introduce high variance and computational overhead, we design the surrogate sampling at the group level. We partition the training data into 
+ clusters using K-means. To fit the surrogate model, we generate selections by masking each cluster with probability 
+ and compute the loss for each selection. We use 100 selections for each of MMTraCE and MultiBench.
+
+Baselines.
+
+For all baselines, we start with samples containing all available modalities. To evaluate a particular modality in a sample, we replace its input with zeros, keep the remaining modalities of the sample unchanged, and then apply the corresponding baseline method.
+
+Influence functions 
+[
+9
+]
+ estimate how upweighting one masked sample affects the loss of another masked sample. We flatten the modalities across samples into individual training items, treating modality 
+ of sample 
+ (
+) as a separate item with label 
+. We compute the loss gradient for each item and the gradient of the average test loss. Their negative inner product, weighted by the inverse Hessian of the training objective, gives the influence score for that item.
+
+DSIR 
+[
+39
+]
+ estimates an importance weight for 
+ by taking the ratio of its likelihood under the target distribution to its likelihood under the training distribution in a reduced feature space. A larger ratio indicates that 
+ is more representative of the target distribution. We use this weight to rank and select sample-modality pairs under the fixed budget.
+
+TracIn 
+[
+31
+]
+ estimates pairwise influence by accumulating gradient similarity over multiple training checkpoints. Treating each 
+ as an individual training item with label 
+, we compute its loss gradient and the gradient of the average test loss at each saved checkpoint. We then take the inner product between these gradients, weight it by the corresponding learning rate, and sum across checkpoints to obtain the attribution score for 
+. A positive score indicates that training on this item is estimated to reduce the average test loss.
+
+TRAK 
+[
+29
+]
+ estimates how each training item contributes to a target prediction. Treating each 
+ as an individual training item with label 
+, we compute gradients of the log-odds of the correct-class probability at 
+ for both training items and target examples. We randomly project these gradients into a lower-dimensional space and compute their similarity using the inverse Gram matrix of the projected training gradients. Each training item’s score is then weighted by one minus the probability assigned to 
+. Averaging over target examples gives the attribution score for 
+.
+
+BIF 
+[
+10
+]
+ estimates influence through loss covariance over a localized parameter distribution, avoiding the inverse-Hessian computation used by classical influence functions. Starting from 
+, we use stochastic gradient Langevin dynamics to sample model parameters from a local posterior defined by the training loss and a Gaussian prior centered at 
+. At each sampled parameter value 
+, we evaluate 
+ for each individual training item and the average test loss. We compute their negative empirical covariance across parameter draws as the attribution score for 
+. We use the resulting scalar as the attribution score between the two sample-modality pairs.
+
+LESS 
+[
+38
+]
+ estimates influence using optimizer-aware gradient similarity. After a short LoRA warm-up, it records model checkpoints and Adam optimizer states. For the masked candidate and target inputs, LESS computes an Adam-aware update feature for the candidate and a loss gradient for the target, projects both into a shared low-dimensional space, and accumulates their learning-rate-weighted cosine similarity across checkpoints. We use the resulting value as the attribution score between the two sample-modality pairs.
+
+B.1 
+Cross-sample Modality Interaction
+
+We examine pairs of satellite images from MMTraCE to understand how visual information relates to interactions between samples. As shown in Figure 
+4
+, positive interactions are observed when both images contain similar complex road structures, such as dense residential networks, curved or wide roads, and intersections. This shows that they reinforce each other. In contrast, negative interactions occur when the images differ substantially, such as when a dense urban scene is paired with a sparse, low-density, or rural scene. This demonstrates that the latter may weaken the evidence provided by the former.
+
+Figure 4
+: 
+Examples of cross-sample modality interactions on MMTraCE. The top row shows the reference subset, while the middle and bottom rows show satellite images with positive and negative interactions with the reference subset, respectively. Positive interactions generally share similar road structures, and negative interactions exhibit substantially different spatial patterns.
+
+B.2 
+First-order Approximation in Multimodal Models
+
+To evaluate the accuracy of the first-order approximation, we measure the relative mean squared error (MSE) between the output of the real trained model and the approximated output using the validation set:
+
+(4)
+
+Table 
+6
+ reports the approximation error and computational savings on 
+MMTraCE
+, with computational cost measured in FLOPs. Across all six states, the approximation error remains lower than 
+. The linearized objective provides a speedup up to 
+ over exact retraining. These results show that the first-order approximation closely estimates the loss at a substantially lower computational cost.
+
+Table 6
+: 
+First-order approximation error and speedup over exact retraining on MMTraCE. Errors are reported as the mean and standard deviation over three runs.
+
+DE
+
+MA
+
+MD
+
+NV
+
+MT
+
+IA
+
+Relative MSE
+
+Speed up
+
+The complexity of first-order approximation is linear in the size of the model, thus, we apply it to pretrained VLMs to show the scalability. We evaluate the accuracy of this estimation procedure on the multimodal ScienceQA benchmark 
+[
+24
+]
+, with model architectures ranging from 2B to 30B parameters. As shown in Table 
+7
+, the error is less than 
+ on all models.
+
+Table 7
+: 
+First-order approximation error on ScienceQA across pretrained vision-language models ranging from 2B to 30B parameters. Results report the mean and standard deviation of the relative MSE over three runs.
+
+Qwen2-VL-2B
+
+Qwen3-VL-8B
+
+Qwen3-VL-30B-A3B
+
+Llama-3.2-11B-Vision
+
+Relative MSE
+
+B.3 
+Computational Costs
+
+By using the first-order approximation, 
+SKS
+ avoids retraining the multimodal model for each sampled state, allowing the cost of constructing state-loss pairs to scale linearly with the input size. We report the total computational cost, measured in FLOPs, on 
+MMTraCE
+ in Table 
+8
+. Overall, 
+SKS
+ has a FLOP cost comparable to the baselines and is nearly identical to TracIn and LESS across all six tasks.
+
+Table 8
+: 
+Computational cost of 
+SKS
+ and baseline attribution methods on 
+MMTraCE
+, measured by the total number of FLOPs.
+
+Method
+
+DE
+
+MA
+
+MD
+
+NV
+
+MT
+
+IA
+
+Influence functions
+
+DSIR
+
+TracIn
+
+LESS
+
+BIF
+
+SKS
+
+B.4 
+Omitted Ablation Analysis
+
+Choice of the RBF Kernel.
+
+We use the RBF kernel because it provides expressivity for any attribution function theoretically. 
+[
+46
+]
+ show that the Gaussian RBF kernel is strictly positive definite on any finite set of distinct vectors in 
+. This implies that its Gram matrix is of full rank. Therefore, for any function 
+, there exists a kernel mapping that matches 
+ on the input vectors. Classical results 
+[
+30
+]
+ guarantee that on this discrete domain, the RBF kernel can approximate any attribution function without loss of expressivity 
+[
+46
+]
+.
+
+Moreover, the RBF kernel encodes an inductive bias that matches the geometry of the subset space. On 
+, two subsets that differ on only a few coordinates are close in Hamming distance, and intuitively their performances tend to be similar. The RBF kernel directly reflects this structure. By contrast, polynomial kernels do not encode distance-based locality; two subsets with small Hamming distance are not necessarily mapped to nearby points in the feature space.
+
+While we utilize the squared Euclidean distance function within the RBF kernel, the distance measure can be set to other types of measures depending on the application scenario. We conducted an ablation analysis comparing the RBF kernel to using an 
+-Laplacian kernel (
+), and another quadratic kernel. The results are reported in Table 
+9
+, which show that the RBF kernel gives a 
+ average advantage over the other two kernels in LDS scores on the MMTraCE benchmark.
+
+Table 9
+: 
+Ablation study of nonlinear kernel choices on MMTraCE. Each entry reports the mean and standard deviation of the LDS score over three runs.
+
+Kernel
+
+DE
+
+MA
+
+MD
+
+NV
+
+MT
+
+IA
+
+-Laplacian
+
+Quadratic
+
+RBF
+
+Comparing the compositional kernel to a flat kernel design.
+
+For the kernel-structure ablation analysis, the flat kernel vectorizes each sample-modality selection matrix 
+ into a single binary vector and applies one RBF kernel to the entire vector. It treats all sample-modality decisions as flat coordinates and does not distinguish sample-level similarity from modality-level similarity. We fit the same kernel ridge regression surrogate using each kernel and evaluate its LDS. Figure 
+5(a)
+ reports the comparison on AV-MNIST, Humor, and MM-IMDb.
+
+Next, we change which modality is selected under the fixed data budget. In the ablation, we retain all visual data and select the top 
+ of the tabular data according to each attribution method. We train the multimodal model on the resulting data subset and report its test accuracy. Figure 
+5(b)
+ presents the remaining results on Nevada, Montana, and Iowa.
+
+(a)
+ 
+Compositional kernel
+
+(b)
+ 
+Data modality
+
+Figure 5
+: 
+Ablation analysis on MultiBench and 
+MMTraCE
+. Figure 
+5(a)
+ compares the LDS of 
+SKS
+ with that of the flat surrogate kernel on AV-MNIST, Humor, and MM-IMDb. Figure 
+5(b)
+ studies tabular-data selection on Nevada, Montana, and Iowa. We retain all visual data, select the top 
+ of the tabular data using each method, and report the resulting test accuracy.
+
+B.5 
+Discussions
+
+Our current empirical evaluation focuses on standard multimodal fusion models. This establishes a baseline for the efficacy of SKS but bounds our current scope. Investigating the scalability and behavior of SKS on large-scale Vision-Language Models (VLMs) is a promising direction for future research.
+
