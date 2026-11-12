@@ -1,6 +1,6 @@
 # News candidates — 2026-11-12 (IST)
 
-Generated 2026-11-12 07:38 UTC. Showing 205 items first seen in the last 18 h or published in the last 30 h; 198 older items from the 3-day window are only in news.json.
+Generated 2026-11-12 07:47 UTC. Showing 208 items first seen in the last 18 h or published in the last 30 h; 197 older items from the 3-day window are only in news.json.
 Each item appears once, in the first section it matches. Dates are as reported by the source ("date unknown" = page with no date).
 
 ## By priority topic
@@ -16,9 +16,8 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-11 19:04 UTC] Master Human, Bot & Agent Traffic — DataDome — (Google News link; search the headline) · Agents
 - [2026-11-11 10:20 UTC] Meta and OpenAI accounted for 90% of agentic traffic in October – report — Performance Marketing World — (Google News link; search the headline) · Agents
 
-### Crawl (3)
+### Crawl (2)
 - [2026-11-11 15:55 UTC] Google: How Moving to a CDN Can Accidentally Overwhelm Your Website — Search Engine Roundtable — https://www.seroundtable.com/google-search-cdn-42511.html · Crawl
-- [2026-11-10 04:57 UTC] Why Search Crawlers Could Read for Free: The Mechanism of the 'Invisible Compensation' Called Referral — note — https://note.com/trillion_bank/n/nc5cb90e6b134?hl=en · Crawl
 - [2026-11-09 13:11 UTC] llms.txt — learn — https://learn.microsoft.com/en-us/microsoftteams/platform/llms-txt · Crawl
 
 ### Ads (19)
@@ -50,9 +49,9 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-11 20:06 UTC] Ashley Furniture beats Walmart 66.5% to 13.4% in AI Overviews deal answers — PPC Land — https://ppc.land/ashley-furniture-beats-walmart-66-5-to-13-4-in-ai-overviews-deal-answers/ · Citation & source selection, GEO/AEO · +1 other hits
 - [2026-11-11 18:03 UTC] Perplexity Adds Gemini 4 Carbon to Perplexity Computer for Pro and Max — TOKENPOST — (Google News link; search the headline) · GEO/AEO
 - [2026-11-11 15:22 UTC] Google rolls out November 2026 core update as third search algorithm overhaul of the year begins — Tribuna.com — https://tribuna.com/en/casino/news/2026-11-11-google-rolls-out-november-2026-core-update-as-third-search-algorithm-overhaul-of-the-year/ · +1 other hits
-- [2026-11-11 15:06 UTC] Google Begins November 2026 Core Update Before Black Friday — Affiverse — (Google News link; search the headline)
 - [2026-11-11 13:23 UTC] Google’s AI Overviews Face Antitrust Scrutiny — The Regulatory Review — (Google News link; search the headline) · GEO/AEO
 - [2026-11-11 13:19 UTC] AI Visibility Isn’t Just for Enterprises: How Operato AI Helps Small Businesses Track 6 AI Assistant — HackerNoon — https://hackernoon.com/ai-visibility-isnt-just-for-enterprises-how-operato-ai-helps-small-businesses-track-6-ai-assistant · GEO/AEO · +2 other hits
+- [2026-11-11 13:13 UTC] Google November 2026 Core Update Rolling Out: SEO Analysis — PanAsiaBiz — (Google News link; search the headline) · GEO/AEO
 - [2026-11-11 12:32 UTC] Adobe & Google Deepen AI Partnership With AI Mode, Gemini Enterprise & Acrobat Integrations - BT — B&T — (Google News link; search the headline) · GEO/AEO
 - [2026-11-11 10:38 UTC] Google Search Console data got worse (again) — Browser Media — (Google News link; search the headline)
 - [2026-11-11 07:15 UTC] Google's core update may run until three days before Black Friday — PPC Land — https://ppc.land/googles-core-update-may-run-until-three-days-before-black-friday/ · (already listed on an earlier day) · GEO/AEO · +1 other hits
@@ -65,7 +64,7 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-10 08:00 UTC] Google Rolls Out November 2026 Core Update in All Languages — TechJuice — (Google News link; search the headline)
 - [2026-11-09 22:30 UTC] AI for finding seats, you for booking. The difference between AI mode and Gemini in one table — note — https://note.com/holy_sloth8115/n/n0a28448b1fcf?hl=en · GEO/AEO
 
-### Model & lab launches (news search) (56)
+### Model & lab launches (news search) (57)
 - [2026-11-12 07:00 UTC] Alibaba Qwen4-Max-Preview Retires November 25 With No Benchmarks, Model Card or Price — Tech Times — https://www.msn.com/en-us/technology/tech-companies/alibaba-qwen4-max-preview-retires-november-25-with-no-benchmarks-model-card-or-price/ar-AA2hgZgV · +1 other hits
 - [2026-11-12 06:49 UTC] GLM vs Claude, GPT, Gemini, Grok and DeepSeek: How Zhipu’s Open Model Compares — Fello AI — (Google News link; search the headline)
 - [2026-11-12 02:29 UTC] Google enters decision model market, launches Gemini Decision API — 디지털투데이 — (Google News link; search the headline)
@@ -98,6 +97,7 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-11 11:16 UTC] Google releases Gemini Decisions API: a new tool for rapid decision-making (1000 questions in 250 milliseconds) — dev.ua — https://dev.ua/en/news/gemini-decisions-api-1794467027
 - [2026-11-11 11:08 UTC] Grok Bot 1.0 Is Here: Your Questions Answered — basenor — https://www.basenor.com/blogs/news/grok-bot-1-0-is-here-your-questions-answered
 - [2026-11-11 10:56 UTC] xAI Plans Limited Grok 4.8 Rollout for Bot Users This Week — TOKENPOST — (Google News link; search the headline)
+- [2026-11-11 10:37 UTC] OpenAI launches Business Hub in ChatGPT: how it will work — en.ain.ua — (Google News link; search the headline)
 - [2026-11-11 10:23 UTC] Musk Calls Claude Opus 5.5 a Masterpiece, Admits Grok 4.8 Lagging Behind — ForkLog — https://forklog.com/en/musk-calls-claude-opus-5-5-a-masterpiece-admits-grok-4-8-lagging-behind/ · +1 other hits
 - [2026-11-11 10:22 UTC] Anthropic announces Claude Fable 5.2 and Mythos 5.2. They'e already solved black hole physics problems. — Mashable — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-11-11 09:15 UTC] Elon Musk's Grok Build coding agent is leaking a serious amount of confidential data — TechRadar on MSN — https://www.msn.com/en-us/technology/software/elon-musk-s-grok-build-coding-agent-is-leaking-a-serious-amount-of-confidential-data/ar-AA2hfgjj
@@ -119,11 +119,11 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-10 16:00 UTC] Google Releases Gemini Decision 1: Skips Token-by-Token Generation, Evaluates 1,000 Questions in a Single Request — techflowpost — https://www.techflowpost.com/en-US/article/35312
 - [2026-11-10 16:00 UTC] Google enters decision model market with Gemini Decisions API — SiliconANGLE — https://siliconangle.com/2026/11/11/google-enters-the-decision-model-market-with-gemini-decisions-api/ · GEO/AEO
 - [2026-11-10 14:30 UTC] Anthropic Announces 'Claude Fable 5.2' and 'Mythos 5.2'. A Breakdown of Speed, Pricing, and Available Plans — note — https://note.com/haredaisuki888/n/ndf2df321c066?hl=en
-- [2026-11-10 08:35 UTC] OpenAI Launches "Daybreak": To Counter "Claude Mythos" and Secure Software — آي-فون إسلام — (Google News link; search the headline)
 - [2026-11-10 08:00 UTC] OpenAI launches Control Room to stop AI models within 35 seconds for safety. — Pluang — (Google News link; search the headline) · GEO/AEO
 - [2026-11-09 23:19 UTC] Mistral has released a 1 trillion parameter AI for free — note — https://note.com/kinu_0427/n/n682be71cc67f?hl=en
+- [2026-11-09 07:58 UTC] Should You Use Open-Weight AI? Here’s What to Consider. — Built In — https://builtin.com/articles/open-weight-ai
 
-### B2B buyer AI / adoption (9)
+### B2B buyer AI / adoption (10)
 - [2026-11-11 20:06 UTC] The partnership economy's next frontier is B2B influence — AdNews — https://www.adnews.com.au/opinion/the-partnership-economy-s-next-frontier-is-b2b-influence · +1 other hits
 - [2026-11-11 18:22 UTC] Appian's Jake Rank on serious AI: put agents inside the process, measure the outcome, and use a business rule when it's cheaper — iTWire — https://itwire.com/business-it-news/data/appians-jake-rank-on-serious-ai-put-agents-inside-the-process-measure-the-outcome-and-use-a-business-rule-when-its-cheaper · +1 other hits
 - [2026-11-11 16:00 UTC] Skan AI Named a Strong Performer in 2026 Gartner® Peer Insights™ Voice of the Customer for Process Intelligence Platforms — PR Newswire — (Google News link; search the headline)
@@ -132,6 +132,7 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-11 11:56 UTC] B2B teams protect AI spending half of leaders can't measure, ChurnZero finds — MarketScale — (Google News link; search the headline)
 - [2026-11-11 04:13 UTC] Edelman: 84% of B2B buyers use AI on thought leadership — ContentGrip — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-11-11 00:27 UTC] Adobe opens Creative Cloud apps to third-party AI assistants — Computerworld — https://www.computerworld.com/article/4247247/adobe-opens-creative-cloud-apps-to-third-party-ai-assistants.html
+- [2026-11-10 17:02 UTC] AI Overtakes Account-Based Marketing as the Top B2B Budget Priority for 2026 — Demand Gen Report — (Google News link; search the headline)
 - [2026-11-09 20:12 UTC] Why do sales meetings that end with 'I'll consider it' never come back? — note — https://note.com/taku_challenge_2/n/n3e95a9b85684?hl=en
 
 ### Sites with no usable feed (via Google News site: search) (11)
@@ -186,7 +187,9 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-11 17:20 UTC] Your choice: Turn AI answers on or off in Bing — Bing Search Blog — https://blogs.bing.com/search/2026/11/your-choice-turn-ai-answers-on-or-off-in-bing/
 - [2026-11-11 00:00 UTC] Moving to a CDN without overwhelming your origin (or blocking Googlebot) — Google Search Central Blog — https://developers.google.com/search/blog/2026/11/crawling-cdn
 
-### SEO / search press (34)
+### SEO / search press (36)
+- [2026-11-12 07:48 UTC] Nielsen to borrow $1.4bn at 10.5% to pay for DoubleVerify — PPC Land — https://ppc.land/nielsen-to-borrow-1-4bn-at-10-5-to-pay-for-doubleverify/
+- [2026-11-12 07:45 UTC] AWS opens Chile cloud region to select customers, backed by $4bn — PPC Land — https://ppc.land/aws-opens-chile-cloud-region-to-select-customers-backed-by-4bn/
 - [2026-11-12 06:00 UTC] AI Shopping Errors: What To Fix To Help Shoppers Choose Your Products — Search Engine Journal — https://www.searchenginejournal.com/fix-ai-shopping-errors-writesonic-spa/595790/ · Brand/product recommendation
 - [2026-11-12 05:58 UTC] Game: Buyers and sellers still read the same contract differently — PPC Land — https://ppc.land/game-buyers-and-sellers-still-read-the-same-contract-differently/
 - [2026-11-12 05:49 UTC] United bans AI agents from bookings as Brussels targets paid AI picks — PPC Land — https://ppc.land/united-bans-ai-agents-from-bookings-as-brussels-targets-paid-ai-picks/
