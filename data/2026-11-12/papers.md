@@ -1,14 +1,14 @@
 # Paper candidates — 2026-11-12 (IST)
 
-Generated 2026-11-12 01:17 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
-Totals: 0 new topic matches · 0 other new cs.IR · 86 seen in earlier runs.
+Generated 2026-11-12 07:38 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Totals: 0 new topic matches · 0 other new cs.IR · 79 seen in earlier runs.
 Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
 
 ## New papers matching your topics (0), highest score first
 
 ## Other new cs.IR papers, title only (0)
 
-## Already listed on an earlier day, still inside the look-back window (86)
+## Already listed on an earlier day, still inside the look-back window (79)
 - From Tool State to Scientific Action: Auditing Decision Provenance in Biomedical Research Agents — https://arxiv.org/abs/2611.01527 (score 14)
 - Can the Confidence and Decisions of System 1 Models Be Trusted? An Explainability and Perturbation Audit of Jev-Style Decision Models — https://arxiv.org/abs/2611.12521 (score 14)
 - TS-GEAR: Taobao Shangou GEnerative Ad Retrieval — https://arxiv.org/abs/2611.12180 (score 13)
@@ -22,8 +22,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Least-Privilege Auditing of Agent Tool Calls with Intent Graphs and Reasoning-Guided Escalation — https://arxiv.org/abs/2611.11305 (score 9)
 - State Media at Retrieval Time: A Large-Scale Audit of Russian State-Aligned Sources in AI Chatbot Responses — https://arxiv.org/abs/2611.11727 (score 9)
 - Can AI be a 'Researcher Without Borders'? Auditing Bias in AI-Assisted Social Science Research about China and the US — https://arxiv.org/abs/2611.14288 (score 9)
-- Can open citation data detect citation stacking? An audit against Clarivate's journal suppressions — https://arxiv.org/abs/2611.10471 (score 8)
-- Do links to retracted papers predict future retractions? An out-of-sample test on the open biomedical citation graph — https://arxiv.org/abs/2611.10474 (score 8)
 - Hybrid Product Search Without the Copy: Lexical, Semantic and Filtered Retrieval Served Directly from a Data Lake — https://arxiv.org/abs/2611.11031 (score 8)
 - ScrapeBench: Evaluating Legal Compliance of AI Agents in Website Scraping — https://arxiv.org/abs/2611.11306 (score 8)
 - SkillCODER: Towards Auditing and Attribution of Copyright Infringement in LLM Agent Skills — https://arxiv.org/abs/2611.11308 (score 8)
@@ -38,7 +36,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Auditing LLM Pseudo-Label Distillation for Review Informativeness at E-Commerce Scale — https://arxiv.org/abs/2611.13797 (score 8)
 - Agents of Chaos: A Systematization of Knowledge (SoK) on Malicious Attacks on Agentic AI Systems — https://arxiv.org/abs/2611.10843 (score 7)
 - PARIS: A multi-agent LLM framework for end-to-end, PRISMA-guided systematic literature reviews with pre-synthesis corpus quality assessment — https://arxiv.org/abs/2611.12222 (score 7)
-- When Experience Becomes a Backdoor: Poisoning Self-Evolving LLM Agents via Failure-Aware Task Optimization — https://arxiv.org/abs/2611.10542 (score 6)
 - On the Relative Security of Prompt Injection: Mechanised Definitions, Defences and Verdicts for LLM Agents — https://arxiv.org/abs/2611.11506 (score 6)
 - Kimodo-Policy: Learning Kinematic Action Models for Humanoid Loco-Manipulation — https://arxiv.org/abs/2611.11554 (score 6)
 - Treating the Model as an Untrusted Component: Deterministic Policy Enforcement, Human Approval and Taint Tracking Against Prompt Injection in Tool-Using Agents, with Validation on Open-Weights Models — https://arxiv.org/abs/2611.11571 (score 6)
@@ -61,7 +58,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Exploiting Feature-invariant Scaling Laws for Efficient A/B Experimentation in Recommendation Systems — https://arxiv.org/abs/2611.13539 (score 4)
 - INTENT: Out-of-Sample, Out-of-Time, and Cold-Start Evaluation on User Event Sequences — https://arxiv.org/abs/2611.13069 (score 3)
 - Lightfoot: Graph Retrieval-Augmented Generation with Exact, Model-Free Document Deletion — https://arxiv.org/abs/2611.11010 (score 2)
-- Yuanbao-Reranker: Document-Grounded Synthesis and Preference Distillation for Text Reranking — https://arxiv.org/abs/2611.10405 (score 1)
 - Activation-Guided Graph Retrieval for Cognitive Memory Reconstruction in Language Model Systems — https://arxiv.org/abs/2611.13127 (score 1)
 - Controlled Knowledge Engineering for Taxonomy Induction with Tool-Grounded LLM Agents and Runtime-Adaptive Policies — https://arxiv.org/abs/2611.13966 (score 1)
 - Data Quality Challenges in Multimodal Tourism Recommender Systems — https://arxiv.org/abs/2611.13972 (score 1)
