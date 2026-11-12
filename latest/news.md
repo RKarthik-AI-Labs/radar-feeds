@@ -1,6 +1,6 @@
 # News candidates — 2026-11-12 (IST)
 
-Generated 2026-11-12 07:47 UTC. Showing 208 items first seen in the last 18 h or published in the last 30 h; 197 older items from the 3-day window are only in news.json.
+Generated 2026-11-12 08:23 UTC. Showing 209 items first seen in the last 18 h or published in the last 30 h; 189 older items from the 3-day window are only in news.json.
 Each item appears once, in the first section it matches. Dates are as reported by the source ("date unknown" = page with no date).
 
 ## By priority topic
@@ -20,7 +20,8 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-11 15:55 UTC] Google: How Moving to a CDN Can Accidentally Overwhelm Your Website — Search Engine Roundtable — https://www.seroundtable.com/google-search-cdn-42511.html · Crawl
 - [2026-11-09 13:11 UTC] llms.txt — learn — https://learn.microsoft.com/en-us/microsoftteams/platform/llms-txt · Crawl
 
-### Ads (19)
+### Ads (20)
+- [2026-11-12 08:07 UTC] OpenAI expands ChatGPT Ads to 44 countries via Aleph — Australia — (Google News link; search the headline) · Ads
 - [2026-11-12 06:09 UTC] AI labels won't save public figure impersonators from Google Ads suspension — PPC Land — https://ppc.land/ai-labels-wont-save-public-figure-impersonators-from-google-ads-suspension/ · Ads
 - [2026-11-12 06:05 UTC] Bing's AI-off switch for Chrome also makes Bing the default search engine — PPC Land — https://ppc.land/bings-ai-off-switch-for-chrome-also-makes-bing-the-default-search-engine/ · Ads
 - [2026-11-12 06:03 UTC] OpenAI names Aleph exclusive ChatGPT Ads reseller across 44 global markets — Adgully — https://www.adgully.com/post/23694/openai-names-aleph-exclusive-chatgpt-ads-reseller-across-44-global-markets · Ads, Brand/product recommendation · +1 other hits
@@ -41,7 +42,7 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-10 19:08 UTC] Google Ads Now Runs In AI Mode Across 10 More Countries via @sejournal, @brookeosmundson — Search Engine Journal — https://www.searchenginejournal.com/google-expands-ads-in-ai-mode-multiturn-ads/596540/ · GEO/AEO, Ads
 - [2026-11-10 19:08 UTC] Google Ads Now Runs In AI Mode Across 10 More Countries — Search Engine Journal — (Google News link; search the headline) · Ads, GEO/AEO · +1 other hits
 
-### Search / AEO / GEO (21)
+### Search / AEO / GEO (20)
 - [2026-11-12 07:26 UTC] Claude SEO Guide, Commands and AI Search Visibility — Pasquale Pillitteri — (Google News link; search the headline) · GEO/AEO
 - [2026-11-12 06:38 UTC] november 2026 core update launched by google globally — NewzTodays — (Google News link; search the headline)
 - [2026-11-12 01:15 UTC] Google Placing Source Icons At Bottom Of AI Overviews — Search Engine Roundtable — https://www.seroundtable.com/google-ai-overview-source-icons-bottom-42519.html · Citation & source selection, GEO/AEO · +2 other hits
@@ -61,13 +62,18 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-11 05:14 UTC] Google Brings Gemini 4 Carbon To AI Mode In Search: All Details — Free Press Journal — (Google News link; search the headline) · GEO/AEO
 - [2026-11-10 21:13 UTC] Google Adds Home Services Booking to AI Mode Through Software Partners — 1851 Franchise — (Google News link; search the headline) · GEO/AEO
 - [2026-11-10 17:45 UTC] ChatGPT Search Data Now Visible (November 2026) — note — https://note.com/piftee/n/n05e0be63f2c4?hl=en · GEO/AEO
-- [2026-11-10 08:00 UTC] Google Rolls Out November 2026 Core Update in All Languages — TechJuice — (Google News link; search the headline)
 - [2026-11-09 22:30 UTC] AI for finding seats, you for booking. The difference between AI mode and Gemini in one table — note — https://note.com/holy_sloth8115/n/n0a28448b1fcf?hl=en · GEO/AEO
 
 ### Model & lab launches (news search) (57)
+- [2026-11-12 08:15 UTC] Musk Calls Claude Opus 5.5 a 'Masterpiece', Admits Grok 4.8 Falls Short — OpenTools — (Google News link; search the headline)
+- [2026-11-12 08:02 UTC] OpenAI Launches API Inference Residency in India — analyticsindiamag.com — (Google News link; search the headline)
 - [2026-11-12 07:00 UTC] Alibaba Qwen4-Max-Preview Retires November 25 With No Benchmarks, Model Card or Price — Tech Times — https://www.msn.com/en-us/technology/tech-companies/alibaba-qwen4-max-preview-retires-november-25-with-no-benchmarks-model-card-or-price/ar-AA2hgZgV · +1 other hits
 - [2026-11-12 06:49 UTC] GLM vs Claude, GPT, Gemini, Grok and DeepSeek: How Zhipu’s Open Model Compares — Fello AI — (Google News link; search the headline)
-- [2026-11-12 02:29 UTC] Google enters decision model market, launches Gemini Decision API — 디지털투데이 — (Google News link; search the headline)
+- [2026-11-12 03:00 UTC] Google expands Gemini ecosystem with faster, lower-cost decision-making API — ET CIO — (Google News link; search the headline)
+- [2026-11-12 01:50 UTC] Anthropic Launches AI Office Suite: Next-Generation Intelligent Productivity Tool for Modern Workflows — 36Kr — (Google News link; search the headline)
+- [2026-11-12 00:20 UTC] Google launches Gemini Decisions API for faster AI responses — indianbroadcastingworld — https://www.indianbroadcastingworld.com/google-launches-gemini-decisions/
+- [2026-11-12 00:16 UTC] Today's Generative AI News with Lisa (November 12) — note — https://note.com/lisalisa7/n/nc9dc10746e41?hl=en
+- [2026-11-12 00:00 UTC] Google Unveils Gemini Robotics 2.5, Reports Robots Attain 96% Success Rate — RS Web Solutions — https://www.rswebsols.com/news/google-unveils-gemini-robotics-2-5-reports-robots-attain-96-success-rate/
 - [2026-11-11 23:24 UTC] OpenAI introduces local AI processing for businesses in India — Best Media Info — https://bestmediainfo.com/mediainfo/mediainfo-digital/openai-introduces-local-ai-processing-for-businesses-in-india-12803196
 - [2026-11-11 23:22 UTC] AI Tech Morning Paper November 12, 2026 (Thu) | Google launches dedicated API for AI 'judgment' / OpenAI, mechanism to stop AI under research in 35 seconds / Government ... — note — https://note.com/jsn525/n/n8638e14e5586?hl=en
 - [2026-11-11 22:53 UTC] After Gemini 4 Carbon, Google may be launching a Hydrogen model — India Today — https://www.indiatoday.in/technology/news/story/after-gemini-4-carbon-google-may-be-launching-a-hydrogen-model-3037253-2026-11-12 · GEO/AEO
@@ -91,7 +97,6 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-11 15:16 UTC] Anthropic Launches "Claude Meetings," Whiteboards, and Sheets in Major Push into Workplace Software Suites — OODA Loop — (Google News link; search the headline)
 - [2026-11-11 15:05 UTC] Mistral Large 4: Europe’s answer to closed frontier AI models — IO+ — (Google News link; search the headline) · GEO/AEO
 - [2026-11-11 13:34 UTC] Anthropic's new Claude product drop just sent a message to these 3 tech stocks — Yahoo Finance — (Google News link; search the headline)
-- [2026-11-11 13:21 UTC] Google Launches Gemini Decisions API With Gemini Decision 1 at $0.10/M Tokens — MarkTechPost — https://www.marktechpost.com/2026/11/11/google-gemini-decisions-api-gemini-decision-1/
 - [2026-11-11 13:06 UTC] DeepSeek, 5 China AI Rivals Run at $11B; Anthropic at $81B — FourWeekMBA — (Google News link; search the headline)
 - [2026-11-11 12:58 UTC] xAI Faces Multiple Lawsuits Over Grok's Role in Child Pornography Cases — kucoin — https://www.kucoin.com/news/flash/xai-faces-multiple-lawsuits-over-grok-s-role-in-child-pornography-cases
 - [2026-11-11 11:16 UTC] Google releases Gemini Decisions API: a new tool for rapid decision-making (1000 questions in 250 milliseconds) — dev.ua — https://dev.ua/en/news/gemini-decisions-api-1794467027
@@ -111,19 +116,14 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-11 05:11 UTC] Musk calls Claude Opus 5.5 a masterpiece, says Grok 4.8 will not beat it — 디지털투데이 — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-11-11 04:25 UTC] Alibaba's Qwen4-Max Preview Launches Abruptly, Targeting Complex Coding and Professional Software Operations — BigGo Finance — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-11-11 04:13 UTC] Microsoft stock fell after Anthropic launches Claude Sheets to rival Excel — International Business Times on MSN — https://www.msn.com/en-us/news/other/microsoft-stock-fell-after-anthropic-launches-claude-sheets-to-rival-excel/ar-AA2hcJAp
-- [2026-11-11 02:15 UTC] MIDM K 3.0 Pro vs DeepSeek V4.1 Pro: A Name, Not a Model — OrcaRouter — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-11-11 01:50 UTC] OpenAI launches ChatGPT Business Hub for companies — Australia — (Google News link; search the headline)
 - [2026-11-11 01:07 UTC] Introducing Kimi K3.1 Pro on Amazon Bedrock | Amazon Web Services — Amazon Web Services (AWS) — (Google News link; search the headline)
-- [2026-11-10 19:30 UTC] The Qwen4-Max preview has begun, and access is now open — note — https://note.com/noptium/n/n390fb4e05b82?hl=en
 - [2026-11-10 19:12 UTC] Anthropic launches Claude Sheets and Claude Whiteboards in beta — Crypto Briefing — https://cryptobriefing.com/anthropic-launches-claude-sheets-whiteboards-beta/
-- [2026-11-10 16:00 UTC] Google Releases Gemini Decision 1: Skips Token-by-Token Generation, Evaluates 1,000 Questions in a Single Request — techflowpost — https://www.techflowpost.com/en-US/article/35312
 - [2026-11-10 16:00 UTC] Google enters decision model market with Gemini Decisions API — SiliconANGLE — https://siliconangle.com/2026/11/11/google-enters-the-decision-model-market-with-gemini-decisions-api/ · GEO/AEO
 - [2026-11-10 14:30 UTC] Anthropic Announces 'Claude Fable 5.2' and 'Mythos 5.2'. A Breakdown of Speed, Pricing, and Available Plans — note — https://note.com/haredaisuki888/n/ndf2df321c066?hl=en
-- [2026-11-10 08:00 UTC] OpenAI launches Control Room to stop AI models within 35 seconds for safety. — Pluang — (Google News link; search the headline) · GEO/AEO
 - [2026-11-09 23:19 UTC] Mistral has released a 1 trillion parameter AI for free — note — https://note.com/kinu_0427/n/n682be71cc67f?hl=en
-- [2026-11-09 07:58 UTC] Should You Use Open-Weight AI? Here’s What to Consider. — Built In — https://builtin.com/articles/open-weight-ai
 
-### B2B buyer AI / adoption (10)
+### B2B buyer AI / adoption (9)
 - [2026-11-11 20:06 UTC] The partnership economy's next frontier is B2B influence — AdNews — https://www.adnews.com.au/opinion/the-partnership-economy-s-next-frontier-is-b2b-influence · +1 other hits
 - [2026-11-11 18:22 UTC] Appian's Jake Rank on serious AI: put agents inside the process, measure the outcome, and use a business rule when it's cheaper — iTWire — https://itwire.com/business-it-news/data/appians-jake-rank-on-serious-ai-put-agents-inside-the-process-measure-the-outcome-and-use-a-business-rule-when-its-cheaper · +1 other hits
 - [2026-11-11 16:00 UTC] Skan AI Named a Strong Performer in 2026 Gartner® Peer Insights™ Voice of the Customer for Process Intelligence Platforms — PR Newswire — (Google News link; search the headline)
@@ -132,7 +132,6 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-11 11:56 UTC] B2B teams protect AI spending half of leaders can't measure, ChurnZero finds — MarketScale — (Google News link; search the headline)
 - [2026-11-11 04:13 UTC] Edelman: 84% of B2B buyers use AI on thought leadership — ContentGrip — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-11-11 00:27 UTC] Adobe opens Creative Cloud apps to third-party AI assistants — Computerworld — https://www.computerworld.com/article/4247247/adobe-opens-creative-cloud-apps-to-third-party-ai-assistants.html
-- [2026-11-10 17:02 UTC] AI Overtakes Account-Based Marketing as the Top B2B Budget Priority for 2026 — Demand Gen Report — (Google News link; search the headline)
 - [2026-11-09 20:12 UTC] Why do sales meetings that end with 'I'll consider it' never come back? — note — https://note.com/taku_challenge_2/n/n3e95a9b85684?hl=en
 
 ### Sites with no usable feed (via Google News site: search) (11)
@@ -187,7 +186,9 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-11 17:20 UTC] Your choice: Turn AI answers on or off in Bing — Bing Search Blog — https://blogs.bing.com/search/2026/11/your-choice-turn-ai-answers-on-or-off-in-bing/
 - [2026-11-11 00:00 UTC] Moving to a CDN without overwhelming your origin (or blocking Googlebot) — Google Search Central Blog — https://developers.google.com/search/blog/2026/11/crawling-cdn
 
-### SEO / search press (36)
+### SEO / search press (38)
+- [2026-11-12 07:57 UTC] Google's Gemini can now use food and ride apps for people in 3 more countries — PPC Land — https://ppc.land/googles-gemini-can-now-use-food-and-ride-apps-for-people-in-3-more-countries/
+- [2026-11-12 07:52 UTC] Google says CDN bot blocks can drop products from Shopping and ads — PPC Land — https://ppc.land/google-says-cdn-bot-blocks-can-drop-products-from-shopping-and-ads/ · Brand/product recommendation
 - [2026-11-12 07:48 UTC] Nielsen to borrow $1.4bn at 10.5% to pay for DoubleVerify — PPC Land — https://ppc.land/nielsen-to-borrow-1-4bn-at-10-5-to-pay-for-doubleverify/
 - [2026-11-12 07:45 UTC] AWS opens Chile cloud region to select customers, backed by $4bn — PPC Land — https://ppc.land/aws-opens-chile-cloud-region-to-select-customers-backed-by-4bn/
 - [2026-11-12 06:00 UTC] AI Shopping Errors: What To Fix To Help Shoppers Choose Your Products — Search Engine Journal — https://www.searchenginejournal.com/fix-ai-shopping-errors-writesonic-spa/595790/ · Brand/product recommendation
