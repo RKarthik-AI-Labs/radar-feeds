@@ -1,14 +1,14 @@
 # Paper candidates — 2026-11-12 (IST)
 
-Generated 2026-11-12 08:23 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
-Totals: 0 new topic matches · 0 other new cs.IR · 79 seen in earlier runs.
+Generated 2026-11-12 08:46 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Totals: 0 new topic matches · 0 other new cs.IR · 78 seen in earlier runs.
 Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
 
 ## New papers matching your topics (0), highest score first
 
 ## Other new cs.IR papers, title only (0)
 
-## Already listed on an earlier day, still inside the look-back window (79)
+## Already listed on an earlier day, still inside the look-back window (78)
 - From Tool State to Scientific Action: Auditing Decision Provenance in Biomedical Research Agents — https://arxiv.org/abs/2611.01527 (score 14)
 - Can the Confidence and Decisions of System 1 Models Be Trusted? An Explainability and Perturbation Audit of Jev-Style Decision Models — https://arxiv.org/abs/2611.12521 (score 14)
 - TS-GEAR: Taobao Shangou GEnerative Ad Retrieval — https://arxiv.org/abs/2611.12180 (score 13)
