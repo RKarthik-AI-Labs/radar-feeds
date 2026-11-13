@@ -1,6 +1,6 @@
 # News candidates — 2026-11-13 (IST)
 
-Generated 2026-11-13 07:09 UTC. Showing 294 items first seen in the last 18 h or published in the last 30 h; 134 older items from the 3-day window are only in news.json.
+Generated 2026-11-13 07:25 UTC. Showing 291 items first seen in the last 18 h or published in the last 30 h; 133 older items from the 3-day window are only in news.json.
 Each item appears once, in the first section it matches. Dates are as reported by the source ("date unknown" = page with no date).
 
 ## By priority topic
@@ -15,17 +15,16 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-12 16:45 UTC] On matters of agentic traffic and declining human readership across the open internet — https://www.thecurrent.com/ — (Google News link; search the headline) · Agents
 - [2026-11-12 13:06 UTC] a16z says firms must court AI agents as agent traffic grows 8x in two months — PPC Land — https://ppc.land/a16z-says-firms-must-court-ai-agents-as-agent-traffic-grows-8x-in-two-months/ · Agents · +2 other hits
 
-### Crawl (3)
+### Crawl (2)
 - [2026-11-12 13:37 UTC] Google ad tags gain full IPs on January 11 unless sGTM owners build a fix — PPC Land — https://ppc.land/google-ad-tags-gain-full-ips-on-january-11-unless-sgtm-owners-build-a-fix-2/ · Crawl · +1 other hits
-- [2026-11-11 16:00 UTC] 【都道府県・政令市・府省庁の公式サイト114件を調査】98.1%はrobots.txtにAIクローラーの記載なし。名指ししていたのは2サイト、llms ... — PR TIMES — https://prtimes.jp/main/html/rd/p/000000254.000137731.html · Crawl
 - [2026-11-11 14:57 UTC] THE IMPORTANCE OF MAKING YOUR WEBSITE ACCESSIBLE FOR AI CRAWLERS — HME News — (Google News link; search the headline) · Crawl
 
-### Ads (34)
+### Ads (33)
 - [2026-11-13 06:23 UTC] Jensen Huang quits Nvidia as Google gives every searcher Gemini 4 Hydrogen — PPC Land — https://ppc.land/jensen-huang-quits-nvidia-as-google-gives-every-searcher-gemini-4-hydrogen/ · Ads
 - [2026-11-13 04:09 UTC] 10 best ChatGPT Ads agencies for international brands — Kingy AI — (Google News link; search the headline) · Ads, Brand/product recommendation
 - [2026-11-13 03:45 UTC] OpenAI increases its ChatGPT Ads presence in 44 countries through an exclusive reseller partnership with Aleph — StreetInsider — https://thepeninsulaqatar.com/article/12/11/2026/openai-increases-its-chatgpt-ads-presence-in-44-countries-through-an-exclusive-reseller-partnership-with-aleph · Ads, Brand/product recommendation · +1 other hits
 - [2026-11-13 00:30 UTC] OpenAI taps Aleph as exclusive ChatGPT Ads reseller across 44 markets — Mi-3.com.au. — (Google News link; search the headline) · Ads
-- [2026-11-12 23:14 UTC] AI News Summary 11/13 | ChatGPT Ads Report Card, MAGP ETF, and More — note — https://note.com/believe_diary/n/nbb1dea7c6ccc?hl=en · Ads
+- [2026-11-12 23:28 UTC] AI News Summary 11/13 | ChatGPT Ads Report Card, MAGP ETF, and More — note — https://note.com/believe_diary/n/nbb1dea7c6ccc?hl=en · Ads
 - [2026-11-12 21:38 UTC] Amazon advertisers will lose unmigrated reports on January 31, 2027 — PPC Land — https://ppc.land/amazon-advertisers-will-lose-unmigrated-reports-on-january-31-2027/ · Ads
 - [2026-11-12 21:24 UTC] Zeta Global raises 2026 revenue forecast to $1.855bn after 46% Q3 jump — PPC Land — https://ppc.land/zeta-global-raises-2026-revenue-forecast-to-1-855bn-after-46-q3-jump/ · Ads
 - [2026-11-12 21:21 UTC] ProSiebenSat.1 TV ad revenue drops 13% in the third quarter — PPC Land — https://ppc.land/prosiebensat-1-tv-ad-revenue-drops-13-in-the-third-quarter/ · Ads
@@ -33,7 +32,7 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-12 21:01 UTC] Google Ads Rolls Out New Invalid Traffic Overview Card via @sejournal, @brookeosmundson — Search Engine Journal — https://www.searchenginejournal.com/google-ads-rolls-out-new-invalid-traffic-overview-card/597098/ · Ads
 - [2026-11-12 20:22 UTC] Google Ads now shows how much invalid traffic advertisers did not pay for — PPC Land — https://ppc.land/google-ads-now-shows-how-much-invalid-traffic-advertisers-did-not-pay-for/ · Ads
 - [2026-11-12 19:26 UTC] Samsung's Gemini glasses go on sale December 10, from $395 in the US — PPC Land — https://ppc.land/samsungs-gemini-glasses-go-on-sale-december-10-from-395-in-the-us/ · Ads
-- [2026-11-12 18:38 UTC] ChatGPT Ads adds Target CPA and CPC bidding, expands product campaign controls — Search Engine Land — (Google News link; search the headline) · Ads · +1 other hits
+- [2026-11-12 18:38 UTC] ChatGPT Ads adds Target CPA and CPC bidding, expands product campaign controls — Search Engine Land — https://searchengineland.com/chatgpt-ads-adds-target-cpa-and-cpc-bidding-expands-product-campaign-controls-501868 · Ads · +2 other hits
 - [2026-11-12 17:45 UTC] Microsoft Advertising Updates UI Following Advertiser Feedback via @sejournal, @brookeosmundson — Search Engine Journal — https://www.searchenginejournal.com/microsoft-advertising-updates-ui-following-advertiser-feedback/597078/ · Ads
 - [2026-11-12 16:38 UTC] OpenAI ChatGPT Ads Updates With Intelligent Bidding, New Cost Targets, Geo-Flexibility & Product Set Filters — Search Engine Roundtable — (Google News link; search the headline) · Ads, GEO/AEO
 - [2026-11-12 13:57 UTC] Google AI Mode gains local retailer ads after Search growth slows to 12% — PPC Land — https://ppc.land/google-ai-mode-gains-local-retailer-ads-after-search-growth-slows-to-12/ · Ads, GEO/AEO · +2 other hits
@@ -50,16 +49,15 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-12 06:09 UTC] AI labels won't save public figure impersonators from Google Ads suspension — PPC Land — https://ppc.land/ai-labels-wont-save-public-figure-impersonators-from-google-ads-suspension/ · (already listed on an earlier day) · Ads
 - [2026-11-12 06:05 UTC] Bing's AI-off switch for Chrome also makes Bing the default search engine — PPC Land — https://ppc.land/bings-ai-off-switch-for-chrome-also-makes-bing-the-default-search-engine/ · (already listed on an earlier day) · Ads
 - [2026-11-12 05:53 UTC] OpenAI expands ChatGPT Ads to 44 markets through exclusive reseller partnership with Aleph — MediaNews4U — (Google News link; search the headline) · (already listed on an earlier day) · Ads
-- [2026-11-12 05:22 UTC] OpenAI expands ChatGPT Ads reach to Cyprus in 44-country Aleph deal — Cyprus Mail — https://cyprus-mail.com/2026/11/12/openai-expands-chatgpt-ads-reach-to-cyprus-in-44-country-aleph-deal · Ads, Brand/product recommendation
 - [2026-11-12 01:35 UTC] BlueMedia Launches ChatGPT Ads Partnership for Chinese Brands — Unite.AI — https://www.unite.ai/bluemedia-launches-chatgpt-ads-partnership-for-chinese-brands/ · Ads, Brand/product recommendation
 - [2026-11-12 01:09 UTC] From AI Native Advertising to Marketing System Delivery: BlueMedia launches partnership with ChatGPT Ads — Yahoo Finance — https://finance.yahoo.com/media-advertising/articles/ai-native-advertising-marketing-system-090900872.html · Ads, Brand/product recommendation
 - [2026-11-11 21:05 UTC] ChatGPT Ads are live in South Africa, but that’s not the real Story — The Media Online — https://themediaonline.co.za/2026/11/chatgpt-ads-are-live-in-south-africa-but-thats-not-the-real-story/ · Ads, Brand/product recommendation
 - [2026-11-10 17:08 UTC] 【AI Daily Digest】AI response surfaces are expanding with ads and mentions, but in Japan, the current stage is to measure 'how each AI perceives' your company (11/11) — note — https://note.com/aidl/n/ne4bda1ed9862?hl=en · Ads, GEO/AEO
 
-### Search / AEO / GEO (34)
+### Search / AEO / GEO (33)
 - [2026-11-13 07:07 UTC] Perplexity showed shoppers risky store sites in 15% of answers, ChatGPT in 8% — Martin Cid Magazine — (Google News link; search the headline) · GEO/AEO
+- [2026-11-13 06:08 UTC] Media Anchored Launches Guaranteed PR and AI Search Visibility Programs for Founders and Brands — Digital Journal — https://www.theglobeandmail.com/investing/markets/markets-news/NewsFile/8813045/media-anchored-launches-guaranteed-pr-and-ai-search-visibility-programs-for-founders-and-brands/ · Brand/product recommendation, GEO/AEO · +1 other hits
 - [2026-11-13 04:04 UTC] Top 10 best GEO agencies for AI search visibility in 2026 — Kingy AI — (Google News link; search the headline) · GEO/AEO
-- [2026-11-13 03:35 UTC] Media Anchored Launches Guaranteed PR and AI Search Visibility Programs for Founders and Brands — The National Law Review — https://www.theglobeandmail.com/investing/markets/markets-news/NewsFile/8813045/media-anchored-launches-guaranteed-pr-and-ai-search-visibility-programs-for-founders-and-brands/ · Brand/product recommendation, GEO/AEO · +1 other hits
 - [2026-11-13 01:47 UTC] Gemini 4 Hydrogen Now Powers AI Mode in Google Search for All Users — AndroidPure — (Google News link; search the headline) · GEO/AEO
 - [2026-11-12 22:00 UTC] Google Brings Gemini 4 Hydrogen to Search AI Mode in Global Rollout — www.tokenpost.com — (Google News link; search the headline) · GEO/AEO
 - [2026-11-12 21:13 UTC] Google explains why analytics won't match Search Console click counts — PPC Land — https://ppc.land/google-explains-why-analytics-wont-match-search-console-click-counts/ · +1 other hits
@@ -69,7 +67,7 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-12 19:15 UTC] Chrome’s upcoming Search Journeys feature could bring Google AI Overviews back to your side panel — PiunikaWeb — (Google News link; search the headline) · GEO/AEO
 - [2026-11-12 17:05 UTC] Reddit's AI Paradox: Site Fuels Chatbots While Google's AI Overviews Drain Its Search Traffic — BigGo Finance — (Google News link; search the headline) · GEO/AEO
 - [2026-11-12 16:07 UTC] Reddit Sinks 6% as Traffic Falls 13% on Google’s AI Overviews: “Not Traffic Drivers” — TIKR.com — https://finance.yahoo.com/markets/stocks/articles/reddit-sinks-6-traffic-falls-151135405.html · GEO/AEO · +1 other hits
-- [2026-11-12 15:00 UTC] Are we chasing AI visibility at the expense of business results? — Search Engine Land — https://searchengineland.com/are-we-chasing-ai-visibility-at-the-expense-of-business-results-501382 · +1 other hits
+- [2026-11-12 15:00 UTC] Are we chasing AI visibility at the expense of business results? — Search Engine Land — (Google News link; search the headline)
 - [2026-11-12 13:19 UTC] Fusion Vine Expands White Label Offerings With AEO and GEO Services — The Palm Beach Post — https://www.palmbeachpost.com/press-release/story/263922/fusion-vine-expands-white-label-offerings-with-aeo-and-geo-services/ · GEO/AEO
 - [2026-11-12 13:06 UTC] Reddit's traffic falls 13% as Google's AI Overviews cut search referrals, Similarweb says — MLQ.ai — (Google News link; search the headline) · GEO/AEO
 - [2026-11-12 13:00 UTC] Why A Dashboard Cannot Define Your Brand’s AI Visibility Strategy — Search Engine Journal — (Google News link; search the headline) · Brand/product recommendation
@@ -87,12 +85,12 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-12 07:00 UTC] More than 170 GEO and AI SEO Agencies in 40+ Countries Now Partner With OtterlyAI — Yahoo Finance — https://finance.yahoo.com/technology/ai/articles/more-170-geo-ai-seo-150000177.html · GEO/AEO
 - [2026-11-12 06:38 UTC] november 2026 core update launched by google globally — NewzTodays — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-11-12 04:00 UTC] Your Next Customer May Never Visit Google. Here’s What Every Business Owner Needs to Do Now — Inc.com — https://www.inc.com/michael-tasner/openai-business-hub-chatgpt-profile-ai-visibility/91434674 · GEO/AEO
-- [2026-11-12 01:15 UTC] Google Placing Source Icons At Bottom Of AI Overviews — Search Engine Roundtable — https://www.seroundtable.com/google-ai-overview-source-icons-bottom-42519.html · (already listed on an earlier day) · Citation & source selection, GEO/AEO · +1 other hits
 - [2026-11-11 16:51 UTC] AI Search Visibility & Credibility Building for B2B Experts: Guide Released — FinancialContent — (Google News link; search the headline) · GEO/AEO · +1 other hits
 - [2026-11-11 03:09 UTC] [Breaking News: $0 Cost] The ChatGPT version of "Search Console" has arrived | What you can and cannot do with "Business Hub," which shows how many times your company name has ... — note — https://note.com/gay_swan7844/n/nca6dd4cf539f?hl=en
 - [2026-11-11 02:03 UTC] ChatGPT Search Volume is About 20% of Google's—How to Interpret OpenAI's Announcement (Definitions, Undisclosed Data, Referral Traffic) — note — https://note.com/j_grip/n/n1e29962dd802?hl=en · GEO/AEO, Clicks & measurement
 
 ### Model & lab launches (news search) (57)
+- [2026-11-13 07:04 UTC] Grok 5 Release Date: Is It Out? What xAI Has Confirmed — Kingy AI — (Google News link; search the headline)
 - [2026-11-13 05:14 UTC] DeepSeek V4.1 Pro Adalah Fixture Pengujian dalam Agen Pengodean — OrcaRouter — (Google News link; search the headline)
 - [2026-11-13 04:34 UTC] Google Launches Gemini 4 Hydrogen for Search, Coding and Everyday AI — Kingy AI — (Google News link; search the headline)
 - [2026-11-13 04:04 UTC] OpenAI launches Daybreak security tools as nonprofits seek court order to halt advanced AI development — news.lavx.hu — (Google News link; search the headline)
@@ -102,8 +100,8 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-13 00:14 UTC] Anthropic launches Claude for Manufacturing, a plugin that drafts quotes and quality reports from Infor, NetSuite and Autodesk data — MLQ.ai — (Google News link; search the headline)
 - [2026-11-12 23:29 UTC] Meta Releases Muse Ember 1.0, a Low-Cost Hosted Model: What Researchers Should Know — CASRAI — (Google News link; search the headline)
 - [2026-11-12 23:29 UTC] OpenAI releases GPT-6 Cyber with a Critical cybersecurity rating — CASRAI — (Google News link; search the headline)
-- [2026-11-12 23:15 UTC] AI Tech Morning Paper, November 13, 2026 (Fri) | Google releases 'Gemini 4 Hydrogen' to everyone / OpenAI launches security product where AI acts as an attacker / US groups ... — note — https://note.com/jsn525/n/n02bf9ce89f07?hl=en
-- [2026-11-12 23:06 UTC] Kiro adds xAI’s Grok 4.7 to its AI coding platform — Crypto Briefing — https://cryptobriefing.com/kiro-adds-xai-grok-4-7-coding/ · +1 other hits
+- [2026-11-12 23:28 UTC] AI Tech Morning Paper, November 13, 2026 (Fri) | Google releases 'Gemini 4 Hydrogen' to everyone / OpenAI launches security product where AI acts as an attacker / US groups ... — note — https://note.com/jsn525/n/n02bf9ce89f07?hl=en
+- [2026-11-12 23:06 UTC] Kiro adds xAI’s Grok 4.7 to its AI coding platform — Crypto Briefing — (Google News link; search the headline)
 - [2026-11-12 22:50 UTC] Google releases Gemini 4 Hydrogen, a lower-cost model said to outscore Argon — SiliconANGLE — (Google News link; search the headline)
 - [2026-11-12 22:43 UTC] Google launches Gemini 4 Hydrogen for Pro and Ultra users — TestingCatalog AI News — (Google News link; search the headline)
 - [2026-11-12 22:38 UTC] Google launches Gemini 4 Hydrogen, targets faster AI workflows — The American Bazaar — (Google News link; search the headline)
@@ -126,8 +124,9 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-12 17:00 UTC] With IPO looming, Anthropic launches Claude product for manufacturers — Business Insider — (Google News link; search the headline)
 - [2026-11-12 16:50 UTC] Grok Bot 1.0 launches with shared Bots in Slack, Teams and meetings — Pasquale Pillitteri — (Google News link; search the headline)
 - [2026-11-12 16:33 UTC] You can now test Alibaba Cloud’s new Qwen4 AI for just $3 — astig.ph — (Google News link; search the headline)
+- [2026-11-12 16:00 UTC] Google unveils Gemini 4 Hydrogen, its new AI model built for speed — Mashable — https://mashable.com/tech/google-gemini-4-hydrogen-ai-model-launch · GEO/AEO
 - [2026-11-12 13:55 UTC] Google’s new Gemini model is better at understanding complicated questions — The Verge — https://www.theverge.com/ai-artificial-intelligence/1032505/google-search-ai-mode-gemini-4-hydrogen
-- [2026-11-12 13:25 UTC] Google's Gemini 4 Hydrogen speeds up coding, research, agentic workflows — NewsBytes — https://www.newsbytesapp.com/news/science/google-launches-gemini-4-hydrogen-its-latest-ai-model/story · GEO/AEO
+- [2026-11-12 12:46 UTC] Echo Harbor Tech Launches Three Unbiased News Products Built with BairesDev and Anthropic’s Claude — Yahoo Finance — https://finance.yahoo.com/technology/ai/articles/echo-harbor-tech-launches-three-204600620.html
 - [2026-11-12 12:33 UTC] Tether Launches On-Device AI Agent BotPsy, Claims Win Over Larger Qwen That Qwen's Own Score Narrows — Tech Times — https://www.msn.com/en-us/news/other/tether-launches-on-device-ai-agent-botpsy-claims-win-over-larger-qwen-that-qwens-own-score-narrows/ar-AA2hiscn · +1 other hits
 - [2026-11-12 12:31 UTC] Grok vs ChatGPT: $6 vs $10 per 1M Output Tokens [2026] — shattered.io — https://shattered.io/grok-vs-chatgpt-grok-4-7-vs-gpt-6-output-price-6-vs-10-2026/ · +1 other hits
 - [2026-11-12 11:46 UTC] xAI’s 52-Day Grok Gap: Anthropic Shipped 4 Claude Models — FourWeekMBA — (Google News link; search the headline)
@@ -135,7 +134,6 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-12 10:46 UTC] Anthropic Introduces Claude Meetings, Whiteboards and Sheets in Push Into Workplace Productivity — citybiz — https://www.citybiz.co/article/932422/anthropic-introduces-claude-meetings-whiteboards-and-sheets-in-push-into-workplace-productivity/ · +1 other hits
 - [2026-11-12 10:21 UTC] From Grok Bot to MausBot: PrivOS Says Personal AI Agents Don’t Stretch to the Whole Company — Green Bay Press-Gazette — https://www.greenbaypressgazette.com/press-release/story/206183/from-grok-bot-to-mausbot-privos-says-personal-ai-agents-dont-stretch-to-the-whole-company/
 - [2026-11-12 09:00 UTC] Anthropic pitches a new Claude tool as a salve for manufacturers' labor shortages — Insider — https://www.businessinsider.com/anthropic-launches-claude-for-manufacturers-ahead-of-ipo-2026-11
-- [2026-11-12 08:15 UTC] Musk Calls Claude Opus 5.5 a 'Masterpiece', Admits Grok 4.8 Falls Short — OpenTools — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-11-12 08:02 UTC] OpenAI Launches API Inference Residency in India — Analytics India Magazine — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-11-12 07:24 UTC] OpenAI introduces local AI processing for businesses in India — BMI — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-11-12 07:24 UTC] Kiro Integrates xAI’s Grok 4.7 with 500K-token Context Window for Paid Users — kucoin — https://www.kucoin.com/news/flash/kiro-integrates-xai-s-grok-4-7-with-500k-token-context-window-for-paid-users
@@ -149,7 +147,6 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-11 08:00 UTC] Qwen 4 Release Date: Qwen4-Max Is in Preview, and Here Is What Is Actually Out — Fello AI — (Google News link; search the headline)
 - [2026-11-11 04:28 UTC] Extra Edition | Qwen4-Max Preview Begins — Early Access Including Free Trials, and Qwen App Pricing Details — note — https://note.com/kz00/n/n254a9cb1be80?hl=en
 - [2026-11-11 03:19 UTC] Transcription model takes 1st place, Kimi arrives mid-week to take 2nd | Weekly Hugging Face Trends #1 (11/4–11/10) — note — https://note.com/bochibochi_ai/n/nae918f395e90?hl=en
-- [2026-11-10 17:31 UTC] AWS Makes Kimi K3.1 Pro Highspeed Available on Amazon Bedrock — Unite.AI — https://www.unite.ai/aws-makes-kimi-k3-1-pro-highspeed-available-on-amazon-bedrock/
 
 ### B2B buyer AI / adoption (11)
 - [2026-11-13 00:00 UTC] Accessibility and AI readiness: What answer engines and AI agents need from your website — The Garden Island — https://www.kansascity.com/news/business/article318050521.html · GEO/AEO · +1 other hits
@@ -182,6 +179,7 @@ Each item appears once, in the first section it matches. Dates are as reported b
 ## Other items from source feeds
 
 ### Labs (official feeds + trackers) (26)
+- [2026-11-13 07:25 UTC] OpenAI launches Daybreak Red Team in early access to test web apps for flaws and Daybreak Defense Factory to automate finding, validating, and fixing them (Jessica Lyons/The Register) — Techmeme — https://www.techmeme.com/261113/p5#a261113p5
 - [2026-11-13 06:30 UTC] Sources: Samsung is in talks to buy Modine Manufacturing, a US maker of data center cooling systems, as soon as the coming weeks; Modine's market value is $5.6B (Bloomberg) — Techmeme — https://www.techmeme.com/261113/p4#a261113p4
 - [2026-11-13 06:01 UTC] Filing: Nscale says it needs more funding for its 2027 commitments after ordering Nvidia chips for a $45B Anthropic deal, casting doubt on its planned $35B IPO (Financial Times) — Techmeme — https://www.techmeme.com/261113/p3#a261113p3
 - [2026-11-13 05:50 UTC] Nscale's updated IPO prospectus shows Q3 revenue up 1,344% YoY to $307.5M, up from $140.6M in Q2; net loss widened to $1.69B, up from $1.02B in Q2 (Jordan Novet/CNBC) — Techmeme — https://www.techmeme.com/261113/p2#a261113p2
@@ -196,7 +194,6 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-13 01:35 UTC] Sources: President Trump's and Howard Lutnick's close relationship with Jensen Huang made officials wary of taking aggressive steps to rein in Nvidia chip sales (New York Times) — Techmeme — https://www.techmeme.com/261112/p67#a261112p67
 - [2026-11-13 00:35 UTC] Sources: President Trump urged Jensen Huang to keep fighting for his job in a Tuesday call; aides say Trump saw the company as essentially too big to fail (New York Times) — Techmeme — https://www.techmeme.com/261112/p66#a261112p66
 - [2026-11-13 00:30 UTC] New York-based Hatz AI, which makes tools for managed services providers to help small businesses adopt AI, raised a $24M Series A (CJ Fairfield/CRN) — Techmeme — https://www.techmeme.com/261112/p65#a261112p65
-- [2026-11-12 23:50 UTC] Cisco reports Q1 revenue up 24% YoY to $18.5B, above $18.14B est., adjusted EPS above estimates, and raises its FY 2027 revenue forecast (Anzar Mehraj/Reuters) — Techmeme — https://www.techmeme.com/261112/p64#a261112p64
 - [2026-11-12 22:55 UTC] llm-gemini 0.37 — Simon Willison — https://simonwillison.net/2026/Nov/12/llm-gemini/
 - [2026-11-12 20:00 UTC] How Amplitude ships product improvements in 1–2 days with OpenAI — OpenAI News — https://openai.com/business/customer-stories/amplitude · GEO/AEO
 - [2026-11-12 18:00 UTC] Introducing Gemini 4 Hydrogen — Google DeepMind Blog — https://deepmind.google/blog/introducing-gemini-4-hydrogen/ · +1 other hits
