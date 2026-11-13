@@ -1,0 +1,3806 @@
+Differential Backpack Language Models: Sense Inhibition via Signed Contextualization Weights
+https://arxiv.org/abs/2611.15642
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+Differential Backpack Language Models:
+
+Sense Inhibition via Signed Contextualization Weights
+
+Konstantinos Skianis
+
+Affiliation: 
+University of Ioannina
+
+Email: 
+kskianis@cse.uoi.gr
+
+  
+
+Giannis Nikolentzos
+
+Affiliation: 
+University of Peloponnese
+
+Email: 
+nikolentzos@uop.gr
+
+  
+
+Polykarpos Meladianos
+
+Affiliation: 
+MBZUAI
+
+Email: 
+polykarpos.m@mbzuai.ac.ae
+
+  
+
+Michalis Vazirgiannis
+
+Affiliation: 
+École Polytechnique & MBZUAI
+
+Email: 
+michalis.vazirgiannis@mbzuai.ac.ae
+
+Abstract
+
+Backpack language models predict with a strictly linear combination of
+non-contextual per-word sense vectors, weighted by non-negative
+contextualization scores. We show that non-negativity conflates two
+properties: the linear readout, which carries the interpretability, and the
+conic combination, which merely restricts it. We relax the latter by computing the sense weights with differential
+attention, a difference of two softmax maps with a learned per-sense gain,
+so context can actively inhibit a sense; we call the result a differential
+Backpack. At equal parameters on WikiText-103 this cuts the Backpack’s
+perplexity gap to a Transformer by 
+, improves over the softmax
+Backpack at every sense count, persists with a shrinking margin up to
+
+M parameters on OpenWebText, and is localized at the sense layer by
+ablations and controls. The learned inhibition is
+directly interpretable (a financial context drives the river sense of
+
+bank
+ to 
+), and the preserved per-sense attribution predicts
+counterfactual removals exactly. We tested a number of combination rules, showing the linear interface is nearly free. Making the readout nonlinear gains only 
+ perplexity
+points while invalidating two
+thirds of the decomposition. The differential Backpack’s senses are also better
+representations, improving zero-shot sentence similarity by up to 
+.
+
+Figure 1: 
+The differential Backpack. Non-contextual sense
+vectors 
+ (left) are combined by signed weights
+
+ (right) under a linear readout; the
+dashed arrow marks a negative weight suppressing a contextually wrong
+sense.
+
+1 
+Introduction
+
+Most interpretability for language models is post hoc. The model is
+trained for performance and reverse-engineered afterwards. Backpack language models
+
+(
+Hewitt et al., 2023
+)
+ take the opposite route, building an
+interpretable interface into the architecture. Each vocabulary item is
+assigned 
+ non-contextual sense vectors, and the model’s
+prediction at every position is a linear combination of the sense vectors
+of the preceding tokens (Eq. 
+1
+). Because the readout is
+linear in the senses, the contribution of any sense of any word to any
+prediction is an exact, inspectable quantity, enabling sense-level
+control such as debiasing by down-weighting a targeted sense.
+
+Backpack language models have one notable limitation. The contextualization weights that
+combine senses are softmax outputs, hence non-negative, so context can
+select a sense or ignore it but never oppose one. When 
+bank
+ appears in a
+financial sentence, its river sense does not simply go unused. Left
+un-suppressed, it leaks into the prediction. A non-negative combination has
+no mechanism to cancel this wrong-sense contribution.
+
+This is the setting differential attention was designed for. The DIFF Transformer 
+(
+Ye et al., 2025
+)
+
+computes attention as the difference of two softmax maps, so that scores
+can be negative and common-mode “attention noise” cancels. In a Backpack model,
+noise can be seen as the contribution of the wrong word sense, and the
+difference of softmaxes is a mechanism for sense inhibition. We adopt it
+without giving up the interface, because non-negativity conflates two
+distinct properties: the
+linear readout, which carries the interpretability, and the
+conic (non-negative) combination, which merely restricts it. We keep the first and relax the second.
+
+We call this differential sense contextualization
+(Figure 
+1
+). On WikiText-103
+at equal parameters it recovers 
+ of the perplexity gap
+between the softmax Backpack and an unconstrained Transformer, and the
+improvement persists, with a shrinking margin, up to 
+M parameters on
+OpenWebText. An ablation shows the gain is
+specific to the sense-combination layer, exactly where the
+non-negativity constraint binds; placing differential attention in the
+underlying Transformer instead does not help, and the learned inhibition
+is directly interpretable (§
+4
+).
+
+Our contributions are:
+
+•
+
+We introduce differential sense contextualization: the Backpack’s
+non-negative sense weights become the difference of two softmax maps
+with a learned per-sense gain, so context can inhibit a sense while the
+readout, and hence exact per-sense attribution, stays strictly linear.
+
+•
+
+At equal parameters the differential Backpack outperforms the softmax
+Backpack on WikiText-103 at every sense count and at 
+M and 
+M
+on OpenWebText. An ablation localizes the gain at the sense layer, and
+three controls that each remove one ingredient recover at most 
+
+of it and an existing signed rule none, so the gain is caused by the
+differential form of inhibition.
+
+•
+
+We make the expressivity of negative attention
+
+(
+Kong et al., 2025
+)
+ precise for sense combination,
+characterizing which outputs each rule can reach and showing the
+constraint binds at the sense layer but not in a Transformer, with a
+separation that is exact at one sense head and decays with more, which
+we confirm.
+
+•
+
+We examine a number of combination rules that decompose the Backpack’s perplexity
+tax. Only 
+ is attributable to the linear interface, and the rest
+is depth that the sense dictionary’s parameters displace; at matched
+depth the differential Backpack trails a Transformer by 
+
+perplexity points. Differential
+contextualization is the best exactly-attributable rule we test, its
+attribution predicts counterfactual removals exactly where the
+nonlinear rung’s does not, and its sense outputs are the strongest
+sentence representations we measure at 
+M and 
+M.
+
+•
+
+The learned inhibition is analyzable and usable. The gain
+
+ reaches the same value from three initializations, is
+highest when senses are few, and matters above 
+ (
+
+perplexity points at 
+); suppressing a targeted sense at inference cuts gender bias
+by up to 
+ at negligible cost, most effectively at scale. A
+zero-shot WiC probe shows no advantage, which bounds the claim.
+
+2 
+Related Work
+
+Backpack language models.
+
+Backpacks 
+(
+Hewitt et al., 2023
+)
+ were introduced as an
+architecture coupling Transformer-level performance with a linear,
+sense-level interface, and demonstrate sense-based control including
+targeted debiasing. Follow-up work extends the architecture to
+character-level Chinese 
+(
+Sun and Hewitt, 2023
+)
+, uses sense finetuning for
+model editing from canonical examples 
+(
+Hewitt et al., 2024
+)
+, adapts
+senses across languages 
+(
+Cruz et al., 2026
+)
+, and intervenes on
+senses to debias retrieval 
+(
+Afzali et al., 2026
+)
+. All of this work keeps the non-negative contextualization weights; we
+modify that mechanism itself, narrowing the perplexity gap to Transformers
+while preserving the sense interface these methods rely on. A complementary line
+asks whether the interface must be trained in at all, inducing sense
+pathways into frozen pretrained models 
+(
+Cruz and Aji, 2026
+)
+; we find that senses read off a trained Transformer’s output-value (OV) circuits
+
+(
+Elhage et al., 2021
+)
+ are weaker than learned ones on every lexical
+benchmark we test.
+
+Differential attention.
+
+The Differential Transformer (DIFF Transformer, 
+Ye et al., 2025
+) computes attention
+as a difference of two softmax maps to cancel common-mode noise, and has
+prompted gated 
+(
+Lygizou et al., 2025
+)
+, parameter-shared 
+(
+Cang et al., 2025
+)
+
+and thresholded 
+(
+Huang et al., 2026
+)
+ variants. Cog Attention
+
+(
+Lv et al., 2024
+)
+ obtains negative weights by a different rule,
+
+ times a softmax over 
+, so a row’s absolute weights sum to one (we test it at the sense layer in
+§
+4.4
+); the Integral Transformer
+
+(
+Kobyzev et al., 2025
+)
+ argues that both routes risk discarding
+useful tokens. A subsequent study finds the DIFF Transformer’s
+advantage stems from negative-attention expressivity and reduced head
+redundancy rather than denoising per se, with modest gains at small scale
+
+(
+Kong et al., 2025
+)
+. Our results agree that differential attention
+helps at the sense layer, not in the underlying Transformer. None of this
+work places signed attention
+at a linear, inspectable readout, where its expressivity can be characterized exactly (§
+3.3
+).
+
+Word senses as explicit vectors.
+
+Representing a word by several vectors instead of one has a long history:
+multi-prototype and non-parametric sense embeddings cluster a word’s
+contexts and learn a vector per cluster
+
+(
+Reisinger and Mooney, 2010
+; 
+Neelakantan et al., 2014
+)
+, a
+literature surveyed by 
+Camacho-Collados and Pilehvar (2018)
+. Those
+senses live outside the language model and are selected one at a time by a
+similarity rule, whereas a Backpack makes them components of the model’s own prediction.
+Unsupervised sense induction still fails to beat a one-cluster-per-lemma
+baseline even with modern language models 
+(
+Mosolova et al., 2026
+)
+, so an
+architecture that carries an explicit inventory is still a live design
+choice rather than a legacy of pre-neural lexical semantics. Differential contextualization adds
+the operation that selection-based schemes structurally lack: a sense can be scored below zero, not merely passed over.
+
+Interpretability by architecture.
+
+Our work sits with approaches that make a model interpretable by
+construction, not by post-hoc probing. The contrast is sharpest
+against attention weights, contested as explanations because the map from
+weights to outputs is nonlinear and non-unique
+
+(
+Jain and Wallace, 2019
+; 
+Wiegreffe and Pinter, 2019
+)
+.
+Backpack sense weights are not proxies in this sense. They multiply fixed
+vectors under a linear readout, so a weight is a contribution. A
+second line accepts the trained network as given and recovers an
+interpretable basis after the fact, from superposition analyses
+
+(
+Elhage et al., 2022
+)
+ to sparse dictionary learning over
+activations 
+(
+Huben et al., 2024
+)
+. Our ladder bears on that choice. The cost of a Backpack is its fixed
+per-token dictionary, not its linear readout.
+
+3 
+Method
+
+3.1 
+Background: Backpack Language Models
+
+Given a sequence 
+, a Backpack 
+(
+Hewitt et al., 2023
+)
+
+represents each vocabulary item 
+ with 
+ non-contextual sense vectors
+
+ and predicts from a linear combination
+
+(1)
+
+where 
+ is the (tied) embedding matrix and the contextualization
+weights 
+ are computed by an
+attention-style map over the hidden states 
+ of an underlying
+Transformer 
+(
+Vaswani et al., 2017
+)
+, one head per sense. In the original model each row of
+
+ is a softmax output: 
+.
+
+3.2 
+Our proposed approach: Differential Sense Contextualization
+
+We compute the sense weights as a difference of two causal softmax maps
+(Figure 
+1
+):
+
+(2)
+
+with a learned per-sense gain reparameterized as
+
+following 
+Ye et al. (2025)
+. Weights become signed. The first
+map excites senses, the second inhibits them; each entry
+lies in 
+ and each row’s mass is 
+.
+
+Preserving the linear readout.
+
+The signed weights leave Eq. 
+1
+ otherwise intact, so
+
+ is still an exact linear function of the sense vectors:
+the contribution of sense 
+ of token 
+ to the prediction at 
+ is
+exactly 
+, now carrying a sign. We
+apply no normalization after the sense combination, keeping the per-head
+RMSNorm of the DIFF Transformer inside the underlying Transformer
+only, since any normalization of 
+ would make the readout nonlinear in
+
+; sense vectors are LayerNormed at creation instead. The second map
+costs a second query/key projection at the sense layer, 
+M parameters
+(
+ of the model at 
+M) and 
+ of forward FLOPs, and
+
+–
+ of training throughput in practice
+(Appendix 
+B
+).
+
+Terminology.
+
+Differential attention is the mechanism of Eq. (
+2
+), a
+difference of two softmax maps. A DIFF Transformer 
+(
+Ye et al., 2025
+)
+ applies it inside a
+Transformer’s self-attention layers; a differential Backpack, our model,
+applies it only to the sense contextualization weights and keeps softmax
+attention in its underlying Transformer, while the softmax Backpack is the
+original.
+In tables and figures, softmax and diff name a Backpack’s sense-weight
+rule, never a Transformer’s attention.
+
+Why the constraint binds only in Backpacks.
+
+Non-negativity is a weak constraint in a standard Transformer. Signed
+value and output projections let a head realize subtraction downstream, so
+negative attention adds little the architecture cannot already route
+around. A Backpack is different. Its sense-combination layer is the single
+point where context integrates lexical information, over frozen,
+non-contextual sense vectors the model cannot reshape, so non-negativity
+binds (there is no way to express “not this sense”) and relaxing it adds expressivity that has no substitute. This
+predicts that differential attention should help at the sense layer but not
+in the underlying Transformer, which our ablation confirms
+(§
+4
+).
+
+3.3 
+An Expressivity Separation
+
+A softmax Backpack averages the sense vectors in context and cannot leave
+the region they span; signed weights can, since 
+ sits past
+
+. A non-negative model can say “mostly finance, partly river”; only a
+signed one can say “finance, and not river”.
+
+That signed attention is more expressive has been observed empirically
+
+(
+Kong et al., 2025
+)
+; what follows makes it exact for sense
+combination and identifies where it binds. Formally, fix a position 
+ and
+write 
+ for the sense-
+ vectors
+available in context.
+
+Proposition 1
+ 
+(Reachable sets)
+.
+
+For the position 
+ fixed above and a sense 
+, let
+
+ be the row of
+weights that position 
+ assigns to the 
+ available positions, and let
+
+ be the
+probability simplex. For a softmax Backpack 
+ for every
+
+, so 
+, a Minkowski
+sum of convex hulls. For a differential Backpack with gain
+
+ and 
+, a vector 
+ is realizable (in
+closure) as 
+ with 
+ if and only if
+
+(3)
+
+Equivalently, the normalized coefficients 
+ sum to
+one and have negative part 
+; since 
+
+on that hyperplane, they range over the 
+ ball section
+
+(4)
+
+with the bound attained at 
+, 
+.
+
+The proof is in Appendix 
+A
+. Relaxing
+non-negativity trades the
+simplex for an 
+ ball of radius set by 
+, the geometry
+of signed sparse coding: the softmax Backpack can only interpolate among the
+senses present in context, whereas signed weights can extrapolate past
+them.
+
+Proposition 2
+ 
+(Strict separation at 
+)
+.
+
+Let 
+, let 
+ be orthonormal, and let 
+. Suppose
+the data pin the single-token outputs 
+ to 
+ and 
+ respectively (a
+single-token context fixes the output exactly, since only one weight is
+available), and require the two-token output 
+ for some
+
+. Every softmax Backpack incurs squared Euclidean error
+
+ (a distance of 
+), while a
+differential Backpack attains 
+ if and only if 
+.
+
+The proof is in Appendix 
+A
+. The separation is governed by 
+, which the model grows during
+training (§
+H
+). Both propositions assume
+
+, so that the row sum is positive. Trained models
+sometimes exceed it (mean 
+ above 
+ at 
+, individual senses
+reaching 
+); such a sense is net inhibitory, subtracting a weighted
+average of the context rather than adding one, and the separation argument
+no longer applies (Appendix 
+H
+). The regime is not
+incidental. Constraining 
+ to 
+ costs 
+ perplexity points at 
+
+but nothing at 
+; characterizing it remains open. The bound is tight
+only at 
+: with more heads a softmax Backpack can imitate signed
+behaviour by cancelling heads, since single-token contexts pin only
+
+. We expect a separation exact at 
+ that decays
+with 
+, and measure it in §
+G
+.
+
+4 
+Experiments
+
+4.1 
+Experimental Setup
+
+All models are trained from scratch on WikiText-103
+
+(
+Merity et al., 2017
+)
+ with the GPT-2 byte-pair encoding (BPE) vocabulary
+
+(
+Radford et al., 2019
+)
+ and a context of 
+ tokens, unless stated
+otherwise. The main configuration has 
+70M parameters (
+, an
+
+-layer underlying Transformer, 
+ senses) and is trained for
+
+k steps with AdamW, a cosine schedule and bf16 precision; Transformer
+baselines use a 
+-layer trunk to match parameters (
+M vs. 
+M). Larger models are trained on OpenWebText
+
+(
+Gokaslan and Cohen, 2019
+)
+ at 
+M and 
+M parameters
+(Appendix 
+D
+). We report exact validation perplexity (ppl)
+over non-overlapping windows of the full validation split.
+
+Running the same evaluation battery on the released Backpack-GPT2
+
+(
+Hewitt et al., 2023
+)
+ reproduces its published lexical profile
+and the properties our analysis assumes (Appendix 
+E
+).
+
+4.2 
+Main Result: Equal-Parameter Comparison
+
+Model
+
+Params
+
+PPL 
+
+tax
+
+Transformer
+
+70.1M
+
+21.09
+
+—
+
+DIFF Transformer
+
+70.1M
+
+21.00
+
+softmax Backpack
+
+69.6M
+
+24.60
+
+differential Backpack (ours)
+
+69.6M
+
+23.52
+
++ DIFF trunk
+
+69.6M
+
+24.78
+
+Table 1: 
+WikiText-103 exact validation perplexity at matched
+parameters and identical training budget (20k steps, single seed); tax is
+the gap to the plain Transformer.
+
+Figure 2: 
+Interpretability tax on WikiText-103: exact validation
+perplexity at matched parameters (
+70M), with a Transformer of the
+Backpack trunk’s depth (
+ layers, 
+M) for reference.
+
+Differential sense contextualization (Table 
+1
+,
+Figure 
+2
+) improves exact validation perplexity
+from 
+ to 
+, cutting the Backpack’s gap to the plain Transformer from 
+ to
+
+, a 
+ reduction at equal parameters and budget.
+The controls isolate the mechanism. A DIFF Transformer matches the plain
+Transformer (
+ vs. 
+), and adding differential attention to
+the differential Backpack’s underlying Transformer (“+ DIFF trunk”) is
+worse than the softmax Backpack, so the improvement comes from signing
+the sense weights. The result persists on OpenWebText: 
+ vs. 
+ over three seeds at 
+M, and 
+ vs. 
+ at 
+M, where
+a parameter-matched 
+-layer Transformer reaches 
+, so the tax falls
+from 
+ to 
+ (
+). The relative gain shrinks with scale
+(
+, 
+, 
+) while inhibition usage does not
+(Appendix 
+D
+).
+
+Retraining both headline arms with three seeds gives 
+ and
+
+ (mean 
+ s.d.); the 
+ ppl gap is 
+ standard
+errors (Welch’s 
+, 
+).
+
+4.3 
+Decomposing the Interpretability Tax
+
+We locate the source of the Backpack’s gap by placing the model on a ladder
+of combination rules sharing the main configuration and differing only in
+how sense weights are formed. Five rungs keep predictions linear in the senses, so attribution stays
+exact: hard selection (one-hot, straight-through), non-negative (softmax),
+signed by difference (diff), signed by sign and magnitude (Cog Attention,
+
+Lv et al., 2024
+), and unconstrained weights (raw real-valued scores). A sixth applies a residual multilayer perceptron (MLP) to the sense sum, the one change that makes
+predictions nonlinear in the senses.
+
+Combination rule
+
+PPL 
+
+tax
+
+attr. resid.
+
+Transformer
+
+21.09
+
+—
+
+n/a
+
+DIFF Transformer
+
+21.00
+
+n/a
+
+Transformer, 8 layers
+
+23.38
+
+n/a
+
+one-hot
+
+31.58
+
+softmax
+
+24.60 
+.12
+
+diff Backpack (ours)
+
+23.52 
+.04
+
+unconstrained weights
+
+26.67
+
+Cog Attention
+
+24.72
+
+softmax + MLP
+
+23.97 
+.17
+
+diff + MLP
+
+23.09 
+.08
+
+Table 2: 
+The constraint ladder on WikiText-103. All rows share the main
+configuration and budget; tax is the gap to the 
+-layer Transformer;
+the 
+-layer Transformer (
+M) matches the Backpack trunk’s depth; attr. resid. is the relative error of the per-sense decomposition against the
+model’s own logits.
+
+Table 
+2
+ yields three findings, the most important being
+that linearity is cheap. Making the readout nonlinear improves the
+differential Backpack from 
+ to 
+, a gain of 
+ ppl
+(
+ standard errors over three seeds), while the
+attribution residual jumps from 
+ to 
+. The
+remaining 
+ ppl of tax survives the MLP, so only 
+ of the gap to a
+Transformer is attributable to the linear interface; the other 
+ is
+not. That remainder is depth. A Transformer with the Backpack trunk’s
+
+ layers (
+M parameters) reaches 
+, so the six layers alone cost
+
+ ppl, and against it the differential Backpack trails by only
+
+ ppl while carrying 
+M more parameters in its non-contextual
+dictionary; with the MLP it leads by 
+. The tax at matched parameters
+is therefore the depth that the dictionary’s parameters displace, not the
+linear interface.
+
+Constraints also help optimization. Removing them entirely is worse than
+softmax (
+ vs. 
+) and hard selection is far worse (
+), both rungs trained to the same
+budget. The differential relaxation
+loosens the simplex sufficiently to permit inhibition while retaining
+normalization.
+
+Among the exactly-attributable rules, differential contextualization is
+the strongest.
+
+4.4 
+Controls for the Causal Claim
+
+Differential contextualization changes three things at once, two
+attention maps, a learned gain and signed weights; only the third is
+inhibition, so three controls each remove one while matching the rest. The sum control adds the two
+maps, 
+, keeping the two-map
+structure and parameter count but leaving weights non-negative.
+The gain control scales a single softmax by a learned positive per-sense factor,
+relaxing the row-sum constraint without permitting signs. The 
+
+control freezes the differential gain at zero, leaving the second map
+without gradient: the differential parameterization with inhibition
+switched off, which doubles as a noise check. A fourth rule, Cog Attention 
+(
+Lv et al., 2024
+)
+, is signed by another
+route: 
+ times a softmax over 
+, a single map whose
+absolute row sum is one.
+
+Sense weights
+
+PPL 
+
+% of gain
+
+neg. mass
+
+softmax
+
+24.60
+
+—
+
+0.00
+
+two maps, added
+
+24.30
+
+28%
+
+0.00
+
+scaled softmax
+
+24.51
+
+9%
+
+0.00
+
+24.55
+
+5%
+
+0.00
+
+Cog Attention
+
+24.72
+
+0.39
+
+diff Backpack (ours)
+
+23.52
+
+100%
+
+0.45
+
+Table 3: 
+Controls for the causal claim (WikiText-103, main
+configuration). “% of gain” is the share of diff’s 
+ ppl
+improvement over softmax each rule recovers.
+
+Table 
+3
+ isolates the cause. The two-map structure alone
+recovers 
+ of the gain and the relaxed row sum 
+, while the
+
+ run lands 
+ ppl from softmax, within the 
+ seed
+deviation; all three have zero negative weight mass, so each removed
+inhibition and nothing else. Roughly three quarters of the
+improvement is therefore due to signed weights themselves. Signedness alone does not suffice: Cog Attention lands at 
+,
+softmax level, despite 
+ negative weight mass; what recovers the gain
+is the difference-of-softmax structure with its positive row sum, the
+geometry of Proposition 
+1
+. The controls are single-seed; the smallest gap they must explain (
+
+ppl) far exceeds the 
+ seed deviation.
+
+4.5 
+Downstream Probes
+
+Perplexity need not track usefulness, so we probe frozen representations
+on five tasks: part-of-speech (POS) tagging (UD English-EWT
+
+(
+Silveira et al., 2014
+)
+, linear probe), STS-B sentence similarity
+
+(
+Cer et al., 2017
+)
+ (zero-shot cosine of mean-pooled
+representations, no trained parameters), SST-2 
+(
+Socher et al., 2013
+)
+ and MRPC
+
+(
+Dolan and Brockett, 2005
+)
+ (linear probes, GLUE validation splits), and clustering contextual
+occurrences of ambiguous words against WiC sense labels (adjusted Rand
+index). Each is run on the underlying Transformer state 
+
+and on the sense output 
+, the Backpack’s actual interface.
+
+Representation (70M)
+
+POS
+
+STS
+
+SST-2
+
+ARI
+
+Transformer (
+)
+
+0.859
+
+0.488
+
+0.753
+
+0.174
+
+DIFF Transformer (
+)
+
+0.859
+
+0.499
+
+0.743
+
+0.203
+
+softmax Backpack (
+)
+
+0.844
+
+0.372
+
+0.718
+
+0.151
+
+diff Backpack (
+)
+
+0.815
+
+0.495
+
+0.731
+
+0.174
+
+Cog Backpack (
+)
+
+0.836
+
+0.422
+
+0.736
+
+0.163
+
+diff Backpack + MLP (
+)
+
+0.838
+
+0.485
+
+0.749
+
+0.168
+
+Table 4: 
+Frozen-representation probes at 
+M: POS accuracy (UD
+English-EWT), STS-B Spearman, SST-2 probe accuracy, and sense-clustering
+ARI, on the Transformer state 
+ or the sense output 
+; all scales and
+MRPC in Appendix 
+D
+.
+
+Table 
+4
+ reports the 
+M probes. The semantic result
+is the strongest. The differential Backpack’s sense outputs reach 
+
+Spearman on STS-B against 
+ for the softmax Backpack’s (
+
+relative), 
+
+against 
+ at 
+M (
+), and 
+ against 
+ at
+
+M (
+). Against the Transformers’ hidden states, which carry no
+attribution interface, the differential Backpack’s interface is within
+noise on STS-B (
+ vs. 
+ and 
+; s.e. 
+) and SST-2,
+and trails on POS and clustering, the representational side of the
+interpretability tax, which the softmax Backpack incurs in full (
+
+on STS-B). At 
+M the Transformer’s state (
+) is the stronger
+sentence representation.
+Differential attention inside a plain Transformer leaves its hidden state unchanged on every probe (STS 
+
+vs. 
+), so the representational gain, like the perplexity gain, is
+specific to the sense layer; and Cog Attention’s signed rule recovers part
+of it (
+) but stays well short of diff. Sense clustering agrees at
+every scale (
+ vs. 
+ at 
+M), and SST-2 probes favour the differential Backpack’s senses at every scale (
+ vs. 
+, 
+ vs. 
+, 
+ vs. 
+), each within one standard error (
+
+points); MRPC probes stay at the majority class and do not separate models. The trade is syntactic. The differential Backpack’s senses are slightly worse for POS tagging (
+ vs. 
+). The nonlinear rung
+improves no probe beyond noise (STS 
+, SST-2 
+ vs. 
+).
+
+4.6 
+Sense Quality and Disambiguation
+
+A sense lens lists the vocabulary items a sense vector most strongly
+predicts through the tied embedding, 
+, with no probe and
+no labelled data. For 
+rock
+, the
+differential Backpack devotes one sense to the mineral reading (
+rock,
+Rocks, canyon, Canyon
+) and another to the music-genre reading
+(
+rock, garage, punk, gig, pop
+), whereas the two most
+
+rock
+-specific senses of the softmax Backpack both blend geological
+(
+shale, bedrock
+) and musical (
+punk, metal, Stones
+)
+tokens. Appendix 
+E
+ quantifies this. Senses tracking human
+similarity judgments rise from 
+ to 
+ at 
+.
+
+Inhibition can perform word-sense disambiguation.
+
+For 
+bank
+, take each model’s most recruited finance sense (lens
+
+subsidiary, mint, Treasury
+ in ours) and its river sense
+(
+River, river, rivers, stars
+).
+Figure 
+3
+ shows the signed self-weight 
+ the
+two senses receive as 
+bank
+ appears in two disambiguating contexts.
+In the differential Backpack they move in opposite directions. A financial
+context raises the finance sense from 
+ to 
+ and drives the
+river sense from 
+ to 
+, cancelling the contextually wrong
+sense. The softmax Backpack, floored at zero, can only move one way,
+boosting its finance sense (
+) with no way to suppress the
+river sense (
+). Signed weights
+thus supply a mechanism the non-negative variant lacks: cancellation of
+the wrong word sense, differential denoising with a lexical meaning. The
+signal is cleanest for words like
+
+bank
+ whose senses separate sharply, and §
+4.8
+ shows
+this is not inhibition’s dataset-level role.
+
+Figure 3: 
+Signed self-weight 
+ of the finance
+and river senses of 
+bank
+ in a river vs. a financial context,
+for the differential (left) and softmax (right) Backpacks.
+
+4.7 
+Faithfulness of the Attribution
+
+At 
+ validation positions we
+remove the ten (sense, position) pairs with the largest attributed
+contribution to the target logit, one at a time, and compare attributed
+with actual change (Table 
+5
+, Appendix 
+C
+).
+On every linear rung the two agree to numerical precision; with the MLP the
+rank correlation falls to 
+–
+ and the median contribution is
+mis-sized by 
+–
+, which is what the 
+ residual of
+Table 
+2
+ means behaviourally. It is also useful in the ERASER sense. Removing the ten top pairs costs 
+ nats of target
+log-probability against 
+ for ten random pairs, and keeping only them
+retains the prediction to within 
+ nats against 
+.
+
+4.8 
+Inhibition: Structure and Ablation
+
+Inhibition structure.
+
+Table 
+6
+ quantifies how the weights are used. Differential
+contextualization places 
+ of the weight mass on negative
+(inhibitory) weights (zero for softmax by construction) and engages
+more of the sense
+position grid, not less: 
+ entropy is
+higher and sparsity lower. This argues against the hypothesis that subtraction sharpens selection:
+the gain comes from added expressivity, consistent with
+
+Kong et al. (2025)
+. Inhibition is not localized to a subset of senses. Every sense takes both
+signs depending on context, with per-sense negative-mass fractions of 
+–
+
+(Fig. 
+4
+).
+
+Lexical quality is preserved (Table 
+6
+): best-sense 
+ on
+SimLex-999/WordSim-353 is 
+/
+ for diff against 
+/
+ for
+softmax, both far above the raw-embedding baselines.
+
+Is inhibition load-bearing, and where?
+
+We remove only the subtraction from a trained differential Backpack at
+inference, clamping negative weights to zero and rescaling each row to its
+original mass, or dropping the inhibition map, and bucket the per-token
+loss increase by the WordNet polysemy of the preceding word
+(Figure 
+5
+). The trained model cannot function without
+inhibition. Perplexity rises from 
+ to 
+ at 
+M, 
+ to
+
+ at 
+M and 
+ to 
+ at 
+M (the softmax control is
+untouched), whereas a model trained without inhibition is only 
+ ppl
+worse (Table 
+3
+); the senses and the excitation map are
+co-adapted to the subtraction. The damage is not where a disambiguation
+account predicts. It is largest after non-lexical tokens and decreases
+mildly with polysemy (
+ nats after monosemous words, 
+ after
+words with eight or more senses at 
+M, the same profile at 
+M and
+
+M). Inhibition is a general-purpose part of the combination, of which 
+bank
+ is an instance rather than the rule
+(cf. Appendix 
+J
+).
+
+4.9 
+Debiasing by Sense Intervention
+
+Following the sense-intervention protocol of
+
+Hewitt et al. (2023)
+, we take 
+ profession nouns, identify
+each word’s most gendered sense exactly via the linear readout
+(
+), and edit that sense’s contextualization weights at
+inference. We compare three interventions: down-weighting
+(
+), removal (
+), and
+suppression (
+), the signed operation
+that only a differential Backpack performs natively. We report bias as the
+mean 
+ over six templates.
+
+Since an intervention can always reduce bias by damaging the model, we pair bias with a collateral damage measure, the Kullback–Leibler (KL)
+divergence between
+edited and clean next-token distributions over the non-gendered
+vocabulary, renormalized.
+
+Suppression is the strongest intervention in every model
+(Table 
+7
+), and all edits are surgical. Validation perplexity moves by less than
+
+ ppl, so they touch only the targeted senses. The architecture-specific result appears at 
+M and 
+M
+(Figure 
+6
+), where the differential Backpack dominates the
+frontier. At 
+M, suppressing a sense reduces bias by 
+ (0.763 in
+absolute terms) at a collateral KL of 
+, whereas the softmax Backpack
+reaches only 
+ (0.545) at 
+: 
+ the absolute
+effect for less than a third of the damage. At matched damage, softmax removal achieves a 
+ reduction while
+differential suppression achieves 
+, 
+ more. Suppression also adds substantially
+over removal for the differential Backpack (
+) but almost
+nothing for softmax (
+), consistent with the inhibition
+pathway being one that only a model trained with signed weights exploits.
+At 
+M the pattern repeats: 
+ at KL 
+ against 
+ at
+
+ for softmax, and suppression again adds over removal for the
+differential Backpack (
+) but little for softmax
+(
+).
+
+Differential Backpacks start from a higher baseline bias, so their advantage
+is controllability, not lower bias to begin with. The frontier ordering also reverses at 
+M, where the softmax Backpack is
+the more efficient one; our single-seed evidence at each scale therefore
+supports the claim from 
+M upward but not as a scale-free property.
+
+5 
+Conclusion
+
+We keep the Backpack’s linear readout, which carries its
+interpretability, and relax the conic combination that merely restricts
+it, computing sense weights as a difference of two softmax maps so that
+context can inhibit a sense. At equal parameters this cuts the gap
+to an unconstrained Transformer by 
+ on WikiText-103 and persists to
+
+M on OpenWebText with a margin that shrinks with scale, with an
+ablation localizing the gain at the sense-combination layer. Because the
+readout stays linear, the attribution predicts counterfactual removals
+exactly, the inhibition is directly interpretable, and it doubles as a
+control surface. Suppressing a
+targeted sense cuts gender bias by up to 
+ at negligible cost. The
+senses are also better representations, improving sentence similarity by
+up to 
+ over the softmax Backpack.
+
+A ladder of combination rules then sharpens what the architecture costs:
+making the readout nonlinear gains 
+ ppl, improves no probe beyond
+noise and
+invalidates two thirds of the decomposition, while the 
+ of the tax
+that survives is the depth displaced by the sense dictionary’s parameters;
+at matched depth the differential Backpack trails a Transformer by 
+
+ppl. Since exact attribution requires only a linear readout over a fixed
+inspectable basis, and nothing of how the coefficients are computed, the
+natural next step is a global overcomplete dictionary. Non-negativity was never the price of interpretability, and
+neither is linearity.
+
+Limitations
+
+Scale and replication.
+
+Our experiments span 
+M to 
+M parameters. The advantage persists
+across that range but shrinks with scale, from 
+ relative at 
+M
+to 
+ at 
+M and 
+ at 
+M, and the tax reduction from
+
+ to 
+; whether it survives at billion-parameter scale is open.
+The WikiText-103 and 
+M OpenWebText comparisons are replicated over
+three seeds per arm; the 
+M runs, the Transformer baselines, the
+sense-count sweep and the control experiment are single-seed. The depth-matched Transformer has 
+ fewer parameters than the
+Backpack, so the two Transformer baselines bound the dictionary’s cost
+from either side; a joint sweep over depth and dictionary size would give
+the full trade-off.
+
+Size and cost of the effect.
+
+The perplexity gains, while consistent, are modest in absolute terms:
+differential contextualization reduces the Backpack’s gap to a Transformer
+but does not close it, and the contribution is best understood as lowering
+the cost of an interpretable architecture rather than advancing the state
+of the art in perplexity. Differential contextualization adds a second attention map at the sense
+layer, which costs under 
+ in parameters but 
+–
+ of training
+throughput (Appendix 
+B
+).
+
+Interpretability evidence.
+
+The sense-level interpretations, though exact by construction, are cleaner
+for some words than others; our disambiguation analysis shows a clear case
+and does not claim every sense is human-labelable, and the inhibition
+ablation (§
+4.8
+) shows that inhibition, while essential,
+is not polysemy-specific, so the disambiguation reading describes
+instances rather than its dataset-level role. That evidence is
+qualitative: a zero-shot WiC probe (§
+J
+) shows no measurable
+advantage for signed sense weights, though at this model scale even a
+contextual hidden-state baseline barely exceeds the majority class, so the
+experiment does not decide the question either way. The control result (§
+4.9
+) is single-seed at each scale,
+and the reversal of the frontier at 
+M is unexplained.
+
+Scope.
+
+All experiments are on English, and signed weights forgo the “conic
+selection” reading of the original Backpack even though exact per-sense
+attribution is retained.
+
+Ethics Statement
+
+The debiasing experiment (§
+4.9
+) measures gender bias as
+the gap between the log-probabilities of 
+he
+ and 
+she
+
+after 
+ profession nouns in six templates. This binary, English,
+pronoun-based measure is a standard probe of one salient bias and not a
+measure of fairness: it omits non-binary identities, other languages, and
+the many forms bias takes beyond pronoun prediction, and reducing it does
+not make a model unbiased. Sense suppression is an inference-time edit
+that can remove a targeted association; the same mechanism could be used
+to insert one, which is a reason to prefer architectures whose edits are
+inspectable, as the linear readout makes ours. All models are trained on
+public corpora (WikiText-103 and OpenWebText) that contain the biases of
+their sources; we release no new data. Training used a single H200 GPU
+for roughly one GPU-week in total.
+
+AI Assistance
+
+An AI coding and writing assistant (Claude, Anthropic) was used under the
+authors’ direction to implement the experimental code from the authors’
+specification and to produce analysis scripts and figures. The research
+idea, the experimental design, the execution of all experiments, the
+interpretation of the results, and the claims made are the authors’ own,
+and all numbers were verified against the experimental records.
+
+References
+
+Afzali 
+et al.
+ (2026)
+
+A. Afzali, A. Velae, I. Ahmadi, and M. Aliannejadi
+
+Controlling gender bias in retrieval via a backpack architecture
+.
+
+In 
+Proceedings of the 48th European Conference on Information Retrieval (ECIR)
+,
+
+Note: 
+arXiv:2511.00875
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+Camacho-Collados and Pilehvar (2018)
+
+J. Camacho-Collados and M. T. Pilehvar
+
+From word to sense embeddings: a survey on vector representations of meaning
+.
+
+Journal of Artificial Intelligence Research
+ 
+63
+, 
+pp. 743–788
+.
+
+Cited by: 
+§2
+.
+
+Cang 
+et al.
+ (2025)
+
+Y. Cang, Y. Liu, X. Zhang, L. Shi, and W. Que
+
+Shared DIFF transformer
+.
+
+arXiv preprint arXiv:2501.17900
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+Cer 
+et al.
+ (2017)
+
+D. Cer, M. Diab, E. Agirre, I. Lopez-Gazpio, and L. Specia
+
+SemEval-2017 task 1: semantic textual similarity multilingual and crosslingual focused evaluation
+.
+
+In 
+Proceedings of the 11th International Workshop on Semantic Evaluation (SemEval-2017)
+,
+
+pp. 1–14
+.
+
+External Links: 
+Link
+
+Cited by: 
+§4.5
+.
+
+Cruz 
+et al.
+ (2026)
+
+J. C. B. Cruz, D. I. Adelani, and A. F. Aji
+
+Multilinguality as sense adaptation
+.
+
+arXiv preprint arXiv:2601.10310
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+Cruz and Aji (2026)
+
+J. C. B. Cruz and A. F. Aji
+
+Sense representations are inducible interfaces
+.
+
+arXiv preprint arXiv:2605.28669
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+Devlin 
+et al.
+ (2019)
+
+J. Devlin, M. Chang, K. Lee, and K. Toutanova
+
+BERT: pre-training of deep bidirectional transformers for language understanding
+.
+
+In 
+Proceedings of the 2019 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies, Volume 1 (Long and Short Papers)
+,
+
+pp. 4171–4186
+.
+
+External Links: 
+Link
+
+Cited by: 
+Appendix D
+.
+
+Dolan and Brockett (2005)
+
+W. B. Dolan and C. Brockett
+
+Automatically constructing a corpus of sentential paraphrases
+.
+
+In 
+Proceedings of the Third International Workshop on Paraphrasing (IWP2005)
+,
+
+External Links: 
+Link
+
+Cited by: 
+§4.5
+.
+
+Elhage 
+et al.
+ (2022)
+
+N. Elhage, T. Hume, C. Olsson, N. Schiefer, T. Henighan, S. Kravec, Z. Hatfield-Dodds, R. Lasenby, D. Drain, C. Chen, R. Grosse, S. McCandlish, J. Kaplan, D. Amodei, M. Wattenberg, and C. Olah
+
+Toy models of superposition
+.
+
+Transformer Circuits Thread
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+Elhage 
+et al.
+ (2021)
+
+N. Elhage, N. Nanda, C. Olsson, T. Henighan, N. Joseph, B. Mann, A. Askell, Y. Bai, A. Chen, T. Conerly, N. DasSarma, D. Drain, D. Ganguli, Z. Hatfield-Dodds, D. Hernandez, A. Jones, J. Kernion, L. Lovitt, K. Ndousse, D. Amodei, T. Brown, J. Clark, J. Kaplan, S. McCandlish, and C. Olah
+
+A mathematical framework for transformer circuits
+.
+
+Transformer Circuits Thread
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+Finkelstein 
+et al.
+ (2001)
+
+L. Finkelstein, E. Gabrilovich, Y. Matias, E. Rivlin, Z. Solan, G. Wolfman, and E. Ruppin
+
+Placing search in context: the concept revisited
+.
+
+In 
+Proceedings of the 10th International Conference on World Wide Web
+,
+
+pp. 406–414
+.
+
+Cited by: 
+Appendix E
+.
+
+Gao 
+et al.
+ (2021)
+
+T. Gao, X. Yao, and D. Chen
+
+SimCSE: simple contrastive learning of sentence embeddings
+.
+
+In 
+Proceedings of the 2021 Conference on Empirical Methods in Natural Language Processing
+,
+
+pp. 6894–6910
+.
+
+External Links: 
+Link
+
+Cited by: 
+Appendix D
+.
+
+Gerz 
+et al.
+ (2016)
+
+D. Gerz, I. Vulić, F. Hill, R. Reichart, and A. Korhonen
+
+SimVerb-3500: a large-scale evaluation set of verb similarity
+.
+
+In 
+Proceedings of the 2016 Conference on Empirical Methods in Natural Language Processing
+,
+
+pp. 2173–2182
+.
+
+External Links: 
+Link
+
+Cited by: 
+Appendix E
+.
+
+Gokaslan and Cohen (2019)
+
+A. Gokaslan and V. Cohen
+
+OpenWebText corpus
+.
+
+External Links: 
+Link
+
+Cited by: 
+§4.1
+.
+
+Hewitt 
+et al.
+ (2024)
+
+J. Hewitt, S. Chen, L. L. Xie, E. Adams, P. Liang, and C. D. Manning
+
+Model editing with canonical examples
+.
+
+arXiv preprint arXiv:2402.06155
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+Hewitt 
+et al.
+ (2023)
+
+J. Hewitt, J. Thickstun, C. D. Manning, and P. Liang
+
+Backpack language models
+.
+
+In 
+Proceedings of the 61st Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)
+,
+
+Toronto, Canada
+, 
+pp. 9103–9125
+.
+
+External Links: 
+Link
+
+Cited by: 
+Appendix E
+,
+
+Appendix I
+,
+
+§1
+,
+
+§2
+,
+
+§3.1
+,
+
+§4.1
+,
+
+§4.9
+.
+
+Hill 
+et al.
+ (2015)
+
+F. Hill, R. Reichart, and A. Korhonen
+
+SimLex-999: evaluating semantic models with (genuine) similarity estimation
+.
+
+Computational Linguistics
+ 
+41
+ (
+4
+), 
+pp. 665–695
+.
+
+External Links: 
+Link
+
+Cited by: 
+Appendix E
+.
+
+Huang 
+et al.
+ (2026)
+
+X. Huang, X. Ding, M. Ju, Y. Liu, N. Shah, and T. Zhao
+
+Threshold differential attention for sink-free, ultra-sparse, and non-dispersive language modeling
+.
+
+arXiv preprint arXiv:2601.12145
+.
+
+Note: 
+To appear at ACL 2026
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+Huben 
+et al.
+ (2024)
+
+R. Huben, H. Cunningham, L. Smith, A. Ewart, and L. Sharkey
+
+Sparse autoencoders find highly interpretable features in language models
+.
+
+In 
+The Twelfth International Conference on Learning Representations (ICLR)
+,
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+Jain and Wallace (2019)
+
+S. Jain and B. C. Wallace
+
+Attention is not explanation
+.
+
+In 
+Proceedings of the 2019 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies, Volume 1 (Long and Short Papers)
+,
+
+pp. 3543–3556
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+Kobyzev 
+et al.
+ (2025)
+
+I. Kobyzev, A. Ghaddar, D. Hu, and B. Chen
+
+Integral transformer: denoising attention, not too much not too little
+.
+
+In 
+Proceedings of the 2025 Conference on Empirical Methods in Natural Language Processing
+,
+
+pp. 2337–2354
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+Kong 
+et al.
+ (2025)
+
+C. Kong, J. Jang, and N. Kwak
+
+Understanding differential transformer unchains pretrained self-attentions
+.
+
+In 
+Advances in Neural Information Processing Systems (NeurIPS)
+,
+
+Note: 
+arXiv:2505.16333
+
+External Links: 
+Link
+
+Cited by: 
+3rd item
+,
+
+§2
+,
+
+§3.3
+,
+
+§4.8
+.
+
+Lv 
+et al.
+ (2024)
+
+A. Lv, R. Xie, S. Li, J. Liao, X. Sun, Z. Kang, D. Wang, and R. Yan
+
+More expressive attention with negative weights
+.
+
+arXiv preprint arXiv:2411.07176
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2
+,
+
+§4.3
+,
+
+§4.4
+.
+
+Lygizou 
+et al.
+ (2025)
+
+E. M. Lygizou, M. Farsang, and R. Grosu
+
+Differential gated self-attention
+.
+
+arXiv preprint arXiv:2505.24054
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+Merity 
+et al.
+ (2017)
+
+S. Merity, C. Xiong, J. Bradbury, and R. Socher
+
+Pointer sentinel mixture models
+.
+
+In 
+International Conference on Learning Representations (ICLR)
+,
+
+External Links: 
+Link
+
+Cited by: 
+§4.1
+.
+
+Mosolova 
+et al.
+ (2026)
+
+A. Mosolova, M. Candito, and C. Ramisch
+
+In the LLM era, word sense induction remains unsolved
+.
+
+arXiv preprint arXiv:2603.11686
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+Neelakantan 
+et al.
+ (2014)
+
+A. Neelakantan, J. Shankar, A. Passos, and A. McCallum
+
+Efficient non-parametric estimation of multiple embeddings per word in vector space
+.
+
+In 
+Proceedings of the 2014 Conference on Empirical Methods in Natural Language Processing (EMNLP)
+,
+
+pp. 1059–1069
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+Pilehvar and Camacho-Collados (2019)
+
+M. T. Pilehvar and J. Camacho-Collados
+
+WiC: the word-in-context dataset for evaluating context-sensitive meaning representations
+.
+
+In 
+Proceedings of the 2019 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies, Volume 1 (Long and Short Papers)
+,
+
+Minneapolis, Minnesota
+, 
+pp. 1267–1273
+.
+
+External Links: 
+Link
+
+Cited by: 
+Appendix J
+.
+
+Radford 
+et al.
+ (2019)
+
+A. Radford, J. Wu, R. Child, D. Luan, D. Amodei, and I. Sutskever
+
+Language models are unsupervised multitask learners
+.
+
+OpenAI blog
+ 
+1
+ (
+8
+).
+
+Cited by: 
+§4.1
+.
+
+Reisinger and Mooney (2010)
+
+J. Reisinger and R. J. Mooney
+
+Multi-prototype vector-space models of word meaning
+.
+
+In 
+Human Language Technologies: The 2010 Annual Conference of the North American Chapter of the Association for Computational Linguistics
+,
+
+pp. 109–117
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+Rubenstein and Goodenough (1965)
+
+H. Rubenstein and J. B. Goodenough
+
+Contextual correlates of synonymy
+.
+
+Communications of the ACM
+ 
+8
+ (
+10
+), 
+pp. 627–633
+.
+
+Cited by: 
+Appendix E
+.
+
+Silveira 
+et al.
+ (2014)
+
+N. Silveira, T. Dozat, M. de Marneffe, S. R. Bowman, M. Connor, J. Bauer, and C. D. Manning
+
+A gold standard dependency corpus for English
+.
+
+In 
+Proceedings of the Ninth International Conference on Language Resources and Evaluation (LREC’14)
+,
+
+pp. 2897–2904
+.
+
+External Links: 
+Link
+
+Cited by: 
+§4.5
+.
+
+Socher 
+et al.
+ (2013)
+
+R. Socher, A. Perelygin, J. Wu, J. Chuang, C. D. Manning, A. Ng, and C. Potts
+
+Recursive deep models for semantic compositionality over a sentiment treebank
+.
+
+In 
+Proceedings of the 2013 Conference on Empirical Methods in Natural Language Processing
+,
+
+pp. 1631–1642
+.
+
+External Links: 
+Link
+
+Cited by: 
+§4.5
+.
+
+Sun and Hewitt (2023)
+
+H. Sun and J. Hewitt
+
+Character-level Chinese backpack language models
+.
+
+In 
+Proceedings of the 6th BlackboxNLP Workshop: Analyzing and Interpreting Neural Networks for NLP
+,
+
+Singapore
+, 
+pp. 106–119
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+Vaswani 
+et al.
+ (2017)
+
+A. Vaswani, N. Shazeer, N. Parmar, J. Uszkoreit, L. Jones, A. N. Gomez, L. Kaiser, and I. Polosukhin
+
+Attention is all you need
+.
+
+In 
+Advances in Neural Information Processing Systems 30
+,
+
+Cited by: 
+§3.1
+.
+
+Wiegreffe and Pinter (2019)
+
+S. Wiegreffe and Y. Pinter
+
+Attention is not not explanation
+.
+
+In 
+Proceedings of the 2019 Conference on Empirical Methods in Natural Language Processing and the 9th International Joint Conference on Natural Language Processing (EMNLP-IJCNLP)
+,
+
+pp. 11–20
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+Ye 
+et al.
+ (2025)
+
+T. Ye, L. Dong, Y. Xia, Y. Sun, Y. Zhu, G. Huang, and F. Wei
+
+Differential transformer
+.
+
+In 
+The Thirteenth International Conference on Learning Representations (ICLR)
+,
+
+External Links: 
+Link
+
+Cited by: 
+Appendix B
+,
+
+§1
+,
+
+§2
+,
+
+§3.2
+,
+
+§3.2
+.
+
+Appendix A 
+Proofs
+
+Both propositions are stated in §
+3.3
+; we give the arguments
+here in full.
+
+Proof of Proposition 
+1
+.
+
+Softmax rows are convex weights, giving the first claim. For the second,
+necessity: summing 
+ gives 
+. Since 
+, every coordinate satisfies
+
+, hence 
+
+(trivially when 
+) and 
+.
+Writing 
+ and using
+the sum constraint gives 
+. Sufficiency: set
+
+, place the remaining mass
+
+ on any coordinate, and take 
+.
+Then 
+ by construction and 
+. For (
+4
+), dividing (
+3
+) by
+
+ gives 
+ and 
+; on the hyperplane 
+,
+
+, so
+
+. The bound is attained by 
+,
+
+, for which 
+. At
+
+ this collapses to
+
+ with 
+, i.e. the simplex. The equivalence
+holds for a single position as well; 
+ is needed only for the
+strict inclusion in (
+4
+), which requires a coordinate that can
+go negative. The familiar box bounds 
+ are
+implied by (
+3
+) but strictly weaker: 
+
+with 
+ lies in the box and has the correct sum, yet its
+positive part totals 
+, so it is unreachable (verified against an
+exact linear program in the released code).
+∎
+
+Proof of Proposition 
+2
+.
+
+The single-token constraint fixes 
+ for softmax, whose lone
+weight is 
+, and 
+ for the differential Backpack,
+whose lone weight is 
+; each model realizes the same pinned
+output with its own sense scaling. Softmax then gives
+
+, 
+; in the 
+ basis the
+target is 
+ and the reachable segment is 
+,
+so the squared distance is 
+,
+attained at 
+. For the differential Backpack the output is
+
+, so the target requires
+
+, which has the correct sum 
+ and
+negative part 
+. By (
+3
+) it is reachable exactly
+when 
+; since 
+ this is
+
+, and rearranging 
+
+gives 
+. (With a single negative coordinate the
+constraint (
+3
+) reduces to the coordinate bound
+
+.)
+∎
+
+Appendix B 
+Hyperparameters and Reproducibility
+
+All models use pre-LN Transformer blocks, tied input/output embeddings,
+learned absolute positions, and dropout 
+. WikiText-103 runs: 
+,
+
+ layers, 
+ heads, 
+ senses, context 
+, per-sense q/k
+dimension 
+; batch 
+ with gradient accumulation 
+; AdamW
+(
+, weight decay 
+), peak LR 
+ with
+
+ warmup steps and cosine decay to 
+; 
+k steps in
+bf16. Transformer baselines use 
+ layers to match parameters and 
+
+to match depth (
+M). The
+OpenWebText runs use gradient accumulation 
+ and 
+k steps, with
+
+, 
+ layers and 
+ heads at 
+M, and 
+, 
+ heads
+and 
+ layers (
+ for the parameter-matched Transformer) at 
+M. The
+differential 
+ uses the reparameterization of
+
+Ye et al. (2025)
+ with 
+ at the sense
+layer.
+
+Cost of the second map.
+
+Differential contextualization adds one query/key projection at the sense
+layer and nothing else: 
+M, 
+M and 
+M parameters at 
+M,
+
+M and 
+M (
+, 
+ and 
+ of the model). By
+operation count the second map, a second attention pass over the sense
+vectors, is 
+, 
+ and 
+ of the forward FLOPs at the three
+scales. Measured training throughput falls by more, 
+, 
+
+and 
+ relative to the softmax Backpack on the same fused-attention
+path, because attention over 
+ sense heads with 
+-dimensional
+values is memory-bound rather than compute-bound. Relative to the
+parameter-matched Transformer, the softmax Backpack trains 
+ slower at
+
+M and 
+ at 
+M, the differential Backpack 
+ and 
+.
+Inference carries the same two passes; inspecting the weights is
+unchanged, since the two maps are read off the same forward pass. Peak
+memory was not measured. Throughput of the control rungs (one-hot, sum,
+gain, 
+, Cog, unconstrained) is not comparable, as they use
+the explicit, unfused weight computation.
+
+Figure 4: 
+Per-sense negative-mass fraction of the differential Backpack
+in the main configuration (
+); 
+ is purely excitatory, 
+ purely
+inhibitory.
+
+Appendix C 
+Faithfulness and Inhibition Ablation
+
+Rule
+
+rel. err.
+
+compr.
+
+suffic.
+
+one-hot
+
+1.000
+
+5.97
+
+softmax
+
+1.000
+
+3.49
+
+diff Backpack (ours)
+
+1.000
+
+3.74
+
+unconstr. weights
+
+1.000
+
+1.14
+
+Cog Attention
+
+1.000
+
+3.63
+
+softmax + MLP
+
+0.77
+
+0.48
+
+3.39
+
+diff + MLP
+
+0.82
+
+0.44
+
+3.10
+
+ten random pairs
+
+—
+
+—
+
+0.01
+
+Table 5: 
+Counterfactual faithfulness of the per-sense attribution on
+WikiText-103 (
+ positions): Spearman correlation and median relative
+error between attributed and actual logit change under single removals of
+the ten top pairs, and the change in target log-probability (nats) when
+those pairs are removed jointly (comprehensiveness) or kept alone
+(sufficiency).
+
+Table 
+5
+ gives the counterfactual faithfulness numbers of
+§
+4.7
+.
+
+Figure 5: 
+Per-token loss increase when inhibition is removed at inference
+from a trained differential Backpack, by WordNet polysemy of the
+preceding whole word, for the two edits of §
+4.8
+; bars
+are means with 
+ intervals over all validation tokens.
+
+Both edits act on the explicit weights 
+
+and keep every row’s mass 
+, so only the sign structure is
+removed. Polysemy is the number of WordNet synsets of the preceding token
+when it is a complete alphabetic word (
+ of tokens are word pieces,
+punctuation or words absent from WordNet and are reported separately; the
+loss increase there is larger still, 
+–
+ nats). Applied to the
+softmax Backpack both edits are identities and the measured change is
+exactly zero. The loss increase is 
+–
+ nats after every class of
+lexical word at all three scales and decreases mildly with polysemy
+(Figure 
+5
+); relative to the base loss it is flat, about
+
+ throughout.
+
+Appendix D 
+Scale: OpenWebText at 170M and 350M
+
+Table 
+8
+ collects the equal-budget comparisons across scale;
+every OpenWebText model is trained on the same 
+B tokens. The
+advantage persists to 
+M and the three seeds at 
+M put it at
+
+ standard errors, but the relative gain shrinks with scale and so does
+the tax reduction, from 
+ at 
+M to 
+ at 
+M, while
+inhibition usage does not (negative mass 
+–
+, mean 
+
+–
+). Table 
+9
+ gives every probe at every scale.
+The profile is stable: the differential Backpack’s senses lead the softmax Backpack’s on STS-B, SST-2 and sense clustering and trail on POS at 
+M, 
+M and 
+M, with
+the STS-B margin shrinking from 
+ to 
+; the 
+M
+Transformer’s hidden state reaches 
+ on STS-B. For reference, the
+STS-B protocol gives 
+ for GPT-2, 
+ for BERT-base
+
+(
+Devlin et al., 2019
+)
+ and 
+ for SimCSE
+
+(
+Gao et al., 2021
+)
+, so the sense outputs sit between GPT-2 and
+BERT-base. MRPC probes stay at or below the majority class (
+) for
+every model below 
+M and reach it only for the 
+M Transformer
+(
+) and the differential Backpack’s senses (
+), so the task does not separate
+models at these scales. The depth-matched 
+-layer Transformer matches
+the 
+-layer one on every probe (STS-B 
+ vs. 
+, SST-2
+
+ vs. 
+) while trailing it by 
+ ppl, another sign that
+the probes measure something perplexity does not.
+
+neg.
+
+entropy
+
+sparsity
+
+SL999/WS353
+
+mass
+
+of 
+
+@1e-3
+
+(best 
+)
+
+softmax
+
+0.00
+
+0.70
+
+0.66
+
+0.42 / 0.70
+
+diff
+
+0.45
+
+0.78
+
+0.49
+
+0.44 / 0.73
+
+Table 6: 
+Sense-weight structure and lexical quality on
+WikiText-103 (main configuration): negative weight mass, normalized entropy and sparsity of
+
+, and best-sense Spearman 
+ on SimLex-999 / WordSim-353
+(raw-embedding baselines 
+ / 
+–
+).
+
+Figure 6: 
+Bias against collateral damage (KL) for the
+three sense interventions at 
+M, 
+M and 
+M (left to right);
+upper-left is better.
+
+none
+
+remove
+
+suppress
+
+70M
+
+softmax bias
+
+1.14
+
+1.06
+
+0.98
+
+0.86
+
+   KL
+
+—
+
+.002
+
+.007
+
+.030
+
+diff bias
+
+1.77
+
+1.65
+
+1.58
+
+1.47
+
+   KL
+
+—
+
+.006
+
+.024
+
+.095
+
+170M
+
+softmax bias
+
+1.74
+
+1.42
+
+1.20
+
+1.19
+
+   KL
+
+—
+
+.015
+
+.052
+
+.173
+
+diff bias
+
+1.92
+
+1.62
+
+1.38
+
+1.16
+
+   KL
+
+—
+
+.004
+
+.015
+
+.056
+
+350M
+
+softmax bias
+
+1.29
+
+1.08
+
+0.96
+
+0.93
+
+   KL
+
+—
+
+.009
+
+.037
+
+.233
+
+diff bias
+
+1.49
+
+1.29
+
+1.16
+
+1.01
+
+   KL
+
+—
+
+.003
+
+.011
+
+.042
+
+Table 7: 
+Gender bias (
+) and collateral damage
+KL (
+) under each sense intervention, over 
+ profession
+nouns, at 
+M, 
+M and 
+M.
+
+Scale
+
+Transf.
+
+softmax
+
+diff
+
+gap
+
+cut
+
+70M WT103
+
+21.09
+
+24.60
+
+23.52
+
+1.08 (4.4%)
+
+31%
+
+170M OWT
+
+—
+
+23.84
+
+23.15
+
+0.70 (2.9%)
+
+—
+
+350M OWT
+
+18.02
+
+20.48
+
+19.96
+
+0.52 (2.5%)
+
+21%
+
+Table 8: 
+Exact validation perplexity across scale at equal parameters and
+token budget; gap is softmax minus diff and cut the reduction of the tax
+(the gap to the parameter-matched Transformer). The 70M and 170M Backpack
+entries are three-seed means (s.d. 
+/
+ and 
+/
+ for
+softmax/diff); the rest are single runs.
+
+Repr.
+
+POS
+
+STS
+
+SST-2
+
+MRPC
+
+ARI
+
+Transf. (
+), 70M
+
+0.859
+
+0.488
+
+0.753
+
+0.662
+
+0.174
+
+Transf. 8L (
+), 70M
+
+0.860
+
+0.484
+
+0.744
+
+0.674
+
+0.160
+
+DIFF Transf. (
+), 70M
+
+0.859
+
+0.499
+
+0.743
+
+0.654
+
+0.203
+
+softmax (
+), 70M
+
+0.844
+
+0.372
+
+0.718
+
+0.625
+
+0.151
+
+diff (
+), 70M
+
+0.815
+
+0.495
+
+0.731
+
+0.613
+
+0.174
+
+Cog (
+), 70M
+
+0.836
+
+0.422
+
+0.736
+
+0.632
+
+0.163
+
+diff+MLP (
+), 70M
+
+0.838
+
+0.485
+
+0.749
+
+0.662
+
+0.168
+
+softmax (
+), 170M
+
+0.850
+
+0.466
+
+0.773
+
+0.657
+
+0.193
+
+diff (
+), 170M
+
+0.834
+
+0.554
+
+0.792
+
+0.679
+
+0.215
+
+Transf. (
+), 350M
+
+0.869
+
+0.572
+
+0.822
+
+0.711
+
+0.256
+
+softmax (
+), 350M
+
+0.855
+
+0.476
+
+0.786
+
+0.676
+
+0.194
+
+diff (
+), 350M
+
+0.844
+
+0.539
+
+0.792
+
+0.684
+
+0.204
+
+Table 9: 
+Frozen-representation probes at every scale: POS accuracy, STS-B
+Spearman, SST-2 and MRPC probe accuracy (majority class 
+ and
+
+), and sense-clustering ARI.
+
+Appendix E 
+Sense Specialization
+
+Running our battery on the released Backpack-GPT2 gives an attribution
+residual of 
+ and negative weight mass exactly zero. It
+reaches 
+ ppl on OpenWebText with roughly 
+ our token budget;
+our 
+M differential Backpack reaches 
+ at a quarter of the tokens
+and twice the parameters, and our 
+M model reaches comparable
+sense-output quality on STS-B (
+ vs. 
+). The battery also
+reproduces the profile of Table 4 in 
+Hewitt et al. (2023)
+: min-sense similarity is
+strongest on SimLex-999 and a single sense on RG-65 and WordSim-353, as
+reported, while our absolute values run 
+–
+ higher (e.g. 
+ vs. 
+ min-sense on SimLex-999), which we attribute to
+vocabulary coverage and to selecting the best sense per dataset.
+
+The richer weight usage is matched by richer senses
+(Table 
+10
+). We score sense vectors against human similarity
+judgments on SimLex-999 
+(
+Hill et al., 2015
+)
+, SimVerb-3500
+
+(
+Gerz et al., 2016
+)
+, RG-65 
+(
+Rubenstein and Goodenough, 1965
+)
+ and
+WordSim-353 
+(
+Finkelstein et al., 2001
+)
+. Sense vectors far exceed the
+raw-embedding baseline on both lexical-similarity tasks under both
+models, confirming the
+Backpack’s core property; but differential contextualization recruits far
+more of the sense inventory into carrying that signal. The number of
+individual senses correlating with human judgments at 
+ rises from
+
+ to 
+ at 
+, and from 
+ to 
+ at
+
+, with a correspondingly higher mean-senses correlation
+(
+). This is not redundancy: the mean pairwise cosine among a
+word’s sense vectors is 
+, so senses remain nearly orthogonal. The sense lens for 
+rock
+ (§
+4
+, Table 
+11
+) shows the same
+effect qualitatively: the differential Backpack devotes distinct senses to a word’s
+separate meanings that the softmax Backpack conflates.
+
+Model
+
+best 
+
+mean 
+
+#
+
+emb 
+
+softmax, 
+
+0.70
+
+0.67
+
+6/16
+
+0.45
+
+diff, 
+
+0.73
+
+0.69
+
+9/16
+
+0.42
+
+softmax, 
+
+0.72
+
+0.58
+
+8/64
+
+0.48
+
+diff, 
+
+0.74
+
+0.68
+
+37/64
+
+0.48
+
+Table 10: 
+Sense specialization on WordSim-353 (Spearman
+
+): the single best sense, the sense-averaged cosine, the number of
+individual senses with 
+, and the raw token-embedding baseline.
+
+rock
+, differential Backpack (ours)
+
+mineral
+
+rock, Rock, Rocks, canyon, Canyon
+
+music
+
+rock, garage, punk, gig, pop
+
+rock
+, softmax Backpack
+
+blended
+
+rock, punk, metal, shale
+
+blended
+
+rock, bedrock, punk, Stones
+
+Table 11: 
+Sense lens for 
+rock
+: the vocabulary items each
+selected sense most strongly predicts through the tied embedding,
+
+, in the two models at 
+.
+
+Appendix F 
+Robustness Across Sense Counts
+
+Figure 7: 
+Final perplexity by number of senses 
+ on
+WikiText-103 (
+k steps).
+
+The advantage is not tied to a particular sense budget
+(Figure 
+7
+). Differential contextualization wins at every
+sense count we test: 
+ vs. 
+ at 
+, 
+ vs. 
+
+at 
+, and 
+ vs. 
+ at 
+ (exact ppl, 
+k steps).
+The gain is not monotone in 
+: it peaks at 
+ (
+ relative)
+rather than at the smallest inventory (
+ at 
+, 
+ at
+
+). The idealized analysis of §
+3.3
+ predicts a
+separation that shrinks with 
+, so it does not by itself account for this
+profile; at language-model scale the benefit evidently also depends on
+having enough senses for inhibition to act on.
+
+Appendix G 
+Verifying the Separation
+
+Proposition 
+2
+ predicts a concrete, measurable floor, so we test
+it directly. We construct 
+ tokens with orthonormal target directions
+
+ and train Backpacks by regression on the combined sense output
+
+ (rather than through the logits: a logit-space probe is confounded,
+since a model can win an argmax by inflating embedding norms without leaving
+the hull at all; an earlier version of this task was solved by both
+architectures for exactly that reason). Each example is a two-token sequence
+
+ requiring 
+ at position 
+ (which pins the senses
+exactly) and 
+ at position 
+, a point outside
+
+.
+
+squared error
+
+softmax
+
+.275
+
+.275
+
+.092
+
+.028
+
+.002
+
+diff
+
+.000
+
+.000
+
+.000
+
+.000
+
+.005
+
+Table 12: 
+Extrapolation squared error on the synthetic
+task of Appendix 
+G
+ by number of sense heads 
+ (mean of
+3 seeds).
+
+Table 
+12
+ matches the theory. At 
+ the softmax Backpack
+is stuck at a squared error of 
+ while the differential Backpack reaches
+
+ to numerical precision, a separation of four orders of magnitude, and
+it does so by growing 
+ to 
+, well past the
+
+ threshold the proposition requires. The measured floor is
+
+ rather than the proposition’s 
+ because the trained
+objective also scores the pin, and the model trades a little pinning error
+for extrapolation error. This is its true floor, not a poor optimum: with
+attention placed entirely on the first token, the joint objective is
+minimized at 
+ (for 
+,
+
+), which gives pinning error 
+ and extrapolation error
+
+ exactly, the values observed. At 
+ the error is unchanged,
+but there it is an optimization outcome rather than a floor: a cancelling
+solution exists (
+, 
+ with saturated
+attention) and training does not find it. From 
+ the softmax error
+decays (
+, 
+, 
+) as heads cancel, until at 
+ both
+architectures solve the task and the separation disappears.
+
+Appendix H 
+Inhibition Dynamics
+
+Figure 8: 
+Mean learned 
+ over training (a) from
+three initializations and (b) for three sense counts 
+ (WikiText-103,
+
+k steps).
+
+How much inhibition does the model want? We track the mean learned gain
+
+ and vary its initialization (Figure 
+8
+). From
+initializations 
+ trained for 
+k steps, 
+
+reaches the same band (
+–
+) and final perplexity is nearly flat
+across them (
+–
+ at that budget): the level of inhibition is set
+by training rather than inherited from the initialization. It is not a
+fixed constant, however: in the 
+k-step main run 
+ grows
+steadily from 
+ to 
+ without saturating, so the model relies on
+inhibition more, not less, as it improves. Demand for inhibition is highest
+when senses are few: mean 
+ is 
+ at 
+, where some senses
+become net-inhibitory, against 
+ at 
+ and 
+ at 
+
+(all 
+k steps), so it is not monotone in 
+. Across scale at 
+
+the trained gain is stable: 
+ at 
+M, 
+ at 
+M (three
+seeds) and 
+ at 
+M.
+
+Is the 
+ regime necessary?
+
+Mean 
+ exceeds 
+ at 
+, with individual senses reaching
+
+, so those senses are net inhibitory and fall outside the regime
+Propositions 1 and 2 assume. Constraint (
+3
+) still holds for
+such a sense (its proof never uses 
+), but its normalized
+coefficients range over the reflection through the origin of an 
+
+ball section of radius 
+, so the
+separation argument of Proposition 
+2
+, which compares against
+the convex hull, does not apply. Constraining 
+ to 
+ with a
+sigmoid tests whether this regime is necessary or incidental. It costs 
+
+ppl at 
+ (
+) and nothing measurable at 
+
+(
+), where trained 
+ stays below 
+ anyway. The
+constraint does bind: negative weight mass falls from 
+ to 
+ at
+
+, against 
+ to 
+ at 
+. The regime is therefore
+doing work exactly where it arises: with few, coarse senses, some senses are
+most useful as pure subtraction.
+
+Appendix I 
+Induced versus Learned Senses
+
+Because attention-only networks are Backpacks
+
+(
+Hewitt et al., 2023
+)
+, senses can be read out of a trained
+Transformer with no training at all: head 
+ contributes
+
+, and
+
+ depends only on the token. We verified
+this reproduces a real attention sublayer to 
+ relative
+error. This gives a training-free baseline that learned senses must beat.
+
+Senses
+
+SL999
+
+SV3.5k
+
+RG65
+
+WS353
+
+induced, Transf.
+
+112
+
+0.322
+
+0.179
+
+0.493
+
+0.475
+
+induced, trunk
+
+64
+
+0.365
+
+0.249
+
+0.559
+
+0.552
+
+learned, diff
+
+16
+
+0.441
+
+0.337
+
+0.726
+
+0.731
+
+Table 13: 
+Best-sense Spearman 
+ of training-free
+senses induced from OV circuits versus learned Backpack senses.
+
+Learned senses dominate on all four datasets while using far fewer
+components (
+–
+ fewer; Table 
+13
+), so training a Backpack buys a
+qualitatively better interface rather than a repackaging of one a
+Transformer already has. Consistently, reconstructing the Transformer’s
+output from its OV circuits alone leaves a relative residual of 
+:
+most of a Transformer is genuinely outside Backpack form. We report this residual
+only for softmax attention; in differential mode the sublayer applies a
+per-head RMSNorm, so no 
+ factorization exists and the quantity is
+undefined.
+
+Appendix J 
+Word-in-Context: A Negative Result
+
+We also tested whether signed sense weights are a better zero-shot
+word-sense-disambiguation signal, using WiC
+
+(
+Pilehvar and Camacho-Collados, 2019
+)
+: for each sentence pair we take
+the cosine similarity between the target word’s occurrences under four
+representations (the underlying hidden state, the self-position sense
+weights 
+, the mean downstream sense reads, and the sense
+mixture), fit a threshold on train and report dev accuracy. We find
+no evidence for the hypothesis. All features reach only
+
+–
+ (majority class 
+), and every differential-vs-softmax
+difference lies within 
+ standard errors (
+ points on 
+
+pairs) with the sign flipping between the 
+M and 
+M models. The
+contextual hidden-state baseline is itself only 
+–
+, so these
+models are too weak at this scale for WiC probing to be diagnostic at all;
+the null result bounds our claims rather than testing the mechanism.
+One component of the probe is informative, however. Decomposing the signed
+self-weights into their inhibitory and excitatory halves and probing each
+alone, the inhibitory half reaches 
+ at 
+M and 
+ at 
+M,
+
+ and 
+ standard errors above the 
+ majority. For the softmax
+Backpack the same feature is identically zero and scores exactly 
+,
+which is the sanity check the decomposition affords. Inhibition alone
+therefore carries a small but measurable amount of lexical information
+across 
+ pairs, which generalizes the single 
+bank
+ analysis of
+§
+4
+ beyond one word. We
+report the overall null because our disambiguation evidence
+(§
+4
+, Figure 
+3
+) is qualitative, and a
+benchmark-level demonstration of improved WSD remains open.
+

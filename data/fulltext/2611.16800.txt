@@ -1,0 +1,2044 @@
+A Code-Level Audit of X
+https://arxiv.org/abs/2611.16800
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+A Code-Level Audit of X
+
+CCS: 
+Human-centered computing Social media
+CCS: 
+Information systems Recommender systems
+CCS: 
+Social and professional topics Technology audits
+
+Luka Bekavac
+
+email: 
+luka.bekavac@unisg.ch
+
+Affiliation: 
+University of St. Gallen
+, 
+St.Gallen
+, 
+Switzerland
+
+ and 
+
+Simon Mayer
+
+email: 
+simon.mayer@unisg.ch
+
+Affiliation: 
+University of St. Gallen
+, 
+St.Gallen
+, 
+Switzerland
+
+Abstract.
+
+The transparency regime of recommender systems on Very Large Online Platforms (VLOPs) is undergoing significant change under the EU Digital Services Act (DSA). The DSA requires platforms to disclose information about their recommendation pipelines and grants vetted researchers access to non-public data, which may extend to recommender code. However, it is not known 
+to what extent
+ such code releases enable 
+substantive and meaningful
+ third-party auditing of a production recommender system. We address this question by proposing a code-level audit methodology for recommender systems and applying it to the X platform, which has voluntarily open-sourced its recommender pipeline. Our methodology is a backwards-walk traversal of the repository, tracing each decision-relevant component from the user-facing timeline back to its upstream producers, checking that it is reachable from the served pipeline, and classifying each under a four-tier inspectability scheme. Applying this procedure, we identify 
+13 transparency dead-ends
+ on the live serving path: models, services, label lists, and configuration values that the public code depends on but the release does not contain. We find that the components that decide which posts are filtered and how they are ranked fall into the two least inspectable tiers, a pattern that intensifies with the 2025 integration of the proprietary Grok language model into moderation, annotation, and ranking. We further show that the release keeps 2023 code that the 2025 pipeline no longer reaches, with 36 parameter references that would pass for dead-ends without a reachability check. Finally, we discuss which additional artifacts would be required for meaningful auditing.
+
+Keywords: 
+Code Audit, Recommender System, Hybrid Code/LLM Recommender System, Reproducibility, Algorithm Auditing
+
+1. 
+Introduction
+
+Platforms such as X shape public discourse through large-scale recommender systems that determine which posts users see, in what order, and with what prominence. These systems integrate personalization, ranking, and moderation into pipelines that optimize for relevance and for platform-specific economic and political objectives 
+(
+Leerssen, 2020
+)
+. Their outputs co-determine exposure to disinformation, discriminatory content, and other systemic risks, making them a central regulatory concern 
+(
+Meßmer and Degeling, 2023
+)
+.
+Despite this scrutiny, recommender systems remain opaque, owing to both technical complexity and deliberate corporate secrecy (cf. 
+(
+Lipton, 2017
+)
+). Most empirical work therefore infers algorithmic behavior from outputs rather than from internal design and relies on so-called black-box methods—sock-puppet audits, scraping, network analyses, and observational studies—which themselves face methodological, ethical, and legal constraints 
+(
+Urman et al., 2025
+; 
+Bandy, 2021
+; 
+Olteanu et al., 2019
+; 
+Bekavac et al., 2026
+)
+. For AI audits, researchers have argued more generally that black-box access is insufficient and that auditors also need white-box and “outside-the-box” access, for instance to code, documentation, and deployment details 
+(
+Casper et al., 2024
+)
+. In addition to only providing an incomplete view of the external behavior of a system, these methods can merely show 
+that
+ a system behaves in a particular way, but not 
+why
+. On the other hand, code-level audits—which could address this gap—barely exist as a genre in the domain of recommender systems: a 2025 systematic review of 176 algorithm-auditing studies found only a single study that inspected source code directly, and none targeted a recommender system 
+(
+Urman et al., 2025
+; 
+Weber and Kosterich, 2017
+)
+.
+
+The EU Digital Services Act (DSA) 
+(
+European Parliament and Council of the European Union, 2022
+)
+ addresses these concerns. It requires very large online platforms (VLOPs), services with more than 45 million monthly users in the EU, to assess and mitigate the 
+systemic risks
+ their services create, such as the spread of illegal content and negative effects on fundamental rights, civic discourse, electoral processes, public health, and minors (Arts. 34 and 35). The design of recommender systems is named explicitly as a factor in these risks. The DSA pairs these duties with transparency obligations that allow users, regulators, and researchers to scrutinize how recommender systems work: Art. 27 requires platforms to disclose their main recommender parameters in plain language; Art. 38 requires VLOPs to offer at least one recommender option not based on profiling; and Art. 40(4) grants vetted researchers access to non-public data necessary to assess systemic risks, under formal access controls 
+(
+Seiling et al., 2025
+)
+. While nothing in Art. 40(4) excludes it, the DSA does not name source code, and regulators can already demand that VLOPs explain the design and logic of their recommender systems (Art. 40(3)). Platforms typically satisfy DSA transparency obligations through structured documentation, audit reports, and negotiated researcher access. As data-access requests under the DSA become more common, independent researchers will have increasingly the opportunity to scrutinize source code directly and code-level audit methodologies will matter well beyond the case of voluntary releases.
+X has voluntarily open-sourced substantial parts of its production recommender pipeline, first in 2023
+1
+1
+
+1
+
+            
+            
+            
+          Twitter Engineering, 
+Twitter’s Recommendation Algorithm
+, 31 March 2023.
+ and again in a major 2025 update. X made this release voluntarily, outside any DSA obligation, and framed it at the time of the 2023 release as enabling independent third parties to “determine, with reasonable accuracy, what will probably be shown to users” (App. 
+B
+). Within this regulatory landscape, the present study treats X’s release as a test case: because source code is provided, gaps between regulatory transparency requirements and platform disclosures become analytically visible in our study.
+
+The 2025 update is also architecturally distinctive: It extends the pipeline with X’s proprietary large language model (LLM), 
+Grok
+, into moderation, annotation, and ranking logic. This is a transition to a partially non-deterministic hybrid Code/LLM recommender architecture whose semantic annotations, safety classifications, and contextual embeddings now co-determine what content users see. This shift creates a new form of transparency gap: While the deterministic components remain visible in the open-sourced code, the language model layer---its prompts, weights, and inference logic---remains hidden and/or closed. It is therefore an open question which parts of the 2025 pipeline remain auditable, and how LLM integration reshapes the auditability of production recommender systems across platforms more generally. The broader industry is moving in the same direction, which increases the relevance and urgency of this question. Meta’s CEO Mark Zuckerberg has stated in the company’s Q4 2025 earnings call that Meta is ‘‘working on merging LLMs with the recommendation systems that power Facebook, Instagram, Threads, and our ads system.’’
+2
+2
+
+2
+
+            
+            
+            
+          Meta Platforms Q4 2025 earnings call 
+https://www.facebook.com/zuck/posts/pfbid0XaqxVGXPkGHRnotatVneydxapZsSjHbBXVPuDnJGC9T6P3Z76MeenyiW6H3c69asl
+.
+
+As other VLOPs follow, the auditability questions raised by X’s Grok integration will apply across the sector, and the European Commission has already opened a formal investigation into risks associated with Grok’s deployment in the EU.
+3
+3
+
+3
+
+https://ec.europa.eu/commission/presscorner/detail/en/ip_26_203
+
+With this paper, we provide methodological and empirical contributions to close this research gap. Specifically:
+
+(1)
+
+We propose a 
+generalizable methodology
+ for code audits of VLOP recommender systems, comprising a backwards-walk traversal procedure with a reachability check, a four-tier inspectability classification, and a systematic dead-ends inventory.
+
+(2)
+
+We 
+apply this methodology to X’s 2025 open-source repository
+, documenting how user segmentation, visibility filtering, and content ranking are implemented, and how Grok-mediated annotation signals reshape the recommendation pipeline.
+
+(3)
+
+We present a 
+dead-ends inventory
+ of 13 transparency gaps: models, services, label lists, and configuration values that the public code depends on but the release does not contain. For each, we show which audit questions the gap forecloses.
+
+2. 
+Background and Related Work
+
+Existing audit methodologies cluster around two access regimes. The first is first-party access, where organizations audit their own systems with full internal access to design documents, engineers, and configuration. The second is third-party observational access, where researchers study system outputs without any access to internal design. The case this paper addresses falls between these two regimes: Under data access through the DSA or voluntary disclosure, third parties gain access to partial source code but not to engineers, weights, or production configuration.
+In the following, Secs. 
+2.1
+–
+2.3
+ review audit methods and frameworks, Sec. 
+2.4
+ the few existing code audits, and Secs. 
+2.5
+ and 
+2.6
+ the limits of code releases and work on decision provenance.
+
+2.1. 
+Audit Methods for Platform Recommender Systems
+
+Sandvig et al. 
+(
+Sandvig et al., 2014
+)
+ first distinguished research designs for auditing platform algorithms; building on their taxonomy, Bandy 
+(
+Bandy, 2021
+)
+ identifies five methods: code audits, direct scrapes, sock-puppet audits, carrier-puppet audits, and crowdsourced audits.
+The vast majority of empirical work falls into the latter four categories, inferring algorithmic behavior from outputs rather than from internals.
+This hence yields valuable insights into observed effects but provides limited understanding of underlying mechanisms, and faces methodological 
+(
+Mosnar et al., 2025
+)
+, ethical 
+(
+Olteanu et al., 2019
+)
+, and legal 
+(
+Bekavac et al., 2026
+)
+ constraints.
+
+2.2. 
+First-Party and Internal Audit Frameworks
+
+A separate line of work proposes audit frameworks for organizations auditing their 
+own
+ systems before deployment. Raji et al. 
+(
+Raji et al., 2020
+)
+ present SMACTR, an end-to-end internal audit framework with five documented stages: 
+Scoping
+, 
+Mapping
+, 
+Artifact Collection
+, 
+Testing
+, and 
+Reflection
+.
+The framework assumes 
+cooperative access
+ to design documents, engineers, and risk-assessment processes inside the developing organization.
+The methodology we propose audits from outside the organization, with only a partial codebase available, and therefore complements SMACTR. The dead-ends inventory we produce in Sec. 
+6
+ corresponds to what the 
+Mapping
+ and 
+Artifact Collection
+ stages of SMACTR yield when access to engineers, stakeholders, and undisclosed configuration is foreclosed.
+
+2.3. 
+Systemic-Risk Audit Frameworks
+
+A second strand of work frames recommender auditing around systemic risks at the VLOP level. Meßmer and Degeling 
+(
+Meßmer and Degeling, 2023
+)
+ propose a risk-scenario-based audit methodology that translates systemic-risk categories into actionable hypotheses and measurement strategies, warning that the absence of concrete methodologies risks promoting “audit-washing.” Leerssen 
+(
+Leerssen, 2020
+)
+ maps the European transparency landscape to three categories of disclosure: user-facing notices, government auditing, and data-sharing partnerships, and argues that a fourth—
+public data access
+—is needed for inclusive scrutiny.
+Panigutti et al. 
+(
+Panigutti et al., 2025
+)
+ provide a taxonomy of algorithm audit study designs that structures what questions an audit should ask.
+This literature assumes observational or quasi-experimental access only, and there is no methodology for navigating a public or otherwise accessible production codebase.
+
+2.4. 
+Code Audits of Production Recommender Systems
+
+Code audits remain rare: the only one identified in the systematic review discussed in the introduction 
+(
+Urman et al., 2025
+)
+, by Weber and Kosterich 
+(
+Weber and Kosterich, 2017
+)
+, analyzed 59 open-source mobile news applications and demonstrated how editorial and normative decisions become embedded in software through filtering, sorting, and ranking routines.
+
+Our study is based on a rare opportunity: X’s 2023 release published substantial parts of the recommender-system codebase under an open-source license, the first VLOP to do so at this level of detail.Shortly after the 2023 release, Messing documented in a widely-read blog post
+4
+4
+
+4
+
+              
+              
+              
+            S. Messing, 
+What can we learn from “The Algorithm,” Twitter’s partial open-sourcing of its feed-ranking recommendation system?
+, April 2023.
+ that the code was there, but missing specifics. Key parameters, feature sets, and model weights were absent or abstracted. Messing reported engagement weights from a README in the companion ML repository, under which a reply counted 27 times as much as a like and a reply that the post’s author engaged with 150 times as much, but cautioned that the release alone could not explain the algorithm without the underlying model features, parameters, and data. Subsequent commentary on the 2025 update consists largely of informal blog posts and practitioner notes that aim to ‘‘reverse engineer’’ the algorithm or optimize content for broader reach.
+5
+5
+
+5
+
+              
+              
+              
+            E.g. 
+https://medium.com/@byteHumi/i-analyzed-twitters-source-code-here-s-how-to-actually-get-a-banger-no-bs-da4f724ad8c2
+ These resources draw on README files or isolated code snippets and lack systematic analytical grounding. They surface individual nuggets but do not induce a framework for navigating the codebase as a whole, and the 2025 Grok integration has not been analyzed in the scholarly literature at all.
+
+2.5. 
+Limits of Reproducibility in Code Releases
+
+Releasing code does not guarantee reproducibility, even in academic recommender systems where less competitive pressure applies. Hidasi and Czapp 
+(
+Hidasi and Czapp, 2023a
+)
+ demonstrated that results shift materially depending on which third-party implementation of a baseline is used. In a companion paper, they showed that widespread flaws in offline evaluation setups propagate across the literature as later works copy earlier evaluation protocols without scrutiny 
+(
+Hidasi and Czapp, 2023b
+)
+.
+ 
+(
+Ferrari Dacrema et al., 2021
+)
+ found that 11 of the 12 neural recommendation approaches they could reproduce, all published at prestigious conferences between 2015 and 2018, were outperformed by conceptually simple baselines. Releasing source code is hence necessary, but not sufficient, for reproducibility or auditability: source code alone rarely shows how a decision was made, because its behavior depends on inputs and operating conditions that the code does not contain 
+(
+Kroll et al., 2017
+)
+; in addition, outsiders cannot confirm that disclosed code is the code that runs 
+(
+Kroll et al., 2017
+)
+. The pattern recurs in the VLOP setting we examine, where dependencies, configurations, and tuning procedures that determine production behavior are routinely absent even when code is shared.
+
+2.6. 
+Decision Provenance and Traceability
+
+A separate research tradition argues that algorithmic accountability requires tracing the chain of inputs to, the nature of, and the flow-on effects from decisions across interconnected components. Singh, Cobbe, and Norval 
+(
+Singh et al., 2019
+)
+ call this 
+decision provenance
+ and position it against narrow algorithm-focused approaches: accountability requires data-flow exposure across technical and organizational boundaries, not just model inspection. Mora-Cantallops et al. 
+(
+Mora-Cantallops et al., 2021
+)
+ review traceability tools for AI systems, including W3C PROV-based approaches, and define minimal requirements for a model to be traceable.
+Within recommender systems specifically, user-centric evaluation research treats transparency, i.e., whether users understand why an item was recommended, as a core quality of the system 
+(
+Pu et al., 2012
+)
+, but it addresses what users perceive rather than where the underlying information comes from. The literature, hence, articulates what should be traceable or transparent in algorithmic systems; but it does not empirically maps where provenance actually breaks down in a production VLOP recommender.
+
+The methodology we propose closes this gap. Our proposed 
+four-tier inspectability classification
+ follows the idea of a provenance-status classification, and our proposed 
+dead-ends inventory
+ is an empirical map of where provenance breaks down in a real VLOP codebase.
+
+3. 
+Method
+
+A code-level audit of a production recommender system has long been close to infeasible in practice. X’s open-sourced repository spans roughly 615,000 lines of code, mostly Scala and Java, spread over dozens of services that exchange data through shared feature definitions and remote calls. Reading it bottom-up is not a realistic method, and even a complete reading would miss most of what drives user-visible behavior—weights, thresholds, experiment configurations, LLM prompts—because these are not part of the release. Our methodology is therefore 
+top-down
+: We start from what the platform itself states about the system and use those statements to decide which components to inspect. The primary analytical output is an inventory of 
+dead-ends
+: points at which code that actually runs depends on a parameter, service, model, or data source that the release does not contain.
+
+3.1. 
+Audit Inputs
+
+The audit draws on sources with different evidentiary status. 
+Secondary
+ sources tell us what the platform claims and which components it describes as new: X’s Transparency Center
+6
+6
+
+6
+
+https://transparency.x.com/en
+ and Help Portal,
+7
+7
+
+7
+
+https://help.x.com/en/resources/recommender-systems
+ and posts from verified X corporate, engineering, and leadership accounts (App. 
+A
+). We use them only to decide what to inspect. 
+Primary
+ sources are used to verify or falsify those claims: the repository at commit 
+c54bec0
+,
+8
+8
+
+8
+
+https://github.com/twitter/the-algorithm/tree/c54bec0d4e029fe34926ef3258a86ccacc0d0182
+ its commit history, and its inline documentation (e.g., App. 
+C.5.2
+). The 2025 update arrived as a single commit adding 65,319 and removing 3,195 lines, so the diff localizes what changed, including the Grok-related additions. No code claim in this paper rests on transparency materials alone.
+
+3.2. 
+Backwards-Walk Audit Traversal
+
+A codebase of this size needs a systematic way of deciding what to read and in which order. We call our procedure a 
+backwards walk
+. It starts where recommendations become visible to users—the assembled timeline—and follows each decision back through the code to the components and data that produce it, much as one would trace a river upstream to its sources. Walking backwards keeps the audit focused on code that actually shapes what users see, and it ends where the trail leaves the release: at the dead-ends we want to document. The traversal consists of five steps:
+
+(1)
+
+Flag what to inspect.
+ From the secondary sources, list the components described as live or recently changed—here, the Grok integration, verification tiers, Communities, evergreen content, and the trust-and-safety classifiers.
+
+(2)
+
+Enter the code at the user-facing surface.
+ Start from the code that assembles the timeline and follow its wiring to each flagged component (Sec. 
+4.1
+ explains the building blocks).
+
+(3)
+
+Check reachability.
+ A release can contain code that nothing calls. Keep only components that are reachable from the pipeline actually served, and set the rest aside instead of classifying it.
+
+(4)
+
+Trace each component to its producers.
+ For every signal a component uses, follow it upstream until it either resolves inside the repository or ends in an external service, an undisclosed module, or a configuration value set outside the code.
+
+(5)
+
+Classify and record.
+ Assign each component an inspectability class (Sec. 
+3.3
+), and record every unresolved dependency as a dead-end.
+
+This procedure produces a directed graph of dependencies with dead-ends as leaf nodes.
+
+3.3. 
+Inspectability Classification
+
+We define four tiers of inspectability for components of a hybrid Code/LLM recommender system:
+
+Class I (Fully inspectable):: 
+
+Both the logic and its parameters are present in the repository, so the component’s behavior can be reconstructed from the code alone. 
+Example:
+ the formula that scales X’s reputation score to a range of 0–100 (App. 
+C.2.1
+).
+
+Class II (Parameter-dependent):: 
+
+The logic is visible, but the values it runs with are set outside the code. The auditor can identify 
+what
+ the code does but not 
+how much
+ it does in production. 
+Example:
+ the factor that down-weights posts from accounts the viewer does not follow, whose code default of 0.75 production may override (App. 
+C.6.4
+).
+
+Class III (Interface only):: 
+
+The call is visible, but the implementation resides in an external service or proprietary model. The auditor can identify 
+that
+ a decision is made and 
+which signals it produces
+, but not 
+how
+. 
+Example:
+ the component that attaches Grok’s annotations to each post (App. 
+C.4.1
+).
+
+Class IV (Opaque):: 
+
+The component is referenced by name only, with no interface, implementation, or documentation in the repository. 
+Example:
+ the internal table that lists “evergreen” content (App. 
+C.9.4
+).
+
+4. 
+Application: Auditing X’s Codebase
+
+We apply the methodology to X’s 2025 open-source repository. We first give a general overview of how X’s recommender system works (Sec. 
+4.1
+) and then follow a single post through it (Sec. 
+4.2
+); Secs. 
+5
+ and 
+6
+ report what the traversal surfaced. All code references are pinned to commit 
+c54bec0
+, the most recent commit at the time of analysis, which is permanently archived in Software Heritage (App. 
+C
+). Every file path and line reference is verified against this commit and listed in the appendix as a GitHub permalink.
+
+4.1. 
+Architecture of X’s Recommender
+
+Figure 1. 
+High-level architecture of X’s Home Timeline recommendation pipeline. Source: 
+https://github.com/twitter/the-algorithm
+.
+Left-to-right flow diagram of X's Home Timeline pipeline. Three data sources (follow graph, tweet engagement, user data) feed four feature components: SimClusters, TwHIN, RealGraph, and Trust and Safety. These feed the Home Mixer, which first draws candidates from three sources: In Network (RealGraph, T\&S), Embedding Space (SimClusters, TwHIN), and Social Graph (follow graph, engagements). The candidates converge on a neural-network icon labeled Heavy Ranker. The ranked posts then pass through heuristics and filters for social proof, visibility (T\&S), author diversity, content balance, and feedback fatigue. A diamond labeled Mixing combines the filtered posts with Ads and Who to follow modules into the Timeline.
+
+When a user opens the 
+For You
+ timeline, X’s 
+home-mixer
+ service assembles it in four stages (Figure 
+1
+). 
+Candidate sourcing
+ gathers some 1,700 posts: 
+in-network
+ posts from accounts the user follows and 
+out-of-network
+ posts from accounts the user does not follow, which are found through models of users’ interests and interactions. 
+Ranking
+ scores each candidate with machine-learning models that predict how the user will engage with it. 
+Filtering
+, both before and after ranking, removes posts that are too old, already seen, or flagged as unsafe. 
+Mixing
+ assembles the final timeline and interleaves the ranked posts with advertisements and recommendation modules. Table 
+1
+ introduces the building blocks the code uses for these stages; we refer to them throughout the paper.
+
+Table 1. 
+Building blocks of X’s recommendation code
+
+Building block
+
+What it does
+
+Example in X’s code
+
+Pipeline
+
+A configured sequence of steps that produces part of the timeline. Pipelines are nested, and only those the product registers actually run.
+
+ForYouMixerPipelineConfig
+
+Candidate source
+
+Retrieves posts that might be shown, from a search index, an interaction graph, or a similarity model.
+
+tweet-mixer
+, SimClusters
+
+Feature
+
+A piece of information about a post, its author, or the viewer, such as the author’s verification status or a post’s predicted topic.
+
+AuthorIsBlueVerifiedFeature
+
+Feature hydrator
+
+Fetches features from other services and attaches them to each candidate—it “hydrates” a bare post ID with information—so that later steps can use them.
+
+GrokAnnotationsFeatureHydrator
+
+Filter
+
+Removes candidates that fail a condition, such as being older than 48 hours.
+
+GrokSpamFilter
+
+Ranking model and heads
+
+Predicts, for each candidate, the probability of each kind of engagement (like, reply, repost, …); each prediction is a 
+head
+. A weighted sum of the heads is the candidate’s score.
+
+Navi (default), Phoenix
+
+Rescoring factor
+
+Multiplies the score after the model, e.g., to down-weight out-of-network posts or to diversify authors.
+
+OutOfNetworkScaleFactorParam
+
+Parameter (feature switch)
+
+A named configuration value. The code ships a default; production values are set at runtime and can differ between experiment groups.
+
+EnableGrokAnnotations
+ (default off)
+
+External service
+
+A system the code calls but the release does not contain, such as the user database or a model server.
+
+Gizmoduck (users), Navi (model)
+
+4.2. 
+End-to-End Trace of a Candidate
+
+To illustrate how the inspectability classification operates in practice, we follow one candidate along the code that actually runs in 2025: 
+a reply posted by a Blue-verified user, scored for a viewer who does not follow that user
+. The 
+For You
+ product registers a single top-level pipeline; older pipelines that remain in the repository take no part (App. 
+C.9.5
+).
+
+(1)
+
+Sourcing.
+ The reply is retrieved by 
+tweet-mixer
+, which merges about 35 out-of-network sources. Which sources run, and how many posts each contributes, is set by parameters (
+Class II
+); several sources query external indexes (
+Class III
+).
+
+(2)
+
+Pre-scoring filters.
+ The reply must be less than 48 hours old and must not be a duplicate or a post the viewer has already seen (App. 
+C.7.1
+). These rules are hard-coded (
+Class I
+).
+
+(3)
+
+Hydration.
+ Feature hydrators attach the author’s Blue verification status from X’s user database, a precomputed similarity score between viewer and post, and, if the Grok layer is enabled, Grok’s annotations (Apps. 
+C.1.2
+, 
+C.3.3
+, and 
+C.4.1
+). All three come from external services (
+Class III
+).
+
+(4)
+
+Ranking.
+ The Navi model, an external service, predicts 15 engagement probabilities from a record that includes the author’s verification status (App. 
+C.9.7
+). Their weighted sum, with weights set outside the code, is the base score. As an out-of-network reply, the post is then down-weighted by two rescoring factors, to 0.5625 of that score with the code defaults (
+Class III
+ for the model; 
+Class II
+ for weights and factors).
+
+(5)
+
+Post-scoring filters.
+ If enabled, four Grok filters remove posts that Grok flags as gore, adult content, spam, or violent (App. 
+C.4.5
+)—visible logic over external labels (
+Class II
+ over 
+Class III
+).
+
+(6)
+
+Mixing.
+ The timeline is assembled from the ranked posts and about twenty other modules, such as advertisements and account recommendations, which are inserted at hard-coded positions (
+Class I
+). A video carousel, however, draws on a product whose code is not in the release (
+Class IV
+, App. 
+C.9.9
+).
+
+5. 
+Component Findings: Segmentation, Visibility, Ranking
+
+Applying the same traversal to user segmentation, visibility filtering, and ranking surfaced the components in Table 
+2
+. Summarizing, most components are governed by parameters whose code defaults are neutral or off, so the code shows 
+which mechanisms exist
+ but not how strongly they act—we examine three mechanisms in depth in Sec. 
+5.1
+. Furthermore, we can see that the 
+decisive computations are external
+: ranking models, Grok’s annotations, and interest-similarity scores come from services that the code only calls. Finally, we note that 
+code from 2023 persists
+: the abuse classifier and the safety labels are carried over unchanged from the 2023 release, whereas the explicit boosts for verified authors in that release no longer run in 2025 (Sec. 
+5.1
+).
+
+Table 2. 
+Components with information that is shown/withheld, and classifications and references (to the appendix).
+
+Component
+
+Information Shown
+
+Information Withheld
+
+Class
+
+Ref.
+
+User segmentation
+
+Verification tiers
+
+Four tiers (Blue, Gold, Gray, Legacy); Blue status is fetched from the user database and passed to the ranking model
+
+Who sets the Gold, Gray, and Legacy flags
+
+II, IV
+
+C.1.1
+, 
+C.1.2
+
+[0.4pt/1.5pt]Reputation score (TweepCred)
+
+PageRank over the follow graph, scaled to 0–100; verified accounts receive the maximal starting weight; reaches the 2025 timeline only as a model input
+
+Data snapshots and run settings; how much the model uses the score
+
+I, II
+
+C.2.1
+, 
+C.2.2
+
+[0.4pt/1.5pt]Interest clusters (SimClusters)
+
+Offline jobs grouping some 20 million accounts into 145,000 communities; similarity scores used for retrieval and ranking
+
+The services that serve the scores; what each cluster means
+
+II, III
+
+C.3.1
+, 
+C.3.2
+
+Visibility filtering
+
+Abuse classifier (2023)
+
+Training code for a multilingual BERT model with eight published enforcement labels
+
+Weights, data, redacted input features; no released pipeline calls it
+
+III
+
+C.5.1
+
+[0.4pt/1.5pt]Safety labels (2023)
+
+Label names such as 
+DoNotAmplify
+ or 
+UntrustedUrl
+, carried over unchanged from 2023
+
+What triggers each label
+
+III
+
+C.5.3
+
+[0.4pt/1.5pt]Grok annotations
+
+13 features per post (App. Table 
+4
+), read from a cache; they feed four filters, the ranking model’s input, and a rescoring factor; off by default
+
+Prompts, model, and the full label set
+
+II, III
+
+C.4.1
+, 
+C.4.5
+
+[0.4pt/1.5pt]Grok topics
+
+32 category names, used only for metrics and logging
+
+The category IDs (redacted)
+
+III
+
+C.4.4
+
+[0.4pt/1.5pt]Freshness filter
+
+A hard-coded 48-hour limit for every scored candidate
+
+Nothing
+
+I
+
+C.7.1
+
+Content ranking
+
+Ranking models
+
+Navi (15 heads) scores by default; Phoenix (13 heads) is switched off; screenshots count among the positive engagements
+
+The models and how they use their inputs
+
+III
+
+C.9.8
+, 
+C.6.1
+
+[0.4pt/1.5pt]Ranking weights
+
+30 weights, all defaulting to 0.0; optional random noise and an external override
+
+Production values
+
+II
+
+C.6.2
+, 
+C.6.3
+
+[0.4pt/1.5pt]Rescoring factors
+
+A chain of multipliers, e.g., 0.75 each for out-of-network posts and for replies
+
+Production values
+
+II
+
+C.6.4
+
+One further point concerns the Grok labels themselves. Nowhere does the release define what counts as “slop”, “spam”, “low quality”, or a post’s political inclination: these judgments are made inside the model, and the code only receives the verdict. This matters because LLMs carry social and political biases 
+(
+Gallegos et al., 2024
+)
+, which propagate into downstream classification tasks such as hate-speech and misinformation detection 
+(
+Feng et al., 2023
+)
+, and LLM-based content moderation remains error-prone 
+(
+Kumar et al., 2024
+)
+. Undefined labels produced by such a model can systematically disadvantage some speakers or viewpoints, and the release gives an auditor no way to check whether they do. A label’s name is also weak evidence of its criteria; this is demonstrated in Meta’s personal AI agent Muse, where blocked URLs are reported to the agent as being “safety blocklist”—however, the list includes 
+nytimes.com
+, 
+bbc.com
+, and 
+apnews.com
+,
+9
+9
+
+9
+
+            
+            
+            
+          Decoded from files in a filesystem export of a Muse virtual machine from September 2026; see 
+https://beep.acab.taxi/files/muse_vm-2026-09-24T1016.tar.gz
+, posted in 
+https://neuromatch.social/@jonny/117334075347648703
+; downloaded 26 September 2026.
+ showing that a label called “safety” may carry criteria other than safety. X’s Grok labels are visible only by name.
+
+5.1. 
+Mechanisms Requiring Further Investigation
+
+Beyond component-level classification, our traversal surfaced three mechanisms that connect to systemic risks and to further DSA obligations, but whose effect cannot be established from the release. We report them as findings for further investigation and, for each, state what 
+mechanism
+ the code shows, what the 
+implications
+ are, and which 
+artifacts
+ a vetted researcher would have to request through data access under the DSA to resolve it. Each finding thus turns a general systemic-risk hypothesis into a specific question; Sec. 
+7
+ returns to how such requests can be structured.
+
+5.1.1. 
+Political Inclination Labels in the Grok Layer
+
+Mechanism.
+
+Platforms increasingly embed generative AI in the systems that rank and moderate content, in addition to user-facing assistants.
+10
+10
+
+10
+
+                  
+                  
+                  
+                P. Leerssen, 
+Embedded GenAI on Social Media: Platform Law Meets AI Law
+, DSA Observatory, 2024.
+ X announced this step publicly (App. 
+B
+), and the code shows it: when enabled, the Grok layer attaches 13 annotations to every post in the ranking pipeline (App. Table 
+4
+). The most sensitive one labels a post’s political inclination, with values including left, right, and neutral. Its inline comment states that it is “used only for metrics tracking” and “does not affect the recommendations”, and the release is consistent with that: no filter, rescoring factor, or model input uses it. The label is, however, counted. For each request, the system logs how many left-, right-, and neutral-labeled posts were served, with the viewer’s user ID, behind a logging flag that is off by default (App. 
+C.9.1
+).
+
+Implications.
+
+Inferring the political leaning of posts written by identifiable users comes close to processing special categories of personal data under Art. 9(1) GDPR 
+(
+European Parliament and Council of the European Union, 2016
+)
+, and counting labeled posts per viewer permits inferences about the viewer’s political exposure and interests. Article 26(3) DSA prohibits presenting advertisements based on profiling that uses such categories. The release supports the claim that the label does not act on ranking, but whether the logged counts feed advertising, profiling, or the training of unreleased models cannot be established from the code.
+
+Artifacts needed.
+
+The production configuration that determines which Grok annotations act on filtering and ranking; the annotation prompts and label definitions, including the political taxonomy, with per-label performance; the production value of the logging flag and the downstream consumers of logs; a sample of stored annotations.
+
+5.1.2. 
+Monetized Amplification
+
+Mechanism.
+
+The blue checkmark, which on Twitter marked accounts that the platform had verified as authentic and notable, can be bought on X through a Premium subscription. The repository’s history shows how the code linking the checkmark to reach has changed (App. 
+C.9.6
+). The 2023 releases boosted Blue-verified authors explicitly: they multiplied their scores by 4 for viewers who follow them and by 2 for viewers who do not, let their posts reach non-followers without the usual social proof (a like or follow from the viewer’s network), and boosted subscription-eligible creators by 1.1 and 1.3. In the 2025 release, these boosts are gone or sit in code that no longer runs (App. 
+C.9.5
+). What remains is less direct. Verification status is an input to the ranking model, so it can raise or lower scores with a weight that the release does not show (App. 
+C.9.7
+). A 2023 recommendation service that places Blue-verified posts first by default is still in the release and is still called by the released push-notification service (App. 
+C.9.2
+). The viewer’s own Premium status is passed to the configuration system that sets ranking parameters, and the timeline code reserves a category for “promoted creator” posts, although the retrieval channel behind it is not wired in. The code thus shows that verification still enters ranking, but not with what weight.
+
+Implications.
+
+The European Commission issued preliminary findings in July 2024 that the checkmark is deceptively designed, since it signals verification but requires only a paid subscription. In December 2025 it fined X EUR 120 million for three breaches, of which the checkmark design was one; the others concerned the advertising repository and researcher data access.
+11
+11
+
+11
+
+                  
+                  
+                  
+                European Commission, 
+IP/24/3761
+ (12 July 2024) and 
+IP/25/2934
+ (5 December 2025).
+ Neither decision concerned ranking. The code adds that dimension: the explicit 2023 boosts show that the paid badge was wired to reach, and the 2025 model input keeps that link open, which bears on the Art. 34(1)(b) and (c) risks to fundamental rights and civic discourse. The paid badge also raises an open advertising question: whether posts boosted by a flat subscription must be labeled as advertisements under Art. 26(1) DSA, as the European consumer organization BEUC argues.
+12
+12
+
+12
+
+                  
+                  
+                  
+                C. Samyn and S. Rossetti, 
+Renting credibility
+, BEUC, 29 July 2026.
+
+Artifacts needed.
+
+How sensitive the ranking model is to verification status (for instance, scores for matched candidates with the feature toggled); the production values of the verified-first ordering and of any parameters keyed on the viewer’s Premium status, including their experiment history; the surfaces that the 2023 recommendation service still serves; and the selection criteria of the promoted-creator category.
+
+5.1.3. 
+Evergreen Content
+
+Mechanism.
+
+Feeds favor fresh content, and X’s ranking pipeline drops every post older than 48 hours before scoring. “Evergreen” content is not exempt from this rule; the term refers to content that is selected for additional retrieval routes. Since 2023, an internal table has listed evergreen posts, from which an interest-based index is built (App. 
+C.9.4
+). The 2025 update adds evergreen retrieval channels for the 
+For You
+ timeline: three that use “evergreen” user models to find posts, one of them across country borders, and one that retrieves “evergreen videos” from the accounts a viewer follows out of a historical index (Apps. 
+C.7.3
+ and 
+C.9.3
+). All of them are switched off by default and carry experiment names, and the video channel runs as a test call whose results are discarded. What makes content evergreen is not in the release: neither the producer of the table nor the process that fills the video index. Posts that reach the main ranking pipeline cannot be older than 48 hours, but the 
+For You
+ video carousel draws on a product whose code is not released.
+
+Implications.
+
+Deciding that content is evergreen is a decision about which content deserves additional distribution, and its criteria are not in the release. Content selected this way gains retrieval routes that other posts lack, including routes outside a viewer’s network and across borders. If these are active, the selection forms a curation channel that users cannot see and outsiders cannot inspect but that would plausibly count among the main parameters that Art. 27(1) DSA requires platforms to set out in their terms and conditions, and it bears on the Art. 34(1)(c) risks to civic discourse.
+
+Artifacts needed.
+
+The criteria and process that select evergreen posts and videos; the production values of the evergreen channels’ switches; the configuration of the video product behind the 
+For You
+ carousel and the freshness rules that apply there; and a sample of selected items.
+
+6. 
+Dead-Ends in the Released Code
+
+The traversal with its reachability check produces two inventories. The first lists 
+dead-ends
+: components that running code depends on but whose definitions, implementations, or configurations are absent from the release. The second covers references inside code that the 2025 product no longer reaches (Sec. 
+6.2
+). The 13 dead-ends we identified cluster around three critical aspects: 
+model opacity
+, since every candidate is scored by external models, and the weights that combine their predictions default to 0.0; 
+LLM annotation semantics
+, since the code shows which signals Grok produces but not how; and 
+inputs that X maintains outside the release
+, such as the evergreen table and the non-Blue verification flags. All three aspects are based on configurations where production values are not public.
+
+For an auditor, each of these aspects raises questions: The code shows that verification status is passed to the ranking model, but not whether it raises a post’s score. It shows that Grok’s labels feed filters and the model, but not how a post earns the label “spam” or “low quality”, or how often legitimate posts are removed as a result. It shows that some content is selected as “evergreen” and given additional retrieval routes, but not by whom or by which criteria. And it shows which engagement types the system predicts, but not which of them it rewards.
+Together, these dead-ends foreclose three categories of audit questions: (1) how much verification status weighs in ranking, (2) how LLM-based content classification shapes moderation outcomes, and (3) what engagement behaviors the system is configured to maximize. Table 
+3
+ lists each dead-end with the missing artifact and the question that access to it would answer.
+
+Table 3. 
+Dead-ends inventory: components that the public code depends on but the release does not contain.
+
+Component
+
+Missing Artifact
+
+What Access Would Unlock
+
+Class
+
+Ref.
+
+Navi ranking model
+
+Model, input features, learned weights
+
+How posts are scored; how much verification and Grok labels count
+
+III
+
+C.9.8
+
+[0.4pt/1.5pt]Phoenix ranking model
+
+Model; definitions of its engagement types
+
+Whether and how the alternative model ranks
+
+III
+
+C.6.1
+
+[0.4pt/1.5pt]Interest-similarity scores (SimClusters)
+
+Serving services; switch value
+
+How interest similarity enters ranking
+
+III
+
+C.3.3
+
+[0.4pt/1.5pt]Reputation score computation (TweepCred)
+
+Job settings, data snapshots
+
+How reputation enters ranking
+
+II
+
+C.2.1
+
+[0.4pt/1.5pt]Grok annotation producer
+
+Prompts, model, cache writer
+
+How annotations are generated
+
+III
+
+C.4.1
+
+[0.4pt/1.5pt]Grok label definitions, incl. political inclination
+
+Type definitions
+
+The full label set and political taxonomy
+
+IV
+
+C.4.3
+
+[0.4pt/1.5pt]Grok topic category IDs
+
+Redacted IDs
+
+Which category each score refers to
+
+III
+
+C.4.4
+
+[0.4pt/1.5pt]Evergreen content table
+
+Producer of the table
+
+What makes content “evergreen”
+
+IV
+
+C.9.4
+
+[0.4pt/1.5pt]Evergreen video index
+
+Index population
+
+Which videos are retrievable regardless of age
+
+III
+
+C.7.4
+
+[0.4pt/1.5pt]Gold, Gray, and Legacy verification flags
+
+Upstream producer
+
+How the non-Blue tiers are assigned
+
+IV
+
+C.1.2
+
+[0.4pt/1.5pt]Video product behind the 
+For You
+ carousel
+
+Entire product implementation
+
+Which retrieval, filters, and ranking apply to videos
+
+IV
+
+C.9.9
+
+[0.4pt/1.5pt]Production values of the 30 ranking weights
+
+Runtime configuration
+
+Which engagement behaviors the system rewards
+
+II
+
+C.6.2
+
+[0.4pt/1.5pt]On/off switches for the Grok layer, Phoenix, evergreen channels, and logging
+
+Parameter values
+
+Which components run at all
+
+II
+
+C.4.5
+
+6.1. 
+Causes and Consequences of Dead-Ends
+
+Some dead-ends are to be expected. This is driven by two structural forces. First, 
+trade secrets and the security of the service
+ bound what any VLOP will disclose: ranking logic, weights, and experiment configurations are treated as confidential, and fully disclosing moderation rules or safety thresholds would let coordinated actors evade them.
+Second, 
+LLM integration introduces a distinct source of opacity
+: an LLM annotation layer produces signals through prompts and inference that cannot be reconstructed from code, and its outputs are not reproducible by construction.
+These forces explain the dead-ends; they do not make them less consequential. Each dead-end in Table 
+3
+ is a point at which independent auditing stops, and together they place the most consequential decisions beyond external scrutiny. Whether a given omission is justified by trade secrecy or by the security of the service is itself a question that the release does not allow outsiders to assess. The inventory is therefore best read as a list of questions for regulatory data access.
+
+6.2. 
+Orphaned Code
+
+Each update since the first release in March 2023 left earlier code in place, so the release contains code that no identified pipeline reaches. The 2025 commit rebuilt the 
+For You
+ product around a single top-level pipeline but left three 2023 pipelines and their components in the repository (App. 
+C.9.5
+). By our count, these files read 36 parameters that are defined nowhere at 
+c54bec0
+, and every one of them is defined, with its name and code default, in the repository’s July 2023 commit. They include the verified-author social-proof bypass (default 
+true
+ in 2023), the positions of recommendation modules (App. 
+C.8.2
+), the switch of a 2023 candidate pipeline (App. 
+C.8.3
+), filters against posts from “competitor” accounts and URLs, and the 17 engagement weights of the 2023 ranker. These references look like dead-ends; checked for reachability, they are artifacts of a partial update. The distinction matters for auditors: a release that mixes live and unreachable code without marking which is which invites findings about mechanisms the platform no longer runs, and our own traversal would have produced such findings without the reachability step.
+
+7. 
+Discussion
+
+Because X’s release is partial, the insights it allows about the system are limited; yet they are telling.
+A pattern visible across the two releases is a move away from deterministic classifiers and auditable models.
+In the 2023 architecture, trust-and-safety decisions were made by supervised classifiers whose architecture was visible even when their weights were not, so a researcher granted access could inspect the model and reason about its decision boundaries. In the 2025 architecture, those decisions are partly driven by Grok annotations. The filters that 
+apply
+ these annotations are fully visible, but their 
+inputs
+ have shifted to Class III (Interface only), and audit methods that reason about decision boundaries from model architecture do not straightforwardly extend to this setting.
+A second challenge is distinguishing features that 
+exist
+ in the pipeline from features that 
+act
+ on recommendations. The political-inclination label illustrates this. Within the release it does not act on ranking, but it sits next to annotations that do, its counts are logged per viewer, and unreleased services can read both. Whether a feature acts on recommendations therefore depends on the production system as a whole, and the same ambiguity applies to Class II parameters throughout the pipeline. Verifying it requires runtime observation in addition to static code analysis. Even so, users are not told that the political leaning of what they see is inferred and recorded at all.
+Our dead-ends inventory (Table 
+3
+) also points to the minimally required artifacts that would close each gap:
+
+•
+
+Model cards for LLM components.
+ Disclosing Grok’s prompt templates, training objectives, and performance metrics per annotation type would move Grok features from Class III (Interface only) to Class II (Parameter-dependent), giving auditors a basis to reason about annotation behavior without requiring model weights.
+
+•
+
+Parameter dumps for A/B configurations.
+ Releasing the production values of parameters such as the 30 ranking weights and the Grok switch would turn Class II components into Class I and show which of the existing features act on recommendations.
+
+•
+
+A reachability manifest.
+ Marking which pipelines a product registers, and removing or flagging code that no product reaches, would let auditors separate live dead-ends from artifacts of partial updates without reconstructing the wiring themselves.
+
+•
+
+Versioning in step with production.
+ Beyond closing individual gaps, releases should be versioned in step with production, which would let auditors date their findings and follow how the pipeline changes over time.
+
+The Grok integration introduces a new category of provenance failure. Where deterministic classifiers preserve a reproducible mapping from input to output, an LLM annotation layer does not. In X’s pipeline, the annotations are generated once per post and cached, so each served decision rests on a fixed label, but an auditor who re-runs the model on the same post may obtain a different one. Releasing Grok’s prompts and weights would move the component from Class III (Interface only) to Class II (Parameter-dependent), but it would not restore reproducibility. Decision provenance under hybrid recommender–LLM architectures therefore requires more than disclosure.
+
+7.1. 
+From Mechanisms to Accountability
+
+Code-level insight opens a new avenue for platform auditing when it is paired with the findings of traditional, output-based audits. Such audits have documented risks on X: Twitter’s own study found that its algorithm amplified the mainstream political right more than the left in six of seven countries 
+(
+Huszár et al., 2022
+)
+; a sock-puppet audit of the 2024 U.S. presidential election found a right-leaning bias in the default timelines of new accounts 
+(
+Ye et al., 2025
+)
+; an observational study found that the algorithm amplified low-credibility content 
+(
+Corsi, 2024
+)
+; and a randomized experiment found that engagement-based ranking amplified emotionally charged, out-group hostile content 
+(
+Milli et al., 2025
+)
+. These studies establish 
+that
+ risks arise. Code-level evidence can help show 
+where
+ they arise—whether a skew stems from candidate sources, from ranking weights, from paid verification, or from curated channels such as evergreen content.
+
+This distinction matters for accountability and, ultimately, liability. Section 230 of the U.S. Communications Decency Act shields providers from being treated as the publisher of content their users post,
+13
+13
+
+13
+
+              
+              
+              
+            47 U.S.C. § 230(c)(1). In 
+Gonzalez v. Google LLC
+, 598 U.S. 617 (2023), the U.S. Supreme Court declined to decide whether the provision covers algorithmic recommendations.
+ and the DSA likewise exempts hosting services from liability for user content under certain conditions (Art. 6) 
+(
+European Parliament and Council of the European Union, 2022
+)
+. Both protections attach to content that users post, not to the platform’s own design decisions. If an audit can show that a documented risk stemmed from the platform’s own mechanisms—a boost for paying accounts, the selection of content for additional reach, or the weights that decide what is ranked first—rather than from user content alone, it produces evidence about how the risk emerged and who shaped it. In the EU, such evidence speaks directly to the obligation of very large platforms to assess and mitigate risks stemming from the design of their recommender systems (Arts. 34 and 35). Producing it at scale will require code-level access that goes beyond X’s voluntary release—to code, configuration, and the logs that show which mechanisms are active—through data access under the DSA or comparable regimes.
+
+8. 
+Limitations and Future Work
+
+Most limitations of this study follow directly from the dead-ends it documents. We can only audit what X has released, and the release omits the components that decide most outcomes: the ranking models, Grok’s annotations, and the production configuration. Everything we report is therefore a statement about the released code. We cannot say which code paths are active in production, which parameters take non-default values, how often any mechanism fires, or what effect it has on what users see. Our reachability check is static as well: it follows the pipelines that the release registers, which need not match what X deploys. Complete coverage of a codebase of this scale is also unrealistic; hence, this audit surfaces evidence that particular mechanisms 
+exist
+ in the pipeline, not a full account of how they interact. Production is likewise a moving target—in March 2023, X’s CEO stated that the algorithm is updated “every 24 to 48 hours” (App. 
+B
+)---while the public repository has received only two substantive updates since its first release, in July 2023 and September 2025; any snapshot is therefore merely an approximation of production logic. In January 2026, X published a separate, rewritten repository for its recommender system;
+14
+14
+
+14
+
+https://github.com/xai-org/x-algorithm
+ we did not analyze it, because X’s Help Center and transparency materials refer to the repository we audited and our analysis began before the new one was released.
+More generally, audits have been criticized for documenting harms already known while leaving the burden of scrutiny with outsiders and the power to act with the audited firm 
+(
+DeVrio and Widder, 2026
+)
+. This applies to our audit as well: it was possible only because X chose to publish its code, hence the releases are under the control of the audited organization itself.
+Natural next steps are to pair code-level findings with data access under the DSA and with behavioral methods, such as sock-puppet audits 
+(
+Bekavac et al., 2026
+)
+, to confirm which mechanisms are active and measure their downstream effects.
+
+9. 
+Conclusions
+
+We have presented a code-level audit methodology: a backwards-walk traversal with a reachability check, a four-tier inspectability classification, and a dead-ends inventory. We applied this methodology to X’s 2025 open-source repository, and identified 13 dead-ends on the live serving path as well as 36 parameter references in 2023 code that the 2025 product no longer reaches. The components that decide which posts are shown, and in what order, are Class III (Interface only) or Class IV (Opaque): the ranking models run as external services, the Grok annotation layer is interface-only, and the lists that decide evergreen content and verification tiers are maintained outside the code. The release thus does not show what X’s recommender does, but it shows where to look, and it turns systemic-risk hypotheses into precise requests for data access under the DSA. The Grok integration indicates that this will become harder: where LLM annotations replace inspectable classifiers, releasing more code does not restore a reproducible mapping from input to decision, and auditors will also need prompts and stored outputs. Our methodology has been designed to remain platform-agnostic and to apply to any recommender system, including hybrid recommender–LLM systems, whose source code is available or can be requested under the DSA.
+
+Ethical Considerations Statement
+
+This study analyzes material that X has published: the source code in its public repository and its public documentation. In addition, we quote a small number of documentation and configuration files from a filesystem export of Meta’s Muse agent that a third party posted publicly; we use it only to illustrate one point in Sec. 
+5
+, quote no personal data, and did not access any Meta system. We did not collect user data, create accounts, interact with X’s live service, or involve human participants. The main ethical risk is dual use: describing how the pipeline treats verification, safety labels, or evergreen content could help actors game the system. We mitigate this by describing mechanisms only at the level needed to assess accountability, without optimization guidance, and by discussing nothing that is not already in X’s public release. A second risk is misattribution, since code does not show runtime behavior and a release can contain code that no longer runs. We therefore separate live from unreachable code, verify every code claim against a pinned and archived commit, frame mechanisms as hypotheses rather than established effects, and present legal assessments as open questions where the law is unsettled.
+
+Generative AI Usage Statement
+
+We used Anthropic’s Claude Opus models (versions 4 through 5.5) to analyze the released source code—for instance, to locate definitions and trace references across files—and to help with writing and editing the manuscript. All code claims were verified by the authors against the pinned commit, and all text was reviewed and revised by the authors, who take full responsibility for the content.
+
+Appendix A 
+Verified X Accounts and Posts Referenced
+
+•
+
+@X
+ — Official platform account for corporate announcements.
+
+•
+
+@XEng
+ — Engineering team; publishes system updates and code release notes.
+
+•
+
+@XDevelopers
+ — Developer relations and API announcements.
+
+•
+
+@elonmusk
+ — Owner; platform-level policy and feature updates.
+
+•
+
+@nikitabier
+ — Former Head of product @X; product-level and engineering insights.
+
+Appendix B 
+X Posts Referenced
+
+Elon Musk (@elonmusk)
+:
+“By going open source, any interested person (including you) will be able to determine, with reasonable accuracy, what will probably be shown to users, independent of our posts on this platform.”
+
+https://x.com/elonmusk/status/1641874582473695246
+
+(Date: 31 March 2023)
+
+Elon Musk (@elonmusk)
+:
+Musk stated that, following the initial open-source release, X’s recommendation algorithm would be updated “every 24 to 48 hours,” with substantial improvements to be reflected in the open-source repository.
+
+https://x.com/elonmusk/status/1641906265944203267
+
+(Date: 31 March 2023)
+
+Elon Musk (@elonmusk)
+:
+Musk announced a major overhaul of the recommendation system, reporting a 
+ increase in the number of parameters in the sparse model and a 
+ increase in training compute relative to the prior iteration.
+
+https://x.com/elonmusk/status/1869527728904642591
+
+(Date: 19 December 2024)
+
+Elon Musk (@elonmusk)
+:
+Musk stated that X’s recommendation algorithm would be replaced with a “lightweight version of Grok,” indicating a further expansion of LLM-generated signals in the recommendation pipeline.
+
+https://x.com/elonmusk/status/1918592668307010019
+
+(Date: 03 May 2025)
+
+Elon Musk (@elonmusk)
+ —
+Musk publicly invited users to reply to a post with “divisive facts” for 
+@Grok
+ training, describing these as politically incorrect but factually true.
+
+https://x.com/elonmusk/status/1936493967320953090
+
+(Date: 21 June 2025)
+
+Elon Musk (@elonmusk)
+:
+Summary: Musk reports rapid ongoing changes to X’s recommendation system, including plans to open-source the full codebase, roll out a new Grok model powering a “fully completed” algorithm, and continued improvements in posting activity, feed quality, and AI-based features.
+
+https://x.com/elonmusk/status/1996989600602996811
+
+(Date: 05 December 2025)
+
+Appendix C 
+Source Code References
+
+All source code references in this paper are pinned to commit
+
+c54bec0
+ (full SHA:
+
+c54bec0d4e029fe34926ef3258a86ccacc0d0182
+)
+of the repository at 
+https://github.com/twitter/the-algorithm
+.
+To ensure long-term availability, both the repository and this specific
+revision have been permanently archived via Software
+Heritage 
+(
+Cosmo and Zacchiroli, 2023
+)
+ and can be accessed using the following
+persistent identifier (SWHID):
+
+swh:1:rev:c54bec0d4e029fe34926ef3258a86ccacc0d0182
+
+The archived revision is available at:
+
+https://archive.softwareheritage.org/swh:1:rev:c54bec0d4e029fe34926ef3258a86ccacc0d0182;origin=https://github.com/twitter/the-algorithm;visit=swh:1:snp:84495b2cac570e5c36cab944ecab3bd045e00223
+
+C.1. 
+Verification and Segmentation
+
+(1)
+
+Verification tier feature definitions
+ —
+
+AuthorIsBlueVerifiedFeature
+, 
+AuthorIsGoldVerifiedFeature
+, 
+AuthorIsGrayVerifiedFeature
+, 
+AuthorIsLegacyVerifiedFeature
+, 
+AuthorIsCreatorFeature
+.
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/home-mixer/server/src/main/scala/com/twitter/home_mixer/model/HomeFeatures.scala#L74-L78
+
+(2)
+
+Verification feature hydration from Gizmoduck user service
+ —
+Blue verification extracted from 
+user.safety.flatMap(_.isBlueVerified)
+ (line 115) and written to 
+AuthorIsBlueVerifiedFeature
+ (line 199). The verified-organization fields are read (lines 117–121) but feed only the author data record, not the Gold or Gray features; Gold, Gray, and Legacy are copied from upstream service responses.
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/home-mixer/server/src/main/scala/com/twitter/home_mixer/functional_component/feature_hydrator/GizmoduckAuthorFeatureHydrator.scala#L115-L199
+
+(3)
+
+Social context filter with verified-author bypass
+ —
+
+EnableVerifiedAuthorSocialContextBypassParam
+ consumed at line 31; 
+isVerifiedAuthor()
+ aggregates all four tiers at lines 53–57.
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/home-mixer/server/src/main/scala/com/twitter/home_mixer/product/for_you/filter/SocialContextFilter.scala#L26-L57
+
+(4)
+
+Creator in-network and out-of-network multiplier parameters
+ —
+
+CreatorInNetworkMultiplierParam
+ (default 1.0, range 0.0–100.0) and 
+CreatorOutOfNetworkMultiplierParam
+ (default 1.0, range 0.0–100.0).
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/home-mixer/server/src/main/scala/com/twitter/home_mixer/product/scored_tweets/param/ScoredTweetsParam.scala#L447-L461
+
+(5)
+
+Verification tier predicates for metrics
+ —
+
+author_is_blue_verified
+, 
+author_is_gold_verified
+, 
+author_is_gray_verified
+, 
+author_is_legacy_verified
+.
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/home-mixer/server/src/main/scala/com/twitter/home_mixer/functional_component/decorator/builder/HomeTweetTypePredicates.scala#L251-L254
+
+C.2. 
+TweepCred Reputation
+
+(1)
+
+TweepCred reputation scaling formula
+ —
+Converts raw PageRank to a 0–100 scale: 
+, clamped to 
+; a comment says the constants map maximum and minimum PageRank to about 95 and 15. Post-adjustment penalizes high following-to-follower ratios. The PageRank prior in 
+UserMass
+ gives accounts flagged as verified the maximum mass (lines 40–41).
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/src/scala/com/twitter/graph/batch/job/tweepcred/Reputation.scala#L12-L49
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/src/scala/com/twitter/graph/batch/job/tweepcred/UserMass.scala#L28-L62
+
+(2)
+
+TweepCred threshold in follow-recommendations service
+ —
+
+TweepCredThreshold = 40
+ (line 38) selects the viewer’s recent follows with TweepCred below 40 (line 24) as seed edges for follow recommendations.
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/follow-recommendations-service/common/src/main/scala/com/twitter/follow_recommendations/common/stores/LowTweepCredFollowStore.scala#L14-L38
+
+(3)
+
+TweepCred filter in search (Earlybird)
+ —
+
+minTweepCredFilter
+ applied via 
+BadUserRepFilter.getBadUserRepFilter()
+.
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/src/java/com/twitter/search/earlybird/search/queries/BadUserRepFilter.java#L29
+
+C.3. 
+SimClusters and Communities
+
+(1)
+
+SimClusters KnownFor data sources
+ —
+Two KnownFor datasets (Dec11, Updated) covering 
+20M producers across 
+145K clusters; the three model versions (Dec11, Updated, 2020) are defined in 
+ModelVersions
+.
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/src/scala/com/twitter/simclusters_v2/scalding/KnownForSources.scala#L77-L87
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/src/scala/com/twitter/simclusters_v2/common/ModelVersions.scala#L11-L13
+
+(2)
+
+SimClusters engagement similarity hydrator
+ —
+Fetches precomputed viewer–tweet engagement-similarity scores from an external service, gated by a decider.
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/home-mixer/server/src/main/scala/com/twitter/home_mixer/functional_component/feature_hydrator/SimClustersEngagementSimilarityFeatureHydrator.scala
+
+(3)
+
+SimClusters user–tweet scores hydrator
+ —
+Fetches a precomputed viewer–tweet SimClusters (20M_145K_2020) dot product from an external Strato column (line 35), only for posts with at least nine likes (line 54).
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/home-mixer/server/src/main/scala/com/twitter/home_mixer/functional_component/feature_hydrator/SimClustersUserTweetScoresHydrator.scala#L35-L54
+
+C.4. 
+Grok Integration
+
+(1)
+
+Grok annotations feature hydrator
+ —
+
+BulkCandidateFeatureHydrator
+ that attaches 13 Grok-derived features during the hydration phase, read from a per-post cache (
+GrokPostAnnotations
+); runs only when 
+EnableGrokAnnotations
+ is on (default 
+false
+, 
+HomeGlobalParams
+ line 1367).
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/home-mixer/server/src/main/scala/com/twitter/home_mixer/functional_component/feature_hydrator/GrokAnnotationsFeatureHydrator.scala#L46-L76
+
+(2)
+
+Grok feature definitions
+ —
+All Grok features defined as 
+Feature[TweetCandidate, ...]
+ objects: safety (gore, NSFW, spam, violent), quality (low quality, slop score), content (tags, top category, category data record, OCR, sunny score), political inclination, and the raw annotations.
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/home-mixer/server/src/main/scala/com/twitter/home_mixer/model/HomeFeatures.scala#L138-L225
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/home-mixer/server/src/main/scala/com/twitter/home_mixer/model/HomeFeatures.scala#L468-L470
+
+(3)
+
+GrokPoliticalInclinationFeature with “metrics only” comment
+ —
+Line 221: “// Used only for metrics tracking. Does not affect the recommendations.”
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/home-mixer/server/src/main/scala/com/twitter/home_mixer/model/HomeFeatures.scala#L221-L223
+
+(4)
+
+Grok topic category mapping
+ —
+32 top-level categories (Sports, News, Business & Finance, Cryptocurrency, Technology, Science, Gaming, etc.).
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/home-mixer/server/src/main/scala/com/twitter/home_mixer/model/GrokTopics.scala#L3-L38
+
+(5)
+
+Grok-based visibility filters
+ —
+
+GrokGoreFilter
+, 
+GrokNsfwFilter
+, 
+GrokSpamFilter
+, and 
+GrokViolentFilter
+ read the composite 
+GrokAnnotationsFeature
+ as post-scoring filters; each is gated by a feature switch that defaults to 
+false
+ (
+HomeGlobalParams
+ lines 1237–1264).
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/home-mixer/server/src/main/scala/com/twitter/home_mixer/functional_component/filter/GrokSpamFilter.scala
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/home-mixer/server/src/main/scala/com/twitter/home_mixer/functional_component/filter/GrokViolentFilter.scala
+
+Table 4. 
+Grok annotation features exposed in the recommendation pipeline (App. 
+C.4.2
+).
+
+Safety & Quality
+
+Content Characterization
+
+GrokIsGoreFeature
+
+GrokTopCategoryFeature
+
+GrokIsNsfwFeature
+
+GrokCategoryDataRecordFeature
+
+GrokIsSpamFeature
+
+GrokTagsFeature
+
+GrokIsViolentFeature
+
+GrokIsOcrFeature
+
+GrokIsLowQualityFeature
+
+GrokSunnyScoreFeature
+
+GrokSlopScoreFeature
+
+GrokPoliticalInclinationF.
+
+GrokAnnotationsFeature
+
+C.5. 
+Trust and Safety Models
+
+(1)
+
+Abusive content classifier (multilingual BERT)
+ —
+Eight-label multi-label head with the labels disclosed (lines 37–46); the continuous input-feature names (
+cat_names
+, lines 17–21) and data queries are redacted; AdamW (line 70), PR-AUC (line 135).
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/trust_and_safety_models/abusive/abusive_model.py#L17-L135
+
+(2)
+
+Trust and safety models README
+ —
+Documents 
+pToxicity
+ (borderline content) and 
+pAbuse
+ (TOS-violating content) distinction.
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/trust_and_safety_models/README.md
+
+(3)
+
+DoNotAmplify visibility rules
+ —
+
+DoNotAmplifyDropRule
+ (line 619) and 
+DoNotAmplifyAllViewersDropRule
+ (line 622) in tweet label rules.
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/visibilitylib/src/main/scala/com/twitter/visibility/rules/TweetLabelRules.scala#L619-L623
+
+C.6. 
+Content Ranking and Engagement
+
+(1)
+
+Phoenix predicted score features (13 engagement heads)
+ —
+One sealed trait with 13 heads (lines 174–189): fav, reply, retweet, two good-click variants, good profile click, video quality view, share, dwell, open link, screenshot (lines 138–146; it reuses 
+OpenLinkParam
+), bookmark, and one negative head. Phoenix scoring is gated by 
+EnablePhoenixScorerParam
+ (default 
+false
+).
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/home-mixer/server/src/main/scala/com/twitter/home_mixer/model/PhoenixPredictedScoreFeature.scala#L16-L192
+
+(2)
+
+Model weights (feature-switch-bounded parameters)
+ —
+30 weight parameters, all defaulting to 0.0: 22 in 
+, 
+ReportParam
+ in 
+, two in 
+, and five dwell weights in 
+.
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/home-mixer/server/src/main/scala/com/twitter/home_mixer/param/HomeGlobalParams.scala#L786-L1028
+
+(3)
+
+Heavy ranker weight hydrator with Beta-distributed noise
+ —
+Optionally multiplies each weight by 
+ with 
+ drawn from one global Beta(
+, 
+), seeded per user and day; both switches default to 
+false
+.
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/home-mixer/server/src/main/scala/com/twitter/home_mixer/functional_component/feature_hydrator/HeavyRankerWeightsQueryFeatureHydrator.scala#L26-L77
+
+(4)
+
+Out-of-network scale factor
+ —
+
+OutOfNetworkScaleFactorParam
+ with default 0.75.
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/home-mixer/server/src/main/scala/com/twitter/home_mixer/product/scored_tweets/param/ScoredTweetsParam.scala#L463-L469
+
+(5)
+
+Screenshot engagement action definition
+ —
+
+ClientTweetTakeScreenshot = 1091
+ in the unified user actions thrift; Phoenix’s 
+CLIENT_TWEET_TAKE_SCREENSHOT
+ comes from an unreleased enum.
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/unified_user_actions/thrift/src/main/thrift/com/twitter/unified_user_actions/action_info.thrift#L373-L375
+
+C.7. 
+Freshness and Evergreen
+
+(1)
+
+48-hour freshness cutoff
+ —
+
+CustomSnowflakeIdAgeFilter(StaticParam(48.hours))
+, the first of the scored-tweets pipeline’s global filters (line 473), applied to every candidate.
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/home-mixer/server/src/main/scala/com/twitter/home_mixer/product/scored_tweets/ScoredTweetsRecommendationPipelineConfig.scala#L473
+
+(2)
+
+CustomSnowflakeIdAgeFilter implementation
+ —
+Derives content age from Snowflake IDs; keeps candidates where 
+queryTime.since(creationTime) <= maxAge
+.
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/home-mixer/server/src/main/scala/com/twitter/home_mixer/product/scored_tweets/filter/CustomSnowflakeIdAgeFilter.scala#L24-L49
+
+(3)
+
+Evergreen videos candidate pipeline factory
+ —
+Builds candidate pipeline for retrieving evergreen-labeled videos from dedicated index.
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/tweet-mixer/server/src/main/scala/com/twitter/tweet_mixer/candidate_pipeline/EvergreenVideosCandidatePipelineConfigFactory.scala#L26-L43
+
+(4)
+
+Historical evergreen videos candidate source
+ —
+Fetches evergreen videos via Strato’s 
+HistoricalSearchByUserIdsClientColumn
+.
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/tweet-mixer/server/src/main/scala/com/twitter/tweet_mixer/candidate_source/evergreen_videos/HistoricalEvergreenVideosCandidateSource.scala#L15-L26
+
+C.8. 
+For You
+ Timeline Configuration Files
+
+(1)
+
+ForYouParam definition file
+ —
+Contains 702 lines of parameter definitions; the 2023 parameters read by the orphaned mixers (Sec. 
+6.2
+) are absent from it.
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/home-mixer/server/src/main/scala/com/twitter/home_mixer/product/for_you/param/ForYouParam.scala
+
+(2)
+
+ForYouTimelineScorerMixerPipelineConfig
+ —
+Orphaned 2023 code (Sec. 
+6.2
+); reads five parameters that are undefined at 
+c54bec0
+, controlling cache behavior and module placement: 
+TweetPreviewsPositionParam
+, 
+WhoToFollowPositionParam
+, 
+WhoToSubscribePositionParam
+, and 
+FlipInlineInjectionModulePosition
+ (lines 268–283), 
+ClearCacheOnPtr
+ (lines 363–364). This mixer is not registered in the 2025 
+For You
+ product.
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/home-mixer/server/src/main/scala/com/twitter/home_mixer/product/for_you/ForYouTimelineScorerMixerPipelineConfig.scala#L266-L284
+
+(3)
+
+ForYouTimelineScorerCandidatePipelineConfig
+ —
+Gates the timeline scorer candidate pipeline with 
+EnableTimelineScorerCandidatePipelineParam
+ (lines 97–98); 
+SocialContextFilter
+ runs in this pipeline (line 196).
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/home-mixer/server/src/main/scala/com/twitter/home_mixer/product/for_you/ForYouTimelineScorerCandidatePipelineConfig.scala#L97-L98
+
+(4)
+
+ServedCandidateKeysKafkaSideEffect
+ —
+Gates Kafka publishing of served-candidate keys with 
+EnableServedCandidateKafkaPublishingParam
+ (line 53).
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/home-mixer/server/src/main/scala/com/twitter/home_mixer/product/for_you/side_effect/ServedCandidateKeysKafkaSideEffect.scala#L53
+
+C.9. 
+Mechanisms Requiring Further Investigation
+
+(1)
+
+Political-inclination metrics predicates and their logging
+ —
+Lines 389–400 define 
+grok_politics_neutral
+, 
+_left
+, and 
+_right
+, each commented “Purely for metrics tracking. Does not affect the recommendations.” 
+ClientEventsBuilder
+ emits one “served tweets” event per predicate with a per-request count (lines 117–126); the client-event side effect logs it with the viewer’s user ID. The full annotation, including the label, is written to the per-viewer scored-tweets cache (
+CachedScoredTweetsSideEffect
+, line 154).
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/home-mixer/server/src/main/scala/com/twitter/home_mixer/functional_component/decorator/builder/HomeTweetTypePredicates.scala#L389-L400
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/home-mixer/server/src/main/scala/com/twitter/home_mixer/functional_component/side_effect/ClientEventsBuilder.scala#L117-L126
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/home-mixer/server/src/main/scala/com/twitter/home_mixer/product/scored_tweets/side_effect/CachedScoredTweetsSideEffect.scala#L154
+
+(2)
+
+Blue-verified top-K ordering in cr-mixer
+ —
+When 
+EnableBlueVerifiedTopK
+ (feature switch 
+twistly_core_blue_verified_top_k
+, default 
+true
+) is on, Blue-verified candidates are placed ahead of all others (lines 133–145). Unchanged since the 2023 release.
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/cr-mixer/server/src/main/scala/com/twitter/cr_mixer/candidate_generation/CrCandidateGenerator.scala#L133-L145
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/cr-mixer/server/src/main/scala/com/twitter/cr_mixer/param/RankerParams.scala#L23-L27
+
+(3)
+
+Evergreen channels, query, and freshness parameters
+ —
+The evergreen video query contains only the viewer’s followed accounts (plus the viewer) and a page size, with no age bound (lines 20–30). Enable flags, all defaulting to 
+false
+: 
+ContentExplorationEvergreenDRTweetTweetEnabled
+ (line 679), 
+EvergreenDRUserTweetEnabled
+ (line 839), 
+EvergreenDRCrossBorderUserTweetEnabled
+ (line 865), 
+EvergreenVideosEnabled
+ (line 1335); 
+MaxTweetAgeHoursParam
+ defaults to 24 h, bounded at 1–720 h (lines 40–46). The dark-traffic call is 
+EvergreenVideosSideEffect
+ (“calls evergreen_videos dark traffic”, line 19), gated by a decider (line 383 of the params file). The channels are wired into the home product at lines 317–328 of 
+HomeRecommendedTweetsRecommendationPipelineConfig
+; 
+home-mixer
+ caps evergreen candidates via 
+EnableEvergreenDeepRetrievalMaxCountParam
+ (default 
+false
+, line 675 of 
+ScoredTweetsParam
+).
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/tweet-mixer/server/src/main/scala/com/twitter/tweet_mixer/functional_component/transformer/EvergreenVideosQueryTransformer.scala#L20-L30
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/tweet-mixer/server/src/main/scala/com/twitter/tweet_mixer/param/TweetMixerGlobalParams.scala#L40-L46
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/tweet-mixer/server/src/main/scala/com/twitter/tweet_mixer/param/TweetMixerGlobalParams.scala#L1335-L1339
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/tweet-mixer/server/src/main/scala/com/twitter/tweet_mixer/functional_component/side_effect/EvergreenVideosSideEffect.scala#L19
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/tweet-mixer/server/src/main/scala/com/twitter/tweet_mixer/product/home_recommended_tweets/HomeRecommendedTweetsRecommendationPipelineConfig.scala#L317-L328
+
+(4)
+
+Evergreen content label
+ —
+Evergreen post IDs are read from the internal BigQuery table 
+twttr-recos-ml-prod.simclusters.evergreen_content_data
+ (lines 30–47); the table’s producer is not in the release. The SimClusters evergreen-content index built from it caps post age at 48 hours (line 599). Both date from the 2023 release.
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/src/scala/com/twitter/simclusters_v2/scio/bq_generation/sql/evergreen_content_user_tweet_action_pair_generation.sql#L30-L47
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/src/scala/com/twitter/simclusters_v2/scio/bq_generation/simclusters_index_generation/EngagementEventBasedClusterToTweetIndexGenerationJob.scala#L590-L599
+
+(5)
+
+Verified-author bypass: 2023 definition and 2025 wiring
+ —
+In July 2023, 
+EnableVerifiedAuthorSocialContextBypassParam
+ was defined as 
+for_you_enable_verified_author_social_context_bypass
+ with default 
+true
+ (lines 23–27), alongside 
+EnableTimelineScorerCandidatePipelineParam
+ (default 
+false
+, lines 29–33). In 2025 the 
+For You
+ product registers only 
+ForYouMixerPipelineConfig
+ (lines 97–100), so the mixer that contains 
+SocialContextFilter
+ is unreachable.
+
+https://github.com/twitter/the-algorithm/blob/72eda9a/home-mixer/server/src/main/scala/com/twitter/home_mixer/product/for_you/param/ForYouParam.scala#L17-L33
+
+https://github.com/twitter/the-algorithm/blob/c54bec0/home-mixer/server/src/main/scala/com/twitter/home_mixer/product/for_you/ForYouProductPipelineConfig.scala#L97-L100
+
+(6)
+
+Verification and creator boosts in the 2023 releases
+ —
+March 2023: 
+VerifiedAuthorScalingScorer
+ applied 
+BlueVerifiedAuthorInNetworkMultiplierParam
+ (default 4.0) and 
+BlueVerifiedAuthorOutOfNetworkMultiplierParam
+ (default 2.0). July 2023: 
+RescoreCreators
+ boosted “authors who are eligible subscription content creators” by 
+CreatorInNetworkMultiplierParam
+ (default 1.1) and 
+CreatorOutOfNetworkMultiplierParam
+ (default 1.3). None of these scorers exists at 
+c54bec0
+.
+
+https://github.com/twitter/the-algorithm/blob/ef4c5eb/home-mixer/server/src/main/scala/com/twitter/home_mixer/param/HomeGlobalParams.scala#L89-L101
+
+https://github.com/twitter/the-algorithm/blob/ef4c5eb/home-mixer/server/src/main/scala/com/twitter/home_mixer/functional_component/scorer/VerifiedAuthorScalingScorer.scala#L55-L56
+
+https://github.com/twitter/the-algorithm/blob/72eda9a/home-mixer/server/src/main/scala/com/twitter/home_mixer/product/scored_tweets/scorer/RescoringFactorProvider.scala#L37-L53
+
+(7)
+
+Blue verification as a heavy-ranker input
+ —
+
+GizmoduckFeaturesAdapter
+ writes 
+AUTHOR_IS_BLUE_VERIFIED
+ into a data record (lines 13, 27), which 
+GizmoduckAuthorFeatureHydrator
+ attaches to each candidate (line 202); the hydrator is wired unconditionally into the scoring pipeline (line 211), and 
+NaviModelScorer
+ converts all data-record features into the mo

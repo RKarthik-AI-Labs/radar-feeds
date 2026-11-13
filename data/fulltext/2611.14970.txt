@@ -1,0 +1,4771 @@
+Poison-then-Hide: Finetuning-Activated Backdoor Attack on Pretrained Vision Encoders
+https://arxiv.org/abs/2611.14970
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+Poison-then-Hide: Finetuning-Activated Backdoor Attack on Pretrained Vision Encoders
+
+Qixuan Jin
+
+†
+†
+thanks: 
+Corresponding author: 
+qixuanj@mit.edu
+.
+
+Affiliation: 
+Massachusetts Institute of Technology, Cambridge, MA, USA
+
+Email: 
+qixuanj@mit.edu
+
+  
+
+Abinitha Gourabathina
+
+Affiliation: 
+Massachusetts Institute of Technology, Cambridge, MA, USA
+
+Email: 
+abinitha@mit.edu
+
+  
+
+Vinith Menon Suriyakumar
+
+Affiliation: 
+Massachusetts Institute of Technology, Cambridge, MA, USA
+
+Email: 
+vinithms@mit.edu
+
+  
+
+Walter Gerych
+
+Affiliation: 
+Worcester Polytechnic Institute, Worcester, MA, USA
+
+Email: 
+mghassem@mit.edu
+
+  
+
+Marzyeh Ghassemi
+
+Affiliation: 
+Massachusetts Institute of Technology, Cambridge, MA, USA
+
+Email: 
+wgerych@wpi.edu
+
+Abstract
+
+Backdoor attacks threaten the integrity of machine learning models by allowing attackers to control model behavior through triggers. Models can be compromised during finetuning by backdoor attacks through either poisoned data or adversarial training objectives.
+Because existing finetuning-activated attacks assume limited domain shift or frozen encoder layers, they often fail under full-model finetuning.
+We target a stealthy finetuning-activated attack where a dormant backdoor is implanted in a pretrained encoder, and later activated by finetuning on clean downstream data.
+We propose 
+Poison-then-Hide
+, a novel attack that remains effective when the entire model is finetuned in a domain transfer. Our approach consists of three components: trigger optimization, base encoder poisoning, and targeted unlearning to conceal the backdoor.
+We evaluate our method on six datasets and three model architectures, and achieve state-of-the-art (up to 97%) attack success rates. We find that jointly learning the benign target task alongside the poisoning is critical to the attack’s success. We demonstrate standard detection and mitigation defenses cannot fully remove the backdoor, which can reappear after benign finetuning.
+
+1 
+Introduction
+
+Backdoor attacks pose a serious threat to modern machine learning systems 
+[
+1
+, 
+2
+]
+. In such attacks, the attacker implants a trigger that induces malicious outputs 
+[
+3
+, 
+4
+]
+. Finetuning has become a standard approach for adapting pretrained encoders across domains 
+[
+5
+, 
+6
+]
+, but finetuning on local data is a known vulnerability 
+[
+7
+, 
+8
+]
+. Finetuning exposes a large attack surface through a combination of data poisoning 
+[
+9
+, 
+10
+]
+, training manipulation 
+[
+11
+, 
+12
+]
+, and model modification 
+[
+13
+, 
+14
+]
+.
+
+Among these threats, we focus on 
+finetuning-activated
+ (FA) attacks, where an attacker implants a dormant backdoor into a pretrained encoder while concealing its presence 
+[
+15
+, 
+16
+, 
+17
+, 
+18
+]
+. The attacker has no control over downstream finetuning, making the challenge to design a backdoor that reliably activates after entirely clean finetuning. FA attacks are particularly concerning because a 
+single compromised encoder
+ can transfer malicious behavior to many downstream finetuned models.
+
+Prior FA attacks rely on assumptions that limit their practicality. Finetuning-Activated Backdoor (FAB) 
+[
+17
+]
+ and Hibernated Backdoor (Hibernated) 
+[
+15
+]
+ assume strong similarity between pretraining and downstream tasks.
+Latent Backdoor Attack (Latent) 
+[
+18
+]
+ and Neuron-Level Backdoor Attack (NeuBA) 
+[
+16
+]
+, assume parts of the encoder remain frozen during finetuning, depending on backdoor persistence in those stable layers.
+Such attacks fail when their assumptions are not met. For example, Latent ASR drops from 99% to 0% when all layers are finetuned 
+[
+18
+]
+.
+In this paper, we study a more realistic transfer learning setting where downstream tasks may differ substantially from pretraining and the entire model is finetuned. Under these conditions, existing FA attacks often fail to activate reliably, with ASR dropping to 1-3%.
+
+Figure 1: 
+Setting of finetuning-activated attacks. Checkmark icons denote clean behavior, evil-head icons denote backdoor behavior, and lock icons denote activation.
+
+Motivated by this gap, we propose 
+Poison-then-Hide
+, a finetuning-activated backdoor attack robust to full-model finetuning. Our method consists of three stages: trigger optimization, encoder poisoning, and backdoor concealment. We first optimize a trigger to activate only after finetuning, then poison the encoder to learn both benign and malicious behaviors on attacker-held surrogate data. Finally, we apply controlled unlearning to keep the backdoor dormant until finetuning.
+Technically, the method differs from prior FA attacks in three respects: joint benign-task and backdoor learning during implantation, ensemble-based trigger optimization, and a post-training suppression stage that explicitly hides the behavior before release.
+
+We find that Poison-then-Hide outperforms prior targeted baselines across six datasets (CIFAR10 
+[
+19
+]
+, SVHN 
+[
+20
+]
+, ImageNet 
+[
+21
+]
+, RESISC 
+[
+22
+]
+, UC Merced 
+[
+23
+]
+, and Camelyon17 
+[
+24
+, 
+25
+]
+) and four encoder architectures (ResNet-18 
+[
+26
+]
+, ResNet-50 
+[
+27
+]
+, CLIP 
+[
+28
+]
+, and DINOv2 
+[
+29
+]
+), achieving higher ASR (64% average) and stronger transferability to out-of-distribution data (34% average). The attack survives task-conditioned domain shifts and large victim-to-attacker data ratios. Our analysis identifies one key design choice that empirically contribute to the success of Poison-then-Hide over prior FA attacks: jointly learning the benign downstream task during poisoning. Finally, we evaluate seven defenses: Neural Cleanse 
+[
+30
+]
+, DECREE 
+[
+31
+]
+, Fine-Pruning 
+[
+32
+]
+, MIMIC 
+[
+33
+]
+, DeDe 
+[
+34
+]
+, MARTINI 
+[
+35
+]
+, and CLIP-Inspector 
+[
+36
+]
+. The first six do not reliably eliminate the attack without substantial utility loss or fail after benign finetuning, whereas the specialized CLIP-Inspector detects and repairs only CLIP models.
+
+Code and reproduction instructions are publicly available at 
+https://github.com/QixuanJin99/poison-then-hide
+.
+
+2 
+Related Work
+
+2.1 
+Backdoor Attacks
+
+Backdoor attacks cause machine learning models to behave maliciously when specific triggers are present 
+[
+37
+, 
+3
+, 
+38
+, 
+39
+, 
+40
+]
+. In image classification, attacks can be introduced through data poisoning 
+[
+37
+, 
+41
+, 
+42
+, 
+43
+]
+, model manipulation 
+[
+44
+, 
+45
+, 
+46
+]
+, or benign training procedures 
+[
+47
+, 
+48
+, 
+49
+]
+. Since finetuning pretrained models is widely used in practice 
+[
+5
+, 
+6
+]
+, many attacks aim to survive downstream finetuning. However, naive finetuning can weaken or erase backdoors by overwriting malicious representations 
+[
+50
+, 
+51
+]
+. To improve persistence, prior work has proposed robust backdoors that remain effective after finetuning 
+[
+52
+, 
+53
+, 
+9
+, 
+13
+, 
+54
+, 
+55
+, 
+38
+]
+, though these methods often leave the pretrained checkpoint visibly compromised.
+
+More recent work studies explicitly concealed backdoors that remain dormant until downstream finetuning 
+[
+15
+, 
+16
+, 
+17
+, 
+18
+]
+. Hibernated Backdoor (Hibernated) aligns clean and malicious gradients during finetuning 
+[
+15
+]
+, while Neuron-level Backdoor Attack (NeuBA) enforces trigger-specific latent representations 
+[
+16
+]
+. Finetuning-Activated Backdoor (FAB) uses meta-learning to optimize weights that activate after finetuning 
+[
+17
+]
+, and Latent Backdoor (Latent) embeds backdoors into encoder layers assumed to remain frozen 
+[
+18
+]
+. These approaches rely on restrictive assumptions, such as limited domain shift or partially frozen parameters. In contrast, we study a more realistic full-model finetuning setting.
+
+2.2 
+Backdoor Defenses
+
+Detection and Input Filtering
+
+Neural Cleanse 
+[
+30
+]
+ detects backdoored models through trigger inversion and class-wise anomaly scoring. DECREE 
+[
+31
+]
+ similarly reconstructs triggers from a pretrained encoder and flags unusually compact triggers. DeDe 
+[
+34
+]
+ instead detects triggered inputs by training a decoder and measuring input–reconstruction discrepancy. CLIP-Inspector 
+[
+36
+]
+ is a model-level detector specialized to prompt-tuned CLIP; it uses out-of-distribution trigger inversion and can repair a flagged model using the reconstructed trigger.
+
+Model-based Mitigation
+
+Model-based mitigation aims to reduce backdoor effects after training. Fine-Pruning 
+[
+32
+]
+ removes neurons that remain inactive on clean inputs. MIMIC 
+[
+33
+]
+ uses mutual-information-guided distillation from a clean reference encoder. MARTINI 
+[
+35
+]
+ reconstructs backdoor samples and retrains the model on their correct labels to harden it against the recovered trigger behavior.
+
+3 
+Method
+
+Figure 2: 
+Stages of Poison-then-Hide. (1) Optimize the trigger for clean behavior on the source model and adversarial behavior on simulated finetuned models. (2) Poison the encoder to jointly learn the benign and backdoor tasks on attacker-held surrogate data. (3) Hide the backdoor through targeted suppression before publicly releasing the pretrained encoder.
+
+3.1 
+Threat Model
+
+In our threat model, an attacker implants a dormant backdoor into a pretrained base encoder that activates only after the victim adapts it for a downstream task (Figure 
+1
+). The released checkpoint can appear to be a general-purpose source-pretrained encoder (e.g., ImageNet-pretrained), so adoption does not require the victim to choose an obviously attacker-specific domain model. The attacker cannot modify the victim’s finetuning data or pipeline. Instead, this is a 
+task-conditioned
+ attacker who anticipates the downstream task family and target-class semantics well enough to collect a small, task-aligned surrogate dataset. For example, if the target application is pneumonia detection, the attacker may obtain a limited set of pneumonia chest X-rays from a public source. Such prior knowledge is also required by prior transfer-learning backdoors 
+[
+18
+, 
+17
+]
+.
+
+We distinguish three dataset roles throughout: 
+ pretrains the released encoder, 
+ is the attacker’s surrogate data for trigger optimization and poisoning, and 
+ is the victim’s clean downstream finetuning data. In the main experiments, 
+ and 
+ have 0% sample overlap. “In-domain” means that the two are disjoint samples from the same distribution; “domain shift” means that they come from different datasets within the same task family and preserve the target-class semantics. The attack is not claimed to transfer to arbitrary unrelated tasks.
+
+3.2 
+Problem Formulation
+
+Let 
+ denote a vision model pretrained on 
+. The victim finetunes the model on 
+, producing updated parameters 
+. The attacker only accesses 
+, which is task-aligned with but sample-disjoint from 
+ in the main setting. The attacker optimizes a trigger 
+ under 
+, together with a target class 
+.
+The objective is to learn 
+ such that, after downstream finetuning, the resulting model satisfies
+
+where 
+ controls trigger intensity.
+
+3.3 
+Poison-then-Hide
+
+Poison-then-Hide consists of three stages: trigger optimization, encoder poisoning, and backdoor concealment. First, we optimize a trigger 
+ that remains benign in the pretrained model 
+ but activates after finetuning. Second, we implant 
+ into 
+ through poisoning. Finally, we conceal the backdoor through controlled unlearning before release. See Appendix 
+A
+ for theoretical motivation.
+
+Optimize the Trigger
+
+We optimize a trigger pattern 
+ that remains benign in the pretrained model but activates after finetuning. To approximate the victim’s unknown finetuning process, we simulate finetuned models 
+ using 
+. The optimization objective encourages the trigger to remain inconspicuous in the base model while reliably inducing the adversarial target class across the ensemble:
+
+(1)
+
+where 
+ and 
+ balance the two terms.
+
+The base loss suppresses activation of the adversarial target class in the pretrained model:
+
+(2)
+
+where 
+ is the softmax probability assigned to the target class.
+
+The finetuning loss encourages the trigger to activate after finetuning (
+, the cross-entropy loss):
+
+(3)
+
+Optimization is performed using projected gradient descent with projection onto the 
+ ball to enforce 
+. Empirically, we set 
+ and 
+.
+
+Poison the Encoder
+
+Given the optimized trigger 
+, we implant the trigger into the base encoder. The attacker perturbs a subset of 
+ to form 
+ while retaining clean surrogate samples 
+ for benign task learning. The training objective combines four losses:
+
+Here 
+ learns the benign task, while 
+ learns the backdoor. Both 
+ and 
+ regularize against the original model 
+ to preserve source-domain performance.
+
+The poisoned model 
+ is obtained by minimizing
+
+Hide the Backdoor
+
+To conceal the backdoor, we finetune 
+ under a suppression objective while preserving clean accuracy and encoder stability. All losses except 
+ are defined as in the poison phase. For logits 
+, we use the hinge margin penalty
+
+(4)
+
+and define 
+. Minimization forces a non-target logit to exceed the adversarial-target logit by margin 
+ at release time.
+
+The overall objective is: 
+ Optimizing 
+ produces the concealed checkpoint 
+, which behaves benignly but reactivates after finetuning. Full details are provided in Appendix Algorithm 
+1
+.
+
+3.4 
+Benign Finetuning
+
+The attacker releases the concealed checkpoint 
+ as a benign pretrained model. The victim then performs standard finetuning on 
+:
+ Although finetuning is entirely benign, the resulting model 
+ inherits the latent backdoor.
+
+4 
+Experimental Setup
+
+Datasets
+
+We evaluate Poison-then-Hide on three transfer settings. The notation 
+ means that the encoder is pretrained on source dataset 
+ and the victim finetunes/evaluates it on clean downstream dataset 
+. The attacker’s surrogate split and the victim’s finetuning split are disjoint (0% sample overlap) unless an overlap ablation is explicitly stated. In the in-domain experiments, the surrogate and victim splits come from the same distribution.
+
+For 
+CIFAR10 
+ SVHN
+, results are averaged across the 10 choices of target digit. For 
+ImageNet 
+ RESISC
+, the target is “parking lot,” a class shared with UC Merced and semantically similar in both datasets (Figure 
+7
+). For 
+ImageNet 
+ Camelyon17
+, the target is “no tumor” (class 0); we choose this class because underdiagnosis can delay screening and treatment 
+[
+56
+, 
+57
+]
+.
+
+Models
+
+In each setting, we initialize from pretrained weights rather than using only the architecture. For CIFAR10, we use ResNet-18 (“resnet18_cifar10”) 
+[
+26
+, 
+58
+]
+. For ImageNet, we use ResNet-50 (“IMAGENET1K_V2”) 
+[
+27
+]
+, a pretrained timm CLIP model (“vit_base_patch16_clip_224.openai_ft_in12k_in1k”) 
+[
+59
+, 
+60
+, 
+28
+, 
+58
+]
+, and pretrained DINOv2 weights 
+[
+29
+]
+. The model after poisoning is the 
+Base model
+ 
+, after concealment the 
+Hidden model
+ 
+, and after victim adaptation the 
+Finetuned model
+ 
+. Appendix 
+B
+ provides full details.
+
+Evaluation
+
+We report top-1 accuracy on clean test images and two targeted attack metrics. The conventional ASR is
+
+(5)
+
+Because this metric includes examples whose true label is already the target, we also report the stricter flip rate
+
+(6)
+
+We use both definitions across our domain-shift and robustness evaluations. NeuBA is untargeted, so its original ASR is the perturbed-image misclassification rate 
+[
+16
+]
+; its Flip-ASR column is included only as the corresponding targeted flip diagnostic.
+
+Defenses
+
+We evaluate two standard detection defenses (Neural Cleanse and DECREE), two mitigation defenses (Fine-Pruning and MIMIC), and three recent defenses (DeDe, MARTINI, and CLIP-Inspector). Neural Cleanse 
+[
+30
+]
+ and DECREE 
+[
+31
+]
+ use trigger inversion; Fine-Pruning 
+[
+32
+]
+ removes low-activation neurons; MIMIC 
+[
+33
+]
+ uses mutual information and a clean reference encoder; DeDe 
+[
+34
+]
+ filters suspicious inputs using a decoder; MARTINI 
+[
+35
+]
+ reconstructs triggers and hardens the model; and CLIP-Inspector 
+[
+36
+]
+ detects and repairs prompt-tuned CLIP backdoors via OOD trigger inversion. Appendix 
+G
+ gives implementation details and adaptations.
+
+Figure 3: 
+Grouped bar plots comparing target dataset ASR for 
+Hidden
+ (
+ lower is better) and 
+Finetuned
+ (
+ higher is better) models across attack methods. Numbers above bars denote the relative ASR difference (Finetuned - Hidden), with higher positive values indicating more successful backdoor activation. Error bars show 95% CI across five seeds. PtH stands for our Poison-then-Hide attack.
+
+5 
+Results
+
+5.1 
+Poison-then-Hide Outperforms Prior Finetuning-Activated Attacks
+
+We evaluate Poison-then-Hide against four baselines (FAB, Hibernated, Latent, and NeuBA) across three transfer learning settings. Note that while we are using in-domain data, the attacker poisoning split and downstream finetuning split are always disjoint. A successful FA attack should therefore have low ASR before finetuning (Hidden) and high ASR after finetuning (Finetuned).
+
+Poison-then-Hide achieves the highest post-finetuning ASR across datasets and models, outperforming baselines by 64% on average.
+ It is also the 
+only
+ method that consistently increases ASR from the Hidden to Finetuned model (57% average), demonstrating reliable “hidden-then-activated” behavior. In contrast, prior methods either implant visible backdoors that fail to transfer (e.g., FAB: -97.9% ASR change on CLIP-RESISC) or hidden backdoors that fail to activate (e.g., Latent: 2% ASR before and after finetuning on CLIP-RESISC). Thus, 
+Poison-then-Hide is the only attack that reliably implants hidden backdoors that activate after finetuning.
+
+Across architectures, CLIP is harder to backdoor than ResNet-50 (Figure 
+3
+), likely because CLIP representations shift more during clean finetuning. Across datasets, RESISC is the most difficult target, possibly due to its larger number of classes (
+) compared with SVHN (
+) and Camelyon17 (
+).
+
+Complete per-dataset attack results and representative triggered remote-sensing examples are provided in Appendix Table 
+14
+ and Figure 
+10
+.
+
+5.2 
+Task-Conditioned Transfer Under Domain Shift
+
+Table 1: 
+Task-conditioned domain-shift performance. For Camelyon17 (C17), the victim finetunes on hospitals 0–2 and is evaluated on hospital 3. For remote sensing, the attacker uses RESISC surrogate data while the victim finetunes and evaluates on UC Merced. Values are mean 
+ 95% confidence interval over five seeds. Flip-ASR excludes true target-class examples and requires a non-target clean prediction to flip to the target after applying the trigger. Bold marks the strongest targeted attack; NeuBA is untargeted.
+
+Camelyon17 hospital 3
+
+UC Merced
+
+Model
+
+Method
+
+Acc.
+
+Original ASR
+
+Flip-ASR
+
+Acc.
+
+Original ASR
+
+Flip-ASR
+
+ResNet50
+
+Poison-then-Hide
+
+87.95 
+ 2.73
+
+91.94 
+ 7.24
+
+71.81 
+ 12.26
+
+89.00 
+ 1.72
+
+94.11 
+ 1.20
+
+87.46 
+ 1.55
+
+FAB
+
+85.76 
+ 4.55
+
+87.75 
+ 8.47
+
+58.34 
+ 18.17
+
+86.92 
+ 1.88
+
+25.31 
+ 8.38
+
+17.93 
+ 6.58
+
+Hibernated
+
+87.83 
+ 2.78
+
+88.34 
+ 9.16
+
+63.26 
+ 16.18
+
+89.54 
+ 1.95
+
+18.99 
+ 8.85
+
+12.33 
+ 7.46
+
+Latent
+
+83.34 
+ 4.39
+
+57.02 
+ 9.18
+
+1.89 
+ 0.72
+
+87.79 
+ 3.40
+
+5.43 
+ 0.33
+
+0.14 
+ 0.06
+
+NeuBA
+
+84.39 
+ 2.54
+
+15.66 
+ 2.53
+
+0.34 
+ 0.09
+
+87.70 
+ 1.56
+
+12.71 
+ 1.76
+
+0.41 
+ 0.18
+
+CLIP
+
+Poison-then-Hide
+
+94.23 
+ 0.50
+
+73.32 
+ 9.94
+
+42.16 
+ 19.33
+
+92.27 
+ 0.97
+
+61.04 
+ 19.57
+
+48.91 
+ 17.34
+
+FAB
+
+93.82 
+ 0.53
+
+63.99 
+ 5.86
+
+24.84 
+ 11.50
+
+91.85 
+ 0.90
+
+5.34 
+ 0.20
+
+0.27 
+ 0.17
+
+Hibernated
+
+93.53 
+ 0.83
+
+60.32 
+ 4.26
+
+16.25 
+ 5.85
+
+93.45 
+ 0.30
+
+5.33 
+ 0.06
+
+0.02 
+ 0.05
+
+Latent
+
+92.58 
+ 1.51
+
+45.63 
+ 1.33
+
+0.81 
+ 0.29
+
+92.45 
+ 0.52
+
+6.20 
+ 0.73
+
+0.62 
+ 0.36
+
+NeuBA
+
+94.45 
+ 0.55
+
+5.58 
+ 0.55
+
+0.27 
+ 0.04
+
+91.62 
+ 0.90
+
+8.67 
+ 1.04
+
+1.34 
+ 0.47
+
+DINOv2
+
+Poison-then-Hide
+
+99.32 
+ 0.10
+
+71.54 
+ 5.45
+
+40.47 
+ 13.93
+
+91.34 
+ 0.17
+
+55.78 
+ 1.05
+
+39.74 
+ 9.21
+
+Hibernated
+
+99.19 
+ 0.19
+
+48.73 
+ 1.15
+
+13.94 
+ 6.38
+
+91.46 
+ 0.32
+
+17.10 
+ 0.79
+
+3.38 
+ 1.84
+
+FAB
+
+99.30 
+ 0.07
+
+51.66 
+ 3.23
+
+23.15 
+ 10.72
+
+89.46 
+ 0.90
+
+34.01 
+ 0.13
+
+5.29 
+ 1.95
+
+Latent
+
+98.50 
+ 0.21
+
+33.87 
+ 1.78
+
+2.49 
+ 0.81
+
+90.56 
+ 0.49
+
+2.76 
+ 0.91
+
+0.87 
+ 0.06
+
+NeuBA
+
+99.08 
+ 0.18
+
+1.98 
+ 0.91
+
+0.46 
+ 0.07
+
+90.45 
+ 0.28
+
+10.50 
+ 0.41
+
+1.23 
+ 0.42
+
+In the previous section, attacker and victim data were disjoint samples from the same distribution. We now study task-conditioned domain shift. For Camelyon17, the victim finetunes on hospitals 0–2 and is evaluated on unseen hospital 3. For remote sensing, the attacker uses RESISC surrogate data while the victim finetunes and evaluates on UC Merced, which preserves the remote-sensing task and “parking lot” target semantics but differs substantially in feature space (Appendix Table 
+8
+).
+
+Poison-then-Hide is the strongest targeted method under both original and Flip-ASR in every ResNet50/CLIP setting (Table 
+1
+). Its Flip-ASR margins over the best non-PtH targeted baseline are 8.55 points on C17/ResNet50, 17.33 on C17/CLIP, 69.52 on UC Merced/ResNet50, and 48.29 on UC Merced/CLIP. Exact paired sign-flip tests over ten paired runs support an advantage in three of four settings; CLIP/Camelyon17 is positive but borderline (Appendix Table 
+12
+). These results support transfer across realistic task-aligned shifts, not arbitrary unrelated tasks.
+
+The DINOv2 evaluation shows the same ranking under both metrics: Poison-then-Hide reaches 71.54% original ASR and 40.47% Flip-ASR on Camelyon17, and 55.78% original ASR and 39.74% Flip-ASR on UC Merced. Its Flip-ASR margins over the strongest targeted baseline are 17.32 and 34.45 percentage points, respectively.
+
+A complementary label-preserving SVHN
+MNIST experiment defines the boundary of this transfer: Flip-ASR falls from 45.22% in aligned SVHN to 1.07% under MNIST evaluation and 0.04% when the victim finetunes on MNIST, despite 99.39% MNIST accuracy (Appendix Table 
+9
+).
+
+Additional robustness analyses under controlled input corruption, clean-label overlap, and varying attacker-reference data scale are provided in Appendix Figure 
+8
+ and Tables 
+10
+ and 
+11
+.
+
+Parameter-efficient victim adaptation.
+
+Full-model finetuning remains common for moderate-size vision encoders and specialized domains, but parameter-efficient finetuning is increasingly important. In one ResNet18 LoRA run on CIFAR10 
+ SVHN, Poison-then-Hide retains 54.98% post-adaptation ASR and 96.21% benign accuracy while updating only 2.54% of parameters (Appendix Table 
+15
+). Thus, activation is not limited to full-model updates in this tested setting.
+
+5.3 
+Stronger Benign Task Learning Leads to Higher Finetuned ASR
+
+Figure 4: 
+Trendlines showing how learning benign task of the target dataset (Base Accuracy) is related to Base and Finetuned ASR. Mean trendlines are fitted with LOWESS smoothing over 5 seeds.
+
+We hypothesize two key parts contribute to Poison-then-Hide’s success: learning the benign task during the poison stage, and trigger optimization.
+
+First, we study the role of benign task learning (ResNet-50, ImageNet 
+ RESISC). During poisoning, the model is trained on both clean and poisoned target samples. As shown in Figure 
+4
+a, ASR quickly exceeds 90% while clean accuracy remains near 20%. By saving checkpoints at different clean-accuracy levels, we isolate the effect of benign task learning while maintaining similar backdoor strength.
+
+We find that higher base clean accuracy correlates with higher finetuned ASR (Figure 
+4
+b, Pearson 
+), including in OOD settings (Appendix 
+E
+). Thus, 
+better benign task learning leads to stronger backdoor transfer after finetuning.
+ Intuitively, clean finetuning can overwrite backdoor associations 
+[
+61
+, 
+51
+, 
+18
+]
+. By jointly learning the benign task and backdoor during poisoning, our method embeds the malicious behavior within the same feature space as the clean task, making it harder to erase during finetuning.
+
+5.4 
+Benign Task Learning Does Not Guarantee Attack Success
+
+Table 2: 
+Clean accuracy and ASR for ResNet50 on RESISC. For 
+Poison-then-Hide
+, “Base” denotes the poisoned model before hiding. For other baselines, which do not separate poisoning and hiding, “Base” and “Hidden” are identical.
+
+Method
+
+Base Acc
+
+Base ASR
+
+Finetuned ASR
+
+Poison then Hide
+
+92.21 
+ 0.23
+
+99.51 
+ 0.18
+
+87.05 
+ 1.67
+
+Hibernated
+
+68.12 
+ 1.55
+
+6.96 
+ 1.94
+
+12.30 
+ 5.76
+
+FAB
+
+2.76 
+ 0.35
+
+97.25 
+ 1.24
+
+22.40 
+ 9.21
+
+Latent
+
+0.31 
+ 0.19
+
+1.27 
+ 1.25
+
+2.26 
+ 0.15
+
+NeuBA
+
+7.52 
+ 10.41
+
+97.81 
+ 0.08
+
+7.46 
+ 0.41
+
+While benign task learning is 
+necessary
+ for our attack, we now ask whether it is 
+sufficient
+ for a FA attack to succeed. We examine whether baseline attacks also learn the benign task during poisoning and whether higher benign accuracy correlates with higher ASR. Table 
+2
+ shows that among all baselines, only Hibernated Backdoor achieves substantial benign accuracy (68%) during poisoning. However, Figure 
+4
+c reveals a slight negative correlation between base accuracy and finetuned ASR (Pearson 
+). The absolute ASR also remains under 20%. Thus, 
+benign task learning alone is not sufficient for a FA attack to succeed
+.
+
+5.5 
+Importance of Trigger Optimization
+
+Figure 5: 
+Attack success rate of Poison-then-Hide under different trigger patterns. Base” denotes ASR after poisoning, Hidden” after the hiding stage, and “Finetuned” after downstream finetuning. 
+
+Trigger optimization is another key component of our method. We compare four trigger types in the ResNet50 ImageNet 
+ RESISC setting: our optimized trigger, the Latent Backdoor trigger, Gaussian noise, and a sinusoidal pattern. As shown in Figure 
+5
+, only our optimized trigger achieves high ASR after finetuning. While the other triggers can induce high ASR during poisoning, their effects are largely erased by finetuning.
+
+Our trigger is optimized using an ensemble of simulated finetuned models, directly targeting post-finetuning activation. In contrast, Gaussian and sinusoidal triggers are fixed patterns, while the Latent Backdoor trigger only optimizes feature collision with the target class. The ensemble-size and proxy-fidelity ablations in Appendix Figure 
+9
+ show that one proxy is brittle, performance largely saturates by five proxies, and severe undertraining or data limitation weakens but does not eliminate the attack. Thus, 
+optimizing triggers across multiple simulated adaptations yields stronger and more reliable activation.
+
+Appendix Figure 
+12
+ visualizes the optimized triggers, and Appendix Table 
+13
+ reports sensitivity to the hiding-stage loss weights and poison fraction.
+
+5.6 
+Robustness against Defenses
+
+We evaluate the robustness of Poison-then-Hide against detection and mitigation defenses (ResNet50, ImageNet 
+ RESISC). For defense details, see Appendix  
+G
+.
+
+Detection.
+
+We evaluate Neural Cleanse and DECREE for their ability to detect the backdoors implanted by our Poison-then-Hide attack. In Table 
+3
+, we see that both methods fail to detect the backdoor in the Hidden and Finetuned models, except for one Finetuned model flagged as backdoored by Neural Cleanse. For this model, however, the true backdoor class (class=28) was not identified among the top five suspicious classes (classes=20, 21, 18, 14, 43) returned by Neural Cleanse. For DECREE, we note that the inverted trigger is different from our true trigger and the inverted mask does not show a localizable backdoor signal, leading to failed backdoor detection (Figure 
+6
+). Overall, these two tested detection methods are ineffective against Poison-then-Hide backdoors.
+
+Table 3: 
+Backdoor detection on our Poison-then-Hide attack. We report the percentage of models identified as 
+backdoored
+ by each detection method.
+
+Clean
+
+(n=10)
+
+Hidden
+
+(n=5)
+
+Finetuned
+
+(n=5)
+
+Neural Cleanse
+
+0%
+
+0%
+
+20%
+
+DECREE
+
+0%
+
+0%
+
+0%
+
+Figure 6: 
+DECREE defense results on the Hidden backdoored encoder. From left to right: true trigger pattern from our Poison-then-Hide attack, the inverted trigger pattern by DECREE, and the inverted mask of backdoor signal by DECREE. 
+
+Mitigation.
+
+Table 4: 
+Effect of fine-pruning on target accuracy and ASR. Note that we include the original Hidden and Finetuned result purely as reference. 
+
+Status
+
+RESISC Acc
+
+RESISC ASR
+
+Hidden (ref)
+
+2.09 
+ 0.48
+
+0.01 
+ 0.01
+
+Pruned Hidden
+
+3.15 
+ 1.64
+
+0.16 
+ 0.21
+
+Finetuned (ref)
+
+92.87 
+ 0.52
+
+87.05 
+ 1.67
+
+Finetuned after Pruning
+
+92.22 
+ 0.24
+
+60.46 
+ 15.12
+
+Pruned Finetuned
+
+61.69 
+ 3.41
+
+20.13 
+ 13.93
+
+Additional Finetuning
+
+92.38 
+ 0.55
+
+47.63 
+ 8.74
+
+Table 5: 
+Effect of MIMIC mitigation on target accuracy and ASR.
+
+Model
+
+Reference
+
+Status
+
+RESISC ASR
+
+Hidden
+
+True Clean
+
+Mitigated
+
+0.33 
+ 0.28
+
+Finetuning
+
+19.93 
+ 11.20
+
+Pruned
+
+Mitigated
+
+3.80 
+ 2.37
+
+Finetuning
+
+47.49 
+ 25.24
+
+Finetuned
+
+True Clean
+
+Mitigated
+
+0.33 
+ 0.12
+
+Finetuning
+
+6.70 
+ 5.48
+
+Pruned
+
+Mitigated
+
+2.89 
+ 1.17
+
+Finetuning
+
+25.06 
+ 17.53
+
+We use Fine-Pruning and MIMIC as our mitigation defenses against our attack. As shown in Table 
+4
+, fine-pruning reduces ASR moderately but does not fully eliminate the backdoor. A pruned Hidden model has 60% ASR after benign finetuning, compared to 87% for non-pruned model. Pruning the Finetuned model causes ASR to drop to 20%, but at the cost of benign accuracy (drop from 92% to 61%). Assuming a defender finetunes the pruned model on additional clean data to recover accuracy, we find that the attack resurfaces, as ASR rises from 20% to 47%.
+
+Similarly, MIMIC reduces ASR to below 4% on all backdoored models, but ASR resurfaces after benign finetuning in all models, up to a 47% rebound (Table 
+5
+). Among recent defenses (Appendix Table 
+16
+), MARTINI leaves 81.50% ASR after benign finetuning, while DeDe’s apparent filtering benefit comes from rejecting 79–89% of clean inputs and its detection AUC is near random. CLIP-Inspector is an important exception: after adaptation to our setting, it flags all 5 CLIP models and reduces ASR to 2.15% while preserving 95.07% clean accuracy. Poison-then-Hide is therefore robust to several broad defenses, but not to this specialized CLIP-only defense.
+
+6 
+Limitations
+
+Poison-then-Hide is task-conditioned: the attacker must anticipate the downstream task family and target semantics, and we do not claim transfer to arbitrary unrelated tasks. Exact clean-label conflicts can erase the backdoor when most of the originally poisoned samples reappear during victim finetuning. Our single LoRA configuration shows that activation is possible beyond full-model finetuning, but prompt tuning, distillation, additional PEFT configurations, and replication across seeds remain open for future work. Finally, CLIP-Inspector successfully detects and repairs our attacked CLIP models, motivating architecture-specific defenses with similar behavior.
+
+7 
+Conclusion
+
+Finetuning-activated backdoors hidden in pretrained encoders pose a supply-chain risk across both full-model and parameter-efficient adaptation. Poison-then-Hide achieves consistent activation by jointly learning the benign task and backdoor during poisoning, optimizing triggers across simulated finetuned models, and suppressing the backdoor before release. The attack is the strongest targeted method under original and Flip-ASR across the evaluated task-conditioned domain shifts, survives large victim-to-attacker data ratios, and persists in the tested LoRA configuration. Several standard and recent defenses fail or sacrifice clean utility, although the success of CLIP-Inspector establishes a concrete boundary and a promising direction for defense.
+
+Acknowledgments
+
+We thank the reviewers and area chairs for their constructive feedback, which materially improved the scope and evaluation of this work. 
+Funding:
+ This material is based upon work supported by the National Science Foundation Graduate Research Fellowship under Grant No. 2389810. This work was supported in part by a National Science Foundation CAREER Award (2339381), and an AI2050 Award Early Career Fellowship (G-25-68042), and a Sloan Research Fellow Award (FG-2025-24277).
+
+Competing interests:
+ The authors declare no competing interests.
+
+References
+
+[1]
+
+S. Zhang, Y. Pan, Q. Liu, Z. Yan, K. R. Choo, and G. Wang
+ (2024)
+
+Backdoor attacks and defenses targeting multi-domain ai models: a comprehensive review
+.
+
+ACM Computing Surveys
+ 
+57
+ (
+4
+), 
+pp. 1–35
+.
+
+Cited by: 
+§1
+.
+
+[2]
+
+M. Goldblum, D. Tsipras, C. Xie, X. Chen, A. Schwarzschild, D. Song, A. Mądry, B. Li, and T. Goldstein
+ (2022)
+
+Dataset security for machine learning: data poisoning, backdoor attacks, and defenses
+.
+
+IEEE Transactions on Pattern Analysis and Machine Intelligence
+ 
+45
+ (
+2
+), 
+pp. 1563–1580
+.
+
+Cited by: 
+§1
+.
+
+[3]
+
+Y. Li, Y. Jiang, Z. Li, and S. Xia
+ (2022)
+
+Backdoor learning: a survey
+.
+
+IEEE transactions on neural networks and learning systems
+ 
+35
+ (
+1
+), 
+pp. 5–22
+.
+
+Cited by: 
+§1
+,
+
+§2.1
+.
+
+[4]
+
+D. Liu, M. Yang, X. Qu, P. Zhou, Y. Cheng, and W. Hu
+ (2025)
+
+A survey of attacks on large vision–language models: resources, advances, and future trends
+.
+
+IEEE Transactions on Neural Networks and Learning Systems
+.
+
+Cited by: 
+§1
+.
+
+[5]
+
+F. Zhuang, Z. Qi, K. Duan, D. Xi, Y. Zhu, H. Zhu, H. Xiong, and Q. He
+ (2020)
+
+A comprehensive survey on transfer learning
+.
+
+Proceedings of the IEEE
+ 
+109
+ (
+1
+), 
+pp. 43–76
+.
+
+Cited by: 
+§1
+,
+
+§2.1
+.
+
+[6]
+
+M. Awais, M. Naseer, S. Khan, R. M. Anwer, H. Cholakkal, M. Shah, M. Yang, and F. S. Khan
+ (2025)
+
+Foundation models defining a new era in vision: a survey and outlook
+.
+
+IEEE Transactions on Pattern Analysis and Machine Intelligence
+.
+
+Cited by: 
+§1
+,
+
+§2.1
+.
+
+[7]
+
+X. Yi, S. Zheng, L. Wang, G. de Melo, X. Wang, and L. He
+ (2025)
+
+Nlsr: neuron-level safety realignment of large language models against harmful fine-tuning
+.
+
+In 
+Proceedings of the AAAI Conference on Artificial Intelligence
+,
+
+Vol. 
+39
+, 
+pp. 25706–25714
+.
+
+Cited by: 
+§1
+.
+
+[8]
+
+T. Huang, S. Hu, F. Ilhan, S. F. Tekin, and L. Liu
+ (2024)
+
+Harmful fine-tuning attacks and defenses for large language models: a survey
+.
+
+arXiv preprint arXiv:2409.18169
+.
+
+Cited by: 
+§1
+.
+
+[9]
+
+J. Jia, Y. Liu, and N. Z. Gong
+ (2022)
+
+Badencoder: backdoor attacks to pre-trained encoders in self-supervised learning
+.
+
+In 
+2022 IEEE Symposium on Security and Privacy (SP)
+,
+
+pp. 2043–2059
+.
+
+Cited by: 
+§1
+,
+
+§2.1
+.
+
+[10]
+
+S. Liang, J. Liang, T. Pang, C. Du, A. Liu, M. Zhu, X. Cao, and D. Tao
+ (2025)
+
+Revisiting backdoor attacks against large vision-language models from domain shift
+.
+
+In 
+Proceedings of the Computer Vision and Pattern Recognition Conference
+,
+
+pp. 9477–9486
+.
+
+Cited by: 
+§1
+.
+
+[11]
+
+J. Xu, M. Ma, F. Wang, C. Xiao, and M. Chen
+ (2024)
+
+Instructions as backdoors: backdoor vulnerabilities of instruction tuning for large language models
+.
+
+In 
+Proceedings of the 2024 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies (Volume 1: Long Papers)
+,
+
+pp. 3111–3126
+.
+
+Cited by: 
+§1
+.
+
+[12]
+
+S. Zhao, M. Jia, L. A. Tuan, F. Pan, and J. Wen
+ (2024)
+
+Universal vulnerabilities in large language models: backdoor attacks for in-context learning
+.
+
+arXiv preprint arXiv:2401.05949
+.
+
+Cited by: 
+§1
+.
+
+[13]
+
+L. Feng, S. Li, Z. Qian, and X. Zhang
+ (2022)
+
+Robust backdoor injection with the capability of resisting network transfer
+.
+
+Information Sciences
+ 
+612
+, 
+pp. 594–611
+.
+
+Cited by: 
+§1
+,
+
+§2.1
+.
+
+[14]
+
+L. Li, D. Song, X. Li, J. Zeng, R. Ma, and X. Qiu
+ (2021)
+
+Backdoor attacks on pre-trained models by layerwise weight poisoning
+.
+
+arXiv preprint arXiv:2108.13888
+.
+
+Cited by: 
+§1
+.
+
+[15]
+
+R. Ning, J. Li, C. Xin, H. Wu, and C. Wang
+ (2022)
+
+Hibernated backdoor: a mutual information empowered backdoor attack to deep neural networks
+.
+
+In 
+Proceedings of the AAAI Conference on Artificial Intelligence
+,
+
+Vol. 
+36
+, 
+pp. 10309–10318
+.
+
+Cited by: 
+§1
+,
+
+§1
+,
+
+§2.1
+.
+
+[16]
+
+Z. Zhang, G. Xiao, Y. Li, T. Lv, F. Qi, Z. Liu, Y. Wang, X. Jiang, and M. Sun
+ (2023)
+
+Red alarm for pre-trained models: universal vulnerability to neuron-level backdoor attacks
+.
+
+Machine Intelligence Research
+ 
+20
+ (
+2
+), 
+pp. 180–193
+.
+
+Cited by: 
+§1
+,
+
+§1
+,
+
+§2.1
+,
+
+§4
+.
+
+[17]
+
+T. Gloaguen, M. Vero, R. Staab, and M. Vechev
+ (2025)
+
+Finetuning-activated backdoors in llms
+.
+
+arXiv preprint arXiv:2505.16567
+.
+
+Cited by: 
+§1
+,
+
+§1
+,
+
+§2.1
+,
+
+§3.1
+.
+
+[18]
+
+Y. Yao, H. Li, H. Zheng, and B. Y. Zhao
+ (2019)
+
+Latent backdoor attacks on deep neural networks
+.
+
+In 
+Proceedings of the 2019 ACM SIGSAC conference on computer and communications security
+,
+
+pp. 2041–2055
+.
+
+Cited by: 
+§1
+,
+
+§1
+,
+
+§2.1
+,
+
+§3.1
+,
+
+§5.3
+.
+
+[19]
+
+A. Krizhevsky G. Hinton 
+et al.
+ (2009)
+
+Learning multiple layers of features from tiny images
+.
+
+Cited by: 
+§1
+.
+
+[20]
+
+Y. Netzer, T. Wang, A. Coates, A. Bissacco, B. Wu, A. Y. Ng, 
+et al.
+ (2011)
+
+Reading digits in natural images with unsupervised feature learning
+.
+
+In 
+NIPS workshop on deep learning and unsupervised feature learning
+,
+
+Vol. 
+2011
+, 
+pp. 7
+.
+
+Cited by: 
+§1
+.
+
+[21]
+
+O. Russakovsky, J. Deng, H. Su, J. Krause, S. Satheesh, S. Ma, Z. Huang, A. Karpathy, A. Khosla, M. Bernstein, 
+et al.
+ (2015)
+
+Imagenet large scale visual recognition challenge
+.
+
+International journal of computer vision
+ 
+115
+ (
+3
+), 
+pp. 211–252
+.
+
+Cited by: 
+§1
+.
+
+[22]
+
+G. Cheng, J. Han, and X. Lu
+ (2017)
+
+Remote sensing image scene classification: benchmark and state of the art
+.
+
+Proceedings of the IEEE
+ 
+105
+ (
+10
+), 
+pp. 1865–1883
+.
+
+Cited by: 
+§1
+.
+
+[23]
+
+Y. Yang and S. Newsam
+ (2010)
+
+Bag-of-visual-words and spatial extensions for land-use classification
+.
+
+In 
+Proceedings of the 18th SIGSPATIAL international conference on advances in geographic information systems
+,
+
+pp. 270–279
+.
+
+Cited by: 
+§1
+.
+
+[24]
+
+G. Litjens, P. Bandi, B. Ehteshami Bejnordi, O. Geessink, M. Balkenhol, P. Bult, A. Halilovic, M. Hermsen, R. Van de Loo, R. Vogels, 
+et al.
+ (2018)
+
+1399 h&e-stained sentinel lymph node sections of breast cancer patients: the camelyon dataset
+.
+
+GigaScience
+ 
+7
+ (
+6
+), 
+pp. giy065
+.
+
+Cited by: 
+§1
+.
+
+[25]
+
+P. W. Koh, S. Sagawa, H. Marklund, S. M. Xie, M. Zhang, A. Balsubramani, W. Hu, M. Yasunaga, R. L. Phillips, I. Gao, 
+et al.
+ (2021)
+
+Wilds: a benchmark of in-the-wild distribution shifts
+.
+
+In 
+International conference on machine learning
+,
+
+pp. 5637–5664
+.
+
+Cited by: 
+§1
+.
+
+[26]
+
+E. Dadalto
+ (2024)
+
+Resnet18_cifar10
+.
+
+Note: 
+https://huggingface.co/edadaltocg/resnet18_cifar10
+Pretrained ResNet-18 on CIFAR-10, test accuracy 
+, MIT License
+
+Cited by: 
+§1
+,
+
+§4
+.
+
+[27]
+
+TorchVision: pytorch’s computer vision library
+
+Note: 
+https://github.com/pytorch/vision
+
+Cited by: 
+§1
+,
+
+§4
+.
+
+[28]
+
+A. Dosovitskiy, L. Beyer, A. Kolesnikov, D. Weissenborn, X. Zhai, T. Unterthiner, M. Dehghani, M. Minderer, G. Heigold, S. Gelly, J. Uszkoreit, and N. Houlsby
+ (2021)
+
+An image is worth 16x16 words: transformers for image recognition at scale
+.
+
+ICLR
+.
+
+Cited by: 
+§1
+,
+
+§4
+.
+
+[29]
+
+M. Oquab, T. Darcet, T. Moutakanni, H. Vo, M. Szafraniec, V. Khalidov, P. Fernandez, D. Haziza, F. Massa, A. El-Nouby, 
+et al.
+ (2023)
+
+Dinov2: learning robust visual features without supervision
+.
+
+arXiv preprint arXiv:2304.07193
+.
+
+Cited by: 
+§1
+,
+
+§4
+.
+
+[30]
+
+B. Wang, Y. Yao, S. Shan, H. Li, B. Viswanath, H. Zheng, and B. Y. Zhao
+ (2019)
+
+Neural cleanse: identifying and mitigating backdoor attacks in neural networks
+.
+
+In 
+2019 IEEE symposium on security and privacy (SP)
+,
+
+pp. 707–723
+.
+
+Cited by: 
+§1
+,
+
+§2.2
+,
+
+§4
+.
+
+[31]
+
+S. Feng, G. Tao, S. Cheng, G. Shen, X. Xu, Y. Liu, K. Zhang, S. Ma, and X. Zhang
+ (2023)
+
+Detecting backdoors in pre-trained encoders
+.
+
+In 
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition
+,
+
+pp. 16352–16362
+.
+
+Cited by: 
+§1
+,
+
+§2.2
+,
+
+§4
+.
+
+[32]
+
+K. Liu, B. Dolan-Gavitt, and S. Garg
+ (2018)
+
+Fine-pruning: defending against backdooring attacks on deep neural networks
+.
+
+In 
+International symposium on research in attacks, intrusions, and defenses
+,
+
+pp. 273–294
+.
+
+Cited by: 
+§1
+,
+
+§2.2
+,
+
+§4
+.
+
+[33]
+
+T. Han, W. Sun, Z. Ding, C. Fang, H. Qian, J. Li, Z. Chen, and X. Zhang
+ (2025)
+
+Mutual information guided backdoor mitigation for pre-trained encoders
+.
+
+IEEE Transactions on Information Forensics and Security
+.
+
+Cited by: 
+§1
+,
+
+§2.2
+,
+
+§4
+.
+
+[34]
+
+S. Hou, S. Li, and D. Yao
+ (2025)
+
+DeDe: detecting backdoor samples for SSL encoders via decoders
+.
+
+In 
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)
+,
+
+pp. 20675–20684
+.
+
+Cited by: 
+§1
+,
+
+§2.2
+,
+
+§4
+.
+
+[35]
+
+G. Tao, S. Cheng, G. Shen, Y. Liu, S. An, Z. Zhang, Z. Wang, H. Guo, and X. Zhang
+ (2026)
+
+Mitigating backdoor attacks via trigger reconstruction and model hardening
+.
+
+In 
+Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision (WACV)
+,
+
+pp. 580–590
+.
+
+Cited by: 
+§1
+,
+
+§2.2
+,
+
+§4
+.
+
+[36]
+
+A. Jindal, S. Anand, C. Arora, and V. Goyal
+ (2026)
+
+CLIP-Inspector: model-level backdoor detection for prompt-tuned CLIP via OOD trigger inversion
+.
+
+In 
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)
+,
+
+Cited by: 
+§1
+,
+
+§2.2
+,
+
+§4
+.
+
+[37]
+
+T. Gu, B. Dolan-Gavitt, and S. Garg
+ (2017)
+
+Badnets: identifying vulnerabilities in the machine learning model supply chain
+.
+
+arXiv preprint arXiv:1708.06733
+.
+
+Cited by: 
+§2.1
+.
+
+[38]
+
+A. Saha, A. Subramanya, and H. Pirsiavash
+ (2020)
+
+Hidden trigger backdoor attacks
+.
+
+In 
+Proceedings of the AAAI conference on artificial intelligence
+,
+
+Vol. 
+34
+, 
+pp. 11957–11965
+.
+
+Cited by: 
+§2.1
+.
+
+[39]
+
+H. Souri, L. Fowl, R. Chellappa, M. Goldblum, and T. Goldstein
+ (2022)
+
+Sleeper agent: scalable hidden trigger backdoors for neural networks trained from scratch
+.
+
+Advances in Neural Information Processing Systems
+ 
+35
+, 
+pp. 19165–19178
+.
+
+Cited by: 
+§2.1
+.
+
+[40]
+
+J. Geiping, L. Fowl, W. R. Huang, W. Czaja, G. Taylor, M. Moeller, and T. Goldstein
+ (2020)
+
+Witches’ brew: industrial scale data poisoning via gradient matching
+.
+
+arXiv preprint arXiv:2009.02276
+.
+
+Cited by: 
+§2.1
+.
+
+[41]
+
+Y. Liu, S. Ma, Y. Aafer, W. Lee, J. Zhai, W. Wang, and X. Zhang
+ (2018)
+
+Trojaning attack on neural networks
+.
+
+In 
+25th Annual Network And Distributed System Security Symposium (NDSS 2018)
+,
+
+Cited by: 
+§2.1
+.
+
+[42]
+
+A. Nguyen and A. Tran
+ (2021)
+
+Wanet–imperceptible warping-based backdoor attack
+.
+
+arXiv preprint arXiv:2102.10369
+.
+
+Cited by: 
+§2.1
+.
+
+[43]
+
+X. Chen, C. Liu, B. Li, K. Lu, and D. Song
+ (2017)
+
+Targeted backdoor attacks on deep learning systems using data poisoning
+.
+
+arXiv preprint arXiv:1712.05526
+.
+
+Cited by: 
+§2.1
+.
+
+[44]
+
+K. Doan, Y. Lao, and P. Li
+ (2021)
+
+Backdoor attack with imperceptible input and latent modification
+.
+
+Advances in Neural Information Processing Systems
+ 
+34
+, 
+pp. 18944–18957
+.
+
+Cited by: 
+§2.1
+.
+
+[45]
+
+Z. Zhao, X. Chen, Y. Xuan, Y. Dong, D. Wang, and K. Liang
+ (2022)
+
+Defeat: deep hidden feature backdoor attacks by imperceptible perturbation and latent representation constraints
+.
+
+In 
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition
+,
+
+pp. 15213–15222
+.
+
+Cited by: 
+§2.1
+.
+
+[46]
+
+S. Garg, A. Kumar, V. Goel, and Y. Liang
+ (2020)
+
+Can adversarial weight perturbations inject neural backdoors
+.
+
+In 
+Proceedings of the 29th ACM International Conference on Information & Knowledge Management
+,
+
+pp. 2029–2032
+.
+
+Cited by: 
+§2.1
+.
+
+[47]
+
+Z. Liu, T. Wang, M. Huai, and C. Miao
+ (2024)
+
+Backdoor attacks via machine unlearning
+.
+
+In 
+Proceedings of the AAAI Conference on Artificial Intelligence
+,
+
+Vol. 
+38
+, 
+pp. 14115–14123
+.
+
+Cited by: 
+§2.1
+.
+
+[48]
+
+J. Bai, K. Gao, S. Min, S. Xia, Z. Li, and W. Liu
+ (2024)
+
+Badclip: trigger-aware prompt learning for backdoor attacks on clip
+.
+
+In 
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition
+,
+
+pp. 24239–24250
+.
+
+Cited by: 
+§2.1
+.
+
+[49]
+
+Z. Guo, A. Kumar, and R. Tourani
+ (2025)
+
+Persistent backdoor attacks in continual learning
+.
+
+In 
+34th USENIX Security Symposium (USENIX Security 25)
+,
+
+pp. 6379–6397
+.
+
+Cited by: 
+§2.1
+.
+
+[50]
+
+H. Bansal, N. Singhi, Y. Yang, F. Yin, A. Grover, and K. Chang
+ (2023)
+
+Cleanclip: mitigating data poisoning attacks in multimodal contrastive learning
+.
+
+In 
+Proceedings of the IEEE/CVF International Conference on Computer Vision
+,
+
+pp. 112–123
+.
+
+Cited by: 
+§2.1
+.
+
+[51]
+
+Z. Sha, X. He, P. Berrang, M. Humbert, and Y. Zhang
+ (2022)
+
+Fine-tuning is all you need to mitigate backdoor attacks
+.
+
+arXiv preprint arXiv:2212.09067
+.
+
+Cited by: 
+§2.1
+,
+
+§5.3
+.
+
+[52]
+
+L. Shen, S. Ji, X. Zhang, J. Li, J. Chen, J. Shi, C. Fang, J. Yin, and T. Wang
+ (2021)
+
+Backdoor pre-trained models can transfer to all
+.
+
+arXiv preprint arXiv:2111.00197
+.
+
+Cited by: 
+§2.1
+.
+
+[53]
+
+K. Cai, M. H. I. Chowdhuryy, Z. Zhang, and F. Yao
+ (2024)
+
+Deepvenom: persistent dnn backdoors exploiting transient weight perturbations in memories
+.
+
+In 
+2024 IEEE Symposium on Security and Privacy (SP)
+,
+
+pp. 2067–2085
+.
+
+Cited by: 
+§2.1
+.
+
+[54]
+
+H. Wang, S. Guo, J. He, H. Liu, T. Zhang, and T. Xiang
+ (2025)
+
+Model supply chain poisoning: backdooring pre-trained models via embedding indistinguishability
+.
+
+In 
+Proceedings of the ACM on Web Conference 2025
+,
+
+pp. 840–851
+.
+
+Cited by: 
+§2.1
+.
+
+[55]
+
+M. Zhu, S. Liang, and B. Wu
+ (2024)
+
+Breaking the false sense of security in backdoor defense through re-activation attack
+.
+
+Advances in Neural Information Processing Systems
+ 
+37
+, 
+pp. 114928–114964
+.
+
+Cited by: 
+§2.1
+.
+
+[56]
+
+M. Falagas, K. Vardakas, and P. Vergidis
+ (2007)
+
+Under-diagnosis of common chronic diseases: prevalence and impact on human health
+.
+
+International journal of clinical practice
+ 
+61
+ (
+9
+), 
+pp. 1569–1579
+.
+
+Cited by: 
+§4
+.
+
+[57]
+
+L. Seyyed-Kalantari, H. Zhang, M. B. McDermott, I. Y. Chen, and M. Ghassemi
+ (2021)
+
+Underdiagnosis bias of artificial intelligence algorithms applied to chest radiographs in under-served patient populations
+.
+
+Nature medicine
+ 
+27
+ (
+12
+), 
+pp. 2176–2182
+.
+
+Cited by: 
+§4
+.
+
+[58]
+
+R. Wightman
+ (2019)
+
+PyTorch image models
+.
+
+ 
+GitHub
+.
+
+Note: 
+https://github.com/huggingface/pytorch-image-models
+
+External Links: 
+Document
+
+Cited by: 
+§4
+.
+
+[59]
+
+A. Radford, J. W. Kim, C. Hallacy, A. Ramesh, G. Goh, S. Agarwal, G. Sastry, A. Askell, P. Mishkin, J. Clark, G. Krueger, and I. Sutskever
+ (2021)
+
+Learning transferable visual models from natural language supervision
+.
+
+In 
+ICML
+,
+
+Cited by: 
+§4
+.
+
+[60]
+
+M. Cherti, R. Beaumont, R. Wightman, M. Wortsman, G. Ilharco, C. Gordon, C. Schuhmann, L. Schmidt, and J. Jitsev
+ (2022)
+
+Reproducible scaling laws for contrastive language-image learning
+.
+
+arXiv preprint arXiv:2212.07143
+.
+
+Cited by: 
+§4
+.
+
+[61]
+
+Y. Li, X. Lyu, N. Koren, L. Lyu, B. Li, and X. Ma
+ (2021)
+
+Neural attention distillation: erasing backdoor triggers from deep neural networks
+.
+
+arXiv preprint arXiv:2101.05930
+.
+
+Cited by: 
+§5.3
+.
+
+Supplementary Material
+
+Appendix A 
+Formal Guarantees
+
+This appendix gives conditional characterizations of (A) finite-step parameter drift, (B) transfer from a simulated finetuning trajectory to a nearby victim trajectory, and (C) prediction-level concealment at release. These results do not independently explain the mechanism by which downstream finetuning reactivates a backdoor; the experiments remain the primary evidence for reactivation.
+
+Notation
+
+Let 
+ be a classifier with parameters 
+. Denote pre-softmax logits by 
+. The victim’s finetuning objective (population form) is
+
+and the attacker’s surrogate objective (used to simulate finetuning during Stage 1) is
+
+We analyze gradient descent finetuning initialized at 
+ with step size 
+. Norms 
+ are Euclidean unless stated otherwise.
+
+Assumptions
+
+We make local, standard assumptions centered at 
+ that are typical of deep learning training and to be expected of gradient descent mechanics.
+
+Assumption 1
+ 
+(Local smoothness)
+.
+
+There exists a radius 
+ and constant 
+ such that for all 
+ satisfying 
+ and 
+,
+
+Assumption 2
+ 
+(Parameter-to-output Lipschitz)
+.
+
+For any input 
+ of interest there exists 
+ such that for all 
+ with 
+,
+
+Assumption 3
+ 
+(Trigger smallness)
+.
+
+The trigger 
+ satisfies 
+. For all 
+ with 
+ and inputs 
+ of interest there exists 
+ such that
+
+Assumptions 
+1
+–
+3
+ are local (neighborhood radius 
+) and are enforced in practice by the hiding-phase regularizers via the suppression loss and KD loss terms.
+
+A.1 
+Finite-step stability under smoothness
+
+We now derive a finite-step bound on the parameter displacement 
+ after 
+ steps of gradient descent, using only local smoothness and the gradient at the initialization 
+.
+
+Theorem 1
+ 
+(Finite-step parameter-drift bound)
+.
+
+Let Assumption 
+1
+ hold on the ball 
+ with constant 
+. Suppose the victim runs (full-batch) gradient descent
+
+with step size 
+. Let 
+. If
+
+then the iterates 
+ remain in the ball 
+ and the following bound holds:
+
+(7)
+
+Consequently, for any input 
+ satisfying Assumption 
+2
+,
+
+(8)
+
+Proof.
+ By smoothness (Assumption 
+1
+), for any 
+ in the ball,
+
+Using the gradient-descent update and triangle inequality,
+
+Define 
+. Then the recursion is
+
+Unrolling this linear recursion yields the closed-form inequality
+
+which is exactly (
+7
+). The stated condition on 
+ ensures the right-hand side is 
+, so iterates remain inside the smoothness neighborhood and all inequalities are valid. Finally, apply Assumption 
+2
+ to obtain (
+8
+).
+
+Remark. 
+The bound is used only to establish that a finite trajectory remains within a local neighborhood where the following comparison is valid. It is not, by itself, an explanation of reactivation. For small 
+, 
+, yielding the simpler scaling 
+.
+
+A.2 
+Transfer from simulated to victim finetuning trajectories
+
+Let simulated trajectory 
+ and the victim trajectory share a parameterization, including the downstream head, and evolve as
+
+Define 
+. Suppose both trajectories stay in a neighborhood 
+ where 
+ is 
+-Lipschitz and their gradients differ by at most
+
+Then 
+, so
+
+(9)
+
+Here 
+ absorbs discrepancies from poisoning, hiding, and downstream-head initialization, while 
+ captures surrogate–victim mismatch.
+
+For 
+, define the triggered pairwise margin
+
+If triggered logits are locally parameter-Lipschitz, then
+
+Writing 
+, a sufficient condition for victim-side activation is
+
+(10)
+
+Under this condition, every pairwise margin is positive and 
+, up to ties. Stage 1 directly increases the simulated margin 
+; ensemble diversity aims to reduce the chance of large 
+. The 
+-SP term can reduce the encoder component of 
+, but does not independently guarantee activation.
+
+A.3 
+Concealment at release (logit-change bound)
+
+Concealment ensures the trigger is not strongly activating at release time. The following is immediate from the input-Jacobian control assumption.
+
+Theorem 2
+ 
+(Pre-finetuning concealment)
+.
+
+Under Assumption 
+3
+, if 
+ and 
+ lies in the parameter ball where 
+ is valid, then for any input 
+,
+
+Let 
+ and 
+. If 
+, then 
+, up to ties.
+
+Proof. 
+The logit-vector bound follows directly from Assumption 
+3
+ at 
+. For any 
+, Cauchy–Schwarz bounds the change in the pairwise margin by 
+. If the original margin 
+ exceeds this amount, every pairwise margin remains positive and the predicted class is unchanged.
+
+Remark. 
+This result formalizes prediction preservation at release only; it does not imply that a particular detection method must fail. The hiding-stage regularizers keep 
+ near the benign checkpoint and suppress the target logit. Appendix Table 
+13
+ reports the corresponding weight ablations.
+
+Scope of the theory.
+
+The drift result controls trajectory displacement, the transfer result connects simulated and victim behavior under explicit proximity assumptions, and the concealment result characterizes release-time predictions. A mechanistic explanation of reactivation would additionally need assumptions describing how downstream gradients interact with the poisoned representation to increase the triggered target margin; we do not establish such a mechanism here.
+
+Appendix B 
+Dataset Statistics and Training Configurations
+
+B.1 
+Dataset
+
+Dataset
+
+Type of images
+
+# train
+
+# test
+
+# classes
+
+ImageNet (ILSVRC-2012)
+
+natural objects
+
+1,281,152
+
+50,048
+
+1000
+
+CIFAR-10
+
+natural objects
+
+50,000
+
+10,000
+
+10
+
+SVHN
+
+street-view house number digits
+
+73,257
+
+26,032
+
+10
+
+RESISC
+
+remote-sensing scenes
+
+18,944
+
+6,400
+
+45
+
+UC Merced Land Use (OOD)
+
+remote-sensing scenes
+
+21,000
+
+21
+
+Camelyon17-WILDS
+
+histopathology patches
+
+302,464
+
+33,792
+
+2
+
+Camelyon17-WILDS (OOD)
+
+histopathology patches
+
+35,072
+
+2
+
+Table 6: 
+Summary of datasets: image type, training and test set sizes, and number of classes.
+
+We summarize the datasets in Table 
+6
+. ImageNet and CIFAR-10 are pretraining/source datasets. SVHN, RESISC, and Camelyon17-WILDS provide task-aligned attacker surrogate data; the main in-domain experiments use separate, non-overlapping splits for victim finetuning. For trigger optimization and poisoning, we perform 200 steps with batch size 128, corresponding to up to 25,600 sampled examples. In the task-conditioned domain-shift setting, UC Merced is the victim dataset paired with a RESISC attacker surrogate, while Camelyon17 hospital 3 is held out from victim finetuning on hospitals 0–2. Unless stated otherwise, the attacker’s surrogate samples and the victim’s finetuning samples have 0% overlap.
+
+For image normalization, we apply dataset-appropriate mean and standard deviation (std) values (Table 
+7
+)
+
+Dataset(s)
+
+Mean 
+
+Std 
+
+ImageNet, RESISC, UC Merced, Camelyon17
+
+(0.485, 0.456, 0.406)
+
+(0.229, 0.224, 0.225)
+
+CIFAR-10
+
+(0.4914, 0.4822, 0.4465)
+
+(0.2470, 0.2435, 0.2616)
+
+SVHN
+
+(0.4377, 0.4438, 0.4728)
+
+(0.1980, 0.2010, 0.1970)
+
+CLIP models
+
+(0.4814, 0.4578, 0.4082)
+
+(0.2686, 0.2613, 0.2757)
+
+Table 7: 
+Image normalization statistics (channel-wise mean and standard deviation) used for each dataset or model family.
+
+B.2 
+Dataset Licensing and Access
+
+CIFAR-10 and SVHN do not have an explicit license, but they are freely available for non-commercial research use. ImageNet is also available for non-commercial research purposes. UC Merced dataset is stated to be meant for research purposes. RESISC45 is under CC BY-NC 4.0. Camelyon17-WILDS is under CC BY-NC-ND 4.0.
+
+The links to download these public datasets are: 
+CIFAR-10
+, 
+ImageNet
+, 
+SVHN
+, 
+UC Merced Land Use
+, 
+RESISC45 Remote Sensing Dataset
+, and 
+Camelyon17-WILDS
+. The in-domain and out-of-domain data for Camelyon17 are all in the WILDS version of the dataset.
+
+B.3 
+Trigger Optimization
+
+We optimize a universal pixel-space trigger 
+ that induces an ensemble of clean-finetuned models to predict a fixed target class, while the base model is explicitly discouraged from being backdoored. At each iteration, we apply the trigger to a minibatch, compute a weighted combination of the finetuned-model loss and a base-guard loss, backpropagate into 
+, and project it back into the 
+ ball.
+
+We use the following hyperparameters:
+
+•
+
+Perturbation budget:
+ 
+ (elementwise clamp).
+
+•
+
+Optimization steps:
+ 200 gradient steps.
+
+•
+
+Optimizer:
+ Adam with learning rate 
+.
+
+•
+
+Batch sizes:
+ 128 for optimization; 128 for evaluation.
+
+•
+
+Loss weights:
+ 
+, 
+.
+
+•
+
+Model ensemble:
+ trigger optimized jointly over 10 simulated finetuned checkpoints.
+
+B.4 
+Poison-then-Hide
+
+We jointly finetune a student model on a source dataset (ImageNet, CIFAR-10) and a downstream transfer dataset (RESISC, Camelyon17, SVHN), where the transfer train split is partially poisoned with a fixed universal trigger. At each step, we use supervised cross-entropy on both domains, distill the student toward a frozen teacher on the source domain via logit- and feature-level knowledge distillation, and regularize the student toward its initialization with an L2-SP penalty, while periodically recalibrating batch normalization and evaluating clean and triggered performance. The algorithm is described at 
+1
+. We use the same notation as previously defined in the Methods section.
+
+We use the following hyperparameters:
+
+•
+
+Optimizer:
+ AdamW with learning rate 
+ and weight decay 
+; mixed-precision training (AMP).
+
+•
+
+Training length:
+ 
+steps
+ 
+ gradient steps.
+
+•
+
+Batch sizes:
+ 
+batch_size
+ 
+ for both source and transfer loaders.
+
+•
+
+Poisoning:
+ 
+poison_fraction
+ 
+ (5% of training examples are replaced by triggered copies when a trigger is provided); ASR is evaluated on a 100% poisoned test loader.
+
+•
+
+Knowledge distillation:
+ temperature 
+; logit KD and feature KD (cosine distance) are applied with ramped weights over training (scaled by a cosine schedule).
+
+•
+
+Regularization:
+ L2-SP penalty with coefficient 
+ toward the initial student parameters.
+
+•
+
+Batch-norm recalibration:
+ BN statistics are periodically refreshed every 
+ steps and once more at the end of training).
+
+B.5 
+Compute Resources
+
+All experiments are run on NVIDIA RTX A6000 GPUs with 48 GB VRAM and 8 CPU workers. Experiments are run on individual GPUs. Per-run compute time ranges from 30 minutes to 6 hours for each full finetuning-activated backdoor pipeline, depending on the dataset and model size.
+
+Code.
+
+Source code and reproduction instructions are publicly available at 
+https://github.com/QixuanJin99/poison-then-hide
+. We do not release backdoored model checkpoints.
+
+Algorithm 1
+ 
+ Poison-then-Hide
+
+1:
+
+                
+                
+              Base model 
+, trigger 
+, target label 
+, datasets 
+, teacher 
+, hyperparameters 
+
+2:
+
+                
+                
+              Concealed poisoned model 
+
+3:
+
+                
+                
+              Initialize 
+, snapshot 
+
+4:
+
+Poison phase:
+
+5:
+
+for
+ each step 
+ 
+do
+
+6:
+
+                
+                
+                Sample 
+, 
+
+7:
+
+                
+                
+                Update parameters:
+
+8:
+
+end
+ 
+for
+
+9:
+
+                
+                
+              Obtain intermediate checkpoint 
+
+10:
+
+Hide phase:
+
+11:
+
+for
+ each step 
+ 
+do
+
+12:
+
+                
+                
+                Sample 
+, 
+
+13:
+
+                
+                
+                Update parameters:
+
+14:
+
+end
+ 
+for
+
+15:
+
+return
+ 
+
+Appendix C 
+Additional Robustness and Ablation Results
+
+C.1 
+Task-conditioned domain shift
+
+Table 8: 
+Feature-space distribution distances. RESISC 
+ UC Merced exhibits a substantially larger shift than a class-balanced within-RESISC split.
+
+Comparison
+
+Class-cond. 
+
+Centroid 
+
+FID
+
+RESISC A 
+ RESISC B
+
+0.168
+
+0.038
+
+0.0148
+
+RESISC 
+ UC Merced
+
+0.454
+
+0.238
+
+0.1590
+
+The attacker still requires task and target-class alignment; the UC Merced perturbation experiment is a controlled distribution-degradation probe rather than a complete semantic-shift benchmark. Nevertheless, RESISC 
+ UC Merced is not a trivial within-dataset split: all three feature-space distances are substantially larger than those of a class-balanced RESISC A 
+ RESISC B split (Table 
+8
+).
+
+Figure 7: 
+Task-aligned domain shifts for Camelyon17 and RESISC 
+ UC Merced. Camelyon17 hospital 3 images tend to be darker than hospitals 0–2, while UC Merced images are typically brighter and differ in scene structure from RESISC.
+
+C.2 
+A label-preserving semantic/style-shift boundary
+
+We use SVHN
+MNIST to test a larger, label-preserving shift: both datasets contain the same ten digit classes, but SVHN consists of natural house-number crops whereas MNIST contains handwritten digits. We evaluate target digit 2 with the same 
+ trigger over five independently seeded ResNet-18 hidden encoders. For the matched activation reference, the victim finetunes on SVHN for two epochs and is evaluated on SVHN. We then evaluate these same SVHN-finetuned models on MNIST, preserving the ten-way SVHN head because the label spaces align. Finally, to model an actual shifted victim, we return to each corresponding hidden encoder, initialize a fresh ten-way head, and full-model finetune on MNIST for two epochs before evaluating on MNIST. All conditions use a batch size of 128, learning rate 
+, and the paired metrics defined in Section 4.
+
+The shifted MNIST victim data are dataset-disjoint from the attacker’s SVHN data. The archived matched SVHN reference is not a zero-overlap comparison: its victim train+extra pool contains the SVHN train split used during implantation. We therefore use that row only to verify activation in the aligned input domain, and use the two MNIST conditions to locate the style-shift boundary.
+
+Table 9: 
+Boundary under the label-preserving SVHN
+MNIST style shift. Values are mean 
+ 95% 
+-confidence interval across five seeds. “Clean target” is the fraction predicted as digit 2 before applying the trigger, and “Net increase” is triggered target rate minus clean target rate.
+
+Victim finetuning
+
+Evaluation
+
+Clean acc.
+
+Clean target
+
+Original ASR
+
+Net increase
+
+Flip-ASR
+
+SVHN
+
+SVHN
+
+SVHN
+
+MNIST
+
+MNIST
+
+MNIST
+
+Table 
+9
+ shows a sharp boundary. In the aligned SVHN condition, Poison-then-Hide reaches 
+% Flip-ASR with 
+% clean accuracy. Merely changing the evaluation inputs to MNIST reduces Flip-ASR to 
+%—a 97.6% relative reduction—while the same models retain 
+% MNIST accuracy. When the victim instead finetunes and evaluates on MNIST, clean accuracy rises to 
+% but Flip-ASR falls to 
+%, a 99.9% reduction from the aligned reference. The roughly 10% original ASR in this condition is the natural target-digit prediction rate: the trigger changes it by only 
+ percentage points. Thus, the collapse is not caused by failure to learn the victim task; rather, it identifies a boundary at which the trigger–target association no longer transfers across a large visual-style shift. Together with the positive Camelyon17 and RESISC
+UC Merced results, this supports task-conditioned transfer under moderate aligned shifts, not universal transfer to arbitrary downstream visual domains.
+
+Figure 8: 
+Robustness boundaries. (a) Poison-then-Hide remains effective under mild additional corruption of UC Merced, but ASR falls once clean task performance is substantially damaged. (b) On ImageNet 
+ RESISC, exact clean-label conflict weakens the attack; seeing most or all originally poisoned samples with clean labels can erase it. Error bars are 95% confidence intervals.
+
+Table 10: 
+Exact values for the controlled distribution-degradation and clean-label conflict studies in Figure 
+8
+. Values are mean 
+ 95% confidence interval.
+
+UC Merced Gaussian-noise stress test
+
+Perturbation
+
+Clean acc.
+
+ASR
+
+Clean
+
+89.50 
+ 1.71
+
+93.88 
+ 1.19
+
+88.62 
+ 2.05
+
+91.78 
+ 1.43
+
+84.16 
+ 4.46
+
+78.24 
+ 5.40
+
+74.13 
+ 8.55
+
+36.27 
+ 20.45
+
+50.80 
+ 10.39
+
+4.00 
+ 2.31
+
+Clean overlap with poisoned conflicting samples
+
+Overlap
+
+Count
+
+Clean acc. after FT
+
+Original ASR
+
+Flip-ASR
+
+0%
+
+0 / 919
+
+85.86 
+ 0.74
+
+99.65 
+ 0.28
+
+99.64 
+ 0.29
+
+25%
+
+230 / 919
+
+85.23 
+ 0.88
+
+46.66 
+ 48.89
+
+45.77 
+ 49.58
+
+50%
+
+460 / 919
+
+85.60 
+ 1.74
+
+49.67 
+ 49.08
+
+49.38 
+ 49.05
+
+75%
+
+690 / 919
+
+86.37 
+ 0.58
+
+7.22 
+ 10.08
+
+6.40 
+ 9.83
+
+100%
+
+919 / 919
+
+83.64 
+ 0.63
+
+0.00 
+ 0.00
+
+0.00 
+ 0.00
+
+The overlap experiment is deliberately favorable to the defender: the victim sees clean versions of the exact non-target images poisoned during implantation, with their original labels. The high variance at 25–50% overlap indicates seed sensitivity, while 75–100% overlap consistently suppresses the attack. This differs from the main 0%-overlap threat model.
+
+Table 11: 
+Effect of victim-data scale on CIFAR10 
+ SVHN. The victim always finetunes on the full SVHN train+extra set; only the attacker’s reference size changes. Values are mean 
+ 95% confidence interval.
+
+Reference size
+
+Victim/reference
+
+Poisoned
+
+Clean acc.
+
+ASR
+
+3,000
+
+201
+
+150
+
+97.59 
+ 0.17
+
+55.29 
+ 5.49
+
+10,000
+
+60
+
+500
+
+97.47 
+ 0.09
+
+55.12 
+ 4.52
+
+30,000
+
+20
+
+1,500
+
+97.37 
+ 0.09
+
+58.35 
+ 2.78
+
+73,000
+
+8
+
+3,650
+
+97.58 
+ 0.16
+
+51.79 
+ 0.97
+
+Even with a 3,000-example attacker reference set and roughly 
+ more victim finetuning data, ASR remains 55.29% while clean accuracy stays at 97.59% (Table 
+11
+). The persistence of ASR is therefore not an artifact of weak downstream task learning.
+
+Table 12: 
+Paired comparisons with the closest targeted baseline over ten paired runs, as reported in the rebuttal. The exact one-sided paired sign-flip test for PtH 
+ baseline is primary. CLIP/Camelyon17 is positive but not significant.
+
+Model
+
+Dataset
+
+Baseline
+
+PtH ASR
+
+Baseline ASR
+
+Difference
+
+Sign-flip 
+
+ResNet50
+
+C17
+
+Hibernated
+
+10
+
+93.42 
+ 3.46
+
+89.86 
+ 4.47
+
+0.0176
+
+ResNet50
+
+UCM
+
+FAB
+
+10
+
+85.84 
+ 13.98
+
+19.41 
+ 7.15
+
+0.0039
+
+CLIP
+
+C17
+
+FAB
+
+10
+
+72.14 
+ 7.48
+
+65.34 
+ 4.96
+
+0.0625
+
+CLIP
+
+UCM
+
+NeuBA
+
+10
+
+54.80 
+ 15.84
+
+8.45 
+ 0.72
+
+0.0078
+
+The paired tests support the domain-shift conclusion for ResNet50 on both datasets and for CLIP on UC Merced. We avoid a significance claim for CLIP/Camelyon17 under the primary exact sign-flip test.
+
+C.3 
+Simulated-finetuning ensemble and training sensitivity
+
+Figure 9: 
+Sensitivity to simulated finetuned models in Stage 1 on CIFAR10 
+ SVHN. (a) One proxy model is brittle; performance improves by 
+ and largely saturates by 
+. The 
+ point is a single run. (b) Low-fidelity proxy ensembles remain nontrivial, although extreme undertraining or data limitation reduces ASR. Clean accuracy remains stable. Error bars are 95% confidence intervals where available.
+
+For proxy composition at 
+, mixed subsets of the original proxy sweep obtain 
+ ASR; one archived restricted 
+ ensemble composed of head-only, masked-partition, and SGD proxies obtains 
+; proxies trained for only 250 steps obtain 
+; and proxies trained on 10% of SVHN obtain 
+. Corresponding clean accuracies are 
+, 
+, 
+, and 
+. Thus, fidelity matters, but in the single archived restricted-ensemble run, hyperparameter and update-rule mismatch did not eliminate the attack.
+
+Table 13: 
+CIFAR10 
+ SVHN sensitivity to hiding-stage weights (left) and poison fraction (right). Accuracy is stable and activated ASR remains in a similar range across the tested settings.
+
+Hiding condition
+
+SVHN acc.
+
+ASR
+
+Default
+
+97.56
+
+59.21
+
+97.50
+
+52.35
+
+97.54
+
+58.00
+
+97.50
+
+61.00
+
+97.62
+
+57.27
+
+97.61
+
+58.97
+
+97.57
+
+61.65
+
+97.63
+
+60.70
+
+97.56
+
+54.88
+
+97.53
+
+58.64
+
+97.44
+
+59.33
+
+97.62
+
+56.24
+
+97.54
+
+60.57
+
+Poison fraction
+
+SVHN acc.
+
+ASR
+
+0.010
+
+97.59
+
+55.54
+
+0.025
+
+97.53
+
+57.90
+
+0.050 (default)
+
+97.55
+
+58.91
+
+0.100
+
+97.60
+
+54.90
+
+0.200
+
+97.51
+
+62.27
+
+Moderate variation in 
+, 
+, and 
+ has little effect on clean accuracy or final ASR. The attack also remains effective across poison fractions from 1% to 20%, showing that it is not narrowly tuned to the default 5%.
+
+Appendix D 
+Additional Attack Results
+
+Figure 10: 
+Visualization of what the backdoor class (“parking lot”) looks like in the RESISC and UC Merced datasets.
+
+Table 14: 
+Performance of Poison then Hide and baseline finetuning-activated backdoors across dataset transfers. Mean and 95% confidence intervals computed across five random seeds.
+
+Model
+
+Method
+
+Status
+
+CIFAR10 Acc
+
+SVHN Acc
+
+SVHN ASR
+
+ResNet18
+
+FAB
+
+Hidden
+
+93.23 
+ 0.19
+
+11.93 
+ 2.11
+
+99.94 
+ 0.02
+
+Finetuned
+
+11.30 
+ 1.36
+
+97.27 
+ 0.07
+
+52.33 
+ 3.85
+
+Hibernated
+
+Hidden
+
+91.66 
+ 0.19
+
+70.02 
+ 1.14
+
+11.65 
+ 0.60
+
+Finetuned
+
+11.84 
+ 1.54
+
+97.26 
+ 0.17
+
+53.81 
+ 5.44
+
+Poison then Hide
+
+Hidden
+
+92.56 
+ 0.21
+
+4.73 
+ 3.60
+
+7.24 
+ 13.84
+
+Finetuned
+
+12.44 
+ 0.76
+
+97.37 
+ 0.09
+
+54.10 
+ 2.29
+
+Model
+
+Method
+
+Status
+
+ImageNet Acc
+
+RESISC Acc
+
+RESISC ASR
+
+ResNet50
+
+FAB
+
+Hidden
+
+73.67 
+ 1.72
+
+2.76 
+ 0.35
+
+97.25 
+ 1.24
+
+Finetuned
+
+18.95 
+ 2.46
+
+92.98 
+ 0.46
+
+22.40 
+ 9.21
+
+Hibernated
+
+Hidden
+
+78.27 
+ 0.03
+
+68.12 
+ 1.55
+
+6.96 
+ 1.94
+
+Finetuned
+
+25.78 
+ 1.96
+
+93.08 
+ 0.41
+
+12.30 
+ 5.76
+
+Latent
+
+Hidden
+
+74.05 
+ 1.18
+
+0.31 
+ 0.19
+
+1.27 
+ 1.25
+
+Finetuned
+
+13.11 
+ 2.01
+
+92.46 
+ 0.34
+
+2.26 
+ 0.15
+
+NeuBA
+
+Hidden
+
+71.68 
+ 0.29
+
+7.52 
+ 10.41
+
+97.81 
+ 0.08
+
+Finetuned
+
+14.59 
+ 1.54
+
+92.57 
+ 0.41
+
+7.46 
+ 0.41
+
+Poison then Hide
+
+Hidden
+
+75.58 
+ 0.24
+
+2.09 
+ 0.48
+
+0.01 
+ 0.01
+
+Finetuned
+
+28.96 
+ 3.72
+
+92.87 
+ 0.52
+
+87.05 
+ 1.67
+
+CLIP
+
+FAB
+
+Hidden
+
+84.06 
+ 0.20
+
+2.11 
+ 0.08
+
+99.96 
+ 0.04
+
+Finetuned
+
+81.86 
+ 0.47
+
+91.61 
+ 0.34
+
+2.01 
+ 0.11
+
+Hibernated
+
+Hidden
+
+80.82 
+ 0.16
+
+91.35 
+ 0.96
+
+2.12 
+ 0.04
+
+Finetuned
+
+80.36 
+ 0.44
+
+94.96 
+ 0.26
+
+2.10 
+ 0.02
+
+Latent
+
+Hidden
+
+85.93 
+ 0.00
+
+2.11 
+ 0.45
+
+0.74 
+ 0.91
+
+Finetuned
+
+84.21 
+ 0.22
+
+93.10 
+ 0.43
+
+1.88 
+ 0.15
+
+NeuBA
+
+Hidden
+
+81.77 
+ 0.62
+
+1.67 
+ 0.56
+
+98.12 
+ 0.47
+
+Finetuned
+
+82.48 
+ 4.29
+
+76.76 
+ 27.45
+
+9.29 
+ 0.36
+
+Poison then Hide
+
+Hidden
+
+85.64 
+ 0.09
+
+2.27 
+ 0.83
+
+6.11 
+ 7.80
+
+Finetuned
+
+85.20 
+ 0.10
+
+95.10 
+ 0.12
+
+60.41 
+ 15.05
+
+Model
+
+Method
+
+Status
+
+ImageNet Acc
+
+Camelyon17 Acc
+
+Camelyon17 ASR
+
+ResNet50
+
+FAB
+
+Hidden
+
+30.39 
+ 2.79
+
+51.84 
+ 8.23
+
+63.28 
+ 17.63
+
+Finetuned
+
+0.16 
+ 0.03
+
+99.23 
+ 0.06
+
+97.42 
+ 0.73
+
+Hibernated
+
+Hidden
+
+65.48 
+ 0.44
+
+83.39 
+ 0.58
+
+83.26 
+ 6.84
+
+Finetuned
+
+0.13 
+ 0.04
+
+99.12 
+ 0.17
+
+97.33 
+ 1.13
+
+Latent
+
+Hidden
+
+63.76 
+ 0.92
+
+47.39 
+ 8.82
+
+55.46 
+ 15.41
+
+Finetuned
+
+0.08 
+ 0.02
+
+99.09 
+ 0.04
+
+50.66 
+ 0.24
+
+NeuBA
+
+Hidden
+
+58.51 
+ 1.03
+
+46.72 
+ 6.32
+
+53.47 
+ 5.80
+
+Finetuned
+
+0.12 
+ 0.02
+
+99.32 
+ 0.29
+
+0.85 
+ 0.09
+
+Poison then Hide
+
+Hidden
+
+75.74 
+ 0.27
+
+54.77 
+ 17.97
+
+57.63 
+ 21.46
+
+Finetuned
+
+0.14 
+ 0.02
+
+99.15 
+ 0.17
+
+97.78 
+ 1.57
+
+CLIP
+
+FAB
+
+Hidden
+
+82.96 
+ 0.62
+
+50.50 
+ 0.02
+
+100.00 
+ 0.00
+
+Finetuned
+
+80.50 
+ 0.71
+
+99.21 
+ 0.09
+
+59.88 
+ 4.21
+
+Hibernated
+
+Hidden
+
+79.37 
+ 0.27
+
+99.16 
+ 0.18
+
+54.72 
+ 2.18
+
+Finetuned
+
+80.22 
+ 0.26
+
+96.94 
+ 0.85
+
+53.10 
+ 1.45
+
+Latent
+
+Hidden
+
+85.93 
+ 0.00
+
+53.21 
+ 8.64
+
+46.07 
+ 27.73
+
+Finetuned
+
+80.05 
+ 0.47
+
+99.09 
+ 0.17
+
+49.39 
+ 1.07
+
+NeuBA
+
+Hidden
+
+81.29 
+ 1.46
+
+52.92 
+ 7.59
+
+46.79 
+ 8.02
+
+Finetuned
+
+78.33 
+ 2.31
+
+99.18 
+ 0.11
+
+0.84 
+ 0.12
+
+Poison then Hide
+
+Hidden
+
+85.80 
+ 0.03
+
+39.66 
+ 2.41
+
+12.90 
+ 6.83
+
+Finetuned
+
+83.99 
+ 0.12
+
+99.27 
+ 0.02
+
+73.30 
+ 8.61
+
+Appendix E 
+Additional Benign Accuracy Results
+
+Figure 11: 
+Trendlines showing how learning benign task of the target dataset does not affect attack success in the finetuned model for the Hibernated Backdoor baseline. Results for the ResNet50 model in the ImageNet 
+ RESISC transfer setting. Mean trendlines are fitted with LOWESS smoothing over 5 seeds.
+
+Appendix F 
+Additional Trigger Optimization Results
+
+Figure 12: 
+Panel of four trigger patterns on RESISC images. All triggers are bounded by an 
+ norm of 
+. We visualize the trigger by itself, the clean image, and then the poisoned image.
+
+Appendix G 
+Additional Defense Details
+
+G.1 
+Parameter-efficient adaptation
+
+Table 15: 
+Poison-then-Hide after LoRA adaptation on CIFAR10 
+ SVHN. The attack remains effective while updating 2.54% of parameters.
+
+Victim adaptation
+
+Benign acc.
+
+ASR
+
+Trainable parameters
+
+ResNet18 LoRA
+
+96.21%
+
+54.98%
+
+291,554 / 11,465,516 (2.54%)
+
+This result is a single ResNet18 LoRA configuration and should not be interpreted as evidence for every parameter-efficient adaptation method.
+
+Table 16: 
+Recent defenses on ImageNet 
+ RESISC Poison-then-Hide models. DeDe’s low filtered ASR is driven by rejecting most clean inputs; ASR among retained inputs remains high. CLIP-Inspector is effective, but is specialized to CLIP and was adapted beyond its original prompt-tuning setting. Values are mean 
+ 95% confidence interval.
+
+MARTINI (ResNet50)
+
+Evaluation point
+
+Acc.
+
+ASR
+
+Before MARTINI
+
+92.21 
+ 0.23
+
+99.51 
+ 0.18
+
+After MARTINI
+
+61.97 
+ 3.68
+
+99.85 
+ 0.12
+
+After benign FT
+
+91.83 
+ 0.63
+
+81.50 
+ 3.20
+
+DeDe input filtering
+
+Model
+
+Clean acc.
+
+Pre-filter ASR
+
+Filtered ASR
+
+DeDe AUC
+
+Clean inputs kept
+
+ASR among kept
+
+ResNet50
+
+92.87 
+ 0.73
+
+87.05 
+ 2.37
+
+17.68 
+ 4.24
+
+52.10 
+ 1.13
+
+21.19 
+ 3.92
+
+95.56 
+ 0.69
+
+CLIP
+
+95.10 
+ 0.18
+
+53.42 
+ 21.32
+
+6.97 
+ 3.71
+
+50.74 
+ 0.11
+
+11.08 
+ 2.94
+
+65.95 
+ 22.70
+
+CLIP-Inspector
+
+Model
+
+Detection
+
+Post-repair RESISC acc.
+
+Post-repair true-trigger ASR
+
+CLIP
+
+5/5 models flagged
+
+95.07 
+ 0.12
+
+2.15 
+ 0.04
+
+MARTINI and DeDe do not provide reliable mitigation in this setting. MARTINI preserves high ASR even after a substantial clean-accuracy drop, and DeDe’s AUC is near random; its low filtered ASR is achieved by rejecting most inputs. In contrast, CLIP-Inspector flags all five CLIP models and repairs them effectively, but it is architecture-specific and required adaptation from prompt tuning to our full-finetuning transfer setting.
+
+G.2 
+Neural Cleanse
+
+We implement Neural Cleanse by optimizing an inverted trigger such that poisoned inputs are classified as the target. We then rank classes by the average recovered mask size and use a MAD-based anomaly score over mask sizes to identify suspicious (potentially backdoored) target classes.
+
+Hyperparameters (Neural Cleanse).
+
+•
+
+Optimization per class:
+
+–
+
+Iterations per class: 
+.
+
+–
+
+Optimizer: Adam on pattern and mask logits, learning rates
+
+, 
+.
+
+–
+
+Loss: 
+,
+with 
+, 
+, 
+.
+
+–
+
+Early stopping if mean target confidence 
+.
+
+•
+
+Anomaly scoring:
+ per-class mask size score = average mask value; classes are ranked via MAD-based z-scores, and the smallest masks (largest inverted z-score) are treated as most suspicious.
+
+G.3 
+DECREE
+
+We reproduce DECREE by performing self-supervised trigger inversion: we optimize a keep-mask and pattern such that stamping the pattern onto clean images collapses their feature embeddings (maximally similar under negative cosine similarity) while minimizing the size of the edited region. The detector computes the normalized trigger size 
+ and declares a model backdoored if a sufficiently small trigger region (
+) suffices to collapse embeddings.
+
+Hyperparameters (DECREE).
+
+•
+
+Trigger inversion optimization:
+
+–
+
+Iterations: 
+
+–
+
+Optimizer: Adam on pattern and keep-mask logits with
+
+, 
+, 
+.
+
+–
+
+Similarity loss: pairwise negative cosine over embeddings (include self pairs); constraint enforced via hinge penalty on 
+.
+
+–
+
+Similarity threshold: 
+, 
+.
+
+–
+
+Size / regularization: trigger mask 
+, 
+;
+loss 
+,
+with 
+, 
+.
+
+•
+
+Decision rule:
+ backdoored if 
+ with threshold 
+.
+
+G.4 
+Fine-Pruning
+
+We implement Fine-Pruning by identifying and disabling dormant convolutional channels in later backbone layers based on their average activation on clean data. Concretely, we record mean absolute activations for each output channel of selected convolutional layers on clean inputs, prune channels with the smallest activations (via hard zeroing and multiplicative gates).
+
+Hyperparameters (Fine-Pruning).
+
+•
+
+Target layers:
+ convolutional layers whose qualified names contain 
+"layer3"
+ or 
+"layer4"
+ (
+).
+
+•
+
+Channel scoring:
+ for each target conv layer, we compute the mean absolute activation per output channel over batch and spatial dimensions on clean training data.
+
+•
+
+Pruning policy:
+
+–
+
+Prune ratio per layer: 
+ (20% of channels with the lowest mean activation in each selected layer).
+
+–
+
+Pruning mechanism: pruned channels are zeroed in the convolution weights and biases, and a fixed multiplicative gate is applied to zero out their outputs during forward passes.
+
+G.5 
+MIMIC
+
+We apply the MIMIC defense using a clean reference encoder to clean a potentially backdoored encoder. The method first estimates mutual information (MI) between intermediate layer features and the final encoder representation using a MINE estimator to obtain MI-based weights per layer, and then distills the teacher into the student using a combination of (i) cosine feature matching between teacher and student embeddings, (ii) a small InfoNCE loss on two noisy views of the student features, and (iii) an MI-weighted attention-map matching loss over selected encoder layers.
+
+Hyperparameters (MIMIC).
+
+•
+
+Layer selection:
+ Encoder layers whose names contain 
+"layer2"
+, 
+"layer3"
+, or 
+"layer4"
+; we keep the last 
+ convolutional blocks from these layers as the set of MI/attention layers.
+
+•
+
+MI estimation (MINE):
+
+–
+
+MINE network: two MLP encoders for layer and final features (two linear layers with ReLU, hidden size 
+), followed by a scalar head.
+
+–
+
+Steps: 
+ SGD steps per layer.
+
+–
+
+Batch size: 
+.
+
+–
+
+Learning rate: 
+.
+
+–
+
+MI to weights: raw MI values are linearly normalized across layers and converted to per-layer weights
+
+with 
+ and 
+.
+
+•
+
+Distillation loss:
+
+–
+
+Training epochs: 
+.
+
+–
+
+Optimizer: SGD with learning rate 
+, momentum 
+, weight decay 
+.
+
+–
+
+Clone loss (embedding matching):
+
+where 
+ are student/teacher encoder features pooled to 
+ and 
+ denotes 
+-normalization.
+
+–
+
+InfoNCE regularizer on two student views:
+
+with temperature 
+ and weight 
+. Two views are generated by adding i.i.d. Gaussian noise with standard deviation 
+, clamped to 
+ in pixel space and then clipped back to 
+.
+
+–
+
+Attention loss: for each selected layer 
+, we form attention maps
+
+(channel-wise 
+ norm, spatially normalized), and minimize
+
+where teacher maps are detached and student maps carry gradients. If spatial resolutions differ, teacher maps are bilinearly resized to match student maps. The attention loss is weighted by 
+.
+
+–
+
+Total loss:
+
+G.6 
+DeDe
+
+We train DeDe’s reconstruction decoder on clean auxiliary data and use reconstruction discrepancy to filter suspicious inputs. We report AUC, false-positive behavior through the fraction of clean inputs retained, filtered ASR, and ASR among retained inputs. This distinction is essential here: the method retains only 21.19% of clean ResNet50 inputs and 11.08% of clean CLIP inputs, while ASR among retained inputs remains 95.56% and 65.95%, respectively.
+
+G.7 
+MARTINI
+
+We apply MARTINI’s trigger reconstruction and model-hardening pipeline to a finetuned ResNet50 Poison-then-Hide model, then perform the same benign finetuning used elsewhere to test resurfacing. Hardening reduces clean accuracy from 92.21% to 61.97% without reducing ASR; after benign finetuning, clean accuracy recovers to 91.83% and ASR remains 81.50%.
+
+G.8 
+CLIP-Inspector
+
+CLIP-Inspector was designed for prompt-tuned CLIP. We adapt its OOD trigger inversion and repair procedure to our full-model transfer setting and evaluate five CLIP models. It flags all five, preserves 95.07% RESISC accuracy, and reduces true-trigger ASR to 2.15%. We therefore treat it as a successful specialized defense, not as evidence for broad robustness of the attack.
+
+NeurIPS Paper Checklist
+
+1.
+
+Claims
+
+Question: Do the main claims made in the abstract and introduction accurately reflect the paper’s contributions and scope?
+
+Answer: 
+[Yes] 
+
+Justification: The in-domain, task-conditioned domain-shift, PEFT, and defense experiments support the scoped claims in the abstract and introduction.
+
+Guidelines:
+
+•
+
+The answer 
+[N/A] 
+ means that the abstract and introduction do not include the claims made in the paper.
+
+•
+
+The abstract and/or introduction should clearly state the claims made, including the contributions made in the paper and important assumptions and limitations. A 
+[No] 
+ or 
+[N/A] 
+ answer to this question will not be perceived well by the reviewers.
+
+•
+
+The claims made should match theoretical and experimental results, and reflect how much the results can be expected to generalize to other settings.
+
+•
+
+It is fine to include aspirational goals as motivation as long as it is clear that these goals are not attained by the paper.
+
+2.
+
+Limitations
+
+Question: Does the paper discuss the limitations of the work performed by the authors?
+
+Answer: 
+[Yes] 
+
+Justification: Refer to the Limitations section at the end of the main manuscript for detailed discussion. We address the main limitations with our proposed attack.
+
+Guidelines:
+
+•
+
+The answer 
+[N/A] 
+ means that the paper has no limitation while the answer 
+[No] 
+ means that the paper has limitations, but those are not discussed in the paper.
+
+•
+
+The authors are encouraged to create a separate “Limitations” section in their paper.
+
+•
+
+The paper should point out any strong assumptions and how robust the results are to violations of these assumptions (e.g., independence assumptions, noiseless settings, model well-specification, asymptotic approximations only holding locally). The authors should reflect on how these assumptions might be violated in practice and what the implications would be.
+
+•
+
+The authors should reflect on the scope of the claims made, e.g., if the approach was only tested on a few datasets or with a few runs. In general, empirical results often depend on implicit assumptions, which should be articulated.
+
+•
+
+The authors should reflect on the factors that influence the performance of the approach. For example, a facial recognition algorithm may perform poorly when image resolution is low or images are taken in low lighting. Or a speech-to-text system might not be used reliably to provide closed captions for online lectures because it fails to handle technical jargon.
+
+•
+
+The authors should discuss the computational efficiency of the proposed algorithms and how they scale with dataset 

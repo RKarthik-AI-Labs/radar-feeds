@@ -1,0 +1,4069 @@
+What Entropy-Based View Selection Cannot See: An Audit of Test-Time Adaptation for Vision-Language Models
+https://arxiv.org/abs/2611.14686
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+\workshoptitle
+
+Grounded and Faithful Vision-Language Models for Real-World Deployment
+
+What Entropy-Based View Selection Cannot See:
+
+An Audit of Test-Time Adaptation for Vision-Language Models
+
+Sivasuthan Sukumar
+
+Affiliation: 
+University of Moratuwa
+
+Affiliation: 
+Sri Lanka
+
+Email: 
+sivasuthan.26@cse.mrt.ac.lk
+
+  
+
+Uthayasanker Thayasivam
+
+Affiliation: 
+University of Moratuwa
+
+Affiliation: 
+Sri Lanka
+
+Email: 
+rtuthaya@cse.mrt.ac.lk
+
+Abstract
+
+A vision-language model such as CLIP can classify images into categories it was never explicitly trained to recognize, but accuracy degrades when test images differ in style or source from the training data. A widely used remedy generates randomly cropped and flipped copies of each test image, called views, and combines their predictions. Because some views miss the object, these methods must decide which views to trust. The dominant approach measures prediction entropy, the concentration of each view’s predicted class distribution, and retains the most certain views. Other methods use quantities such as how typical a view’s embedding is among views of the same image. Despite repeated refinement of these scoring functions, the information they use, the model’s own response to each view, has remained largely unexamined. We examine this choice. Holding each stage of the pipeline fixed, we first show that view selection, rather than the gradient update, produces almost all of the accuracy gains. We then ask whether entropy can identify useful views when the method is wrong despite at least one view predicting the correct class. On these cases, entropy ranks correct views above incorrect ones no better than chance, recovering only about one-twentieth of the accuracy recovered by an oracle over the same views. Entropy is therefore weakly informative rather than useless. This result holds for two image encoders and under a control ruling out an obvious statistical artifact. An exact analysis of the entropy objective explains why: the score measures confidence, but not which class a view favors. We identify an unused signal in the pipeline: the augmentation procedure already knows how much of the image each crop contains. Ranking views by this quantity improves accuracy on 14 of 15 benchmark datasets over entropy and on 11 of 15 over the strongest scoring function tested. A pre-method measurement also predicts which datasets benefit.
+
+1 
+Introduction
+
+Vision-language models such as CLIP 
+(
+Radford et al., 2021
+)
+ learn a shared embedding space for
+images and text, which lets them classify an image into any set of categories named in words,
+without task-specific training. Their accuracy drops when test images differ in style, rendering
+or source from the training data, a 
+distribution shift
+. Since a zero-shot model is
+deployed precisely because the target distribution is unknown in advance, this is the operating
+regime rather than an edge case.
+
+The pipeline this paper studies.
+
+One family of remedies, 
+test-time adaptation
+, adjusts the prediction for each test image
+separately, using no labels. Within it we study the variant built on augmentation
+(
+Fig.
+ 
+1
+a): random crops and horizontal flips turn the single test image into 
+
+transformed copies, called 
+views
+. Some views contain the object clearly, others crop it
+away entirely, so the method scores each view and keeps only the highest-scoring ones. The
+dominant line of methods computes that score from one quantity, the 
+prediction entropy
+
+, where 
+ is the model’s predicted distribution over
+classes for view 
+. Entropy is near zero when almost all probability sits on one class and
+large when it is spread across many, so a low-entropy view is one the model is confident about.
+The surviving views are averaged into a single distribution, and some methods additionally take
+one gradient step lowering the entropy of that average. A smaller line replaces entropy with a
+different model-derived quantity, for instance the density of a view’s embedding among the
+embeddings of the other views 
+(
+Zanella and Ben Ayed, 2024
+)
+. Our audit targets the 
+input
+ these
+scores share, the model’s own response to the view, so it bears on both lines;
+
+Sec.
+ 
+7
+ separates what we test from what we position against.
+
+The scope of this pipeline is not something we assert; the methods state it, quoting their own
+setup sections (
+appendix
+ 
+J
+). ZERO reports that it
+
+“inherit[s] the setup of TPT with 
+”
+ 
+(
+Farina et al., 2024
+)
+, and ADTE adopts that
+same setup with a filtering ratio of 
+ 
+(
+Wu et al., 2026
+)
+. TPT 
+(
+Shu et al., 2022
+)
+ originated
+the recipe and later work inherits it (
+Sec.
+ 
+7
+). Batch-level adaptation
+
+(
+Wang et al., 2021
+)
+ and cache-based methods 
+(
+Karmanov et al., 2024
+)
+ lie outside this scope and
+we claim nothing about them.
+
+Figure 1: 
+The pipeline, and which of its stages produces the accuracy.
+ 
+(a)
+ The
+augment, score, select, aggregate recipe TPT, ZERO and ADTE each declare. 
+(b)
+ Each
+stage measured with the other two held fixed, on ImageNet-A, in 
+percentage points
+: the
+absolute gap between two accuracies, so 
+ to 
+ is 
+ of them. Selection produces
+almost all of the gain; the gradient step is indistinguishable from no update under a paired
+McNemar test 
+(
+McNemar, 1947
+)
+. Concurrent work agrees by different means
+
+(
+Huang et al., 2026
+)
+; we claim the decomposition and its mechanism, not the direction.
+
+Which stage matters, and how we isolated it.
+
+Before asking whether the view score is good, we established that the score is what governs the
+pipeline. The three stages vary independently, so we measured each while holding the other two
+fixed and reusing identical views, cached embeddings and readout, which attributes any difference
+to the stage varied rather than to the data or the evaluation. Selection accounts for 
+
+percentage points, aggregation for 
+, and the gradient step for 
+, indistinguishable
+from making no update (
+Fig.
+ 
+1
+b). The score, not the optimisation, is what these
+methods run on.
+
+What subsequent research changed, and what it did not.
+
+Later studies improved the scoring 
+function
+: a zero-temperature average
+
+(
+Farina et al., 2024
+)
+, Tsallis entropy 
+(
+Tsallis, 1988
+)
+, a one-parameter generalisation of
+Shannon entropy, and a class-adaptive Tsallis exponent 
+(
+Wu et al., 2026
+)
+. Each keeps the
+scoring 
+input
+ fixed at the model’s own output distribution on the view. Whether that
+input carries the information view selection needs has not been tested, and testing it is the
+subject of this paper.
+
+Figure 2: 
+The entropy score separates useful views from useless ones only where a better
+choice cannot help.
+ 
+(a)
+ The control: reducible errors are defined on one random half
+of an image’s views and the score evaluated on the disjoint half, so restricting the population
+cannot contaminate the measurement. 
+(b)
+ Area under the ROC curve (AUC,
+
+Sec.
+ 
+3
+), where 
+ orders correct views perfectly above incorrect ones and 
+
+carries no information; on reducible errors it falls to chance on both encoders.
+
+(c)
+ The consequence in accuracy on those images.
+
+Testing the input, and the control the test requires.
+
+A better view score can only help on images where a better choice of views exists. We call an
+error 
+reducible
+ if the averaged prediction is wrong while at least one of the 
+ views
+already predicts the correct class; 
+ to 
+ of all errors are of this kind. Across all
+test images the entropy score ranks correct views above incorrect ones well; on reducible errors
+it is at chance (
+Fig.
+ 
+2
+b), under the control 
+Sec.
+ 
+3
+ builds to exclude the
+one objection that comparison must survive. The score is informative where selection cannot
+change the answer, and uninformative where it could.
+
+A signal of a different kind, already present.
+
+The augmentation procedure 
+sampled
+ the crop box for each view, so the pipeline already
+records how much of the image each view contains. That measurement needs no labels, costs nothing
+to store and, unlike every score above, is not computed from the model’s response; of the
+test-time adaptation methods for vision-language models we surveyed, none reads it back. Ranking views with it raises accuracy on the standard 
+-dataset
+benchmark, and a label-free measurement predicts in advance which datasets benefit.
+
+Contributions.
+
+(i)
+ A controlled audit of the view score under the conditioning that makes it
+meaningful, showing it is at chance where the remaining accuracy lies, on two image encoders
+(
+Sec.
+ 
+3
+). 
+(ii)
+ An exact analysis of what a score computed from the model’s
+output can express, valid for any tuned parameters, with a matched comparison isolating the
+missing ingredient (
+Secs.
+ 
+4
+ and 
+3
+). 
+(iii)
+ Selection from augmentation
+parameters as a proof of concept, with per-dataset gains predictable in advance and the regime
+in which it does not help (
+Secs.
+ 
+5
+, 
+6
+ and 
+8
+).
+
+2 
+Problem formulation
+
+The failure mode in one sentence.
+
+Because augmentation makes CLIP overconfident rather than merely noisy
+
+(
+Farina et al., 2024
+)
+, a view covering 
+ of the image and landing on background can receive
+a confident prediction and be kept over a view containing the object, even though the pipeline
+recorded that it saw 
+ of the image when it drew the box.
+
+Notation.
+
+Let 
+ be the image embedding of view 
+ and 
+ the text embedding of class 
+,
+from a prompt with tunable parameters 
+. The class scores, or 
+logits
+, are
+
+ with 
+ a fixed temperature, and
+
+ is view 
+’s distribution over the 
+ classes. Writing 
+ for the
+selected set, 
+ is the averaged prediction the method answers
+with. The image encoder runs without gradient tracking, so every 
+ is constant in 
+
+and the analysis of 
+Sec.
+ 
+4
+ is exact rather than approximate. Methods that tune
+parameters minimise 
+; ZERO and ADTE tune nothing and select only.
+
+Two selection rules.
+
+The rule used throughout this literature ranks views by a function of 
+ alone and keeps the
+
+ best,
+
+(1)
+
+The crop box that produced view 
+, giving its position and size in normalised image
+coordinates, costs nothing to record and is statistically independent of how the model responds.
+We combine the two signals by converting each to a within-image rank first, since an entropy
+value and an area are in different units and cannot be added directly:
+
+(2)
+
+where 
+ is the rank of 
+ among the views of that image,
+
+ the rank of the crop area 
+, and 
+ the mixing
+weight. Setting 
+ recovers 
+Eq.
+ 
+1
+ exactly, so the standard rule is a special
+case of ours.
+
+3 
+Auditing the view score
+
+3.1 
+How much accuracy a better choice of views could recover
+
+Selection can only help on a reducible error, so we first measure what those are worth. Such an
+error needs no better model and no better augmentation, only a better choice among views already
+computed. To bound what that choice could buy we use an 
+oracle
+ selector, which keeps the
+same number of views but picks them using the ground-truth label. An oracle is not a method,
+since it needs labels a deployed system lacks; it is an upper bound on any rule operating on the
+same views. The gap to it runs from 
+ to 
+ percentage points, and 
+ to 
+ of
+errors are reducible (
+appendix
+ 
+B
+). The gap is 
+larger
+ on the weaker encoder, which
+rules out reading it as an artefact of an already-strong model.
+
+3.2 
+Can the entropy score reach that headroom?
+
+The quantity we measure.
+
+Each view produces its own prediction and is individually right or wrong, and any score induces a
+ranking over the views of an image. The natural measure of whether that ranking is useful is the
+
+area under the ROC curve
+, written AUC: the probability that a randomly chosen correct view
+is scored better than a randomly chosen incorrect one, so a perfect ranking gives 
+ and an
+uninformative one 
+. It is computed per image with no method in the loop, so it evaluates the
+score itself rather than a pipeline built on it.
+
+The objection this measurement must survive, and the control it forces.
+
+Reducible errors are defined using the averaged prediction 
+, and confident views agree
+with one another, so conditioning on “the average is wrong” could select images on which
+confident views are wrong together, manufacturing a low AUC even if confidence and correctness
+were positively related within every image. That entropy never references 
+ does not settle
+it, because the 
+subset
+ does, and only a design that breaks a statistical dependence
+removes it. We therefore split the 
+ views of each image at random into halves 
+ and 
+:
+half 
+ alone decides whether the image is a reducible error and the AUC is computed only on
+half 
+, so if the confounder were producing the effect the controlled AUC would be
+substantially higher than the uncontrolled one.
+
+Result.
+
+It is not (
+Fig.
+ 
+2
+b; full table in 
+appendix
+ 
+B
+). The controlled AUC is 
+ on the vision
+transformer and 
+ on the convolutional encoder, against 
+ and 
+ across all
+images; controlled and uncontrolled values agree within 
+ on all twelve runs, so the
+confounder is not the explanation, and two encoders with different inductive biases reach chance
+independently. The failure is, however, specific to the 
+output distribution
+. Statistics
+from the cached image embeddings, such as how central a view’s embedding is and how similar it is
+to the unmodified image, score 
+ and 
+ while correlating only weakly with entropy,
+Spearman 
+ between 
+ and 
+. Both sit 
+below
+ chance on both encoders, so
+their ordering is mildly anti-predictive and reversing it gives 
+ and 
+, a larger
+displacement from chance than any score computed from the posterior. We built no selector on the reversed statistic and report it as an observation, not a result. It
+indicates that usable signal survives outside the model’s response, the hypothesis
+
+Sec.
+ 
+5
+ tests.
+
+What this licenses, and what it does not.
+
+An AUC at chance for 
+ranking
+ does not by itself mean entropy selection is no better than
+random selection, and we tested the difference. Under the same split-half design entropy
+selection reaches 
+ against 
+ for random, an advantage of 
+ percentage
+points with a 
+ bootstrap interval of 
+, while an oracle over the same views
+reaches 
+: the score captures about 
+ of the accuracy a better choice could recover
+(
+Fig.
+ 
+2
+c). The claim is quantitative, that the score is weakly informative here
+rather than useless.
+
+3.3 
+What the model’s output omits
+
+Section
+ 
+4
+ shows that the standard view scores, including Shannon entropy, Tsallis and
+Rényi entropy at fixed order, maximum probability and the top-two margin, are unchanged if the
+class labels are permuted. Such a score is therefore a function of the 
+sorted
+ probability
+vector alone: it can report how concentrated a view is, but not which class the view favours.
+
+To measure what that restriction costs we compare two arms differing in exactly one respect:
+both fit the same regressor on the same rows, from feature vectors of 
+identical dimension
+containing the identical multiset of numbers
+, sorted by magnitude in one arm and indexed by
+class in the other, so a gap cannot come from dimensionality, capacity or the values themselves
+(
+Sec.
+ 
+I.8
+). Preserving class identity is worth 
+ percentage points, positive in
+
+ of 
+ configurations across 
+ datasets and 
+ encoders, with a
+capacity ladder saturated throughout (
+appendix
+ 
+D
+). This bounds the 
+information
+
+available, not a deployable method, since both arms fit with labels; ADTE’s class-specific
+exponent is the one published score breaking the symmetry, and it buys roughly 
+ percentage
+points end to end 
+(
+Wu et al., 2026
+)
+.
+
+The same measurement accounts for findings we had obtained separately and could not connect,
+including why no selector we constructed improved on entropy, and it extends to a different
+parameter group: MEMO’s gradient step 
+(
+Zhang et al., 2022
+)
+ improves the averaged prediction in
+
+ of 
+ configurations (
+appendix
+ 
+F
+).
+
+4 
+What a score computed from the model’s output can express
+
+The audit in 
+Sec.
+ 
+3
+ is an observation. This section explains it and states how far the
+explanation reaches. Full derivations are in 
+appendix
+ 
+A
+; each result names the subsection
+that proves it.
+
+Why we analyse the score in logit space, and what that buys.
+
+Methods in this family tune different parameters, so an analysis tied to one parameter set would
+not transfer. We avoid that by differentiating with respect to the 
+logits
+ 
+ rather than
+the parameters 
+. For any differentiable model the chain rule gives
+
+ with 
+, so 
+
+is a factor of 
+every
+ parameter-space update, whichever parameters are tuned, and
+statements about it hold for any gradient-based minimiser of 
+ (
+Sec.
+ 
+A.2
+). This
+is the factorisation on which kernel analyses of training dynamics are built
+
+(
+Jacot et al., 2018
+)
+; we use it and not the infinite-width theorem, whose assumptions we
+measured and found violated here. 
+Section
+ 
+I.1
+ gives that argument in full with the line
+it forbids us to cross: our statements are about the force 
+, not about
+which logits actually rise. Because the image embeddings are constants, the views reach 
+
+only through one matrix 
+ (
+Sec.
+ 
+A.3
+). Every identity below was checked against
+automatic differentiation in double precision (
+Tab.
+ 
+4
+).
+
+The gradient transmits a ranking, not a margin.
+
+Differentiating 
+ through the softmax gives, for view 
+ and class 
+,
+
+(3)
+
+The derivation is in 
+Sec.
+ 
+A.1
+. Read the right-hand side as a sum over pairs of
+classes, each contributing a force with two separable parts. The factor 
+ is a
+gate, negligible unless view 
+ assigns real probability to 
+both
+ classes, so only pairs
+the view is undecided about contribute. The factor 
+ supplies
+direction and size, and its sign is simply whether 
+ exceeds 
+.
+
+That second part is the important one, and it must be stated precisely. The 
+sign
+ of each
+pairwise term is 
+, a rank statistic of 
+ that records
+which class the average prefers and nothing about how reliable that preference is; the
+
+magnitude
+ is not a rank statistic, since 
+ grows as the
+average sharpens. A near-tie therefore hands the update a direction fixed by an arbitrarily small
+margin, damped only logarithmically. We claim this of the pairwise terms, not of the assembled
+gradient vector, which sums magnitudes over all pairs before the optimiser acts on it. A view
+whose distribution is exactly one-hot
+contributes nothing at all, since 
+ for every pair, and because 
+
+for any Jacobian that holds whatever parameters are tuned. Keeping only the most confident views
+therefore keeps precisely the views that contribute least to the update.
+
+The objective does not enforce agreement between views.
+
+It is often assumed that minimising the entropy of the average makes the views agree. It does not
+follow. Let 
+ be a class view 
+ favours but the average does not, write
+
+, let 
+ be 
+ conditioned off 
+, and let
+
+ be the moment generating function of those log-ratios.
+Let 
+ denote the 
+force
+ on class 
+, the sign
+convention used throughout. In Tsallis form of order 
+, which recovers Shannon entropy as
+
+ 
+(
+Tsallis, 1988
+)
+, the update drives view 
+ 
+further
+ towards its dissenting
+class exactly when
+
+(4)
+
+The cases do not collapse: 
+ holds identically for any moment generating function, so
+the 
+ inequality degenerates exactly at the Shannon order every method in scope uses, leaving
+the mean log-ratio as the operative condition there. 
+ is strictly convex with
+
+, so when the Shannon case fires there is a unique positive root
+
+ and a critical order 
+, classically the Lundberg coefficient
+
+(
+Asmussen and Albrecher, 2010
+)
+. The reversal below 
+ is why an order good for 
+scoring
+ views
+need not be good for 
+driving
+ an update (
+Sec.
+ 
+6
+). 
+Section
+ 
+A.5
+ proves all
+three cases and exhibits a step that lowers the loss while moving a view further from the
+average, so agreement is not something the objective enforces. Verified on 
+ dissenting
+views at six Tsallis orders, 
+ checks, with no sign disagreements.
+
+Little of the gradient survives to the parameters.
+
+Much of 
+Eq.
+ 
+3
+ is discarded before reaching the parameters: the optimiser is reset per
+image, so each update is a first step from zero moments, which for Adam is the 
+sign
+ of the
+gradient 
+(
+Balles and Hennig, 2018
+)
+, and what survives passes through 
+, whose singular values
+are dominated by one direction. Unlike the results above this depends on the optimiser and the
+parameter group, and realised logit motion agrees with the force coordinatewise only part of the
+time, so we give it as measurement, not theorem (
+appendix
+ 
+C
+).
+
+Together.
+
+A signal whose direction encodes only the average’s ranking, whose magnitude the optimiser
+discards, and which reaches the image through an essentially one-dimensional channel cannot
+repair a badly chosen set of views. This supplies the mechanism behind the reported
+near-invariance of the averaged prediction to the update 
+(
+Farina et al., 2024
+)
+.
+
+5 
+Selecting views from the augmentation parameters
+
+Two quantities in that audit are displaced from chance (
+Tab.
+ 
+2
+): crop area, at
+
+ against 
+ for entropy, and the embedding statistics, which are anti-predictive and
+would have to be reversed. Crop area is the only one that is usable as scored 
+and
+ not
+computed from the model’s response, so it is the one we test. That test is direct: if what the
+entropy score lacks is information the model’s output cannot carry, the simplest available
+quantity of a different kind should help. What follows is that test, not a tuned system.
+
+The signal.
+
+The augmentation operator samples a crop box with area fraction drawn uniformly from
+
+ and resizes to 
+ pixels. The pipeline generates this box, so recording
+its area costs nothing and needs no labels. We rank views by area and combine that
+ranking with the entropy ranking as in 
+Eq.
+ 
+2
+. The mixing weight 
+ and the number
+of retained views 
+ are chosen by 
+-fold cross-fitting: the parameters scoring each fifth of
+the data are chosen using only the other four fifths, so no image is scored under parameters
+selected with its own outcome. The baseline is the standard entropy rule at its published
+setting and is never tuned. We state that asymmetry plainly rather than claim it favours the
+baseline: our rule fits two parameters where the baseline fits none, so part of any gain could
+be the freedom to choose 
+. What bounds the concern is that 
+ recovers the baseline
+exactly, and that the per-dataset gains are forecast by an AUC measured with no method in the
+loop, which a free parameter cannot produce.
+
+Predicting in advance where the signal exists.
+
+A method that helps on some datasets and hurts on others is useful only if one can tell which
+beforehand. The controlled AUC of 
+Sec.
+ 
+3
+ does that with no method in the loop: across the 
+
+datasets the crop-area AUC on reducible errors predicts the eventual gain with a Spearman rank
+correlation of 
+, where 
+ measures how well one ordering matches another on a
+scale from 
+ to 
+ (
+Fig.
+ 
+3
+). Datasets whose
+crop-area AUC falls below chance gain nothing, and cross-fitting drives 
+ towards zero
+on them. That protection is not exact. DTD, the single dataset that loses, is one of them, and
+it loses 
+ percentage points; with no signal for 
+ to exploit, that loss is
+attributable to the cross-fitted 
+ rather than to crop area, and we count it against the
+method rather than explaining it away.
+
+This is what separates the result from a tuning artefact: seven significant gains among fifteen
+datasets could arise from testing many datasets, but an independent measurement that forecasts
+the 
+size
+ of each gain could not. It also survives the circularity objection that the AUC
+and the gain use the same images, since computing them on 
+disjoint
+ halves still leaves
+
+.
+
+What we do not claim.
+
+We have no mechanism: two accounts written down before testing were both rejected
+(
+appendix
+ 
+H
+). We report the empirical relationship, which is strong and predictive, and
+label the mechanism unknown rather than offer a third untested account.
+
+6 
+Experiments
+
+Protocol, and what it holds fixed.
+
+We use the 
+-dataset benchmark standard in this literature, ImageNet
+
+(
+Deng et al., 2009
+)
+ with four distribution shifts plus ten fine-grained datasets, listed in
+
+appendix
+ 
+J
+. Backbones are CLIP ViT-B/16 and RN50 
+(
+Radford et al., 2021
+)
+; the
+matched-information control additionally spans MetaCLIP, SigLIP and ViT-L/14. Every arm sees 
+identical views, the same cached image embeddings and the same
+readout
+, so an accuracy difference can only come from the selection rule. Significance uses a
+paired McNemar test 
+(
+McNemar, 1947
+)
+, which counts only the images on which two classifiers
+disagree; AUC intervals are bootstrap estimates over 
+ resamples; selector parameters are
+cross-fitted and baselines are never tuned. All 
+ loaders were verified against published
+zero-shot accuracy at full test-set size, matching on ImageNet to within 
+ percentage
+points. The comparisons replay a cached tensor of 
+ images per dataset, drawn once and stratified
+by class on ImageNet, with 
+every arm scored on identical images
+, so the sample cannot
+favour a rule; it does bound resolution to about half a percentage point under a paired test. We
+read smaller per-dataset differences as directional and rest the claim on the suite average, the
+sign count and the forecast of 
+Fig.
+ 
+3
+. 
+Appendix
+ 
+I
+ states, for each measurement and each analytical
+assumption, the question it answers, the alternative explanation it excludes, and why its metric
+is the right one.
+
+Figure 3: 
+The gain is predictable before the method is run.
+ One point per dataset; the
+horizontal axis is how well a view’s 
+crop area
+ separates correct from incorrect views on
+reducible errors, an AUC computed with no method in the loop. Datasets left of the chance line
+gain nothing, as a real signal rather than a tuning artefact should. Per-dataset gains are in
+
+Tab.
+ 
+1
+.
+
+Table 1: 
+Selection rules on the 
+-dataset benchmark
+, CLIP ViT-B/16, with identical
+views, cache and readout so that 
+only
+ the selection rule differs. The baseline is never
+tuned; our parameters are cross-fitted. 
+∗
+ marks 
+ under paired McNemar
+
+(
+McNemar, 1947
+)
+. Crop geometry is positive on 
+ of 
+ datasets and its largest gains
+are those the label-free measurement flags in advance (
+Fig.
+ 
+3
+).
+
+ImageNet and distribution shifts
+
+Fine-grained
+
+Selection rule
+
+IN
+
+IN-A
+
+IN-K
+
+IN-V2
+
+IN-R
+
+Avg.
+
+Flwr
+
+DTD
+
+Pets
+
+Cars
+
+UCF
+
+Cal
+
+Food
+
+SUN
+
+Air
+
+ESAT
+
+All
+
+Shannon entropy 
+(
+Shu et al., 2022
+)
+
+68.5
+
+59.6
+
+46.4
+
+61.5
+
+77.3
+
+62.7
+
+67.0
+
+45.9
+
+86.0
+
+66.8
+
+67.0
+
+92.6
+
+84.7
+
+60.9
+
+24.4
+
+39.4
+
+63.2
+
+Tsallis 
+
+68.9
+
+60.8
+
+47.0
+
+61.6
+
+77.8
+
+63.2
+
+66.8
+
+46.2
+
+87.0
+
+67.3
+
+67.0
+
+92.7
+
+84.5
+
+61.4
+
+24.2
+
+40.2
+
+63.6
+
+Crop geometry (ours)
+
+68.9
+
+59.9
+
+47.8
+∗
+
+62.0
+
+78.7
+∗
+
+63.4
+
+68.0
+∗
+
+45.1
+
+88.8
+∗
+
+67.8
+
+67.6
+
+94.2
+∗
+
+85.5
+∗
+
+61.2
+
+25.1
+
+42.5
+∗
+
+64.2
+
+Main result.
+
+Table
+ 
+1
+ compares selection rules with everything else held fixed, so the differences
+isolate the rule. Against the standard Shannon rule, ranking with crop area raises the suite
+average by 
+ percentage points, improves 
+ of 
+ datasets, is significant on 
+ and
+significantly worse on none. Against the stronger Tsallis score the margin is smaller and we
+state it in full: 
+ wins, one tie and three losses, averaging 
+ percentage points. The
+asterisks are paired tests against Shannon; we ran none between the two non-baseline rows, so
+that head-to-head is counts and a margin, not a significance claim. The point is not that crop
+area is the better score, but that a quantity carrying no information about the model’s response
+competes with the best functional of that response.
+
+Does the effect depend on the image encoder?
+
+Repeating the evaluation on the convolutional encoder RN50 gives, on the six datasets run with
+both encoders, a mean gain of 
+ percentage points against 
+ for the vision transformer
+on those same six, so the effect is not tied to one architecture and
+is if anything stronger on the weaker encoder, consistent with its larger headroom, and the
+predictive relationship holds within each encoder separately. The per-dataset gains themselves do
+
+not
+ transfer: their rank correlation across encoders is 
+, so a dataset’s gain is
+not a constant of it and we quote none (
+appendix
+ 
+G
+).
+
+A better scoring function is not a substitute.
+
+Improving the scoring 
+function
+ while keeping its input fixed does help: a Tsallis score
+at fixed order 
+ beats Shannon entropy on 
+ of 
+ datasets, ties on one and loses on
+three (
+Tab.
+ 
+1
+), in the direction of ADTE’s own ablation 
+(
+Wu et al., 2026
+)
+. That order is harmful when the same functional drives an
+optimisation step (
+Sec.
+ 
+4
+), so the scoring and driving roles do not share an optimum.
+Changing the input remains the larger effect; 
+Sec.
+ 
+8
+ reports what happens when the two
+are combined.
+
+7 
+Related work
+
+We organise by 
+what a method scores views on
+, the axis this paper is about;
+
+appendix
+ 
+K
+ gives the extended discussion.
+
+Scoring from the model’s output: the incumbent.
+
+Entropy minimisation on unlabelled data originates in semi-supervised learning
+
+(
+Grandvalet and Bengio, 2004
+)
+ and became the standard test-time objective through TENT
+
+(
+Wang et al., 2021
+)
+ and SHOT 
+(
+Liang et al., 2020
+)
+. MEMO 
+(
+Zhang et al., 2022
+)
+ moved it to the
+single-image setting and TPT 
+(
+Shu et al., 2022
+)
+ specialised it to vision-language models,
+adapting the prompt tokens of 
+Zhou et al. (2022)
+. The scoring 
+function
+ has since been
+improved repeatedly, by a zero-temperature average 
+(
+Farina et al., 2024
+)
+, Tsallis entropy
+
+(
+Tsallis, 1988
+)
+ and a class-adaptive Tsallis exponent 
+(
+Wu et al., 2026
+)
+, while other work
+varies the objective, the calibration or the views 
+(
+Yoon et al., 2024
+; 
+Feng et al., 2023
+)
+. All keep
+the scoring 
+input
+ fixed at the model’s output distribution, which is what our analysis
+targets; the families excluded in 
+Sec.
+ 
+1
+ are untouched by our claims
+
+(
+Karmanov et al., 2024
+; 
+Zhu et al., 2024
+)
+.
+
+Calibration-oriented methods built on top of TPT, such as A-TPT 
+(
+Ahamed et al., 2026b
+)
+ and
+AGI-TPT 
+(
+Anonymous, 2026
+)
+, with related work on calibrated prompt tuning
+
+(
+Ahamed et al., 2026a
+; 
+Sharifdeen et al., 2026
+)
+, target calibration rather than view ranking and are
+complementary to our audit (
+appendix
+ 
+K
+).
+
+Scoring from the model’s representation.
+
+A second line keeps the pipeline but replaces the output-distribution score: MTA
+
+(
+Zanella and Ben Ayed, 2024
+)
+ inherits the same 
+-view protocol and weights views by embedding
+density, reporting that this beats confidence filtering; R-TPT 
+(
+Sheng et al., 2025
+)
+ reweights
+views for robustness and reward-model feedback 
+(
+Zhao et al., 2024
+)
+ replaces entropy outright.
+Not being functions of the sorted posterior these fall outside the class our symmetry argument
+covers, and we do not claim it governs them. They are inside the audit: the embedding statistics
+of 
+Tab.
+ 
+2
+ are of this kind and are anti-predictive on reducible errors. Whether MTA’s
+particular score behaves the same way requires running it, and is the first experiment we would
+add.
+
+Questioning the update, and generation-side information.
+
+ZERO 
+(
+Farina et al., 2024
+)
+ proves the argmax of the averaged prediction is largely invariant to
+the entropy update; we take that as established and do not re-derive it, adding the pairwise
+decomposition of 
+Eq.
+ 
+3
+, the dissent criterion of 
+Eq.
+ 
+4
+ and the stage-wise
+attribution 
+(
+Huang et al., 2026
+, see also)
+. AugMix 
+(
+Hendrycks et al., 2020
+)
+ and
+
+RandomResizedCrop
+ serve throughout this literature purely as generators; augmentation
+identity has been read back when aggregating test-time predictions elsewhere in vision
+
+(
+Shanmugam et al., 2021
+)
+, but within test-time adaptation for vision-language models, to our
+knowledge, the sampled parameters are not. That the optimal error–reject rule thresholds the
+true posterior is classical 
+(
+Chow, 1970
+)
+; what it does not supply, and what we add, is the
+protocol of conditioning on the subpopulation where the intervention can act.
+
+8 
+Discussion
+
+How the analysis and the measurements relate.
+
+We are explicit about which way the support runs. 
+Equation
+ 
+3
+ is exact and says a one-hot view
+contributes zero, so a confidence filter retains the views contributing least; the measured
+gradient stage is 
+ percentage points. That measurement is the evidence and the analysis is
+the account of it, not its derivation: the deployed step takes the 
+sign
+ of the gradient,
+and realised logit motion agrees with the force coordinatewise only 
+ of the time
+(
+appendix
+ 
+C
+), which is why we do not claim to have proved the update inert.
+
+Equations
+ 
+3
+ and 
+4
+ concern the gradient and hold for any tuned parameters; the inertness is
+an empirical finding on two parameter groups. Five hypotheses of our own were rejected by the
+controls built to test them (
+appendix
+ 
+H
+), including a stronger version of this paper’s own
+headline.
+
+What this means for deployment.
+
+The backward pass can be deleted: it costs most of the compute and contributes 
+
+percentage points. Confidence remains a usable coarse filter but should not be trusted as a
+per-view reliability signal on the samples that matter, where it recovers about one twentieth of
+what a better choice among the same views is worth. And the augmenter records a label-free signal
+no method we surveyed reads back. The failure is not in the model’s perception but in the
+
+reliability signal
+ built on it, invisible to any evaluation that does not condition on the
+errors a better choice could still fix.
+
+Limitations and scope.
+
+Crop geometry does not compose with a stronger scoring functional. We pre-registered the two
+channels as additive; they are not, gaining 
+ percentage points against a prediction of
+
+, and under a stricter protocol the combination beats the better single signal in
+
+ of 
+ configurations, so once a stronger scoring function is in use the
+crop-area gain largely does not add on top of it. We also have no mechanism for the gain itself.
+Our rule cross-fits two parameters against an untuned baseline, so we do not claim it is
+tuning-free, and we have not isolated the contribution of the retained-view count from that of
+the crop-area weight; the DTD loss is the visible cost of that choice. Comparisons replay a
+fixed cached subsample rather than the full test sets, which bounds the resolution of the paired
+tests. The selection results run on the shared configuration TPT, ZERO and ADTE each declare,
+but we did not run their code, so that reach is an argument rather than a measurement
+(
+appendix
+ 
+E
+). The gradient-stage results are specific to the optimiser and parameter group
+studied, while 
+Eqs.
+ 
+3
+ and 
+4
+ hold for any tuned parameters.
+
+References
+
+Ahamed 
+et al.
+ (2026a)
+
+S. A. Ahamed, M. Ansaff, N. K. M. L. Phyu, U. S. K. Thanthrige, C. U. S. Edussooriya, R. Rodrigo, and M. H. Khan
+
+M-PFT: angular margin for calibrated prompt-tuning of fine-tuned vision-language models
+.
+
+arXiv preprint arXiv:2610.39861
+.
+
+Cited by: 
+Appendix K
+,
+
+§7
+.
+
+Ahamed 
+et al.
+ (2026b)
+
+S. Ahamed, U. S. K. P. Miriya Thanthrige, R. Rodrigo, and M. H. Khan
+
+A-TPT: angular diversity calibration properties for test-time prompt tuning of vision-language models
+.
+
+In 
+ICLR
+,
+
+pp. 69175–69199
+.
+
+Cited by: 
+Appendix K
+,
+
+§7
+.
+
+Anonymous (2026)
+
+Anonymous
+
+AGI-TPT: adaptive geometry-informed test-time prompt tuning for calibrated zero-shot vision-language models
+.
+
+In 
+Submitted to the Fifteenth International Conference on Learning
+Representations
+,
+
+Note: 
+under review
+
+External Links: 
+Link
+
+Cited by: 
+Appendix K
+,
+
+§7
+.
+
+Asmussen and Albrecher (2010)
+
+S. Asmussen and H. Albrecher
+
+Ruin probabilities
+.
+
+2nd edition
+, 
+Advanced Series on Statistical Science & Applied Probability
+,  
+World Scientific
+.
+
+Cited by: 
+§A.5
+,
+
+§4
+.
+
+Balles and Hennig (2018)
+
+L. Balles and P. Hennig
+
+Dissecting adam: the sign, magnitude and variance of stochastic gradients
+.
+
+In 
+ICML
+,
+
+Note: 
+arXiv:1705.07774
+
+Cited by: 
+Appendix C
+,
+
+§I.3
+,
+
+§4
+.
+
+Bossard 
+et al.
+ (2014)
+
+L. Bossard, M. Guillaumin, and L. Van Gool
+
+Food-101 – mining discriminative components with random forests
+.
+
+In 
+ECCV
+,
+
+Cited by: 
+Appendix J
+.
+
+Chaimanowong and Zhu (2024)
+
+W. Chaimanowong and Y. Zhu
+
+Approximating invariant functions with the sorting trick is theoretically justified
+.
+
+arXiv preprint arXiv:2403.01671
+.
+
+Cited by: 
+Appendix D
+.
+
+Chow (1970)
+
+C. K. Chow
+
+On optimum recognition error and reject tradeoff
+.
+
+IEEE Transactions on Information Theory
+ 
+16
+ (
+1
+), 
+pp. 41–46
+.
+
+Cited by: 
+§7
+.
+
+Cimpoi 
+et al.
+ (2014)
+
+M. Cimpoi, S. Maji, I. Kokkinos, S. Mohamed, and A. Vedaldi
+
+Describing textures in the wild
+.
+
+In 
+CVPR
+,
+
+Cited by: 
+Appendix J
+.
+
+Deng 
+et al.
+ (2009)
+
+J. Deng, W. Dong, R. Socher, L. Li, K. Li, and L. Fei-Fei
+
+ImageNet: a large-scale hierarchical image database
+.
+
+In 
+CVPR
+,
+
+Cited by: 
+Appendix J
+,
+
+§6
+.
+
+Farina 
+et al.
+ (2024)
+
+M. Farina, G. Franchi, G. Iacca, M. Mancini, and E. Ricci
+
+Frustratingly easy test-time adaptation of vision-language models
+.
+
+In 
+NeurIPS
+,
+
+Note: 
+arXiv:2405.18330
+
+Cited by: 
+Appendix K
+,
+
+Table 4
+,
+
+§I.4
+,
+
+§1
+,
+
+§1
+,
+
+§2
+,
+
+§4
+,
+
+§7
+,
+
+§7
+.
+
+Fei-Fei 
+et al.
+ (2004)
+
+L. Fei-Fei, R. Fergus, and P. Perona
+
+Learning generative visual models from few training examples: an incremental bayesian approach tested on 101 object categories
+.
+
+In 
+CVPR Workshops
+,
+
+Cited by: 
+Appendix J
+.
+
+Feng 
+et al.
+ (2023)
+
+C. Feng, K. Yu, Y. Liu, S. Khan, and W. Zuo
+
+Diverse data augmentation with diffusions for effective test-time prompt tuning
+.
+
+In 
+ICCV
+,
+
+Cited by: 
+Appendix K
+,
+
+§7
+.
+
+Grandvalet and Bengio (2004)
+
+Y. Grandvalet and Y. Bengio
+
+Semi-supervised learning by entropy minimization
+.
+
+In 
+NeurIPS
+,
+
+Cited by: 
+§7
+.
+
+Helber 
+et al.
+ (2019)
+
+P. Helber, B. Bischke, A. Dengel, and D. Borth
+
+EuroSAT: a novel dataset and deep learning benchmark for land use and land cover classification
+.
+
+IEEE Journal of Selected Topics in Applied Earth Observations and
+Remote Sensing
+.
+
+Cited by: 
+Appendix J
+.
+
+Hendrycks 
+et al.
+ (2021a)
+
+D. Hendrycks, S. Basart, N. Mu, S. Kadavath, F. Wang, E. Dorundo, R. Desai, T. Zhu, S. Parajuli, M. Guo, D. Song, J. Steinhardt, and J. Gilmer
+
+The many faces of robustness: a critical analysis of out-of-distribution generalization
+.
+
+In 
+ICCV
+,
+
+Cited by: 
+Appendix J
+.
+
+Hendrycks 
+et al.
+ (2020)
+
+D. Hendrycks, N. Mu, E. D. Cubuk, B. Zoph, J. Gilmer, and B. Lakshminarayanan
+
+AugMix: a simple data processing method to improve robustness and uncertainty
+.
+
+In 
+ICLR
+,
+
+Cited by: 
+§7
+.
+
+Hendrycks 
+et al.
+ (2021b)
+
+D. Hendrycks, K. Zhao, S. Basart, J. Steinhardt, and D. Song
+
+Natural adversarial examples
+.
+
+In 
+CVPR
+,
+
+pp. 15262–15271
+.
+
+Cited by: 
+Appendix J
+.
+
+Hill (1973)
+
+M. O. Hill
+
+Diversity and evenness: a unifying notation and its consequences
+.
+
+Ecology
+ 
+54
+ (
+2
+), 
+pp. 427–432
+.
+
+Cited by: 
+§A.4
+.
+
+Huang 
+et al.
+ (2026)
+
+J. Huang, X. Chen, Z. Liu, Y. Sun, J. Jiang, and Z. Wang
+
+What drives test-time adaptation for clip? a controlled empirical study from an update perspective
+.
+
+arXiv preprint arXiv:2606.14299
+.
+
+Cited by: 
+Figure 1
+,
+
+§7
+.
+
+Jacot 
+et al.
+ (2018)
+
+A. Jacot, F. Gabriel, and C. Hongler
+
+Neural tangent kernel: convergence and generalization in neural networks
+.
+
+In 
+NeurIPS
+,
+
+Cited by: 
+§A.2
+,
+
+§I.1
+,
+
+§4
+.
+
+Karmanov 
+et al.
+ (2024)
+
+A. Karmanov, D. Guan, S. Lu, A. El Saddik, and E. Xing
+
+Efficient test-time adaptation of vision-language models
+.
+
+In 
+CVPR
+,
+
+Cited by: 
+§1
+,
+
+§7
+.
+
+Krause 
+et al.
+ (2013)
+
+J. Krause, M. Stark, J. Deng, and L. Fei-Fei
+
+3D object representations for fine-grained categorization
+.
+
+In 
+ICCV Workshops
+,
+
+Cited by: 
+Appendix J
+.
+
+Krogh and Vedelsby (1994)
+
+A. Krogh and J. Vedelsby
+
+Neural network ensembles, cross validation, and active learning
+.
+
+In 
+NeurIPS
+,
+
+Cited by: 
+§A.6
+.
+
+Liang 
+et al.
+ (2020)
+
+J. Liang, D. Hu, and J. Feng
+
+Do we really need to access the source data? source hypothesis transfer for unsupervised domain adaptation
+.
+
+In 
+ICML
+,
+
+Note: 
+arXiv:2002.08546
+
+Cited by: 
+§7
+.
+
+Lin (1991)
+
+J. Lin
+
+Divergence measures based on the shannon entropy
+.
+
+IEEE Transactions on Information Theory
+ 
+37
+ (
+1
+), 
+pp. 145–151
+.
+
+Cited by: 
+§A.6
+.
+
+Loshchilov and Hutter (2019)
+
+I. Loshchilov and F. Hutter
+
+Decoupled weight decay regularization
+.
+
+In 
+ICLR
+,
+
+Cited by: 
+Appendix C
+.
+
+Maji 
+et al.
+ (2013)
+
+S. Maji, J. Kannala, E. Rahtu, M. Blaschko, and A. Vedaldi
+
+Fine-grained visual classification of aircraft
+.
+
+Technical report
+
+ 
+arXiv
+.
+
+Cited by: 
+Appendix J
+.
+
+McNemar (1947)
+
+Q. McNemar
+
+Note on the sampling error of the difference between correlated proportions or percentages
+.
+
+Psychometrika
+ 
+12
+ (
+2
+), 
+pp. 153–157
+.
+
+Cited by: 
+Appendix J
+,
+
+Figure 1
+,
+
+§6
+,
+
+Table 1
+.
+
+Nilsback and Zisserman (2008)
+
+M. Nilsback and A. Zisserman
+
+Automated flower classification over a large number of classes
+.
+
+In 
+Indian Conference on Computer Vision, Graphics and Image Processing
+,
+
+Cited by: 
+Appendix J
+.
+
+Parkhi 
+et al.
+ (2012)
+
+O. M. Parkhi, A. Vedaldi, A. Zisserman, and C. V. Jawahar
+
+Cats and dogs
+.
+
+In 
+CVPR
+,
+
+Cited by: 
+Appendix J
+.
+
+Radford 
+et al.
+ (2021)
+
+A. Radford, J. W. Kim, C. Hallacy, A. Ramesh, G. Goh, S. Agarwal, G. Sastry, A. Askell, P. Mishkin, J. Clark, G. Krueger, and I. Sutskever
+
+Learning transferable visual models from natural language supervision
+.
+
+In 
+ICML
+,
+
+Cited by: 
+§1
+,
+
+§6
+.
+
+Recht 
+et al.
+ (2019)
+
+B. Recht, R. Roelofs, L. Schmidt, and V. Shankar
+
+Do imagenet classifiers generalize to imagenet?
+.
+
+In 
+ICML
+,
+
+Cited by: 
+Appendix J
+.
+
+Roy and Vetterli (2007)
+
+O. Roy and M. Vetterli
+
+The effective rank: a measure of effective dimensionality
+.
+
+In 
+European Signal Processing Conference (EUSIPCO)
+,
+
+pp. 606–610
+.
+
+Cited by: 
+Appendix C
+.
+
+Shanmugam 
+et al.
+ (2021)
+
+D. Shanmugam, D. Blalock, G. Balakrishnan, and J. Guttag
+
+Better aggregation in test-time augmentation
+.
+
+In 
+ICCV
+,
+
+Cited by: 
+§7
+.
+
+Sharifdeen 
+et al.
+ (2026)
+
+A. Sharifdeen, S. A. Ahamed, U. Khan, M. A. Munir, S. Ibrahim, M. R. M. Ahamed, Y. Xie, I. Razzak, and M. H. Khan
+
+MVC-Bench: benchmarking calibration of medical vision-language models
+.
+
+In 
+Findings of the Association for Computational Linguistics: EMNLP 2026
+,
+
+pp. 36128–36162
+.
+
+Cited by: 
+Appendix K
+,
+
+§7
+.
+
+Sheng 
+et al.
+ (2025)
+
+L. Sheng, J. Liang, Z. Wang, and R. He
+
+R-TPT: improving adversarial robustness of vision-language models through test-time prompt tuning
+.
+
+In 
+CVPR
+,
+
+Cited by: 
+Appendix K
+,
+
+§7
+.
+
+Shu 
+et al.
+ (2022)
+
+M. Shu, W. Nie, D. Huang, Z. Yu, T. Goldstein, A. Anandkumar, and C. Xiao
+
+Test-time prompt tuning for zero-shot generalization in vision-language models
+.
+
+In 
+NeurIPS
+,
+
+Note: 
+arXiv:2209.07511
+
+Cited by: 
+Appendix K
+,
+
+§I.4
+,
+
+§1
+,
+
+Table 1
+,
+
+§7
+.
+
+Soomro 
+et al.
+ (2012)
+
+K. Soomro, A. R. Zamir, and M. Shah
+
+UCF101: a dataset of 101 human actions classes from videos in the wild
+.
+
+CoRR
+ 
+abs/1212.0402
+.
+
+Cited by: 
+Appendix J
+.
+
+Tsallis (1988)
+
+C. Tsallis
+
+Possible generalization of boltzmann-gibbs statistics
+.
+
+Journal of Statistical Physics
+ 
+52
+ (
+1–2
+), 
+pp. 479–487
+.
+
+Cited by: 
+§A.5
+,
+
+§I.4
+,
+
+§1
+,
+
+§4
+,
+
+§7
+.
+
+Wang 
+et al.
+ (2021)
+
+D. Wang, E. Shelhamer, S. Liu, B. Olshausen, and T. Darrell
+
+Tent: fully test-time adaptation by entropy minimization
+.
+
+In 
+ICLR
+,
+
+Note: 
+arXiv:2006.10726
+
+Cited by: 
+§1
+,
+
+§7
+.
+
+Wang 
+et al.
+ (2019)
+
+H. Wang, S. Ge, Z. Lipton, and E. P. Xing
+
+Learning robust global representations by penalizing local predictive power
+.
+
+In 
+NeurIPS
+,
+
+Cited by: 
+Appendix J
+.
+
+Wu 
+et al.
+ (2026)
+
+X. Wu, D. Jiang, F. Yu, Y. Tian, J. Tang, Q. Chen, Y. Yang, and J. Lu
+
+Adaptive debiasing tsallis entropy for test-time adaptation
+.
+
+In 
+ICLR
+,
+
+Note: 
+arXiv:2602.11743
+
+Cited by: 
+Appendix K
+,
+
+Appendix D
+,
+
+Appendix E
+,
+
+Appendix H
+,
+
+§I.4
+,
+
+§1
+,
+
+§1
+,
+
+§3.3
+,
+
+§6
+,
+
+§7
+.
+
+Xiao 
+et al.
+ (2010)
+
+J. Xiao, J. Hays, K. A. Ehinger, A. Oliva, and A. Torralba
+
+SUN database: large-scale scene recognition from abbey to zoo
+.
+
+In 
+CVPR
+,
+
+Cited by: 
+Appendix J
+.
+
+Yoon 
+et al.
+ (2024)
+
+H. S. Yoon, E. Yoon, J. T. J. Tee, M. Hasegawa-Johnson, Y. Li, and C. D. Yoo
+
+C-tpt: calibrated test-time prompt tuning for vision-language models via text feature dispersion
+.
+
+In 
+ICLR
+,
+
+Note: 
+arXiv:2403.14119
+
+Cited by: 
+Appendix K
+,
+
+Appendix K
+,
+
+§7
+.
+
+Zanella and Ben Ayed (2024)
+
+M. Zanella and I. Ben Ayed
+
+On the test-time zero-shot generalization of vision-language models: do we really need prompt learning?
+.
+
+In 
+CVPR
+,
+
+Cited by: 
+Appendix K
+,
+
+§1
+,
+
+§7
+.
+
+Zhang 
+et al.
+ (2022)
+
+M. Zhang, S. Levine, and C. Finn
+
+MEMO: test time robustness via adaptation and augmentation
+.
+
+In 
+NeurIPS
+,
+
+Cited by: 
+Appendix F
+,
+
+§3.3
+,
+
+§7
+.
+
+Zhao 
+et al.
+ (2024)
+
+S. Zhao, X. Wang, L. Zhu, and Y. Yang
+
+Test-time adaptation with CLIP reward for zero-shot generalization in vision-language models
+.
+
+In 
+ICLR
+,
+
+Cited by: 
+Appendix K
+,
+
+§7
+.
+
+Zhou 
+et al.
+ (2022)
+
+K. Zhou, J. Yang, C. C. Loy, and Z. Liu
+
+Learning to prompt for vision-language models
+.
+
+International Journal of Computer Vision
+ 
+130
+ (
+9
+), 
+pp. 2337–2348
+.
+
+Cited by: 
+§7
+.
+
+Zhu 
+et al.
+ (2024)
+
+X. Zhu, B. Zhu, Y. Tan, S. Wang, Y. Hao, and H. Zhang
+
+Enhancing zero-shot vision models by label-free prompt distribution learning and bias correcting
+.
+
+In 
+NeurIPS
+,
+
+Cited by: 
+Appendix E
+,
+
+§7
+.
+
+Appendix A 
+Proofs
+
+All identities were verified against autograd in float64; the residual quoted after each
+is the maximum absolute disagreement observed. Provenance is stated explicitly: results
+that are classical are cited and not claimed.
+
+A.1 
+Gradient of the averaged-prediction entropy (
+Eq.
+ 
+3
+)
+
+With 
+ and 
+, 
+, the softmax
+Jacobian 
+ gives
+
+using 
+ to write the bracket as a 
+-average of log-ratios.
+Residual 
+ (first form) and 
+ (pairwise form).
+
+Consequences.
+
+(i)
+ The pair 
+ is gated by 
+, which
+vanishes unless view 
+ places mass on both. 
+(ii)
+ The sign of the force
+
+ is 
+, a rank statistic of
+
+ alone, verified with 
+ violations over 
+ pairs. 
+(iii)
+ a one-hot
+view has 
+ for all 
+ and contributes exactly zero.
+
+A.2 
+Why the analysis holds for any tuned parameters
+
+For a loss 
+ depending on 
+ only through the logits 
+, the chain rule gives
+
+ with 
+. This requires only
+that 
+ be differentiable at 
+: no assumption on width, initialisation,
+architecture or step size. Hence 
+ is a factor of every parameter-space gradient,
+and in particular 
+ for any network. Verified on
+a nonlinear encoder: 
+.
+This is the standard functional-gradient factorisation underlying kernel analyses of training
+dynamics 
+(
+Jacot et al., 2018
+)
+; we use only the factorisation, not any infinite-width limit.
+
+A.3 
+The statistic 
+ through which views reach the parameters
+
+With 
+ and the view embeddings 
+ constant, write
+
+ for the 
+force
+ on logit 
+. This is the
+sign convention used in 
+Eq.
+ 
+4
+ and 
+Sec.
+ 
+A.5
+, and it is the one under which
+every “positive iff” statement in this appendix was verified; the singular values of 
+
+below are unaffected by the choice. Then
+
+so the entire dependence of the update on the views passes through 
+. Being a sum of
+
+ outer products, 
+ regardless of 
+ or 
+. Verified to
+
+. Two different view sets with the same 
+ produce identical updates for
+every encoder. We use “sufficient statistic” here in the plain sense that the map factors
+through 
+; this is not Fisher–Neyman statistical sufficiency.
+
+A.4 
+The boosting threshold
+
+From 
+Eq.
+ 
+3
+, the force on 
+ is positive iff 
+.
+(This is the sign of 
+. It is not a claim about realised logit motion, which is
+
+ and need not share it coordinatewise.) For a single view
+this reduces to 
+, the inverse perplexity: entropy minimisation boosts
+every class above the inverse of the effective class count, not merely the argmax. The
+
+-deformed form replaces 
+ by the Hill number 
+
+(
+Hill, 1973
+)
+. Elementary given the Jacobian; 
+ violations.
+
+A.5 
+The dissent threshold is a Cramér root (
+Eq.
+ 
+4
+)
+
+Let 
+ be a class view 
+ is confident in with 
+, 
+ the consensus
+argmax. Put 
+, let 
+ be 
+ conditioned off 
+,
+and 
+. Writing the objective in Tsallis form of
+order 
+ 
+(
+Tsallis, 1988
+)
+ and splitting off the 
+ term,
+
+ is strictly convex with 
+, 
+, and
+
+ since 
+. Hence when 
+ there is a unique
+
+ with 
+, and 
+ is the exact per-view
+threshold. Verified on 
+ dissenting views at 
+, so 
+
+checks in total: the criterion reproduces the true sign with 
+ disagreements; 
+ to 
+.
+
+The equation 
+ is the defining equation of the adjustment (Lundberg)
+coefficient in large-deviations and ruin theory 
+(
+Asmussen and Albrecher, 2010
+)
+; the classical object
+is not ours, its identification as the anti-consensus threshold of this objective is. We use it
+as a characterisation, not as a tuning rule: 
+ is a per-view quantity and we neither
+estimate it online nor build a method on it.
+
+A.6 
+Agreement-blindness, and a step that increases disagreement
+
+ depends on the views only through 
+, so it is exactly constant on the
+
+-dimensional slice 
+, which contains both perfect
+consensus and, for uniform 
+ with 
+, maximal disagreement. Using the ambiguity
+decomposition 
+, classical and due to 
+Lin (1991)
+ in this
+form, with the squared-error antecedent of 
+Krogh and Vedelsby (1994)
+, and
+equal to the Jensen–Shannon divergence of the views, we exhibit (
+, 
+,
+
+) a descent step with 
+ while
+
+. The loss reports progress while the views disagree
+
+more
+, contradicting the stated motivation of the objective. The honest caveat is
+that 
+ does force both terms to zero; the failure is that one scale-free
+step at large 
+ never approaches that regime.
+
+Appendix B 
+The view-score audit and the selection ceiling
+
+Table 2: 
+The entropy score is at chance exactly where a better choice would help.
+
+Mean AUC over six datasets per encoder, where 
+ means the score orders correct and
+incorrect views no better than chance. Orientation matters: a value below 
+ is
+anti-predictive, and reversing the image-feature row gives 
+ and 
+. That row tests
+statistics computed from the cached embeddings rather than the output distribution, and the
+crop-area row a quantity that is not a function of the model at all.
+
+Score, and images it is evaluated on
+
+ViT-B/16
+
+RN50
+
+Entropy, all images
+
+Entropy, reducible errors (controlled)
+
+Entropy, reducible errors (uncontrolled)
+
+Image-feature statistics, reducible errors
+
+Crop area, reducible errors
+
+—
+
+Dataset
+
+Backbone
+
+Achieved
+
+Oracle
+
+Headroom
+
+ImageNet-A
+
+ViT-B/16
+
+ImageNet-A
+
+RN50
+
+ImageNet
+
+ViT-B/16
+
+ImageNet
+
+RN50
+
+ImageNet-R
+
+ViT-B/16
+
+DTD
+
+ViT-B/16
+
+Flowers102
+
+ViT-B/16
+
+Table 3: 
+How much a better choice of views could buy.
+ The oracle keeps the
+same number of views as the deployed method but selects them knowing the label.
+
+Table 4: 
+Closed forms agree with automatic differentiation at machine precision.
+
+Maximum absolute disagreement, float64 (machine epsilon 
+). An
+algebra slip would produce an order-one disagreement, not one at this scale.
+
+Identity
+
+Residual
+
+Logit-space gradient of 
+
+Equation
+ 
+3
+, first form
+
+Equation
+ 
+3
+, pairwise form
+
+Hessian of 
+
+Tangent eigenvalues at the uniform point (
+)
+
+Suppression peak at 
+
+5 s.f.
+
+Argmax invariance under gradient flow (reproduces 
+Farina et al., 2024
+, Prop. 2.1)
+
+0 flips / 3000 steps
+
+Equation
+ 
+4
+ sign criterion, all three cases
+
+0 / 1674
+
+Appendix C 
+The optimiser and the channel
+
+That Adam’s update direction is the 
+sign
+ of the gradient is established
+
+(
+Balles and Hennig, 2018
+)
+; we claim no novelty for the identity, only for its consequence under a
+per-sample optimiser reset, which makes every update by AdamW 
+(
+Loshchilov and Hutter, 2019
+)
+
+a first step from zero moments. From
+
+, 
+ the update is 
+,
+so 
+ independently of 
+. Verified to 
+ on
+a 
+-norm update; exact only while 
+, and under fp16 an underflowed
+coordinate takes a step of exactly zero. The direction fares no better:
+
+ is 
+ for a dense Gaussian gradient but
+
+ measured on CLIP’s heavy-tailed prompt gradient.
+
+Because the view features are constants, the image enters the update only through
+
+, a sum of 
+ outer products, so
+
+ regardless of 
+ or 
+. Its singular values have
+participation ratio 
+ with median 
+ (ImageNet-A,
+ViT-B/16, 
+). Participation ratio is one of two standard conventions; the entropy
+effective rank 
+(
+Roy and Vetterli, 2007
+)
+ gives 
+ on the same 
+. The two differ
+materially, so we name which we report.
+
+Appendix D 
+The matched-information control in full
+
+Figure 4: 
+What the model’s response cannot see.
+ Both arms use the same regressor, the
+same training rows, and feature sets of identical dimension holding the identical value
+multiset; only the ordering differs. 
+(a)
+ Every configuration improves when class
+identity is preserved. 
+(b)
+ The gap, sorted: positive in 
+, mean 
+ percentage points.
+The capacity ladder had saturated in all 
+, so under-fitting does not explain it.
+Per-configuration numbers in 
+Tab.
+ 
+5
+.
+
+The standard confidence functionals, Shannon, Tsallis and Rényi at fixed order,
+max-probability, top-
+ margin, are invariant to permuting the class labels, hence
+functions of the 
+sorted
+ probability vector alone (verified to 
+;
+the factorisation itself is classical, 
+Chaimanowong and Zhu, 2024
+). Such a score can measure
+how concentrated a view is, never 
+which
+ class it is concentrated on. To measure
+what that costs, we fit the same regressor, on the same rows, to predict a view’s
+true-class mass from two feature sets of 
+identical dimension and identical value
+multiset
+, differing only in ordering: the full sorted spectrum (class identity
+destroyed) versus the log-probability vector (class identity preserved). Any gap cannot
+be dimensionality or capacity.
+
+Across 
+ datasets 
+ 
+ backbones (
+ configurations), preserving class
+identity is worth 
+ percentage points, positive in 
+, with the capacity ladder saturated in
+all 
+ (
+Fig.
+ 
+4
+, 
+Tab.
+ 
+5
+). In share terms, the best class-symmetric fit captures
+
+ of the oracle gap against 
+ for the class-asymmetric one. This is an
+information measurement, not a method, both arms are fit with labels, and we note
+that the one deployed method which does break this symmetry, ADTE’s class-specific
+exponent 
+(
+Wu et al., 2026
+)
+, buys only 
+ percentage points end to end in its own ablation.
+The information is present; extracting it label-free is unsolved.
+
+Both arms use the identical regressor, the identical training rows, the identical
+readout, and feature sets of identical dimension 
+ holding the identical value
+multiset, they differ only in whether the entries are ordered by magnitude (class
+identity destroyed) or by class index (class identity preserved). A capacity ladder
+(
+max_iter
+ 
+) was run on the symmetric arm and had saturated in
+
+ configurations, so the gap is not an under-fitting artefact. Both arms are fit
+against the true-class mass 
+with labels
+: this measures information content, not a
+deployable method.
+
+Backbone
+
+Dataset
+
+Entropy
+
+Sorted
+
+Unsorted
+
+Oracle
+
+MetaCLIP-B16
+
+ImageNet-A
+
+200
+
+496
+
+MetaCLIP-B16
+
+ImageNet
+
+1000
+
+359
+
+MetaCLIP-B16
+
+IN-Sketch
+
+1000
+
+389
+
+MetaCLIP-B16
+
+IN-V2
+
+1000
+
+405
+
+MetaCLIP-B16
+
+StanfordCars
+
+196
+
+279
+
+MetaCLIP-B16
+
+Food101
+
+101
+
+247
+
+MetaCLIP-B16
+
+SUN397
+
+397
+
+432
+
+MetaCLIP-B16
+
+UCF101
+
+101
+
+337
+
+RN50
+
+ImageNet-A
+
+200
+
+658
+
+RN50
+
+ImageNet
+
+1000
+
+451
+
+RN50
+
+IN-Sketch
+
+1000
+
+519
+
+RN50
+
+IN-V2
+
+1000
+
+517
+
+RN50
+
+StanfordCars
+
+196
+
+613
+
+RN50
+
+Food101
+
+101
+
+356
+
+RN50
+
+SUN397
+
+397
+
+492
+
+RN50
+
+UCF101
+
+101
+
+422
+
+SigLIP-B16
+
+ImageNet-A
+
+200
+
+510
+
+SigLIP-B16
+
+ImageNet
+
+1000
+
+290
+
+SigLIP-B16
+
+IN-Sketch
+
+1000
+
+319
+
+SigLIP-B16
+
+IN-V2
+
+1000
+
+382
+
+SigLIP-B16
+
+StanfordCars
+
+196
+
+164
+
+SigLIP-B16
+
+Food101
+
+101
+
+173
+
+SigLIP-B16
+
+SUN397
+
+397
+
+449
+
+SigLIP-B16
+
+UCF101
+
+101
+
+330
+
+ViT-B/16
+
+ImageNet-A
+
+200
+
+534
+
+ViT-B/16
+
+ImageNet
+
+1000
+
+372
+
+ViT-B/16
+
+IN-Sketch
+
+1000
+
+484
+
+ViT-B/16
+
+IN-V2
+
+1000
+
+435
+
+ViT-B/16
+
+StanfordCars
+
+196
+
+515
+
+ViT-B/16
+
+Food101
+
+101
+
+208
+
+ViT-B/16
+
+SUN397
+
+397
+
+479
+
+ViT-B/16
+
+UCF101
+
+101
+
+376
+
+ViT-L/14
+
+ImageNet-A
+
+200
+
+299
+
+ViT-L/14
+
+ImageNet
+
+1000
+
+321
+
+ViT-L/14
+
+IN-Sketch
+
+1000
+
+413
+
+ViT-L/14
+
+IN-V2
+
+1000
+
+397
+
+ViT-L/14
+
+StanfordCars
+
+196
+
+317
+
+ViT-L/14
+
+Food101
+
+101
+
+137
+
+ViT-L/14
+
+SUN397
+
+397
+
+392
+
+ViT-L/14
+
+UCF101
+
+101
+
+281
+
+mean over all 40 configurations
+
+Table 5: 
+Keeping class identity is worth 
+ percentage points, positive in 
+.
+
+“Sorted” and “Unsorted” are the two matched feature sets; “Oracle” ranks by the
+true-class mass directly. Share of the oracle gap: 
+ for the best
+class-symmetric fit, 
+ for the class-asymmetric one.
+
+Appendix E 
+Comparison to a state-of-the-art selection rule
+
+ADTE 
+(
+Wu et al., 2026
+)
+ combines a class-adaptive Tsallis entropy for view selection
+with a logit adjustment derived from a transductively estimated class prior
+
+(
+Zhu et al., 2024
+)
+. Only the selection component lies in our scope, and their own
+ablation indicates that with logit adjustment held fixed the entropy variant accounts
+for a minority of their margin. We implemented their selection rule from the paper’s
+equations at their published parameter interval. On our pipeline it underperforms
+plain entropy on the suite average, which we attribute to a limitation of our setup
+rather than of their method: we estimate the prior from 
+ cached samples, which
+on ImageNet is 
+ samples per class, whereas their procedure maintains a memory bank
+over the full test stream. The degradation scales with the number of classes exactly
+as that explanation predicts. We therefore report the per-sample Tsallis row of
+
+Tab.
+ 
+1
+ as the faithful comparison and cite their published system numbers
+rather than a reimplementation we cannot validate.
+
+Appendix F 
+One measurement explains several separate results
+
+The reducible AUC accounts for findings we had obtained separately and could not previously
+connect. Selection is the largest positive stage because the AUC across all images is 
+; no
+selector we constructed improved on entropy because the AUC on reducible errors is
+approximately 
+; re-running selection on the model’s own pseudo-labels recovers exactly
+nothing because it is a fixed point by construction; and alternative aggregation rules give at
+most 
+ percentage points because the view 
+set
+, not the pooling rule, is the binding
+constraint. The finding also extends beyond prompt tuning: for MEMO 
+(
+Zhang et al., 2022
+)
+, which
+adapts model parameters rather than a prompt and performs no view selection, the gradient step
+improves the averaged prediction in 
+ of 
+ configurations spanning two parameter groups and
+nine learning rates over four orders of magnitude.
+
+Appendix G 
+Encoder generality in full
+
+On six datasets evaluated with both encoders, the mean gain is 
+ percentage points on RN50
+with 
+ of 
+ datasets significant, against 
+ with 
+ of 
+ on ViT-B/16. Three datasets
+are significant on both encoders independently. The relationship between the label-free
+crop-area AUC and the realised gain holds within each encoder, with Spearman 
+ on
+ViT-B/16 and 
+ on RN50, pooling to 
+ across all runs. The per-dataset
+gains do not transfer across encoders: their rank correlation is 
+, which at this sample
+size is indistinguishable from no relationship.
+
+Appendix H 
+Claims of ours that the controls refuted
+
+(i)
+ “The entropy score is 
+uninformative
+ where the headroom lies.” False. Under a
+split-half design it reaches 
+ accuracy against 
+ for random selection, an
+advantage of 
+ percentage points with a 
+ bootstrap interval of 
+. The
+defensible statement is quantitative: it captures about 
+ of what an oracle recovers.
+
+(ii)
+ “No label-free score beats entropy selection.” False. That conclusion had been
+drawn from a family of scores we constructed ourselves. A Tsallis score at fixed order 
+
+beats Shannon entropy on 
+ of 
+ datasets, ties on one and loses on three, in the direction
+of ADTE’s own ablation 
+(
+Wu et al., 2026
+)
+.
+
+(iii)
+ “The useful views are the dissenting ones.” False. An oracle restricted to
+dissenting views reaches 
+ against 
+ for a random half of the views.
+
+(iv)
+ Two mechanisms for why crop area helps, each written down before the run. The first,
+that area matters when the object fills the frame but not for textures, predicted that DTD would
+not benefit; DTD gains 
+ percentage points on RN50, although it is the one dataset that
+loses on ViT-B/16, and EuroSAT, predicted to be the least favourable case, shows the largest gain
+in the suite. The second, that the driver is the upscale
+factor, gives 
+ with 
+.
+
+(v)
+ A stronger symmetry claim: that no class-symmetric score could exceed a ceiling we had
+estimated. ADTE’s class-specific exponent is not class-symmetric, so the family does not bound
+the field, and our estimator never attained the ceiling it claimed. The matched-multiset
+comparison of 
+Sec.
+ 
+3
+ is the weaker and better-controlled replacement.
+
+Appendix I 
+Experimental design and the reasoning behind it
+
+This appendix states, for each analytical choice and each measurement in the paper, what question
+it answers, which assumption it rests on, what alternative explanation it was built to exclude,
+and why the chosen metric is the right one. We record the reasoning because the design, rather
+than the size of any single number, is what makes the central claim defensible. The first four
+subsections concern the analysis; the rest concern the experiments.
+
+I.1 
+Why the analysis is carried out in logit space
+
+The methods in this family do not tune the same parameters. TPT updates four prompt token
+embeddings; MEMO updates network parameters; a future variant could update something else again.
+A statement proved about one parameter vector 
+ would therefore say nothing about the
+family, and the family is what the paper is about. We avoid that by proving statements about the
+derivative with respect to the 
+logits
+ 
+, the pre-softmax class scores, and then
+transporting them with the chain rule
+
+This identity requires only that 
+ be differentiable at 
+. It assumes nothing
+about width, initialisation, architecture, learning rate or step count, and it is exact rather
+than asymptotic: we checked it on a nonlinear encoder to
+
+(
+Sec.
+ 
+A.2
+).
+
+What we borrow from kernel analyses, and what we deliberately do not.
+
+Writing the update in function space rather than parameter space is the move that defines the
+neural tangent kernel 
+(
+Jacot et al., 2018
+)
+. There the same factorisation is composed with itself
+to give the function-space dynamics 
+ with
+
+, and the paper’s theorem is that in the infinite-width limit, under the NTK
+parameterisation with random initialisation and an infinitesimal learning rate, 
+
+converges to a deterministic kernel and stays 
+constant
+ throughout training, so the
+dynamics linearise. We use the factorisation. We do not use the theorem, and we are explicit
+that we may not: our setting violates every one of its hypotheses. There are 
+ prompt
+parameters rather than infinite width; initialisation is a pretrained checkpoint at the embedding
+of “a photo of a” rather than a random draw in the NTK parameterisation; and a single AdamW
+step has 
+, roughly a quarter of a token
+embedding’s norm, which is neither infinitesimal nor lazy.
+
+Rather than rest on that argument we measured the assumption directly. We form
+
+ over 
+ logits, with 
+ taken through the real CLIP ViT-B/16 text encoder
+and TPT’s own prompt learner, take one step of the size the method actually takes, and recompute.
+The relative change is 
+, with the
+leading eigenvalue rising from 
+ to 
+. The kernel does not drift
+slightly; it nearly triples over one step. Treating it as constant here would be false, so no NTK
+convergence or generalisation conclusion is available to this paper and none is claimed.
+
+What this licenses, and the line we do not cross.
+
+Two kinds of statement survive without any assumption on 
+. First, exact zeros:
+
+ for every Jacobian, which is what makes the
+one-hot-view consequence of 
+Eq.
+ 
+3
+ parameterisation-free. Second, statements about the
+
+content
+ of the signal, since 
+ is a factor of every parameter-space update
+whatever 
+ is: if the only class-dependent information entering 
+ is the ordering of
+
+, no choice of tuned parameters can recover a margin that was never in the factor.
+Statements about realised logit 
+motion
+ do not survive, because the realised change is
+
+ and 
+ is far from a multiple of the identity: measured over
+
+ logits, 
+ of its Frobenius mass is off-diagonal and its condition number is 
+, so
+the per-coordinate sign agreement between 
+ and the actual logit change is 
+
+against a chance value of 
+. We therefore phrase 
+Eqs.
+ 
+3
+ and 
+4
+ as facts about the 
+force
+
+ and never as claims about which logits rise, and where the paper
+describes what the update does in practice (
+Sec.
+ 
+4
+, final paragraph) the statement is
+measured rather than derived.
+
+I.2 
+Why the view embeddings may be treated as constants
+
+The factorisation 
+ of 
+Sec.
+ 
+A.3
+, through which the whole dependence of
+the update on the views passes, needs the view embeddings 
+ to be constants. This is not an
+approximation we impose: in the reference implementation the image encoder runs without gradient
+tracking, so 
+ carries no gradient by construction and the identity is exact, verified to
+
+. The same fact is what makes the cached protocol below legitimate rather than
+merely convenient, since a quantity that never receives a gradient can be computed once and
+replayed.
+
+I.3 
+Why one step, and why the sign of the gradient
+
+Analysing a single update would be a simplification for ordinary training, but here it is a
+description. The optimiser state is reset for every test image and one step is taken, so the
+moment estimates are zero when the step is formed; Adam’s first step from zero moments is the
+sign of the gradient up to the numerical stabiliser 
+(
+Balles and Hennig, 2018
+)
+. The step we analyse
+is therefore the step the method takes, agreeing with the implemented update to
+
+ at a step norm of 
+. This is also why the magnitude claim in
+
+Sec.
+ 
+4
+ is a property of the deployed configuration rather than a worst case: an image
+on which the model is nearly indifferent, where the gradient is small, receives exactly the same
+sized perturbation as one on which it is certain.
+
+I.4 
+Why the results are stated for a family of scores rather than for Shannon entropy
+
+The published scores in this pipeline are Shannon entropy 
+(
+Shu et al., 2022
+)
+, a zero-temperature
+average 
+(
+Farina et al., 2024
+)
+, and Tsallis entropy with a class-adaptive exponent
+
+(
+Wu et al., 2026
+)
+. Proving statements for the Tsallis family of order 
+ at once therefore
+covers the variants that exist rather than only the first of them, and it costs nothing, because
+the family recovers Shannon entropy as 
+ 
+(
+Tsallis, 1988
+)
+. It also reveals something a
+Shannon-only analysis cannot: the condition under which the update pushes a view further from the
+average has a single critical order 
+, and Shannon entropy sits at the degenerate root
+
+ for 
+every
+ distribution (
+Sec.
+ 
+A.5
+). Separately, the permutation-symmetry
+result is a statement about a function class, not an empirical average over methods, so it is
+established by exhibiting the algebra and enumerating the class members rather than by
+measurement, and ADTE is reported as the counterexample that keeps the class from being the whole
+literature.
+
+I.5 
+Why a cached, fixed-view protocol
+
+Every arm of every comparison replays one cached tensor of view embeddings. Because the image
+encoder runs without gradient tracking, the 
+ view embeddings per image are constants and can
+be computed once. Two consequences follow. First, all arms see bit-identical views, so an
+observed difference cannot come from augmentation randomness, and no paired test is contaminated
+by resampling. Second, because only the selection rule varies across arms, the comparisons measure a property
+of that pipeline stage rather than of any one method’s optimiser. The entropy baseline is
+evaluated at its published setting and is never tuned while our rule cross-fits two parameters;
+we state that asymmetry rather than claim it favours the baseline.
+
+I.6 
+Why AUC for the view score, and not accuracy
+
+The question is whether a score 
+orders
+ views correctly, not whether any particular
+threshold on it is good. Accuracy of a downstream selector confounds the score with the choice of
+how many views to keep, with the aggregation rule, and with the base difficulty of the dataset.
+The area under the ROC curve is the probability that a randomly chosen correct view outscores a
+randomly chosen incorrect one. It is threshold-free, invariant to any monotone rescaling of the
+score, and has an unambiguous null value of 
+, so “no better than chance” is a statement
+about the score itself rather than about a tuned pipeline. It is also computable per image with
+no method in the loop, which is what allows it to be used as an 
+a priori
+ predictor in
+
+Sec.
+ 
+5
+.
+
+I.7 
+Why the population must be restricted, and the confound this creates
+
+A view score can only change an answer on images where a different choice of views yields a
+different prediction. Averaged over all images, a score is dominated by cases where selection is
+irrelevant because the model is already right, or hopeless because no view is right. Restricting
+to reducible errors is therefore not a convenience: it is the only population on which the
+quantity of interest is defined. The restriction introduces a dependence, because reducibility
+is defined using the averaged prediction and confident views agree with one another. The
+split-half design (
+Fig.
+ 
+2
+a) breaks that dependence by construction. We report both
+the controlled and uncontrolled numbers so that the size of the confound is visible rather than
+asserted to be small.
+
+I.8 
+Why the matched-multiset comparison, rather than an ablation
+
+To ask what class identity is worth, an ordinary ablation would compare a model given class
+indices against one that is not, which changes the input dimension and the amount of information
+simultaneously. Our two arms instead receive vectors of identical length containing the identical
+multiset of numbers, differing only in whether they are sorted by magnitude or indexed by class.
+Capacity, dimensionality and the values themselves are therefore held exactly fixed, and the only
+free variable is whether the association between a value and its class survives. A capacity
+ladder is run on the arm we expect to lose, because under-fitting that arm would inflate the
+measured gap in our favour; the ladder saturates in all 
+ configurations.
+
+I.9 
+Why an oracle upper bound
+
+An oracle selector uses the ground-truth label and is not a method. Its role is to convert the
+vague question “could selection do better?” into a number: it is the best achievable accuracy
+for 
+any
+ rule that selects the same number of views from the same candidates. Without it,
+a small gain has no denominator, and the claim that a score captures 
+ of what is available
+could not be stated.
+
+I.10 
+Why cross-fitting, and why the baseline is never tuned
+
+Our rule has two free parameters, 
+ and 
+; the baseline has none that we adjust. To keep
+the comparison honest under that asymmetry we cross-fit: the data are divided into five parts and
+the parameters used to score each part are selected using only the other four, so no image is
+scored under parameters chosen with knowledge of its own outcome. The baseline is evaluated at
+its published setting. The resulting comparison is therefore biased 
+against
+ the proposed
+rule, which is the direction an honest comparison should err in.
+
+I.11 
+Why McNemar, bootstrap intervals, and a disjoint-sample replication
+
+Predictions from two selection rules on the same image are paired, so an unpaired test would
+overstate the variance and understate significance. McNemar’s test conditions on exactly the
+images where the two rules disagree, which is the relevant evidence. AUC has no simple closed-form
+interval under this design, so we use bootstrap resampling over 
+ replicates. For the
+predictive relationship of 
+Sec.
+ 
+5
+, correlating a measurement with a gain computed on
+the same images would be circular; we therefore recompute the two quantities on disjoint halves
+and report that correlation as well.
+
+I.12 
+Why MEMO, and what it does and does not test
+
+MEMO adapts model parameters rather than a prompt and performs no view selection. It is included
+precisely because it differs in the parameter set: if the gradient step were inert only for a
+particular parameterisation, MEMO would show a gain. Sweeping two parameter groups and nine
+learning rates across four orders of magnitude, it does not. This tests whether the result is an
+artefact of one parameter choice; it does not test architectures beyond those studied.
+
+I.13 
+Pre-registration, and predictions that failed
+
+Where a mechanism was proposed, the prediction was written down before the run. Three such
+predictions were rejected: that the two selection signals would combine additively, and two
+separate accounts of why crop area helps. We report them because a design that never contradicts
+its author is not testing anything.
+
+Appendix J 
+Reproducibility
+
+Benchmark composition.
+
+The 
+-dataset suite is ImageNet 
+(
+Deng et al., 2009
+)
+ with four distribution shifts,
+ImageNet-A 
+(
+Hendrycks et al., 2021b
+)
+, ImageNet-R 
+(
+Hendrycks et al., 2021a
+)
+, ImageNet-Sketch
+
+(
+Wang et al., 2019
+)
+ and ImageNet-V2 
+(
+Recht et al., 2019
+)
+, together with Flowers102
+
+(
+Nilsback and Zisserman, 2008
+)
+, DTD 
+(
+Cimpoi et al., 2014
+)
+, OxfordPets 
+(
+Parkhi et al., 2012
+)
+,
+StanfordCars 
+(
+Krause et al., 2013
+)
+, UCF101 
+(
+Soomro et al., 2012
+)
+, Caltech101
+
+(
+Fei-Fei et al., 2004
+)
+, Food101 
+(
+Bossard et al., 2014
+)
+, SUN397 
+(
+Xiao et al., 2010
+)
+,
+FGVC-Aircraft 
+(
+Maji et al., 2013
+)
+ and EuroSAT 
+(
+Helber et al., 2019
+)
+.
+
+All experiments replay a cached feature tensor: because the image tower runs under
+
+no_grad
+, the 
+ view features per sample are constants and can be computed
+once. Every comparison in the paper therefore uses 
+identical
+ views, cache and
+readout, so only the quantity under study differs. Before any experiment we verified all
+
+ dataset loaders by reproducing published zero-shot accuracy at full test-set size
+(all within tolerance, ImageNet to 
+ points). Significance is paired McNemar
+
+(
+McNemar, 1947
+)
+; AUC confidence intervals are bootstrap over 
+ resamples;
+selector parameters are chosen by 
+-fold cross-fitting so that no sample is scored
+under parameters chosen using it. Baselines are never tuned.
+
+Appendix K 
+Extended related work
+
+The incumbent line, in more detail.
+
+TPT 
+(
+Shu et al., 2022
+)
+ fixed the recipe this paper studies: 
+ views per test image, a
+confidence filter retaining the lowest-entropy 
+, an average over the survivors, and one
+AdamW step on the prompt tokens minimising 
+. ZERO 
+(
+Farina et al., 2024
+)
+ keeps the
+views and the filter, deletes the step, and replaces the average by a zero-temperature vote;
+ADTE 
+(
+Wu et al., 2026
+)
+ keeps ZERO’s pipeline and replaces the score by a class-adaptive Tsallis
+entropy. Each states that it inherits the previous setup, which is why we treat the protocol as
+shared rather than as TPT’s. C-TPT 
+(
+Yoon et al., 2024
+)
+ and DiffTPT 
+(
+Feng et al., 2023
+)
+ vary
+calibration and view generation respectively while leaving the scoring input untouched.
+
+Calibration-oriented variants of TPT.
+
+C-TPT 
+(
+Yoon et al., 2024
+)
+, A-TPT 
+(
+Ahamed et al., 2026b
+)
+ and AGI-TPT 
+(
+Anonymous, 2026
+)
+
+inherit TPT’s views, confidence filter and prompt update, and add a regulariser on the
+angular geometry of the class text features so that the averaged prediction is better
+calibrated. AGI-TPT sets its separation target from the number of classes and the feature
+dimension rather than tuning it, and is aimed at the online setting, where the prompt is
+carried across test images and calibration otherwise drifts; M-PFT 
+(
+Ahamed et al., 2026a
+)
+ applies angular-margin regularisation to prompt-tuned
+models more generally, and MVC-Bench 
+(
+Sharifdeen et al., 2026
+)
+ benchmarks calibration of
+medical vision-language models. Their evaluation metric is calibration error of the final
+prediction, not the ranking of individual views, so their results and ours are not on a
+common scale. Because they retain the entropy-based view filter, the audit of
+
+Sec.
+ 
+3
+ applies to the views they select; whether a better-calibrated prompt also
+raises the view-level AUC on reducible errors is an open question we do not test.
+
+Why the second line does not escape the audit.
+
+Methods scoring views on the representation rather than the posterior
+
+(
+Zanella and Ben Ayed, 2024
+; 
+Sheng et al., 2025
+; 
+Zhao et al., 2024
+)
+ are not permutation-invariant functions of the
+sorted probability vector, so 
+Sec.
+ 
+I.8
+’s symmetry argument does not apply to them and
+we do not claim it does. They are nonetheless subject to the same empirical question, and the
+image-feature statistics in 
+Tab.
+ 
+2
+ are our proxy for it: on reducible errors they are
+displaced from chance in the anti-predictive direction on both encoders. We did not run MTA
+itself. Its published comparison is against confidence filtering on the full test population,
+not on reducible errors, so it does not settle the question the audit asks, and we name it as
+the first missing baseline rather than claim our conclusion covers it.
+
+Delineation from ZERO.
+
+ZERO’s Proposition 2.1 establishes that the argmax of 
+ is invariant to the
+marginal-entropy update. That is their result, not ours, and the corresponding row of
+
+Tab.
+ 
+4
+ is a reproduction rather than a contribution. What we add is orthogonal: the
+pairwise gate-times-log-ratio form of 
+Eq.
+ 
+3
+, the three-case dissent criterion of
+
+Eq.
+ 
+4
+, the stage-wise attribution separating selection from aggregation from the
+update, and the audit of the selection signal that both ZERO and its successors retain.
+
+Appendix L 
+Broader impact
+
+This work studies an existing test-time adaptation pipeline and reports where its reliability
+signal fails. The practical recommendations, deleting a backward pass that contributes nothing
+measurable and not treating prediction confidence as a per-view reliability signal, reduce
+compute and discourage a form of unwarranted trust in model confidence, both of which we regard
+as beneficial. The crop-area signal we propose uses no labels and no additional data, and
+records only a geometric parameter the augmentation pipeline already samples, so it introduces
+no new privacy surface. The main risk we can identify is misreading the audit: a score that is
+near chance on reducible errors is not thereby useless overall, and 
+appendix
+ 
+H
+ records
+that we made exactly this error ourselves before the control was run. Deployments that gate
+predictions on confidence should not conclude from this paper that confidence carries no
+information, only that it should not be relied on to identify which view of an image is
+trustworthy.
+

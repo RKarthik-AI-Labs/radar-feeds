@@ -1,0 +1,2310 @@
+Leaderboard Hacking: Preference-Based Model Evaluations are Vulnerable to Manipulation
+https://arxiv.org/abs/2611.14769
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+Leaderboard Hacking: Preference-Based Model Evaluations are Vulnerable to Manipulation
+
+Eve Fleisig    Joachim Baumann   Dylan Hadfield-Menell   Dirk Hovy
+
+Affiliation: 
+UC Berkeley    
+
+Affiliation: 
+Università Bocconi    
+
+Affiliation: 
+Stanford University    
+
+Affiliation: 
+MIT
+
+Abstract
+
+Arena-style rankings of language models are a widely used evaluation framework in online leaderboards, research papers, and model evaluation in production. These rankings aim to realistically assess model performance using pairwise comparisons of anonymous models on user prompts, aggregating votes via the Bradley-Terry model to produce the final ranking. However, we find that these leaderboards are highly vulnerable to several manipulation strategies that unscrupulous providers could use to boost a model’s rank: 
+strategic voting
+ (individual votes that boost a model’s rank, including votes on irrelevant models), 
+strategic prompting
+ (choosing prompts that favor a model), and 
+strategic nomination
+ (boosting the rank of a model by inserting irrelevant models). We demonstrate these effects on public leaderboard data, analyze the circumstances that cause these vulnerabilities, and describe approaches to safeguard against each attack. Notably, these issues hold for any preference-based evaluation using the Bradley-Terry model that allows open prompting, voting, or model submission. These manipulations boost the rank of nearly every tested model; each attack can boost a model by up to 15-20 places in a ranking and, combined, they can boost a model by up to 45 places.
+
+1 
+Introduction
+
+How can we compare the performance of large language models (LLMs)? To address concerns that static benchmarks do not evaluate real-world usage, arena-style evaluations offer a more flexible alternative: users post a prompt of their choice and indicate their preference between two anonymous models’ responses. These pairwise preferences are then aggregated and transformed into rankings on prominent online leaderboards, such as Artificial Analysis (
+artificialanalysis.ai
+), DesignArena (
+designarena.ai
+), and LMArena (
+lmarena.ai
+). However, as these preference-based rankings gain influence—they affect users’ decisions on which model to use, company publicity, funding decisions, and ultimately model developers’ revenue—incentives increase to win these competitions even by unscrupulous means. We consider: how much, and how easily, could a bad actor fraudulently boost a model’s rank?
+
+Most preference-based evaluations transform a set of pairwise preferences into a unified ranking using the Bradley-Terry model, which implicitly reduces to the Borda count 
+[
+1
+]
+, a type of positional voting with known vulnerabilities. Because of this, we hypothesized that known weaknesses of the Borda count also hold for LLM rankings that use Bradley-Terry. We test this hypothesis and indeed find three simple strategies that allow fraudulent actors to boost the rankings of an arbitrary 
+target model
+ 
+.
+
+In 
+strategic voting
+, users change their votes on competitor models to boost 
+’s rank. Because the strength of 
+’s competitors affects 
+’s ranking, even strategic votes on matches that do not involve 
+ can influence the ranking in its favor. In 
+strategic nomination
+, users insert copies of irrelevant models to improve the rank of 
+. By inserting copies of models against which 
+ does particularly well relative to its competitors, this method boosts the target model’s ranking compared to other models. Finally, in 
+strategic prompting
+, users provide prompts that favor 
+, e.g., prompts in a language on which 
+ excels. Because win rates vary widely when splitting the preference data into subsets, 
+’s rank can be boosted by prompting in any definable subcategory where 
+ does well.
+As a corollary, we find that it is surprisingly easy to identify which models are presented, even though anonymity is a cornerstone of these evaluations.
+
+The methods we find for manipulating model rankings are easy to implement, and can be combined to magnify the boosting effect. We describe each method in detail and demonstrate their effects on publicly available data from LMArena. Our contributions are (1) we demonstrate the effect of strategic voting, nomination, and prompting on preference rankings and link to the social choice literature (equivalence to Borda count); (2) we introduce an efficient strategic voting heuristic (that does not require inefficient Elo recomputations); and (3) we propose defenses against each attack.
+
+2 
+Background and Related Work
+
+2.1 
+Preference-based evaluation and its vulnerabilities
+
+The Bradley-Terry model (BT) estimates the relative strength of items based on individual preferences between pairs of items. Let 
+ denote a comparison between candidates 
+ and 
+, and let 
+ denote that 
+ is preferred to 
+: BT assumes that human preferences obey 
+.
+
+The coefficients 
+ serve as scores for the competitors (i.e., models on a leaderboard). 
+Boubdir et al. [2]
+ and 
+Bai et al. [3]
+ discuss using preference-based evaluations for language models. 
+Chiang et al. [4]
+ build on this to rank LLMs from user preferences; they estimate BT scores efficiently using maximum likelihood estimation on logistic regression, which we follow in this work.
+1
+1
+
+1
+
+              
+              
+              
+              
+              
+              
+              
+            On LMArena, these scores are sometimes referred to as Elo scores. The Elo model is a linear scaling of the Bradley-Terry model, but more recent comparisons are weighted more heavily when fitting the model (unlike Bradley-Terry, which weights comparisons equally regardless of when they occurred). However, the current LMArena implementation uses Bradley-Terry scaled to Elo’s scoring range (models are assumed to be static), not Elo; see 
+github.com/lmarena/arena-rank
+.
+
+Singh et al. [5]
+ raise issues regarding the reliability of LMArena’s rankings due to pre-release testing that results in uneven data access for model providers, uneven sampling, and silent model deprecation; they argue that these differences benefit some model providers over others.
+2
+2
+
+2
+
+              
+              
+              
+              
+              
+              
+              
+            The extent of these concerns is debated; see 
+lmarena.ai/blog/our-response
+ In contrast, the evaluation vulnerabilities we discuss here are not limited to any particular leaderboard. Leaderboards designed impartially and in good faith remain vulnerable to the issues we present so long as they rely on the Bradley-Terry model.
+
+Some previous work has explored methods of adversarial attacks on preference-based leaderboards. 
+Zhao et al. [6]
+ and 
+Huang et al. [7]
+ consider strategic voting attacks based on identifying the target model and then voting strategically on examples that involve that model. 
+Min et al. [8]
+ expand this to consider strategic voting on a stream of random votes on pairs 
+ by considering what a target model’s Elo score would be after voting in favor of 
+ or 
+. In concurrent work, 
+Hays et al. [9]
+ explore strategic candidacy restricted to cloning, in which model providers can benefit from submitting copies of the target model itself. 
+Liu et al. [10]
+ pinpoint weaknesses in permitting open-ended prompting for LLM evaluation, since models could be trained to specialize in the skills that are overrepresented in the prompts.
+
+Zhang and Hardt [11]
+ study multi-task benchmarks through social choice theory and show that adding irrelevant models can change aggregate rankings in ordinal benchmarks.
+
+Chen et al. [12]
+ model leaderboard competition as a game in which developers invest in benchmark-specific post-training, and analyze tune-before-test as an intervention on these incentives.
+Relative to this work, our contributions are as follows:
+
+•
+
+We introduce two new attacks, strategic nomination and strategic prompting, based on the ability to submit arbitrary prompts or models on these arenas.
+
+•
+
+We introduce an efficient strategic voting heuristic, with no inefficient Elo recomputation per vote.
+
+•
+
+We explain why strategic voting, nomination, and prompting are effective by linking to the social choice literature (equivalence to Borda count).
+
+•
+
+We show that the new attacks we discuss result in large boosts to many models’ rankings.
+
+•
+
+We propose defenses against each attack.
+
+2.2 
+Parallels to voting vulnerabilities
+
+Siththaranjan et al. [1]
+ found that evaluations using the Bradley-Terry model implicitly optimize for the Borda count, a positional voting rule in which candidates in an election are scored based on how many candidates are ranked below them. In the traditional Borda count formulation, for an election with 
+ candidates, each voter ranks every candidate in order of preferences. The first-place candidate for that voter receives 
+ points; second place 
+, etc. These points are summed across voters, and candidates are ranked in order of points. This is equivalent to ranking candidates in order of the average probability (over voters) that the candidate is preferred to other candidates in the election. 
+Siththaranjan et al. [1]
+ find that any utility function that optimizes for the BT objective implicitly aggregates individual voters’ utilities according to the Borda count.
+However, in the social choice literature, the Borda count is known to be vulnerable to several kinds of strategic manipulation 
+[
+13
+]
+.
+Thus, we hypothesize that 
+preference-based leaderboards that implicitly optimize for the Borda count inherit these weaknesses.
+
+In particular, we hypothesize that one can manipulate these leaderboards to raise a model 
+’s rank relative to a model 
+ using:
+
+Strategic voting.
+ Suppose that 
+ and 
+ are the top two candidates for an election, and supporters of a candidate 
+ wish for it to win over candidate 
+. Under the Borda voting rule, they can use 
+strategic voting
+, in which supporters vote that they prefer a third candidate 
+ in order for 
+ to win (even though they truly believe 
+). In LLM leaderboards, users can raise 
+’s rank over 
+ by strategically voting on comparisons with unrelated models. They can also abstain from votes on pairings that do not involve 
+ even though they do truly have a preference, in order to increase the fraction of their votes involving 
+. In practice, strategic voting requires deanonymizing models in order to vote in favor of 
+.
+
+Strategic nomination.
+ Fraudulent actors can also engage in 
+strategic nomination
+, by introducing a candidate 
+ such that 
+. For voters who initially preferred 
+, their new ranking is 
+, widening 
+’s lead; for voters who initially preferred 
+, their new ranking is 
+, boosting 
+ and 
+ equally. Repeating this process with many candidates 
+ can substantially lower B’s Borda score relative to A. In elections, this is most often discussed in the context of cloning, in which 
+ is very similar to 
+ but slightly worse 
+[
+13
+]
+. Users can add clones 
+ of a model 
+, or copies of unrelated models 
+, in ways that raise model 
+’s rank relative to 
+. If the voters simply want one of the models that resembles 
+ to win, we may also relax the restriction that 
+ be similar to 
+: this means that it is to a faction’s advantage to nominate many similar candidates. More broadly, inserting copies of any model that usually wins over 
+ but loses to 
+ will improve 
+’s rank.
+
+Strategic prompting.
+ Finally, LLMs offer a domain-specific way to raise model 
+’s rank by exploiting the fact that Borda count aggregates over all votes evenly. If voters know that there is a particular definable area in which 
+ excels relative to other models, they can simply choose prompts in that area to explicitly favor 
+ over 
+. This takes advantage of high variance in model win rates between different areas, defined broadly: e.g., different skills (coding vs. writing), or different languages (English vs. Korean vs. Amharic). For example, if model 
+ does very well in Amharic but other models cannot process it, a voter can simply always prompt the model in Amharic.
+
+We can consider strategic prompting as a type of strategic voting specific to language models. Live strategic voting requires deanonymizing models in order to know which model to vote for. Instead, strategic prompting uses subcategory performance as a proxy for model identification: if model 
+ typically performs well on prompts in a subcategory, then in expectation, prompting in that subcategory and always voting for the better model is a strategy that makes it more likely to vote in favor of 
+.
+
+For each of the three attacks, we consider how feasible, likely, and preventable the attack is along three axes:
+
+1.
+
+How many strategic votes, prompts, or inserted models are needed to shift a ranking?
+
+2.
+
+How easy is it to gather the information required (e.g., identify anonymized models, create a suitable model clone, or determine which way to vote strategically)?
+
+3.
+
+How can leaderboard developers secure their evaluations against these attacks?
+
+3 
+Methods
+
+To examine the effects of leaderboard manipulation on real data, we conduct our experiments on a public leaderboard dataset of over 100,000 human preferences from LMArena.
+3
+3
+
+3
+
+            
+            
+            
+            
+            
+            
+            
+          The data is at 
+huggingface.co/datasets/lmarena-ai/arena-human-preference-100k
+ under a CC-BY-4.0 license.
+
+3.1 
+Strategic Voting
+
+We consider two strategic voting attacks: 
+greedy best-vote
+—a computationally expensive method explored in 
+[
+8
+]
+—and 
+heuristic best-vote
+—an efficient heuristic strategy we introduce here. Both strategies leverage Borda count and Bradley-Terry’s dependence on irrelevant alternatives: votes on model pairs that do not involve the model 
+ can nonetheless boost 
+’s rank.
+
+Greedy Best-Vote
+  We consider an attack in which the manipulator votes strategically on a stream of new comparisons between random pairs of models (many of which do not involve 
+). We see that votes on unrelated models do shift 
+’s Elo score, since they shift the scores of 
+’s competitors. For this attack, we run a greedy best-strategic-vote algorithm: given a set of models 
+ that includes a target model 
+ to move up in the rankings, and a stream of 
+ new comparisons to perform between any pair of models 
+, check whether voting for model 
+ or model 
+ results in the best improvement for model 
+.
+4
+4
+
+4
+
+              
+              
+              
+              
+              
+              
+              
+            We initially experimented with allowing ties, but found that voting for one winner was almost always better at shifting model ranks; thus, we restrict the options considered by this strategy to voting for one winner, reducing computational cost.
+ Then, calculate the improvement for 
+ under 
+ strategic votes. For these experiments, we set 
+ to be at most 10K votes (
+10% of votes in the dataset).
+
+Min et al. [8]
+ explore a greedy best-vote strategy in prior work (for each new preference pair, vote for the choice that best improves the target model’s Elo). However, the greedy best-vote strategy is computationally expensive because it recalculates Elo scores after every vote.
+
+Heuristic Best-Vote
+  We introduce a simple efficient heuristic for strategic voting that avoids recomputing Elo scores. Our initial experiments with greedy best-vote found that flipping the winner of a preference is typically optimal for boosting a model’s rank. Based on this, we implement a simple voting rule for a pair 
+, where the voter’s true preference is 
+: If 
+, vote for 
+; if not, vote for the worse model 
+.
+
+Identifying models in order to vote strategically.
+  In practice, strategic voting requires the manipulator to 
+know
+ which pair of models they are voting on. Extensive prior work focuses on detecting LLM-generated text, typically by training classifiers to distinguish human-written from model-generated content or to attribute text to a specific model 
+[
+14
+, 
+15
+, 
+16
+]
+.
+Our setting is much simpler, since the evaluator has full control over the prompt. The simplest identification strategy is to prompt the model to reveal its own identity. However, LMArena filters out responses that include the model name 
+[
+7
+]
+. We therefore consider an approach that is undetectable with output filtering.
+For open-weight models, we use a likelihood-based approach: given a prompt-response pair randomly sampled from the LMArena data,
+3
+ we compute the average token-level log-likelihood of the response for a set of candidate models by measuring the probability assigned to each next answer token conditioned on all previous tokens. Specifically, we run each candidate open-weight model over the observed response in teacher-forcing mode, after applying that model’s own chat template, and compute the average token-level log-probability that the candidate assigns to that exact response. We then identify models based on the highest average log-probability. For proprietary API-based models, where token-level log-probabilities are unavailable, we use an even simpler approach. We generate a single response for a candidate model and score similarity to the observed response using character-level sequence similarity.
+
+3.2 
+Strategic Nomination
+
+In strategic nomination, the objective is to find a model 
+ for which adding copies of 
+ boosts 
+’s ranking. To do so, we (1) identify the model 
+ that best benefits model 
+, and (2) add new copies 
+ whose performance is assumed to be identical to 
+ (thus, its outcomes in battles with existing models are likely the same). Computing the exact solution for which model to add is cheap, since there are only 55 candidate models in our dataset (and about 300 on the current live version of LMArena). For each target model 
+, we find the model 
+ for which adding 
+ copies of model 
+ and its battles results in the best rank improvement for 
+; then, we add 
+ copies of model 
+ and recompute model 
+’s rank. For these experiments, we set 
+ at 
+10 copies.
+
+3.3 
+Strategic Prompting
+
+We consider how to manipulate votes simply by restricting prompts to a subset on which model 
+ outperforms other models. As proof-of-concept, we use language to define our prompt subsets, for several reasons: the language of the prompt is readily available categorical data in the LMArena dataset, it is easy for a manipulator to restrict their prompts to that subset, and it is easy to create new prompts within any given subset by simply prompting in that language. However, we note that any easy-to-define split under which 
+ performs well relative to other models would work here (e.g., performance on specialized domains); see Appendix 
+G
+ for an example.
+
+For this attack, we first split the data into prompt subsets (in our case, different languages). We identify the language in which model 
+ is ranked highest relative to the other models
+5
+5
+
+5
+
+              
+              
+              
+              
+              
+              
+              
+            We restrict to languages with at least 20 battles.
+ and insert 
+ random battles with known results in that language (i.e., copies of existing battles). For these experiments, we set 
+ to be at most 10K votes (approximately 10% of votes in the dataset). As a side effect, we note that strategic prompting also poisons later evaluations that use the prompt set: e.g., if prompts from an arena are later used for offline evaluation of new models, but strategic prompting in favor of a model 
+ was used on evaluations on the arena, then those later evaluations will also favor models similar to 
+.
+
+4 
+Results
+
+4.1 
+Strategic Voting
+
+Figure 1
+: 
+
+Top:
+ Highest model rank (dark bars) and Elo (light bars) achieved under 
+greedy
+ strategic voting, capped at 10K votes (
+ of total votes). Numbers above bars indicate the best absolute rank that a model achieves. Models are boosted up to 20 places in the rankings; 23 models (42% of the dataset) move over 10 places up, and eight models move into the top 5. 
+Bottom:
+ Highest model rank & Elo achieved under 
+heuristic
+ strategic voting, under same conditions. Models are boosted up to 15 places in the rankings; 21 models (38% of the dataset) move over 10 places up, and 15 models move into the top 5.
+
+Strategic Voting (Greedy Strategy)
+  Adding strategic votes substantially boosts target models’ ranks (Figure 
+1
+, top). We find that 
+models are boosted up to 20 places
+ in the ranking using this method, and that every tested model below 2nd place can move up at least one place. Boosting a model higher in the rankings requires more votes (Figure 
+6
+), and models close to the very top of the leaderboard (2nd-4th place) are harder to move than models further down, in part because they have participated in more battles. However, 23 models (42% of the dataset) move over ten places upwards using this method, and rankings near the top of the leaderboard are still swayed relatively easily: 11 models can move into the top 10 places, and eight models can move into the top 5 places.
+
+Strategic Voting (Heuristic)
+  The strategic voting heuristic also substantially boosts target models’ ranks (Figure 
+1
+, bottom). Models are 
+boosted up to 15 places
+, and 21 models move over ten places upward. This method is particularly effective for models high up in the ranking, moving fifteen models into the top 5 places. This suggests that, while the greedy voting strategy results in the largest boost for the most models, the heuristic strategy results in larger boosts for models near the top of the rankings, at a far lower computational cost.
+
+Figure 
+6
+ (Appendix 
+C
+) compares the number of votes needed under each strategy to boost a model’s rank. Small improvements to rank (2-3 places) are relatively easy to achieve, requiring under 2% of total votes (2K out of 100K total) to be manipulated and achievable by a relatively large subset of models. Larger improvements (15+ places) are achievable by a smaller subset of models with more manipulated votes. We find that while the maximum rank boost achieved across models is higher for the greedy strategy, more models are able to achieve smaller boosts under the heuristic strategy (and typically with fewer votes). We also find that, in practice, 
+the identification methods for open-weight and proprietary models suffice for heuristic strategic voting
+ (Appendix 
+D
+).
+Likelihood-based attribution identifies open-weight models with high precision (
+), and similarity-based scoring for API-access models performs above chance (
+40-50%).
+
+4.2 
+Strategic Nomination
+
+Strategic nomination 
+boosts model ranks by up to 15 places
+ (Figure 
+2
+), though boosts are typically more moderate (1-7 places). Curiously, the effect of strategic nominations varies widely by model; for example, the 19th place model jumps to 4th place, whereas other models with similar rankings display more moderate effects. We examine these factors in more detail in Section 
+4.5
+.
+
+Figure 2
+: 
+
+Change in model rank and Elo achieved when adding strategic nominations (10 copies of the most favorable model). Change in rank is the left-hand bar of each double-bar; change in Elo is the right-hand (lighter) bar. Numbers above bars indicate the best absolute rank achieved by the model (1=best). For example, the model originally in 19th place (light blue) jumps 15 places to 4th place.
+
+Nomination effects in existing leaderboards.
+ 
+We examine whether these effects might already affect existing leaderboards by examining a counterfactual (Figures 
+7
+ and 
+8
+, Appendix 
+C
+): what would a model’s rank be if a particular family of models were included or excluded? A more stable ranking would be immune to irrelevant alternatives, i.e., in a set of models 
+, 
+’s rank relative to 
+ should not depend on whether 
+ is included. For each model 
+, we find the family 
+ of models whose removal increases 
+’s rank the most, and the family that decreases 
+’s rank the most. We also calculate 
+’s rank in the full (original) dataset, skipping members of family 
+ for its ranking. We compare each model 
+’s rank among 
+ when family 
+ is excluded from the Elo calculation, versus its rank among 
+ when family 
+ is included. We thus measure whether the ranking among a set of models is affected by the inclusion of unrelated models.
+
+We find that 
+including a model family 
+ can shift a model’s rank among 
+ up to 1-4 places in a desired direction (up or down)
+. Claude models tend to have the strongest effect on model ranks, causing the most movement downwards for 12 models and upwards for 10: this is likely because the strongest Claude model participates in more battles than any other model (14,000, compared to 10,000 for the model with the second-most battles). Several models are also boosted by the inclusion of models from their own family: the inclusion of other Gemma models moves 
+gemma-2-9b-it-simpo
+ up two places, and the inclusion of other Claude models moves Claude 3 Sonnet up two places as well. Since each model family covers many battles, we compare with removing the same number of random battles and find that random removals can account for some but not all of this variation; boosts from the presence of the ChatGPT, LLaMA, and Command-R families are beyond what random removals can achieve. Furthermore, 
+42% of models among 
+ are boosted up one or more places in the ranking due to a single model
+. For each removed model, we compare with the movement achievable by removing an equivalent number of random battles over 5 trials and find that for 38% of models, a model’s inclusion or removal results in a higher boost than random removal can achieve. Claude 3.5 Sonnet, the model involved in the most battles, has the strongest effects: it moves six models up 1-3 ranks when it is included compared to when it is excluded.
+
+4.3 
+Strategic Prompting
+
+Strategic prompting boosts model ranks almost as effectively as strategic voting: models move up to 15 places upward in the rankings, including moving several models up to the top 5 models (Figure 
+3
+). For example, 
+reka-core-20240501
+ moves from 33rd place to 18th place by prompting in Hungarian, 
+llama-3.1-8b-instruct
+ moves from 38th place to 23rd place by prompting in Croatian; and 
+phi-3-medium-4k-instruct
+ moves from 46th place to 32nd place by prompting in Scots. This method is particularly effective with small numbers of prompts, moving model ranks with as few as 500 strategic prompts added (Figure 
+9
+, Appendix 
+C
+).
+
+Figure 3
+: 
+
+Change in model rank and Elo achieved by adding strategic prompts, capped at 10K prompts (
+ of total battles). Models are boosted up to 15 places in the ranking.
+
+In principle, leaderboard developers could spot and filter out unusual clusters of prompts in a language. However, the use of “language” as the axis for strategic prompting is arbitrary. This strategy works for any definable subcategories, meaning it is easy to pick subcategories that are harder to spot. As a demonstration (Appendix 
+G
+), we repeated the prompt experiments with prompts split into subcategories based on whether they involve complexity, creativity, domain knowledge, and/or math.
+6
+6
+
+6
+
+              
+              
+              
+              
+              
+              
+              
+            These are preexisting LMArena labels, defined by having a model classify whether a prompt has each of these traits.
+ Under this version of strategic prompting, we see rank boosts of up to 14 places, comparable to those from strategic prompting using language for prompt subcategories.
+
+4.4 
+Combined Nomination and Prompt Attacks
+
+We examine the effects of combining strategic nomination and prompting (Figure 
+4
+). To combine the attacks, for each model, we follow the strategic nomination strategy to add copies of the most favorable model; then, we run the strategic prompting algorithm on the dataset with those model copies added. We find that 
+models are boosted up to 45 places in the ranking
+, with 9 models moving over 10 places upwards.
+
+Figure 4
+: 
+
+Change in rank and Elo when performing strategic nominations followed by strategic prompting. Models are boosted up to 45 places in the rankings, with 9 models moving over 10 places upwards.
+
+4.5 
+Factors Contributing to Ease of Manipulation
+
+The results across strategic voting, nomination, and prompting indicate that 
+some models are much easier to move than others
+. For example, whereas a few models only move 1-2 ranks under all strategies, 
+dbrx-instruct-preview
+ moves from 49th to 39th place with strategic nominations; 
+command-r
+ moves from 41st to 21st place under strategic voting; and 
+reka-core-20240501
+ moves from 33rd to 18th place under strategic prompting.
+
+We run regressions to understand what factors make it easier to manipulate a model’s rank (Appendix 
+E
+). The factors we consider are 
+’s variance in win rate against different models; 
+’s starting rank and Elo; the number of models in 
+’s model family; 
+’s win rate, gap in Elo, and total battles against the model one rank higher; the number of battles in 
+’s best language for strategic prompting, and 
+’s number of total battles and percent of tied battles. To capture if the model could easily swap places with a model close above it, we define the “Elo density” as the number of models with Elo 0-50 points higher than 
+. For strategic voting (
+=0.660), the top feature is Elo density, followed by win rate variance. For strategic prompting (
+=0.518), the top features are the number of battles in the best prompting language and the gap in Elo score vs. the model one rank higher. For strategic nomination (
+=0.557), the top features are Elo density and gap in Elo score vs. the model one rank higher. These features suggest that models placed below a cluster of models with slightly higher Elo scores are easier to shift in the rankings, since smaller changes in Elo result in larger changes in model rank.
+
+5 
+Attack Feasibility
+
+Table 1
+: 
+Comparison of attack strategies and their properties.
+
+Voting (greedy)
+ 
+also see 
+[
+8
+]
+
+Voting (heuristic)
+
+Prompting
+
+Nomination
+
+Prompting + nomination
+
+Max rank boost
+
+20 places 
+
+15 places 
+
+15 places 
+
+15 places 
+
+45 places 
+
+Must identify models?
+
+All models
+
+Only target model 
+
+–
+
+–
+
+–
+
+Cost of Elo calculations
+ (
+ models, 
+ votes;  
+)
+
+; depends on desired # of prompt subsets
+
+Possible       defenses
+
+Block bots & prompting w/o voting
+
+Block bots & prompting w/o voting
+
+Stratify/cluster prompts
+
+Harmonic Borda count
+
+Harmonic Borda count
+
+Stratify/cluster prompts
+
+All attacks we describe are highly feasible
+, as shown in Table 
+1
+. First, identifying the best way to boost a target model 
+ is computationally cheap.
+Strategic nomination for a target model requires iterating once over a set of candidate models (55 in our dataset; 300 on the live version of LMArena). Strategic prompting requires iterating over a set of candidate subsets (
+40 languages in our dataset; easy to restrict to the top 
+ languages on live data). Optimally computing which model to nominate or language to prompt in is a one-time computation per model; computing it for all 55 models in this dataset takes less than 5 minutes on one CPU. Greedy strategic voting on a random stream is more expensive (for each vote, the change in Elo if one model or the other were selected must be calculated), but using the heuristic strategy is much cheaper and the cost per vote does not depend on the number of models or battles in the dataset. In addition, as we have shown, identifying the models in an anonymized battle is relatively straightforward via multiple methods.
+
+How do the manipulations scale as dataset size increases?
+ We expect our manipulation effects to be feasible for LMArena’s leaderboards that are similar in number of votes (
+100K) to our dataset (e.g., code and search). However, LMArena’s text leaderboard has 
+5 million votes; we expect that a higher absolute number of manipulated votes/prompts/nominations would be necessary to change the text rankings (limitations discussed further in Section 
+Limitations
+). Our scaling experiments in Appendix 
+F
+ show that the number of manipulations needed to boost a model 
+scales roughly linearly
+ with dataset size.
+Though larger arenas are more secure, there is no exponential advantage to a larger leaderboard.
+
+6 
+Leaderboard Defenses
+
+While leaderboards currently implement some mitigations against strategic voting, such as bot detection 
+[
+7
+]
+, we do not know of any protections against strategic nomination (in which the attack is carried out by those submitting unrelated models) or strategic prompting (in which users’ votes indeed align with their "true" preferences, but the prompts are skewed to favor the target model). We also find that properties of how the leaderboards are currently designed (e.g., ease of prompting to deanonymize models; ability to abstain from voting) facilitate the attacks we describe. Bearing in mind the potential impacts of studying leaderboard attacks (Section 
+Limitations
+), we discuss operational and algorithmic defenses to protect against each attack we demonstrate:
+
+6.1 
+Strategic nomination defenses.
+
+Unlike strategic voting, strategic nomination involves manipulation by those submitting models to the leaderboard rather than those evaluating them. A simple defense against this method is to prevent the submission of many similar models at once. A more robust defense to both strategic voting and strategic nomination is to change the aggregation function of the Bradley-Terry model to put less weight on a voter 
+’s preferences among models that 
+ ranks poorly overall.
+
+Harmonic Bradley-Terry objective.
+
+We propose a defense that draws on a solution to the parallel problem in the social choice literature: whereas the Borda count (equivalent to the Bradley-Terry objective) gives 
+ points to the model at rank 
+ in a list of length 
+ (+1 point for each step it goes up in a voter’s ranking), we can instead use the Dowdall or 
+harmonic
+ Borda count, which gives 
+ points to the model at rank 
+. In real election settings, this change hampers strategic voting and makes strategic nomination require enough new nominations as to be broadly infeasible.
+7
+7
+
+7
+
+                
+                
+                
+                
+                
+                
+                
+              The government of Kiribati uses classic Borda count for some elections; Nauru uses the harmonic Dowdall variant. 
+Reilly [17]
+ finds that strategic voting and nomination are both documented (and effective) in Kiribati, but he and 
+Fraenkel and Grofman [18]
+ find that while the same strategies are used in Nauru, they seem far less effective than under classic Borda count.
+ We propose a BT-compatible implementation of harmonic Borda and find it reduces strategic nomination’s effect on boosting Elo scores.
+
+We rank the models based on their head-to-head win rate. Let 
+ be the rank of model 
+ in this ranking. We assign the weights 
+, which adds more weight to wins by models that perform well. We interpolate between the standard BT objective (all weights are 1) and the harmonic one using 
+. At 
+, every battle gets weight 1 (recovering standard BT); at 
+, battles are weighted only by the harmonic weight. This permits smooth tuning between the standard and harmonic BT objectives. We then reweight the matrix of pairwise wins by 
+ and aggregate using the standard BT objective (details in Appendix 
+A
+).
+
+The harmonically-reweighted BT 
+reduces extreme boosts from strategic nomination
+: whereas standard Borda count permits a maximum change in rank of 15 places, the harmonic variant reduces this to just 8 places (Figure 
+5
+). However, the mean possible boost increases slightly (2.74 -> 2.81 places), indicating that small boosts to model rank across the board remain possible. Studying the effects of the harmonic Borda count on other electoral manipulation strategies in this setting, as well as its tradeoffs for leaderboards overall, remain important areas for future work.
+
+6.2 
+Strategic voting and strategic prompting defenses.
+
+The ease of identifying models facilitates strategic voting. Since models are still readily identifiable through likelihood-based attribution, one defense is to check for voters who exhibit suspicious behavior, e.g. votes that always make one model’s ranking improve on the leaderboard, since a true stream of votes on unrelated models should have mixed effects. This might require voters to be logged in and verified, to prevent rapid, anonymous manipulated votes from a single voter. Strategic voting would then be hampered because it would require many voters to coordinate. Finally, strategic voting is easiest when attackers need only vote on comparisons that involve the target model, which makes the strategic votes have a more concentrated effect. Thus, leaderboards should prevent users from viewing many comparisons without voting on them.
+Strategic voting still remains difficult to detect if spread across a user group or if a user only manipulates some of their votes.
+
+Strategic prompting allows individual votes to correctly align with broader preferences on that comparison, but shifts the prompt distribution so more prompts favorable to a particular model come up. When comparisons are clustered, model results become skewed. Approaches to address this could involve stratifying or clustering prompts and then weighting these groupings evenly so that overall performance is not unduly influenced by any single grouping (e.g., prompt language). As a theoretical contribution in Appendix 
+B
+, we propose a modified version of Bradley-Terry that replaces individual scores with kernel-smoothed scores to make it more difficult to use clusters of comparisons to manipulate model rankings.
+
+7 
+Conclusion
+
+As model evaluations become targets for highly incentivized actors, such as model providers who benefit from improving their models’ perceived performance, the likelihood and potential impact of ranking manipulations increases. We drew upon known weaknesses of the Borda count in social choice, which translates to the Bradley-Terry model used in most LLM leaderboards, and tested the equivalents of strategic voting, strategic nomination, and strategic prompting on LMArena data. We found that preference-based model rankings are vulnerable to all three attacks. Concerningly, these effects can move models substantially in the rankings and are relatively simple, cheap, and fast to compute and implement. We discussed defenses for each manipulation technique, including interface changes and variants of current aggregation techniques. Our findings highlight the need to secure widely used leaderboards against such attacks to ensure trust in preference-based model rankings.
+
+Limitations
+
+The dataset we work with is smaller than the full LMArena rankings (though comparable to several of the domain-specific leaderboards). We expect that larger numbers of absolute manipulations would be necessary to move models on larger leaderboards. In addition, strategic voting in practice may be hampered if model identification is difficult; our main results assume the models can be identified. We also note that, for ethical reasons, we have not tried to move models on the live rankings themselves. Red-teaming for the effects of these sorts of manipulations on live rankings, and for effects on larger leaderboards, remain important areas for future work.
+
+Impact Statement
+ 
+Research on potential methods for leaderboard “hacking” raises the concern that bad actors could use these methods in order to manipulate their model results. To mitigate this, we discuss defenses to each of these methods. Our goal is that, in making these simple methods widely known (rather than waiting for bad-faith actors to use them privately), this work raises awareness of the need to defend against manipulated evaluations.
+
+Acknowledgments
+
+Many thanks to the members of the MilaNLP and Berkeley NLP groups for many helpful conversations, and to Chris Hays and Anastasios Angelopoulos for their generous and thoughtful insights. This work was partly supported by an NSF GRFP grant and the SNSF grant 235328.
+
+References
+
+[1]
+
+A. Siththaranjan, C. Laidlaw, and D. Hadfield-Menell
+ (2024)
+
+Distributional preference learning: understanding and accounting for hidden context in rlhf
+.
+
+In 
+The Twelfth International Conference on Learning Representations
+,
+
+Cited by: 
+§1
+,
+
+§2.2
+.
+
+[2]
+
+M. Boubdir, E. Kim, B. Ermis, S. Hooker, and M. Fadaee
+ (2024)
+
+Elo uncovered: robustness and best practices in language model evaluation
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+Vol. 
+37
+, 
+pp. 106135–106161
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2.1
+.
+
+[3]
+
+Y. Bai, A. Jones, K. Ndousse, A. Askell, A. Chen, N. DasSarma, D. Drain, S. Fort, D. Ganguli, T. Henighan, N. Joseph, S. Kadavath, J. Kernion, T. Conerly, S. El-Showk, N. Elhage, Z. Hatfield-Dodds, D. Hernandez, T. Hume, S. Johnston, S. Kravec, L. Lovitt, N. Nanda, C. Olsson, D. Amodei, T. Brown, J. Clark, S. McCandlish, C. Olah, B. Mann, and J. Kaplan
+ (2022)
+
+Training a helpful and harmless assistant with reinforcement learning from human feedback
+.
+
+External Links: 
+2204.05862
+,
+
+Link
+
+Cited by: 
+§2.1
+.
+
+[4]
+
+W. Chiang, L. Zheng, Y. Sheng, A. N. Angelopoulos, T. Li, D. Li, B. Zhu, H. Zhang, M. I. Jordan, J. E. Gonzalez, and I. Stoica
+ (2024)
+
+Chatbot arena: an open platform for evaluating llms by human preference
+.
+
+In 
+Proceedings of the 41st International Conference on Machine Learning
+,
+
+ICML’24
+.
+
+Cited by: 
+§2.1
+.
+
+[5]
+
+S. Singh, Y. Nan, A. Wang, D. Dsouza, S. Kapoor, A. Üstün, S. Koyejo, Y. Deng, S. Longpre, N. Smith, B. Ermis, M. Fadaee, and S. Hooker
+ (2025)
+
+The leaderboard illusion
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+Vol. 
+38, Main Conference
+, 
+pp. 
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2.1
+.
+
+[6]
+
+W. Zhao, A. M. Rush, and T. Goyal
+ (2025)
+
+Challenges in trustworthy human evaluation of chatbots
+.
+
+In 
+Findings of the Association for Computational Linguistics: NAACL 2025
+,
+
+pp. 3359–3365
+.
+
+Cited by: 
+§2.1
+.
+
+[7]
+
+Y. Huang, M. Nasr, A. Angelopoulos, N. Carlini, W. Chiang, C. A. Choquette-Choo, D. Ippolito, M. Jagielski, K. Lee, K. Z. Liu, 
+et al.
+ (2025)
+
+Exploring and mitigating adversarial manipulation of voting-based leaderboards
+.
+
+arXiv preprint arXiv:2501.07493
+.
+
+Cited by: 
+§2.1
+,
+
+§3.1
+,
+
+§6
+.
+
+[8]
+
+R. Min, T. Pang, C. Du, Q. Liu, M. Cheng, and M. Lin
+ (2025)
+
+Improving your model ranking on chatbot arena by vote rigging
+.
+
+In 
+Forty-second International Conference on Machine Learning
+,
+
+External Links: 
+Link
+
+Cited by: 
+§2.1
+,
+
+§3.1
+,
+
+§3.1
+,
+
+Table 1
+.
+
+[9]
+
+C. Hays, R. Li, B. Flanigan, and M. Raghavan
+ (2026)
+
+Strategic candidacy in generative AI arenas
+.
+
+In 
+Forty-third International Conference on Machine Learning
+,
+
+External Links: 
+Link
+
+Cited by: 
+§2.1
+.
+
+[10]
+
+S. Liu, I. Gemp, L. Marris, G. Piliouras, N. Heess, and M. Lanctot
+ (2025)
+
+Re-evaluating open-ended evaluation of large language models
+.
+
+In 
+The Thirteenth International Conference on Learning Representations
+,
+
+External Links: 
+Link
+
+Cited by: 
+§2.1
+.
+
+[11]
+
+G. Zhang and M. Hardt
+ (2024)
+
+Inherent trade-offs between diversity and stability in multi-task benchmarks
+.
+
+In 
+Proceedings of the 41st International Conference on Machine Learning
+,
+
+Proceedings of Machine Learning Research
+, Vol. 
+235
+, 
+pp. 58984–59002
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2.1
+.
+
+[12]
+
+Y. Chen, G. Zhang, and M. Hardt
+ (2026)
+
+Leaderboard incentives: model rankings under strategic post-training
+.
+
+In 
+Forty-third International Conference on Machine Learning
+,
+
+External Links: 
+Link
+
+Cited by: 
+§2.1
+.
+
+[13]
+
+F. Brandt, V. Conitzer, U. Endriss, J. Lang, and A. D. Procaccia
+ (2016)
+
+Handbook of computational social choice
+.
+
+ 
+Cambridge University Press
+.
+
+Cited by: 
+§2.2
+,
+
+§2.2
+.
+
+[14]
+
+A. Uchendu, T. Le, K. Shu, and D. Lee
+ (2020)
+
+Authorship attribution for neural text generation
+.
+
+In 
+Proceedings of the 2020 Conference on Empirical Methods in Natural Language Processing (EMNLP)
+,
+
+Online
+, 
+pp. 8384–8395
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§3.1
+.
+
+[15]
+
+V. Verma, E. Fleisig, N. Tomlin, and D. Klein
+ (2024)
+
+Ghostbuster: detecting text ghostwritten by large language models
+.
+
+In 
+Proceedings of the 2024 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies (Volume 1: Long Papers)
+,
+
+Mexico City, Mexico
+, 
+pp. 1702–1717
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§3.1
+.
+
+[16]
+
+V. S. Sadasivan, A. Kumar, S. Balasubramanian, W. Wang, and S. Feizi
+ (2025)
+
+Can AI-generated text be reliably detected? stress testing AI text detectors under various attacks
+.
+
+Transactions on Machine Learning Research
+.
+
+External Links: 
+ISSN 2835-8856
+,
+
+Link
+
+Cited by: 
+§3.1
+.
+
+[17]
+
+B. Reilly
+ (2002)
+
+Social choice in the south seas: electoral innovation and the borda count in the pacific island countries
+.
+
+International Political Science Review
+ 
+23
+ (
+4
+), 
+pp. 355–372
+.
+
+External Links: 
+Document
+,
+
+Link
+,
+
+https://doi.org/10.1177/0192512102023004002
+
+Cited by: 
+footnote 7
+.
+
+[18]
+
+J. Fraenkel and B. Grofman
+ (2014)
+
+The borda count and its real-world alternatives: comparing scoring rules in nauru and slovenia
+.
+
+Australian Journal of Political Science
+ 
+49
+ (
+2
+), 
+pp. 186–205
+.
+
+External Links: 
+Document
+
+Cited by: 
+footnote 7
+.
+
+Appendix A 
+Harmonic Bradley-Terry Experiments
+
+Figure 5
+: 
+
+Boost in rank achievable under strategic nomination when using the standard Borda count (blue) vs. the harmonically weighted Borda count (orange). The harmonic version reduces the maximum boost from 15 places to 8 places.
+
+We propose an implementation of a harmonically-weighted Borda count that maintains compatibility with the Bradley-Terry objective. The Borda count gives 
+ points to the model at rank 
+ in a list of length 
+ (+1 point for each model it beats in a voter’s ranking). The Dowdall or 
+harmonic
+ Borda count instead gives 
+ points to the model at each voter’s rank 
+.
+
+For the harmonic Borda count, we first compute a ranking of models based on the number of models that they beat head-to-head, then assign a weight 
+ to each model at rank 
+ in this ranking.
+We interpolate between the standard BT objective (all weights are 1) and the harmonic one using 
+. We experiment with 
+. Since switching to harmonic Borda count also changes the original rankings, we measure the extent to which harmonic Borda count modifies the original ranking using the Kendall-Tau distance. We find that 
+ gives the best tradeoff of minimizing extreme boosts and distance from the original ranking (Table 
+2
+).
+
+Mean best boost
+
+Max boost
+
+Kendall 
+ with regular BT
+
+0
+
+2.74
+
+15
+
+1
+
+0.25
+
+2.74
+
+14
+
+0.993
+
+0.50
+
+2.63
+
+10
+
+0.974
+
+0.75
+
+2.81
+
+8
+
+0.946
+
+1.00
+
+4.39
+
+12
+
+0.852
+
+Table 2
+: 
+Effect of harmonic Borda count on the highest boosts that strategic nomination can achieve (mean highest boost per model, and highest boost across models), as well as Kendall 
+ distance from original ranking, at different 
+ weightings.
+
+In a variant of this method, we can interpret the harmonic Borda to use the ranking for 
+voter sets
+ instead of individual voters. This is a closer equivalence to the harmonic Borda count for Bradley-Terry, but introduces additional challenges: the definition of harmonic Borda hinges on the notion of a complete ranking of all candidates for each voter (so that models can be reweighted based on their rank in that voter’s ballot). But typical preference learning datasets do not contain a complete ranking per voter. Instead, we interpret the harmonic Borda to use the ranking for 
+voter sets
+ instead of individual voters.
+
+In this version, we require voter sets to be large enough to contain preferences involving all models in the dataset. Each voter set, consisting of the union of voters’ preferences as edges, must be a connected comparison graph. We partition the judges into clusters that maximize the number of clusters while keeping the comparison graphs connected. We require voter sets to be large enough to contain preferences involving all models in the dataset. That is: for a set of models 
+ and preferences 
+, each voter defines a comparison graph with models as the vertices and the voter’s preferences as the edges. Each voter set, consisting of the union of voters’ edges, must be a connected comparison graph with vertices 
+. We partition the judges into clusters that maximize the number of clusters while keeping the comparison graphs connected. If the number of clusters is set to 1, this variant reduces to the harmonic Borda count version we discussed in Section 
+6.1
+.
+
+In practice, we found that larger numbers of clusters–closer to the notion of reranking based on a harmonic reweighting of individual voters’ rankings–tend to result in more unstable rankings because each cluster contains fewer datapoints. However, this strategy may be more feasible on larger datasets, a potential area for future work.
+
+Appendix B 
+Density-smoothed Bradley–Terry / Elo for LM-arena-style model rankings
+
+We describe a simple modification of standard Bradley–Terry (BT) / Elo fitting for pairwise preference data.
+The modification replaces point scores with kernel-smoothed (KDE-like) “regional mass” scores.
+The intent is to make repeated or highly clustered comparisons produce diminishing returns by coupling similar prompt–response instances through a similarity kernel.
+
+We focus on model-level Elo parameters (one scalar per model), using LM-arena / LMR-style data: each comparison is between two model responses to a prompt.
+
+B.1 
+Standard Bradley–Terry / Elo (model-level)
+
+Data and notation.
+
+A dataset 
+ consists of 
+ pairwise comparisons.
+Each comparison 
+ has:
+
+•
+
+prompt 
+,
+
+•
+
+model 
+ producing response 
+,
+
+•
+
+model 
+ producing response 
+,
+
+•
+
+label 
+, where 
+ means 
+ is preferred to 
+.
+
+We write the row as 
+.
+
+In model-level Elo/BT, the learned parameter is one scalar per model:
+
+Define the positive model strength
+
+Choice model.
+
+Standard Bradley–Terry assumes the probability that 
+ beats 
+ depends only on the two models:
+
+(1)
+
+(2)
+
+where 
+ is the logistic function.
+
+Objective.
+
+The standard regularized negative log-likelihood is
+
+(3)
+
+(4)
+
+The fitted 
+ values are then reported (after an affine rescaling) as Elo.
+
+Why repetition has linear leverage.
+
+In standard BT/Elo, each match depends only on 
+.
+Repeating the same comparison adds the same loss term again; influence is essentially linear in the amount of repetition (until regularization or finite-data effects dominate).
+
+B.2 
+Density-smoothed (kernel) Bradley–Terry / Elo
+
+Key change: “items” are prompt–response instances.
+
+Define the two 
+items
+ compared in row 
+ as the prompt–response pairs
+
+Let 
+ be the set of all unique items 
+ that appear in the dataset, and let 
+.
+Each item 
+ is produced by some model 
+.
+
+Kernel on embeddings.
+
+Define a similarity kernel between items
+
+where 
+ and 
+ are prompt–response pairs.
+Intuitively, 
+ is large when two prompt–response pairs are similar (e.g., same/similar prompt and similar response) and small otherwise.
+Practically, 
+ would be computed from embeddings of prompts/responses or a joint (prompt+response) embedding.
+
+Kernel-smoothed (regional mass) score.
+
+Define the kernel-smoothed score (regional mass) for item 
+ as
+
+(5)
+
+Here 
+ is the multiset of items as they appear in the dataset: if an item 
+ appears multiple times across comparisons (on either side), it appears multiple times in the sum.
+
+BT probability, but using smoothed scores.
+
+For comparison 
+, we have
+
+(6)
+
+This has the same algebraic form as BT, but the scores are kernel-smoothed sums over (prompt, response) instances in the dataset.
+
+Objective.
+
+Use the same Bernoulli log-loss form:
+
+(7)
+
+(8)
+
+(9)
+
+Qualitative difference from standard BT.
+
+In standard BT, each match uses 
+ directly.
+In kernel-smoothed BT, each match uses KDE-like regional masses that sum model scores over 
+similar
+ prompt–response items across the dataset.
+Therefore, adding (or repeating) a comparison changes the loss by adding another term, but also changes the 
+scores used by other terms
+ via the kernel sums.
+Evidence tends to accumulate at the level of regions of similarity, rather than enabling arbitrarily large separation among near-duplicate items within the same region.
+
+Implementation simplification for per-model 
+.
+
+Because 
+ depends only on the model identity of 
+, each smoothed score is a fixed linear combination of 
+:
+
+Define weights
+
+(10)
+
+Then for item 
+,
+
+(11)
+
+We note that, as a limitation, computing 
+ may be expensive. However, once 
+ is computed, evaluating a single match probability only requires two dot products with 
+:
+
+Thus, after precomputing 
+, SGD-style optimization looks very similar to standard BT/Elo: each (mini)batch only requires the rows of 
+ corresponding to the items in that batch.
+
+B.3 
+Simple limiting behavior and intuition
+
+Duplicates of a single comparison (same prompt, same responses).
+
+Suppose we repeatedly add copies of one labeled comparison 
+.
+In standard BT, this adds repeated identical terms and pushes 
+ upward roughly in proportion to repetition (until regularized).
+
+In kernel-smoothed BT, repeating the comparison increases the regional mass around both 
+ and 
+ (and around nearby items) because both sides appear in the kernel sums.
+This yields diminishing returns: additional duplicates also increase the denominator of related comparisons through the KDE. This counteracts the incentive to increase the model score, since increases will also push nearby comparisons closer together.
+
+Duplicates concentrated on a single model.
+
+An “attack” that makes one model appear and win many times is essentially linear in standard BT: more wins leads to more score movement.
+In the kernel-smoothed objective, concentrated wins inflate local regional mass in the neighborhoods where those wins occur.
+If the wins are highly clustered (same prompt type or response style), the marginal gain in moving 
+ diminishes.
+Large global movement requires that the wins be spread across diverse regions of the prompt–response space.
+
+Duplicates concentrated in a single language.
+
+If the kernel uses prompt similarity (or prompt+response embeddings), then a single language will typically form a coherent region in embedding space.
+This means that a large number of comparisons in a single language will dilute the effect, because there will also be a large contribution from that model to the denominator.
+
+Appendix C 
+Results: Supporting Details
+
+Figure 
+6
+ tracks the number of votes needed to move a model up a certain number of places in the rankings under greedy vs. heuristic voting strategies.
+
+Figure 6
+: 
+
+Number of votes under the 
+greedy strategy (top)
+ and 
+heuristic strategy (bottom)
+ needed to achieve greater improvements in leaderboard rank. Point labels indicate the number of models that can achieve that rank improvement with under 10K strategic votes. Small improvements to rank (2-3 places) are relatively easy to achieve, requiring under 2% of total votes (2K of 100K total) to be manipulated and achievable by a relatively large subset of models. Larger improvements (15+ places) are achievable by a smaller subset of models with more manipulated votes. While the maximum rank boost achieved is higher for the greedy strategy, more models are able to achieve smaller boosts under the heuristic strategy (and typically with fewer votes).
+
+Figures 
+7
+ and 
+8
+ indicate the boost achieved in a model’s rank by adding the model family that favors it most. Inclusion of the most favorable family can move models 1-4 places upward, if desired, or 1-4 places downward.
+
+Figure 7
+: 
+
+Counterfactual of model ranks with and without the family 
+ of models that moves the target model furthest 
+up
+ when included. We plot each model’s rank when family 
+ is excluded from the Elo calculation, versus its rank (among models not in 
+) when family 
+ is included in the Elo dataset, i.e., the original dataset.
+
+Figure 8
+: 
+
+Counterfactual of model ranks with and without the family 
+ of models that moves the target model furthest 
+down
+ when included. We plot each model’s rank when family 
+ is excluded from the Elo calculation, versus its rank (among models not in 
+) when family 
+ is included in the Elo dataset, i.e., the original dataset.
+
+Figure 
+9
+ indicates the number of strategic prompts needed to achieve different changes in model rank.
+
+Figure 9
+: 
+
+Average rank change achieved as more strategic prompts are added.
+
+Appendix D 
+Live model identification
+
+We evaluate live model identification on the 
+lmarena-ai/arena-human-preference-100k
+ dataset.
+We consider seven open-weight models and three proprietary API-based models.
+The evaluated models include:
+
+•
+
+gpt-4o-2024-08-06
+
+•
+
+gpt-4o-mini-2024-07-18
+
+•
+
+gpt-3.5-turbo-0125
+
+•
+
+llama-3.1-70b-instruct
+
+•
+
+llama-3-70b-instruct
+
+•
+
+llama-3-8b-instruct
+
+•
+
+llama-3.1-8b-instruct
+
+•
+
+qwen2-72b-instruct
+
+•
+
+gemma-2-2b-it
+
+•
+
+gemma-1.1-7b-it
+
+For each model, we sample 
+ prompt-response pairs, of which 25% have been generated by the target model and the remaining 75% by other models.
+We then formulate the identification as a ranking task, where we make a guess for 
+ outputs and we report Precision@
+, where 
+ corresponds to the fraction of total outputs guessed.
+
+Figure 10
+: 
+
+Model detection precision at different fractions of total outputs guessed for open-weight models (square markers, dashed lines) and proprietary GPT models (circle markers, solid lines). Random baseline shown at 0.25 (base rate).
+
+Figure 11
+: 
+
+Precision@30 (15% of outputs) as a function of tokens scored for open-weight models. Many models reach near-optimal precision with as few as 30 tokens, suggesting substantial efficiency gains are possible by truncating log-probability calculations early.
+
+For open-weight models, we compute the average token-level log-probability of the observed response under each candidate model using teacher forcing, i.e., the log-probability assigned to each answer token conditioned on the prompt and all preceding answer tokens.
+For proprietary models, we generate a single response per prompt and compute character-level similarity to the observed response.
+
+Figure 
+10
+ shows that open-weight models can be identified with high precision (
+, except 
+qwen2-72b-instruct
+, which has a slightly lower precision).
+Proprietary models achieve lower but above chance precision (approximately 
+).
+
+The outputs contain 315 tokens, on average.
+Figure 
+15
+ demonstrates that for open-weight models, we do not need to score all generated tokens to achieve high precision. Scoring only the first few tokens could reduce the computational cost of real-world model identification.
+
+Appendix E 
+Factors Influencing Ease of Movement
+
+We conducted regressions on the best 
+ rank achieved from strategic voting, prompting, or nomination. We used ridge regression with the following factors for each model 
+: The factors we consider are 
+’s variance in win rate against different models, 
+’s starting rank and Elo, the percent of battles in which 
+ tied, the number of models in 
+’s model family, the gap in Elo between 
+ and the model one rank higher, 
+’s win rate and total battles against the model one rank higher, the number of battles in 
+’s best language for strategic prompting, the number of total battles involving 
+, and the “Elo density” (defined as the number of models with Elo 0-50 points higher than the current model).
+
+Table 3
+: 
+Regression coefficients for the best 
+ rank achieved from strategic voting (RMSE=2.75).
+
+Feature
+
+Coefficient
+
+elo density vs above
+
+0.354919
+
+winrate variance
+
+0.079747
+
+# total battles
+
+-0.064431
+
+elo gap vs model above
+
+0.028544
+
+winrate vs model above
+
+-0.027852
+
+model Elo
+
+0.026598
+
+# battles vs model above
+
+-0.021019
+
+tie rate
+
+-0.015949
+
+# battles in best prompt lang
+
+-0.011382
+
+model rank
+
+-0.009996
+
+family size
+
+-0.009464
+
+Train 
+
+0.660
+
+Table 4
+: 
+Regression coefficients for the best 
+ rank achieved from strategic prompting (RMSE=2.67).
+
+Feature
+
+Coefficient
+
+# battles in best prompt lang
+
+-0.337490
+
+elo gap vs model above
+
+-0.126945
+
+elo density vs above
+
+0.111206
+
+winrate variance
+
+0.069611
+
+family size
+
+-0.066190
+
+winrate vs model above
+
+0.040990
+
+# battles vs model above
+
+-0.039253
+
+tie rate
+
+0.036262
+
+model rank
+
+0.027060
+
+# total battles
+
+-0.016139
+
+model Elo
+
+-0.012417
+
+Train 
+
+0.518
+
+Table 5
+: 
+Regression coefficients for the best 
+ rank achieved from strategic nomination (RMSE=1.85).
+
+Feature
+
+Coefficient
+
+elo density vs above
+
+0.231206
+
+elo gap vs model above
+
+-0.200973
+
+winrate variance
+
+0.179882
+
+model Elo
+
+0.157270
+
+# battles in best prompt lang
+
+0.140642
+
+tie rate
+
+0.089433
+
+model rank
+
+-0.077523
+
+# battles vs model above
+
+0.073610
+
+# total battles
+
+-0.036676
+
+family size
+
+0.017748
+
+winrate vs model above
+
+0.001865
+
+Train 
+
+0.557
+
+Appendix F 
+Scaling Experiments
+
+We conducted experiments varying the number of votes and found that when varying the total dataset size from 25%-200% of the current dataset size, manipulating the same percentage of total votes gives a near-uniform rank increase. This means that as the dataset size increases, the number of votes needed to achieve a similar boost increases linearly.
+
+We manipulated a constant 
+ 10% of battles as the dataset size increases. For experiments over 100K examples, we resampled battles from the existing 100K dataset. Then, we plotted dataset size vs. maximum rank boost when manipulating that constant proportion of votes. For heuristic voting, greedy voting, and combined prompting + nomination, the slope is near-constant with 
+
+(that is, not significantly different from a line with slope 0). This indicates that the number of manipulations needed to achieve similar rank boosts scales linearly with dataset size. For prompting and nominations, the slope is also near-constant, though we do find that manipulations become slightly easier as dataset size increases (though these attacks depend on the proportion of models or prompts to total votes, so this result may vary by leaderboard). Figures 
+12
+-
+16
+ show the effects of scaling dataset size on the number of manipulations needed. Across experiments, the number of manipulations scales linearly or close to linearly.
+
+Figure 12
+: 
+
+Best delta rank achieved when manipulating a constant 10% of battles on datasets of different sizes, on the 
+heuristic voting
+ strategy. When plotting dataset size (x) against best rank achieved with 
+ 10% battles modified (y), the slope is near-constant with p 
+ 0.05 (not significantly different from a line with slope 0). This indicates that the number of manipulations needed to achieve similar rank boosts scales linearly with dataset size.
+
+Figure 13
+: 
+
+Best delta rank achieved when manipulating a constant 10% of battles on datasets of different sizes, on the 
+greedy voting
+ strategy. When plotting dataset size (x) against best rank achieved with 
+ 10% battles modified (y), the slope is near-constant with p 
+ 0.05 (not significantly different from a line with slope 0). This indicates that the number of manipulations needed to achieve similar rank boosts scales linearly with dataset size.
+
+Figure 14
+: 
+
+Best delta rank achieved when manipulating a constant 10% of battles on datasets of different sizes, with the 
+strategic prompting
+ strategy. When plotting dataset size (x) against best rank achieved with 
+ 10% battles modified (y), the slope is very slightly positive (p 
+ 0.05), meaning that the manipulation becomes slightly easier as dataset size increases.
+
+Figure 15
+: 
+
+Best delta rank achieved when manipulating a constant fraction of models on datasets of different sizes, using the 
+strategic nomination
+ strategy. When plotting dataset size (x) against best rank achieved (y) with 
+ 10 model copies inserted (number of battles per model copy thus scales with dataset size), the slope is slightly positive (p 
+ 0.05), meaning the attack is somewhat easier as dataset size increases with the same proportion of models changed (though note that the proportion of models to total votes may vary by leaderboard).
+
+Figure 16
+: 
+
+Best delta rank achieved when manipulating a constant 10% of battles on datasets of different sizes, when combining the strategic nomination and prompting strategies in succession. When plotting dataset size (x) against best rank achieved with 
+ 10% battles modified (y), the slope is near-constant with p 
+ 0.05 (not significantly different from a line with slope 0). This indicates that the number of manipulations needed to achieve similar rank boosts scales linearly with dataset size.
+
+Appendix G 
+Strategic Prompting: Changing Subcategories
+
+Here, we test strategic prompting with a different subcategory split as proof-of-concept that strategic prompting can use any definable, consistent subcategories. We find rank boosts of up to 14 places, comparable to those from strategic prompting using language for prompt subcategories (Figure 
+17
+).
+
+Figure 17
+: 
+
+Proof-of-concept that strategic prompting can use any definable, consistent subcategories: best delta rank and Elo achieved under strategic prompting, where prompt categories are based on whether the prompt is labeled as involving complexity, creativity, domain knowledge, and/or math. Rank boosts (up to 14 places) are comparable to those from strategic prompting using language for prompt subcategories.
+
+NeurIPS Paper Checklist
+
+1.
+
+Claims
+
+Question: Do the main claims made in the abstract and introduction accurately reflect the paper’s contributions and scope?
+
+Answer: 
+[Yes] 
+
+Justification: Yes, the abstract and introduction state the claims made in the paper regarding leaderboard manipulation.
+
+Guidelines:
+
+•
+
+The answer 
+[N/A] 
+ means that the abstract and introduction do not include the claims made in the paper.
+
+•
+
+The abstract and/or introduction should clearly state the claims made, including the contributions made in the paper and important assumptions and limitations. A 
+[No] 
+ or 
+[N/A] 
+ answer to this question will not be perceived well by the reviewers.
+
+•
+
+The claims made should match theoretical and experimental results, and reflect how much the results can be expected to generalize to other settings.
+
+•
+
+It is fine to include aspirational goals as motivation as long as it is clear that these goals are not attained by the paper.
+
+2.
+
+Limitations
+
+Question: Does the paper discuss the limitations of the work performed by the authors?
+
+Answer: 
+[Yes] 
+
+Justification: Yes, limitations are discussed in Appendix 
+Limitations
+.
+
+Guidelines:
+
+•
+
+The answer 
+[N/A] 
+ means that the paper has no limitation while the answer 
+[No] 
+ means that the paper has limitations, but those are not discussed in the paper.
+
+•
+
+The authors are encouraged to create a separate “Limitations” section in their paper.
+
+•
+
+The paper should point out any strong assumptions and how robust the results are to violations of these assumptions (e.g., independence assumptions, noiseless settings, model well-specification, asymptotic approximations only holding locally). The authors should reflect on how these assumptions might be violated in practice and what the implications would be.
+
+•
+
+The authors should reflect on the scope of the claims made, e.g., if the approach was only tested on a few datasets or with a few runs. In general, empirical results often depend on implicit assumptions, which should be articulated.
+
+•
+
+The authors should reflect on the factors that influence the performance of the approach. For example, a facial recognition algorithm may perform poorly when image resolution is low or images are taken in low lighting. Or a speech-to-text system might not be used reliably to provide closed captions for online lectures because it fails to handle technical jargon.
+
+•
+
+The authors should discuss the computational efficiency of the proposed algorithms and how they scale with dataset size.
+
+•
+
+If applicable, the authors should discuss possible limitations of their approach to address problems of privacy and fairness.
+
+•
+
+While the authors might fear that complete honesty about limitations might be used by reviewers as grounds for rejection, a worse outcome might be that reviewers discover limitations that aren’t acknowledged in the paper. The authors should use their best judgment and recognize that individual actions in favor of transparency play an important role in developing norms that preserve the integrity of the community. Reviewers will be specifically instructed to not penalize honesty concerning limitations.
+
+3.
+
+Theory assumptions and proofs
+
+Question: For each theoretical result, does the paper provide the full set of assumptions and a complete (and correct) proof?
+
+Answer: 
+[N/A] 
+
+Justification: We do not contribute any proofs.
+
+Guidelines:
+
+•
+
+The answer 
+[N/A] 
+ means that the paper does not include theoretical results.
+
+•
+
+All the theorems, formulas, and proofs in the paper should be numbered and cross-referenced.
+
+•
+
+All assumptions should be clearly stated or referenced in the statement of any theorems.
+
+•
+
+The proofs can either appear in the main paper or the supplemental material, but if they appear in the supplemental material, the authors are encouraged to provide a short proof sketch to provide intuition.
+
+•
+
+Inversely, any informal proof provided in the core of the paper should be complemented by formal proofs provided in appendix or supplemental material.
+
+•
+
+Theorems and Lemmas that the proof relies upon should be properly referenced.
+
+4.
+
+Experimental result reproducibility
+
+Question: Does the paper fully disclose all the information needed to reproduce the main experimental results of the paper to the extent that it affects the main claims and/or conclusions of the paper (regardless of whether the code and data are provided or not)?
+
+Answer: 
+[Yes] 
+
+Justification: Section 
+3
+ provides a link to the (public) data we use and a detailed description of our methods, which are fairly straightforward to implement. We also plan to release code with the camera-ready.
+
+Guidelines:
+
+•
+
+The answer 
+[N/A] 
+ means that the paper does not include experiments.
+
+•
+
+If the paper includes experiments, a 
+[No] 
+ answer to this question will not be perceived well by the reviewers: Making the paper reproducible is important, regardless of whether the code and data are provided or not.
+
+•
+
+If the contribution is a dataset and/or model, the authors should describe the steps taken to make their results reproducible or verifiable.
+
+•
+
+Depending on the contribution, reproducibility can be accomplished in various ways. For example, if the contribution is a novel architecture, describing the architecture fully might suffice, or if the contribution is a specific model and empirical evaluation, it may be necessary to either make it possible for others to replicate the model with the same dataset, or provide access to the model. In general. releasing code and data is often one good way to accomplish this, but reproducibility can also be provided via detailed instructions for how to replicate the results, access to a hosted model (e.g., in the case of a large language model), releasing of a model checkpoint, or other means that are appropriate to the research performed.
+
+•
+
+While NeurIPS does not require releasing code, the conference does require all submissions to provide some reasonable avenue for reproducibility, which may depend on the nature of the contribution. For example
+
+(a)
+
+If the contribution is primarily a new algorithm, the paper should make it clear how to reproduce that algorithm.
+
+(b)
+
+If the contribution is primarily a new model architecture, the paper should describe the architecture clearly and fully.
+
+(c)
+
+If the contribution is a new model (e.g., a large language model), then there should either be a way to access this model for reproducing the results or a way to reproduce the model (e.g., with an open-source dataset or instructions for how to construct the dataset).
+
+(d)
+
+We recognize that reproducibility may be tricky in some cases, in which case authors are welcome to describe the particular way they provide for reproducibility. In the case of closed-source models, it may be that access to the model is limited in some way (e.g., to registered users), but it should be possible for other researchers to have some path to reproducing or verifying the results.
+
+5.
+
+Open access to data and code
+
+Question: Does the paper provide open access to the data and code, with sufficient instructions to faithfully reproduce the main experimental results, as described in supplemental material?
+
+Answer: 
+[No] 
+
+Justification: The data is publicly available. We plan to release the code shortly.
+
+Guidelines:
+
+•
+
+The answer 
+[N/A] 
+ means that paper does not include experiments requiring code.
+
+•
+
+Please see the NeurIPS code and data submission guidelines (
+https://neurips.cc/public/guides/CodeSubmissionPolicy
+) for more details.
+
+•
+
+While we encourage the release of code and data, we understand that this might not be possible, so 
+[No] 
+ is an acceptable answer. Papers cannot be rejected simply for not including code, unless this is central to the contribution (e.g., for a new open-source benchmark).
+
+•
+
+The instructions should contain the exact command and environment needed to run to reproduce the results. See the NeurIPS code and data submission guidelines (
+https://neurips.cc/public/guides/CodeSubmissionPolicy
+) for more details.
+
+•
+
+The authors should provide instructions on data access and preparation, including how to access the raw data, preprocessed data, intermediate data, and generated data, etc.
+
+•
+
+The authors should provide scripts to reproduce all experimental results for the new proposed method and baselines. If only a subset of experiments are reproducible, they should state which ones are omitted from the script and why.
+
+•
+
+At submission time, to preserve anonymity, the authors should release anonymized versions (if applicable).
+
+•
+
+Providing as much information as possible in supplemental material (appended to the paper) is recommended, but including URLs to data and code is permitted.
+
+6.
+
+Experimental setting/details
+
+Question: Does the paper specify all the training and test details (e.g., data splits, hyperparameters, how they were chosen, type of optimizer) necessary to understand the results?
+
+Answer: 
+[Yes] 
+
+Justification: We specify the details of our experimental methodology; none of the experiments involved training new models, so there are no training-related hyperparameters to report.
+
+Guidelines:
+
+•
+
+The answer 
+[N/A] 
+ means that the paper does not include experiments.
+
+•
+
+The experimental setting should be presented in the core of the paper to a level of detail that is necessary to appreciate the results and make sense of them.
+
+•
+
+The full details can be provided either with the code, in appendix, or as supplemental material.
+
+7.
+
+Experiment statistical significance
+
+Question: Does the paper report error bars suitably and correctly defined or other appropriate information about the statistical significance of the experiments?
+
+Answer: 
+[Yes] 
+
+Justification: We report 
+-values for the scaling experiments in Appendix 
+F
+ and RMSE for the regressions in Appendix 
+E
+. For Figures 1-4, the main plots already show the full distribution of attack effect sizes (i.e., the range of observed boosting effects) over all tested models.
+
+Guidelines:
+
+•
+
+The answer 
+[N/A] 
+ means that the paper does not include experiments.
+
+•
+
+The authors should answer 
+[Yes] 
+ if the results are accompanied by error bars, confidence intervals, or statistical significance tests, at least for the experiments that support the main claims of the paper.
+
+•
+
+The factors of variability that the error bars are capturing should be clearly stated (for example, train/test split, initialization, random drawing of some parameter, or overall run with given experimental conditions).
+
+•
+
+The method for calculating the error bars should be explained (closed form formula, call to a library function, bootstrap, etc.)
+
+•
+
+The assumptions made should be given (e.g., Normally distributed errors).
+
+•
+
+It should be clear whether the error bar is the standard deviation or the standard error of the mean.
+
+•
+
+It is OK to report 1-sigma error bars, but one should state it. The authors should preferably report a 2-sigma error bar than state that they have a 96% CI, if the hypothesis of Normality of errors is not verified.
+
+•
+
+For asymmetric distributions, the authors should be careful not to show in tables or figures symmetric error bars that would yield results that are out of range (e.g., negative error rates).
+
+•
+
+If error bars are reported in tables or plots, the authors should explain in the text how they were calculated and reference the corresponding figures or tables in the text.
+
+8.
+
+Experiments compute resources
+
+Question: For each experiment, does the paper provide sufficient information on the computer resources (type of compute workers, memory, time of execution) needed to reproduce the experiments?
+
+Answer: 
+[Yes] 
+
+Justification: Yes, we describe computational feasibility in section 
+5
+.
+
+Guidelines:
+
+•
+
+The answer 
+[N/A] 
+ means that the paper does not include experiments.
+
+•
+
+The paper should indicate the type of compute workers CPU or GPU, internal cluster, or cloud provider, including relevant memory and storage.
+
+•
+
+The paper should provide the amount of compute required for each of the individual experimental runs as well as estimate the total compute.
+
+•
+
+The paper should disclose whether the full research project required more compute than the experiments reported in the paper (e.g., preliminary or failed experiments that didn’t make it into the paper).
+
+9.
+
+Code of ethics
+
+Question: Does the research conducted in the paper conform, in every respect, with the NeurIPS Code of Ethics 
+https://neurips.cc/public/EthicsGuidelines
+?
+
+Answer: 
+[Yes] 
+
+Justification: Yes, we have read and adhere to the code of ethics. Defenses to mitigate security risks from leaderboard manipulation research are discussed in Section 
+6
+.
+
+Guidelines:
+
+•
+
+The answer 
+[N/A] 
+ means that the authors have not reviewed the NeurIPS Code of Ethics.
+
+•
+
+If the authors answer 
+[No] 
+, they should explain the special circumstances that require a deviation from the Code of Ethics.
+
+•
+
+The authors should make sure to preserve anonymity (e.g., if there is a special consideration due to laws or regulations in their jurisdiction).
+
+10.
+
+Broader impacts
+
+Question: Does the paper discuss both potential positive societal impacts and negative societal impacts of the work performed?
+
+Answer: 
+[Yes] 
+
+Justification: Yes, we discuss impacts in the conclusion and impact statement.
+
+Guidelines:
+
+•
+
+The answer 
+[N/A] 
+ means that there is no societal impact of the work performed.
+
+•
+
+If the authors answer 
+[N/A] 
+ or 
+[No] 
+, they should explain why their work has no societal impact or why the paper does not address societal impact.
+
+•
+
+Examples of negative societal impacts include potential malicious or unintended uses (e.g., disinformation, generating fake profiles, surveillance), fairness considerations (e.g., deployment of technologies that could make decisions that unfairly impact specific groups), privacy considerations, and security considerations.
+
+•
+
+The conference expects that many papers will be foundational research and not tied to particular applications, let alone deployments. However, if there is a direct path to any negative applications, the authors should point it out. For example, it is legitimate to point out that an improvement in the quality of generative models could be used to generate Deepfakes for disinformat

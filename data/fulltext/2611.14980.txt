@@ -1,0 +1,2864 @@
+CoLFA: Collaboration-Guided Lightweight Failure Attribution for LLM-Based Multi-Agent Systems
+https://arxiv.org/abs/2611.14980
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+CoLFA: Collaboration-Guided Lightweight Failure Attribution for LLM-Based Multi-Agent Systems
+
+Yufei Luo
+
+  
+
+Yuchen Ling
+
+  
+
+Chunrong Fang
+
+†
+†
+thanks: 
+Corresponding author.
+
+Affiliation: 
+Nanjing University
+
+Affiliation: 
+luoyufei0510@gmail.com
+, 
+yuchenling@smail.nju.edu.cn
+, 
+fangchunrong@nju.edu.cn
+
+Abstract
+
+Failure attribution in multi-agent systems requires tracing error formation to identify the decisive error step and the responsible agent. However, agents’ division of work and information exchange lead to Interleaved Steps and Cluttered Content, requiring models to link executions and check details in lengthy records. This makes it difficult to balance localization accuracy and token cost. We find that multi-agent collaboration also leaves records of how executions connect and content passes between them as results are formed, providing evidence for tracing error formation. Based on this observation, we propose CoLFA (Collaboration-Guided Lightweight Failure Attribution), which uses collaboration cues to organize the attribution input according to how results are formed, determining which steps are examined and how their content is presented. Through Handoff-Guided Step Expansion and Cross-Referenced Content Organization, CoLFA helps the model focus on examining error formation and the role of each decision while reducing the processing of irrelevant and repeated records. Across five settings spanning Who&When and LongRCA and three backbone models, CoLFA achieves the highest exact step-localization accuracy with the lowest token consumption. Compared with individual baselines in each setting, CoLFA improves accuracy by up to 37.50% and reduces token consumption by up to 97.6%.
+1
+1
+
+1
+
+          
+          
+          
+        Code will be released at 
+https://github.com/luoyufeihaha/CoLFA
+.
+
+1 
+Introduction
+
+Figure 1: 
+Exact step-localization accuracy and token consumption on Who&When and LongRCA.
+
+As LLM-based multi-agent systems (MAS) are increasingly applied to complex, long-horizon tasks, obtaining useful feedback from failed executions has become important for system debugging and continuous improvement 
+(
+Zhang et al., 2026b
+; 
+Sun et al., 2026
+)
+. Failure attribution aims to identify the decisive error step, defined as the earliest erroneous step that plays a decisive role in the final failure, and the responsible agent 
+(
+Zhang et al., 2025
+)
+.
+
+The final result of a multi-agent system is formed progressively through the division of work among agents, handoffs, and subsequent processing. An error may be introduced upstream and become apparent only after further transfer and processing, or it may arise from downstream interpretation or processing. Earlier errors may also be corrected during subsequent execution. Thus, erroneous content appearing at a step does not necessarily mean that the decisive error occurred there. Failure attribution requires tracing how the final erroneous result was formed, linking related executions to examine where errors were introduced, how they changed, and what role they played in the final failure 
+(
+Wang et al., 2026b
+; 
+Zhang et al., 2026b
+)
+.
+
+In multi-agent systems, local executions are relatively independent, while interactions across agents connect them within the overall task 
+(
+Wu et al., 2024
+; 
+Hong et al., 2024
+)
+. This form of collaboration poses two related challenges for failure attribution when tracing how results are formed. The first challenge, 
+Interleaved Steps
+, arises because steps involving task requirements, result production, and subsequent processing may belong to different agents, span multiple execution stages, and be interleaved with other work. The chronological order of the original execution trace does not readily reveal these connections, making it difficult for the model to link earlier and later executions. The second challenge, 
+Cluttered Content
+, arises because the evidence needed for attribution is mixed with extensive reasoning, actions, and environment feedback from different agents. Relevant content may also be repeated, paraphrased, or modified as it passes across steps. This makes key details harder to identify and compare, while long and repetitive inputs increase token cost.
+
+To address these challenges, prior work uses guided reasoning, structured context, candidate search, and verification to strengthen the analysis of execution traces. One group of methods directly analyzes the original execution trace, with relatively low token cost but limited localization accuracy 
+(
+West et al., 2025
+; 
+Yu et al., 2026
+)
+. Another group uses structured processing or multiple rounds of analysis to examine executions more thoroughly 
+(
+Banerjee et al., 2025
+; 
+Zhu et al., 2026a
+; 
+Wang et al., 2026b
+)
+. In the comparison in Figure 
+1
+, however, these methods incur much higher token costs with relatively limited localization gains. The presence of evidence in the input does not mean that it is easy to connect and check. Both groups still rely on model analysis to varying degrees. Can we overcome the trade-off between localization accuracy and analysis cost by locating decisive error steps more accurately while reducing token cost?
+
+We find that the same collaborative process that gives rise to Interleaved Steps and Cluttered Content also leaves evidence for linking executions and comparing earlier and later processing. 
+At the step level,
+ determining whether an error occurred in a particular execution requires considering its task requirements and inputs, which may be distributed across other agents’ records. Handoff records capture the transfer of requirements and intermediate results between agents, providing clues for finding the corresponding source records. Content correspondence across steps helps connect the production and subsequent processing of the same information. These cues help link executions that need to be examined together, even before the error location is known. How much historical context is needed depends on what each record helps check.
+
+At the content level,
+ the same content may be handed off, referenced, or used at different steps, with its recurrence in execution records providing content correspondence across steps. This content provides a shared point of comparison for checking the basis on which it was produced and how it was subsequently processed. Task requirements and available information may differ across executions, so each instance of processing needs to be assessed in its own context to determine whether it is erroneous. We refer to handoff records and cross-step content correspondence in execution traces as 
+collaboration cues
+. Evidence for attribution should therefore be organized according to how the result is formed, so that related executions can be examined together and each decision can be assessed in its own context. Setting the scope and level of detail of records according to what needs to be checked can make evidence easier to check while reducing unnecessary expansion and repeated presentation.
+
+Based on these observations, we propose 
+CoLFA (Collaboration-Guided Lightweight Failure Attribution)
+, which uses collaboration cues to organize the attribution input according to how the result is formed. Its two complementary components determine which steps are examined and how their content is presented. 
+Handoff-Guided Step Expansion
+ starts from the final result, links executions through handoffs and content correspondence, and sets each agent’s expansion scope according to what needs to be checked. 
+Cross-Referenced Content Organization
+ uses references to establish a shared point of comparison and retains a separate record for each execution, enabling the model to compare earlier and later processing and assess each decision in its own context. This organization helps the model focus on examining error formation and the role of each decision in the final failure, while reducing the processing of irrelevant history and repeated text. It thereby improves decisive error localization accuracy and lowers token cost.
+
+In evaluations on all failed execution traces from 
+Who&When
+ and 
+LongRCA
+ using two backbone models, CoLFA achieves the highest exact step-localization accuracy with the lowest token consumption in all four settings. Compared with the highest-accuracy baseline in each setting, CoLFA improves accuracy by 1.84% to 3.26% while reducing token consumption by 66% to 90%.
+
+2 
+Related Work
+
+2.1 
+Multi-Agent Failure Attribution
+
+Failure attribution in multi-agent systems aims to identify the decisive error step and the responsible agent, providing evidence for understanding and repairing system failures 
+(
+Zhang et al., 2025
+; 
+Zhang et al., 2026b
+)
+. Existing methods mainly follow two strategies. In one strategy, the model analyzes the complete execution trace in a single pass, using guided reasoning 
+(
+West et al., 2025
+)
+ or historical error patterns 
+(
+Yu et al., 2026
+)
+ to support its judgment. These methods have relatively low token cost, but localization accuracy remains limited on long, cluttered records. The other strategy uses candidate search, investigation, and verification to examine suspicious steps more thoroughly 
+(
+Zhu et al., 2026a
+; 
+Zhu et al., 2026c
+; 
+Rafi et al., 2026
+; 
+Wang et al., 2026c
+; 
+Wang et al., 2026b
+)
+. These methods require additional model analysis during search and verification, resulting in higher token costs with relatively limited gains in localization accuracy, as shown in Figure 
+1
+. To balance localization accuracy and token cost, CoLFA organizes the attribution input to help the model focus on examining how errors are formed and reduce the processing of irrelevant and repeated records.
+
+2.2 
+Trace Organization for Attribution
+
+Trace organization determines which execution records the attribution model receives and how their content is presented, affecting its ability to link earlier and later executions and check evidence 
+(
+Bakish et al., 2026
+; 
+Liang et al., 2026
+; 
+Li et al., 2026
+)
+. Prior work mainly improves attribution analysis by controlling input size or organizing relations between executions. One approach reduces long inputs by compressing or filtering execution records 
+(
+Banerjee et al., 2025
+; 
+Zhang et al., 2026a
+; 
+Qi et al., 2026
+)
+, or retrieves original text and reads it on demand to provide the context needed for examination 
+(
+Wang et al., 2026a
+; 
+Zhu et al., 2026b
+; 
+Zhang et al., 2026b
+)
+. They control how much the model reads, but compression and filtering may omit details needed for examination, and supplying context on demand requires further retrieval and reading. The other approach builds dependency structures from input-output correspondence 
+(
+Ma et al., 2025
+)
+ or model inference 
+(
+Wang et al., 2026b
+; 
+Bakish et al., 2026
+)
+ to support tracing errors along relations between executions 
+(
+Wang, 2026
+)
+. For methods that rely on the model to build these structures, performance depends on the accuracy of relation identification. Building and checking these structures also incur additional analysis cost. To control input size while supporting comparisons between earlier and later processing, CoLFA starts from the final result, links related executions through handoffs and content correspondence, uses references to establish a shared point of comparison, and retains a separate record for each execution.
+
+3 
+Method
+
+Figure 2: 
+Overview of CoLFA, showing how collaboration cues guide step expansion and content organization.
+
+3.1 
+Task Definition and Method Overview
+
+Given a task description 
+ and a failed execution trace 
+, failure attribution aims to identify the decisive error step and the responsible agent. The trace contains the agents’ decision steps 
+ in chronological order, with 
+ denoting the author of step 
+. Step indices retain the numbering in the original execution record. Tool outputs are included in the step that issued the corresponding call. Each step record may contain reasoning, an action, and tool outputs or environment feedback.
+
+As shown in Figure 
+2
+, CoLFA organizes the attribution input based on how the final result is formed. Using collaboration cues, it determines which steps are examined and how their content is presented to address Interleaved Steps and Cluttered Content. 
+Handoff-Guided Step Expansion (Section 
+3.2
+)
+ brings related executions together, and 
+Cross-Referenced Content Organization (Section 
+3.3
+)
+ enables the model to compare information processing across these executions. The model uses the organized records and overall execution progress to identify the decisive error step among the selected steps and the responsible agent.
+
+3.2 
+Handoff-Guided Step Expansion
+
+Given an execution trace 
+, let 
+ be the set of original indices of all decision steps. Starting from the final result, CoLFA uses collaboration cues at the step level to select steps for examining how the result was formed. We call these formation steps and denote their index set by 
+. They bring together executions by different agents at different points in time, providing evidence for the model to locate the decisive error step.
+
+Handoff records capture the transfer of task requirements and intermediate results, while content correspondence suggests that different executions may involve the same information. These cues help trace related executions backward from the final result. After establishing these links, we determine how much history to include, since tracing how content was produced and checking requirements and inputs require different contexts. To address Interleaved Steps, we use collaboration cues to link related executions and set each agent’s expansion scope according to what needs to be checked.
+
+For each step 
+, we identify earlier steps linked to it through handoffs or content correspondence. We denote the set of their indices by 
+, which represents the execution links of step 
+. Handoff cues include assignments, mentions of an agent, and changes in the speaking agent. Content correspondence is identified from recurring numerical values, identifiers, or specific text across steps, excluding content already given in the task and common content. Detailed identification rules are provided in Appendix 
+A
+. For collaboration configurations in which agents delegate and hand off work, we organize 
+ into output steps, production steps, and supply steps according to what needs to be checked. These respectively support examining the output agent’s processing in sequence, tracing how handed-off content was produced upstream, and checking the processing against requirements and 
+inputs supplied by other agents
+.
+
+Output steps.
+
+The output agent may use information, take actions, and make revisions over multiple steps to form the final result, so its processing needs to be examined in sequence. We define the output agent 
+ as the author of the final decision step. We retain all of its decision steps throughout the trace and denote their index set by 
+.
+
+Production steps.
+
+To check whether an error was introduced upstream, we select the author of the last decision step not taken by the output agent as the upstream agent 
+. We then trace how the handed-off content was produced. Let 
+ be the subset of 
+ obtained through content correspondence. We initialize and recursively expand the index set of production steps as
+
+(1)
+
+The initial set contains the upstream steps linked to any output step through handoffs or content correspondence. Subsequent iterations trace backward within the same agent using only content correspondence. 
+ denotes the iteration number, and iteration continues until the set stabilizes, yielding 
+.
+
+Supply steps.
+
+When examining the output and production steps, we need the requirements and inputs supplied by the remaining agents. To provide context while controlling how much history is included, we define the index set of supply steps as
+
+(2)
+
+ contains only steps directly linked to output or production steps and authored by the remaining agents. Expansion stops at these supply steps.
+
+Together, the three parts define 
+, the index set of formation steps. We adjust the expansion scopes according to the known collaboration configuration, as detailed in Appendix 
+A.2
+.
+
+3.3 
+Cross-Referenced Content Organization
+
+Given the task description 
+, execution trace 
+, and formation steps 
+, CoLFA uses collaboration cues at the content level to organize detailed records of these steps. It combines the task description, detailed records, and trace overview into the attribution input. This input enables the model to compare how information is processed across executions and provides overall execution progress to help locate the decisive error step.
+
+Content can be reused across steps, but each decision involving it has its own execution context. To address Cluttered Content, we retain a separate record for each execution and use shared content and execution links to support comparisons between earlier and later processing. We also incorporate overall execution progress to help the model assess the role of errors in the final failure.
+
+Detailed records.
+
+We retain a separate record for each formation step, specifying its original index and author and presenting its reasoning, action, and tool outputs or environment feedback. Content references and step references support comparisons between these records. Content references point to earlier occurrences of repeated text, allowing the model to compare earlier and later processing of the same content. Step references identify relevant earlier steps so that the model can check the current execution against the requirements, inputs, and processing recorded there. Actions are not truncated for length. We truncate reasoning, tool outputs, or environment feedback when they are overly long and mark the omissions. Detailed settings are provided in Appendix 
+B
+.
+
+Content references.
+
+To compare earlier and later processing of the same content, content references allow repeated text to be shared across records, providing a shared point of comparison and reducing repeated presentation. We identify contiguous repeated regions from identical word sequences shared with the task description or previously presented detailed records. We replace these regions with references to their primary matching sources, following the rules given in Appendix 
+B
+. The model uses the records to compare and assess paraphrases and modifications.
+
+Step references.
+
+To examine the output process and upstream content production, the model needs to revisit relevant requirements, inputs, and earlier processing. Using the execution links identified during step expansion, we define the referenced step indices for each 
+ as
+
+(3)
+
+The index and author of each step in 
+ are listed in the detailed record of step 
+, providing explicit pointers for checking relevant requirements, inputs, and earlier processing.
+
+Trace overview.
+
+Assessing an error’s role in the final failure requires examining subsequent processing, which may occur outside the formation steps. The trace overview extracts key points of actions and tool outputs or environment feedback across the complete execution and presents brief chronological records labeled with their original step indices and authors. It provides overall execution progress as context for examining the processing in the detailed records. The construction procedure is given in Appendix 
+B
+.
+
+The model receives the task description, trace overview, and detailed records as the attribution input. It judges whether an action was erroneous based on the agent’s task requirements and the information available at that step, and uses subsequent processing to assess the error’s role in the final failure. In a single call, it identifies the decisive error step among the formation steps and returns its author as the predicted responsible agent.
+
+4 
+Experiments
+
+4.1 
+Experimental Setup
+
+Benchmarks.
+
+We evaluate on all failed execution traces from Who&When 
+(
+Zhang et al., 2025
+)
+ and LongRCA 
+(
+Zhang et al., 2026b
+)
+, which cover different trace lengths and collaboration configurations. Who&When comprises Algorithm-Generated (Alg.) and Hand-Crafted (Hand.) splits, containing 126 and 58 traces with average lengths of 8.7 and 51.6 steps, respectively. LongRCA contains 1,140 traces with an average length of 156.0 steps and covers multiple collaboration configurations. We provide the attribution model with task reference answers on Who&When but not on LongRCA. Step counts are based on the original execution records. Benchmark details and input protocols are provided in Appendix 
+C
+.
+
+Baselines.
+
+We compare against ten baselines covering two attribution strategies. The first group directly analyzes complete execution traces and includes All-at-Once 
+(
+Zhang et al., 2025
+)
+, A2P 
+(
+West et al., 2025
+)
+, and CORRECT 
+(
+Yu et al., 2026
+)
+. The second performs attribution through step-by-step examination, candidate search, or multiple rounds of analysis and includes Step-by-Step and Binary Search 
+(
+Zhang et al., 2025
+)
+, ECHO 
+(
+Banerjee et al., 2025
+)
+, RAFFLES 
+(
+Zhu et al., 2026a
+)
+, DeepDebug 
+(
+Zhu et al., 2026c
+)
+, DCFA 
+(
+Wang et al., 2026c
+)
+, and CHIEF 
+(
+Wang et al., 2026b
+)
+. We rerun all baselines under a common setup. Appendix 
+D
+ provides implementation and adaptation details.
+
+Metrics.
+
+Our primary metric is exact-match accuracy for the decisive error step, corresponding to Overall Step on Who&When and Root Exact on LongRCA. We refer to both as exact step-localization accuracy. We also report responsible-agent accuracy (Agent on Who&When and Role on LongRCA), as well as the proportion of predictions within five steps of the annotated error step (Root 
+5) and the mean absolute error between predicted and annotated step indices (Root MAE) on LongRCA. We measure cost by the average token consumption per trace (Tok.), counting input and output tokens across all model calls within one execution of the method. We use Cost-of-Pass (CoP) 
+(
+Erol et al., 2026
+)
+, measured in tokens, to jointly assess localization accuracy and token cost. It is defined as total token consumption divided by the number of correctly localized traces. Scoring details, token accounting, and token breakdowns are provided in Appendices 
+E
+ and 
+E.1
+.
+
+Backbones and implementation.
+
+The main experiments use DeepSeek-V4.1-Flash 
+(
+DeepSeek-AI, 2026
+)
+ and GLM-5.3-Flash 
+(
+GLM-5-Team et al., 2026
+)
+ as backbone models, yielding four evaluation settings across the two benchmarks. We additionally use Claude Sonnet 5.5 
+(
+Anthropic, 2026
+)
+ to compare CoLFA with five baselines on all failed execution traces from Who&When. These baselines cover both attribution strategies. CoLFA uses the same rules and parameters to identify execution links on both benchmarks. CoLFA’s attribution input and prompts are provided in Appendices 
+B
+ and 
+G
+. Generation settings for all methods are provided in Appendix 
+D
+.
+
+4.2 
+Main Results
+
+DeepSeek-V4.1-Flash
+
+GLM-5.3-Flash
+
+Alg.
+
+Hand.
+
+Overall
+
+Cost (K)
+
+Alg.
+
+Hand.
+
+Overall
+
+Cost (K)
+
+Method
+
+Agent
+
+Step
+
+Agent
+
+Step
+
+Agent
+
+Step
+
+Tok.
+
+CoP
+
+Agent
+
+Step
+
+Agent
+
+Step
+
+Agent
+
+Step
+
+Tok.
+
+CoP
+
+All-at-Once
+
+60.32
+
+23.81
+
+60.34
+
+3.45
+
+60.33
+
+17.39
+
+8.4
+
+48
+
+65.08
+
+12.70
+
+53.45
+
+3.45
+
+61.41
+
+9.78
+
+8.2
+
+84
+
+A2P
+
+62.70
+
+45.24
+
+56.90
+
+20.69
+
+60.87
+
+37.50
+
+8.3
+
+22
+
+64.29
+
+50.00
+
+56.90
+
+20.69
+
+61.96
+
+40.76
+
+8.4
+
+21
+
+CORRECT
+
+61.11
+
+50.00
+
+48.28
+
+22.41
+
+57.07
+
+41.30
+
+22.7
+
+55
+
+66.67
+
+53.17
+
+48.28
+
+25.86
+
+60.87
+
+44.57
+
+20.6
+
+46
+
+Step-by-Step
+
+42.06
+
+32.54
+
+51.72
+
+20.69
+
+45.11
+
+28.80
+
+111.1
+
+386
+
+46.03
+
+35.71
+
+50.00
+
+18.97
+
+47.28
+
+30.43
+
+32.0
+
+105
+
+Binary Search
+
+32.54
+
+4.76
+
+60.34
+
+12.07
+
+41.30
+
+7.07
+
+14.7
+
+208
+
+54.76
+
+36.51
+
+44.83
+
+10.34
+
+51.63
+
+28.26
+
+15.3
+
+54
+
+ECHO
+
+61.90
+
+48.41
+
+44.83
+
+22.41
+
+56.52
+
+40.22
+
+60.9
+
+151
+
+54.76
+
+53.17
+
+53.45
+
+24.14
+
+54.35
+
+44.02
+
+58.5
+
+133
+
+RAFFLES
+
+61.90
+
+46.83
+
+56.90
+
+20.69
+
+60.33
+
+38.59
+
+34.6
+
+90
+
+66.67
+
+50.79
+
+55.17
+
+20.69
+
+63.04
+
+41.30
+
+34.2
+
+83
+
+DeepDebug
+
+48.41
+
+37.30
+
+60.34
+
+18.97
+
+52.17
+
+31.52
+
+13.7
+
+44
+
+57.94
+
+44.44
+
+53.45
+
+20.69
+
+56.52
+
+36.96
+
+14.2
+
+38
+
+DCFA
+
+52.38
+
+40.48
+
+60.34
+
+31.03
+
+54.89
+
+37.50
+
+107.1
+
+285
+
+59.52
+
+43.65
+
+56.90
+
+20.69
+
+58.70
+
+36.41
+
+141.2
+
+388
+
+CHIEF
+
+60.32
+
+36.51
+
+55.17
+
+13.79
+
+58.70
+
+29.35
+
+72.9
+
+248
+
+64.29
+
+41.27
+
+56.90
+
+10.34
+
+61.96
+
+31.52
+
+69.3
+
+220
+
+CoLFA
+
+65.87
+
+52.38
+
+62.07
+
+27.59
+
+64.67
+
+44.57
+
+6.9
+
+16
+
+68.25
+
+54.76
+
+62.07
+
+29.31
+
+66.30
+
+46.74
+
+7.1
+
+15
+
+Table 1: 
+Main results on Who&When with two backbones. Bold and underline mark the best and second best.
+
+DeepSeek-V4.1-Flash
+
+GLM-5.3-Flash
+
+Method
+
+Role
+
+Exact
+
+5
+
+MAE
+
+Tok. (K)
+
+CoP (K)
+
+Role
+
+Exact
+
+5
+
+MAE
+
+Tok. (K)
+
+CoP (K)
+
+All-at-Once
+
+42.02
+
+1.40
+
+10.79
+
+77.09
+
+52.8
+
+3,763
+
+37.81
+
+1.05
+
+11.84
+
+60.06
+
+52.3
+
+4,969
+
+A2P
+
+46.49
+
+13.51
+
+29.47
+
+43.07
+
+53.6
+
+397
+
+47.02
+
+16.49
+
+28.16
+
+43.65
+
+52.9
+
+321
+
+CORRECT
+
+49.65
+
+18.86
+
+25.70
+
+41.88
+
+114.5
+
+607
+
+49.21
+
+20.35
+
+32.19
+
+40.04
+
+110.3
+
+542
+
+Step-by-Step
+
+33.42
+
+7.63
+
+17.37
+
+46.16
+
+950.0
+
+12,449
+
+30.61
+
+8.33
+
+16.67
+
+54.62
+
+367.8
+
+4,414
+
+Binary Search
+
+15.96
+
+0.00
+
+15.96
+
+77.79
+
+130.4
+
+—
+
+28.51
+
+3.51
+
+18.07
+
+53.47
+
+114.7
+
+3,268
+
+ECHO
+
+44.47
+
+15.88
+
+28.51
+
+48.94
+
+347.4
+
+2,188
+
+41.67
+
+16.67
+
+28.51
+
+47.15
+
+337.6
+
+2,025
+
+RAFFLES
+
+48.60
+
+18.33
+
+29.82
+
+40.59
+
+215.9
+
+1,178
+
+54.21
+
+21.75
+
+34.74
+
+35.97
+
+212.3
+
+976
+
+DeepDebug
+
+47.19
+
+17.63
+
+26.40
+
+52.08
+
+71.3
+
+404
+
+38.16
+
+17.11
+
+26.40
+
+46.06
+
+71.9
+
+421
+
+CoLFA
+
+51.58
+
+21.84
+
+32.81
+
+35.54
+
+22.4
+
+103
+
+52.28
+
+23.60
+
+36.23
+
+35.42
+
+22.0
+
+93
+
+Table 2: 
+Main results on LongRCA with two backbones. Bold and underline mark the best and second best.
+
+CoLFA achieves the highest exact step-localization accuracy and lowest token cost and CoP in all four settings, exceeding each setting’s most accurate baseline by 1.84–3.26% with 66–90% fewer tokens. On LongRCA, which has longer traces on average, trace-level paired bootstrap further supports CoLFA’s exact step-localization advantage. The 95% confidence intervals for accuracy differences are 
+% and 
+% for DeepSeek and GLM, respectively (Appendix 
+E.3
+).
+
+Table 
+1
+ shows that on Who&When, CoLFA achieves the highest exact step-localization accuracy with the lowest token consumption under both backbones, reducing CoP by 27% to 30% relative to the lowest baseline CoP in each setting. Across comparisons with individual baselines under the two backbones, CoLFA’s largest step-localization gains are 47.62% and 25.86% on Alg. and Hand., respectively. Team composition and division of work vary by task in Alg., whereas Hand. involves more orchestration and subsequent processing. Both types of systems require linking executions across agents and distinguishing the roles of different processing steps. CoLFA uses execution links and shared points of comparison to support comparisons between earlier and later processing, retains each decision’s context, and reduces the processing of lengthy histories and repeated text.
+
+As shown in Table 
+2
+, on LongRCA, CoLFA achieves the highest Root Exact with the lowest token consumption under both backbones, reducing CoP by 71% to 74% relative to the lowest baseline CoP in each setting. Across comparisons with individual baselines under the two backbones, its largest Root Exact gain is 22.54%. CoLFA also achieves the highest Root 
+5 and the lowest Root MAE under both backbones. CoLFA combines detailed records of the selected steps with a trace overview covering the entire execution. This organization allows the model to check processing at individual steps against subsequent execution progress when assessing the role of errors in the final failure, while reducing the amount of history presented in detail and the repetition in the input.
+
+To compare localization performance and cost across trace lengths, we divide LongRCA into four equal-sized groups by original trace token count. As shown in Figure 
+3
+, under both backbones, CoLFA achieves the lowest CoP in every length group and the highest Root Exact in the longest group, where its CoP is 75% to 83% lower than the lowest baseline CoP. These results show that CoLFA’s advantage in cost per correct localization holds across trace lengths, with joint advantages in localization accuracy and cost in the longest group.
+
+Alg.
+
+Hand.
+
+Overall
+
+Cost (K)
+
+Method
+
+Agent
+
+Step
+
+Agent
+
+Step
+
+Agent
+
+Step
+
+Tok.
+
+CoP
+
+All-at-Once
+
+67.46
+
+39.68
+
+62.07
+
+3.45
+
+65.76
+
+28.26
+
+12.4
+
+44
+
+A2P
+
+65.87
+
+50.00
+
+67.24
+
+29.31
+
+66.30
+
+43.48
+
+13.3
+
+31
+
+CORRECT
+
+65.87
+
+47.62
+
+67.24
+
+32.76
+
+66.30
+
+42.93
+
+33.6
+
+78
+
+RAFFLES
+
+65.08
+
+47.62
+
+62.07
+
+36.21
+
+64.13
+
+44.02
+
+53.5
+
+122
+
+DeepDebug
+
+62.70
+
+47.62
+
+44.83
+
+20.69
+
+57.07
+
+39.13
+
+21.0
+
+54
+
+CoLFA
+
+71.43
+
+52.38
+
+65.52
+
+32.76
+
+69.57
+
+46.20
+
+10.7
+
+23
+
+Table 3: 
+Results with Claude Sonnet 5.5 on Who&When under strict matching.
+
+To test whether this joint advantage also holds with a frontier model, we additionally compare CoLFA with five baselines on Who&When using Claude Sonnet 5.5. As shown in Table 
+3
+, CoLFA again achieves the highest exact step-localization accuracy with the lowest token consumption, reducing CoP by 25% relative to the lowest baseline CoP. CoLFA organizes the attribution input according to how results are formed through multi-agent collaboration and what failure attribution needs to check. Because these principles do not change with the attribution backbone, this organization can help different models link executions and compare earlier and later processing while reducing the processing of lengthy and repeated records.
+
+4.3 
+Ablation Study
+
+Who&When / DeepSeek
+
+Who&When / GLM
+
+LongRCA / DeepSeek
+
+LongRCA / GLM
+
+Variant
+
+Agent
+
+Step
+
+Tok.
+
+CoP
+
+Agent
+
+Step
+
+Tok.
+
+CoP
+
+Role
+
+Exact
+
+Tok.
+
+CoP
+
+Role
+
+Exact
+
+Tok.
+
+CoP
+
+CoLFA
+
+64.67
+
+44.57
+
+1.00
+
+1.00
+
+66.30
+
+46.74
+
+1.00
+
+1.00
+
+51.58
+
+21.84
+
+1.00
+
+1.00
+
+52.28
+
+23.60
+
+1.00
+
+1.00
+
+w/o Expansion
+
+59.78
+
+39.13
+
+1.10
+
+1.25
+
+61.96
+
+42.39
+
+1.09
+
+1.21
+
+47.02
+
+19.65
+
+1.47
+
+1.63
+
+49.82
+
+20.70
+
+1.47
+
+1.68
+
+w/o Organization
+
+60.87
+
+40.22
+
+1.09
+
+1.20
+
+62.50
+
+43.48
+
+1.08
+
+1.17
+
+49.47
+
+19.30
+
+1.35
+
+1.52
+
+48.07
+
+20.35
+
+1.36
+
+1.57
+
+w/o Both
+
+57.07
+
+36.96
+
+1.21
+
+1.46
+
+57.61
+
+39.13
+
+1.21
+
+1.44
+
+45.26
+
+17.89
+
+2.32
+
+2.83
+
+46.32
+
+19.30
+
+2.32
+
+2.83
+
+Table 4: 
+Ablation study of CoLFA. Tok. and CoP are relative to CoLFA. Bold marks the best values.
+
+To assess the contributions of step-level scope organization and content-level presentation to localization accuracy and token cost, we compare CoLFA with three ablation variants across the four main settings. w/o Expansion retains content organization and includes all decision steps in the detailed records and the set of candidate steps for the model’s answer. w/o Organization keeps the formation steps and answer candidates unchanged, presents each step’s complete original text without truncation, and removes content references, step references, and the trace overview. w/o Both gives the model the complete original text of all decision steps and allows it to select from all of them, serving as an internal full-trace control. All variants use the same attribution prompt as CoLFA. Detailed settings are provided in Appendix 
+E.2
+.
+
+Figure 3: 
+Root Exact and CoP on LongRCA across four equal-sized groups by original trace token count.
+
+Table 
+4
+ shows that removing either component lowers exact step-localization accuracy and increases token consumption. Both components thus contribute to joint improvements in accuracy and token cost by organizing the evidence available to the model in different ways. w/o Expansion includes all decision steps in the detailed records and answer candidates, yet accuracy decreases and token consumption increases. This highlights the value of linking executions and setting expansion scopes according to what needs to be checked when addressing Interleaved Steps. w/o Organization keeps the formation steps and answer candidates unchanged, yet both metrics worsen. This shows that, after selecting steps for examination, their evidence still needs to be organized to address Cluttered Content, allowing earlier and later processing to be compared and the role of errors to be assessed in light of overall execution progress. w/o Both has lower accuracy and higher token consumption than either single-component ablation under both backbones on both benchmarks, showing the consistency of the joint contribution of both levels of organization across trace conditions and attribution backbones.
+
+4.4 
+Analysis of Attribution Inputs
+
+Figure 4: 
+Decisive error position distributions (left) and coverage under matched step counts (right) on multi-agent LongRCA traces and Who&When Hand.
+
+To examine whether collaboration cues provide useful evidence for attribution, we analyze CoLFA’s attribution inputs. We examine coverage of decisive error steps, and the textual basis for shared points of comparison and input size. Detailed statistical procedures, experimental settings, and complete supplementary results are provided in Appendix 
+F
+.
+
+To test whether collaboration cues help retain decisive error steps while controlling expansion size, we measure coverage on multi-agent traces from LongRCA and the Hand. split of Who&When. Coverage is the proportion of traces whose formation steps contain the annotated decisive error step. We compare against recency and random selection, matching CoLFA’s number of decision steps for each trace. Figure 
+4
+ shows higher coverage for collaboration-guided selection than both alternatives. On LongRCA’s multi-agent traces, coverage exceeds recency selection by 26.7%. A supplementary matched-step attribution experiment on LongRCA also yields higher localization accuracy than both alternatives under both backbones (Appendix 
+F.5
+). These results show that execution links left as multi-agent systems form results can guide step selection for failure attribution.
+
+To examine the textual basis for shared points of comparison and organized input size, we analyze content references and input size on the same multi-agent LongRCA traces. Content references appear in almost every trace, replacing repeated spans that account for 24% of the pre-truncation characters in actions and tool outputs or environment feedback within detailed records. After organizing steps and content, the aggregate token count of attribution inputs is 40% of that of complete traces. The widespread presence of shared text provides reference points for comparing how different agents process the same content. While reducing overall input size, CoLFA shares original text through references and retains a separate record for each execution, allowing the model to compare earlier and later processing and assess each decision in its own context.
+
+5 
+Conclusion
+
+We propose CoLFA, which uses collaboration cues from result formation to organize which steps are examined and how their content is presented for multi-agent failure attribution.
+Across the evaluated settings on Who&When and LongRCA, CoLFA achieves the highest exact step-localization accuracy with the lowest token consumption.
+It offers more accurate diagnostics at lower cost for agent debugging and iterative improvement.
+
+Limitations
+
+CoLFA uses observable collaboration cues in execution traces to organize which steps are examined for failure attribution in multi-agent systems. Our current expansion scopes are defined for collaboration configurations involving delegation and handoffs or broadcast group chats. The resulting formation steps define the scope of detailed records and the candidate set for decisive error localization. This scope depends on whether recorded handoffs and content correspondence link the relevant executions. The applicability of execution links and expansion scopes to collaboration configurations and record formats not evaluated in this study requires further investigation.
+
+We evaluate decisive error localization and token consumption on Who&When and LongRCA, with attribution judgments based on recorded executions. Whether attribution results support effective repair and improve task completion remains to be directly validated by correcting the relevant steps and examining the outcomes of subsequent reruns.
+
+References
+
+Anthropic (2026)
+
+Anthropic. 2026.
+
+Claude Sonnet 5.5 system card
+.
+
+Bakish et al. (2026)
+
+Yarden Bakish, Amir Dudai, Roy Ganz, Oren Nuriel, Elad Ben Avraham, Mor Shpigel Nacson, and Ron Litman. 2026.
+
+Adaptive influence graphs for failure attribution in multi-agent systems
+.
+
+Preprint
+, arXiv:2608.24361.
+
+Banerjee et al. (2025)
+
+Adi Banerjee, Anirudh Nair, and Tarik Borogovac. 2025.
+
+Where did it all go wrong? A hierarchical look into multi-agent error attribution
+.
+
+Preprint
+, arXiv:2510.04886.
+
+DeepSeek-AI (2026)
+
+DeepSeek-AI. 2026.
+
+DeepSeek-V4.1-Flash: Pushing the limits of KV cache compression
+.
+
+Technical report.
+
+Erol et al. (2026)
+
+Mehmet Hamza Erol, Batu El, Mirac Suzgun, Mert Yuksekgonul, and James Zou. 2026.
+
+Cost-of-Pass: An economic framework for evaluating language models
+.
+
+In 
+The Fourteenth International Conference on Learning Representations
+.
+
+GLM-5-Team et al. (2026)
+
+GLM-5-Team, Aohan Zeng, Xin Lv, Zhenyu Hou, Zhengxiao Du, Qinkai Zheng, Bin Chen, Da Yin, Chendi Ge, Chenghua Huang, Chengxing Xie, Chenzheng Zhu, Congfeng Yin, Cunxiang Wang, Gengzheng Pan, Hao Zeng, Haoke Zhang, Haoran Wang, Huilong Chen, and 167 others. 2026.
+
+GLM-5: from vibe coding to agentic engineering
+.
+
+Preprint
+, arXiv:2602.15763.
+
+Hong et al. (2024)
+
+Sirui Hong, Mingchen Zhuge, Jonathan Chang, Xiawu Zheng, Yuheng Cheng, Ceyao Zhang, Jinlin Wang, Zili Wang, Steven Ka Shing Yau, Zijuan Lin, Liyang Zhou, Chenyu Ran, Lingfeng Xiao, Chenglin Wu, and Jürgen Schmidhuber. 2024.
+
+MetaGPT: Meta programming for a multi-agent collaborative framework
+.
+
+In 
+The Twelfth International Conference on Learning Representations
+.
+
+Li et al. (2026)
+
+Han Li, Yifan Yao, Letian Zhu, Rili Feng, Hongyi Ye, Jiaming Wang, Yancheng He, Pengyu Zou, Lehan Zhang, Xinping Lei, Haoyang Huang, Ken Deng, Ming Sun, Zhaoxiang Zhang, He Ye, and Jiaheng Liu. 2026.
+
+CodeTracer: Towards traceable agent states
+.
+
+Preprint
+, arXiv:2604.11641.
+
+Liang et al. (2026)
+
+Zhixiang Liang, Yifei Liu, Yidan Huang, Haozhe Zhao, Beichen Huang, Jiaqi Wang, Nan Duan, and Qiong Cao. 2026.
+
+SearchAuditor: Auditing and attributing failures in long-horizon search agents
+.
+
+Preprint
+, arXiv:2608.05212.
+
+Ma et al. (2025)
+
+Guoqing Ma, Jia Zhu, Hanghui Guo, Weijie Shi, Jiawei Shen, Jingjiang Liu, and Yidan Liang. 2025.
+
+Automatic failure attribution and critical step prediction method for multi-agent systems based on causal inference
+.
+
+Preprint
+, arXiv:2509.08682.
+
+Qi et al. (2026)
+
+Yunjia Qi, Zehua Yin, Xintong Shi, Hao Peng, Songyuanyi Lu, Yixian Liu, Richeng Xuan, Yuhong Liu, Zhichao Hu, Xiaozhi Wang, Lei Hou, Bin Xu, and Juanzi Li. 2026.
+
+TRAJDEBUG: Tracing error lifecycle to identify critical failures in long-horizon agent trajectories
+.
+
+In 
+Findings of the Association for Computational Linguistics: EMNLP 2026
+, pages 9169–9192, Budapest, Hungary. Association for Computational Linguistics.
+
+Rafi et al. (2026)
+
+Md Nakhla Rafi, Md Ahasanuzzaman, Dong Jae Kim, Zhijie Wang, and Tse-Hsun Chen. 2026.
+
+FALAT: Tracing failures in LLM agent trajectories via dependency-guided search
+.
+
+Preprint
+, arXiv:2606.00765.
+
+Sun et al. (2026)
+
+Xueqiao Sun, Xiaohan Wang, Ludwig Schmidt, Serena Yeung-Levy, and Yuhui Zhang. 2026.
+
+Learning from failure: Inference-time self-improvement for computer-use agents
+.
+
+In 
+Computer Vision – ECCV 2026
+. Springer.
+
+Wang et al. (2026a)
+
+Minxing Wang, Xiaofei Xie, and Yintong Huo. 2026a.
+
+TrajAudit: Automated failure diagnosis for agentic coding systems
+.
+
+Preprint
+, arXiv:2605.26563.
+
+Wang et al. (2026b)
+
+Yawen Wang, Wenjie Wu, Junjie Wang, and Qing Wang. 2026b.
+
+From flat logs to causal graphs: Hierarchical failure attribution for LLM-based multi-agent systems
+.
+
+Preprint
+, arXiv:2602.23701.
+
+Wang et al. (2026c)
+
+Zehao Wang, Lanjun Wang, Shilong Jin, Junjie Chen, and Yanghua Xiao. 2026c.
+
+DCFA: Dual-view causal-inspired attribution for failure reasoning in LLM-based multi-agent systems
+.
+
+In 
+Proceedings of the 2026 Conference on Empirical Methods in Natural Language Processing
+, pages 42999–43025, Budapest, Hungary. Association for Computational Linguistics.
+
+Wang (2026)
+
+Zhaohui Geoffrey Wang. 2026.
+
+AgentTrace: Causal graph tracing for root cause analysis in deployed multi-agent systems
+.
+
+Preprint
+, arXiv:2603.14688.
+
+West et al. (2025)
+
+Alva West, Yixuan Weng, Minjun Zhu, Zhen Lin, Zhiyuan Ning, and Yue Zhang. 2025.
+
+Abduct, act, predict: Scaffolding causal inference for automated failure attribution in multi-agent systems
+.
+
+Preprint
+, arXiv:2509.10401.
+
+Wu et al. (2024)
+
+Qingyun Wu, Gagan Bansal, Jieyu Zhang, Yiran Wu, Beibin Li, Erkang Zhu, Li Jiang, Xiaoyun Zhang, Shaokun Zhang, Jiale Liu, Ahmed Hassan Awadallah, Ryen W. White, Doug Burger, and Chi Wang. 2024.
+
+AutoGen: Enabling next-gen LLM applications via multi-agent conversations
+.
+
+In 
+First Conference on Language Modeling
+.
+
+Yu et al. (2026)
+
+Yifan Yu, Moyan Li, Shaoyuan Xu, Jinmiao Fu, Xinhai Hou, Fan Lai, and Bryan Wang. 2026.
+
+CORRECT: COndensed eRror RECognition via knowledge Transfer in multi-agent systems
+.
+
+In 
+Proceedings of the 43rd International Conference on Machine Learning
+, volume 306 of 
+Proceedings of Machine Learning Research
+, pages 150564–150581. PMLR.
+
+Zhang et al. (2026a)
+
+Jiayi Zhang, Zexin Wang, Degang Sun, Changhua Pei, Fei Sun, Gaogang Xie, and Jingjing Li. 2026a.
+
+Cascade failure attribution for multi-agent systems
+.
+
+Preprint
+, arXiv:2608.29646.
+
+Zhang et al. (2025)
+
+Shaokun Zhang, Ming Yin, Jieyu Zhang, Jiale Liu, Zhiguang Han, Jingyang Zhang, Beibin Li, Chi Wang, Huazheng Wang, Yiran Chen, and Qingyun Wu. 2025.
+
+Which agent causes task failures and when? On automated failure attribution of LLM multi-agent systems
+.
+
+In 
+Proceedings of the 42nd International Conference on Machine Learning
+, volume 267 of 
+Proceedings of Machine Learning Research
+, pages 76583–76599. PMLR.
+
+Zhang et al. (2026b)
+
+Yunfei Zhang, Boyu Feng, Changhua Pei, Zexin Wang, Zhihuang Peng, Xinlong Liu, Hengyue Jiang, Difeng Ma, Jiayi Zhang, Yongzhou Yao, Yanan Zhao, Fei Sun, Yintong Huo, Zhaoyang Liu, Jingjing Li, Gaogang Xie, and Dan Pei. 2026b.
+
+LongRCA Bench: Root-cause localization in long-horizon agent trajectories
+.
+
+Preprint
+, arXiv:2608.15242.
+
+Zhu et al. (2026a)
+
+Chenyang Zhu, Spencer Hong, Jingyu Wu, Kushal Chawla, Yuhui Tang, Youbing Yin, Nathan Wolfe, Erin Babinsky, and Daben Liu. 2026a.
+
+RAFFLES: Reasoning-based attribution of faults for LLM systems
+.
+
+In 
+Proceedings of the 19th Conference of the European Chapter of the Association for Computational Linguistics (Volume 1: Long Papers)
+, pages 7659–7688, Rabat, Morocco. Association for Computational Linguistics.
+
+Zhu et al. (2026b)
+
+Chenyang Zhu, Jiayu Yao, Kushal Chawla, Youbing Yin, Nathan Wolfe, Pengshan Cai, Jingyu Wu, Spencer Hong, Sangwoo Cho, Shi-Xiong Zhang, Daben Liu, Sambit Sahu, and Erin Babinsky. 2026b.
+
+SAFARI: Scaling long horizon agentic fault attribution via active investigation
+.
+
+Preprint
+, arXiv:2606.24626.
+
+Zhu et al. (2026c)
+
+Kunlun Zhu, Xuyan Ye, Zhiguang Han, Yuchen Zhao, Bingxuan Li, Weijia Zhang, Muxin Tian, Xiangru Tang, Pan Lu, James Zou, Jiaxuan You, and Heng Ji. 2026c.
+
+AgentDebugX: An open-source toolkit for failure observability, attribution, and recovery in LLM agents
+.
+
+Preprint
+, arXiv:2607.18754.
+
+Appendix A 
+Execution Links and Expansion Scope
+
+A.1 
+Execution Link Rules
+
+Multi-agent systems connect executions by different agents through task assignments, content handoffs, and subsequent processing. Assessing whether the processing at a step is erroneous requires examining its task requirements and inputs, which may be recorded in earlier steps by other agents. Handoff records capture the transfer of requirements and intermediate results, while content correspondence across steps suggests that different executions may involve the same information. We use the following rules to identify earlier steps that can be revisited when examining step 
+. Their original indices form 
+, which represents the execution links of step 
+. These links provide pointers for examining related executions together. The model uses each execution’s task requirements, information available at that step, actual actions, and subsequent progress to assess how content was used and whether an error occurred and was decisive.
+
+Handoffs.
+
+Assignment records specify what work the receiving agent should perform, so checking its processing requires revisiting these requirements. Systems that delegate work typically identify the receiving agent in the author field or step content, for example with 
+(-> X)
+ or a 
+delegate_to_X
+ call. For a decision step by agent X, we first link to the most recent earlier step in which another agent assigned work to X. If no explicit assignment is recorded, we link to the most recent earlier non-tool step by another agent that mentions X, since naming a recipient in text may also convey requirements or hand off content. When adjacent decision steps have different authors, we also link the later step to the earlier one, using the change in speaking agent as an additional cue for connecting executions. These links allow the receiving agent’s actions to be checked against what it was asked to do, helping distinguish erroneous requirements from errors in interpreting or carrying them out.
+
+Content correspondence.
+
+The same information may recur in records of content production, handoffs, and subsequent processing. Linking these records helps check how the information was formed and later processed. We find related executions using numerical values, identifiers, and specific text that recur across steps, detecting numbers, identifiers, and quoted text that meet their respective minimum length requirements. We exclude values already given in the task description, agent names, and common content because they do not readily distinguish which specific records should be revisited. We measure an item’s specificity by its inverse document frequency across the original records of a single trace. We retain only items with specificity at least 
+, corresponding to occurrence in no more than approximately one quarter of the records. The resulting links focus on distinctive content. Threshold sensitivity is examined in Table 
+12
+.
+
+For each retained item in step 
+, we collect its earlier occurrences and retain the first occurrence for each record author as a candidate. These candidates allow the model to revisit how the content was handled when it first entered each participant’s records. Reviewing, reporting, and coordinating roles may restate content produced at other steps. We therefore prefer the most recent candidate that is not a reporting step. If no such candidate is available, we select the most recent reporting step. We identify reporting steps from role names and wording that reports, summarizes, or closes the task. This selection directs links toward earlier production or processing and reduces links to later restatements. It helps the model check whether an error had already occurred in an earlier execution and whether later executions misread, modified, or corrected the content.
+
+Tool outputs present the results of actions. Attribution also requires examining the agent decisions that obtained or processed this content. If the selected occurrence is a tool-output record, we search the item’s earlier candidates for the most recent agent step. If none is available, we link to the step that issued the tool call. This makes the linked record a decision step that can be assessed for attribution. Each item contributes at most one earlier step. Links from different items are combined with handoff links in 
+.
+
+Parameter settings.
+
+Both benchmarks use a specificity threshold of 
+ for content correspondence. Specificity is computed from record frequencies within each trace, so the same threshold applies a common relative-frequency criterion across tasks to select distinctive content correspondence cues. Table 
+5
+ also lists the parameters for content references and truncation of detailed records, whose uses are described in Appendix 
+B
+. The content-reference parameters are the same on both benchmarks. Given the longer execution traces in LongRCA, we use shorter truncation lengths for its detailed records to control the amount of lengthy reasoning and tool outputs or environment feedback presented to the model.
+
+Parameter
+
+Who&When
+
+LongRCA
+
+Execution links and content references
+
+Specificity threshold 
+
+1.4
+
+Minimum length of a region replaced by a content reference (words)
+
+12
+
+Detailed records (characters)
+
+Reasoning truncation length
+
+1,500
+
+500
+
+Tool output or environment feedback truncation length
+
+6,000
+
+1,500
+
+Table 5: 
+CoLFA parameters. Truncation lengths for detailed records are measured in characters.
+
+A.2 
+Expansion Scope
+
+Execution links indicate which earlier executions to revisit, while the expansion scope determines which steps and how much history to include along these links. Tracing how content was produced requires examining relevant computations, judgments, and actions. Checking subsequent processing requires the recipient’s task requirements, available information, and actual actions. Requirements and inputs supplied by other participants provide additional evidence for these checks. CoLFA accordingly sets how much history to include for each agent and constructs these scopes according to the system’s known collaboration configuration. Differences in scope reflect what each record helps check, while agent identities are used to apply the selection.
+
+Expansion scope and collaboration configuration.
+
+In systems where agents delegate and hand off work, we construct output steps, production steps, and supply steps as defined in Section 
+3.2
+. The output agent may receive and adopt information, take actions, and make revisions multiple times before producing the final result. We therefore retain all of its decision steps throughout the trace. This allows its processing to be examined in sequence, supporting checks of whether it introduced an error and how it handled earlier content. The retained steps also provide multiple entry points for tracing related executions.
+
+Handed-off content presents the outcome of upstream work. Checking whether that outcome is erroneous also requires revisiting the computations, judgments, or actions that produced it. We select as the upstream agent the author of the last decision step not taken by the output agent. We obtain entry points within this agent from the execution links of all output steps, then expand only within that agent using content correspondence to obtain the production steps. These steps allow processing at the receiving end to be checked against the earlier basis for producing the content. This helps distinguish errors already introduced upstream from downstream errors in interpretation or processing, while limiting the upstream history included in detailed examination to steps connected through these links.
+
+Assessing the processing in output and production steps also depends on the requirements and inputs supplied by the remaining agents. Supply steps therefore include earlier steps by these agents that are directly linked to either set, and expansion stops there. These records provide a basis for checking what requirements the processing should satisfy and what inputs informed the decisions. Supply steps belong to both the formation steps and the set of steps from which the model may answer, allowing the model to check whether the requirements or inputs themselves are erroneous. Stopping here limits further expansion into the other participants’ internal histories.
+
+A broadcast group chat shares messages with the entire team, so the output agent may form its result using any message from the upstream agent. In this configuration, we include all decision steps of the upstream agent as production steps, retaining the scope needed to examine the content it supplied. The remaining agents are still included through supply steps. A single-agent execution has no upstream agent. Its formation steps are the output steps, 
+, and the full sequence of its decision steps shows how the result was formed.
+
+In our evaluation, Magentic-One in Who&When Hand-Crafted and the multi-agent systems in LongRCA use the scope for delegation and handoffs. CaptainAgent in Who&When Algorithm-Generated records no assignments and shares all messages with the group chat, so it uses the broadcast group chat scope. All 108 VitaBench traces in LongRCA are single-agent executions.
+
+Scope comparison and analysis.
+
+To examine the trade-off between coverage and size under different expansion scopes, we compare the five scopes in Table 
+6
+ on the 1,032 multi-agent traces from LongRCA without model calls. Coverage is the proportion of traces whose selected steps contain the annotated decisive error step. The mean step share is the average of 
+, calculated separately for each trace. Each strategy supplements its selected steps with directly linked earlier steps, so this additional set varies with the expansion scope.
+
+Expansion scope
+
+Coverage
+
+Mean step
+
+share
+
+All decision steps of the output and upstream agents, supplemented with directly linked steps
+
+87.4
+
+71.9
+
+Output steps, upstream production steps, and their supply steps 
+(CoLFA)
+
+78.9
+
+49.3
+
+All decision steps of the output agent, supplemented with directly linked steps
+
+67.2
+
+40.7
+
+All decision steps of the upstream agent, backward tracing within the output agent through content correspondence, and directly linked steps
+
+61.3
+
+52.3
+
+Backward tracing within both the output and upstream agents through content correspondence and assignments, supplemented with directly linked steps
+
+47.5
+
+26.1
+
+Table 6: 
+Comparison of expansion scopes on multi-agent traces from LongRCA. Values are percentages. Mean step share is the mean of 
+ across traces.
+
+CoLFA has a mean step share of 49.3% and coverage of 78.9%. Retaining all decision steps of the upstream agent and tracing backward within the output agent through content correspondence increases the mean step share to 52.3% but lowers coverage to 61.3%. When backward tracing within both agents uses only content correspondence and assignments, the mean step share is 26.1% and coverage falls to 47.5%. These results support using different scopes for the two agents. Retaining all decision steps of the output agent and tracing upstream production through execution links allows the formation of the final result and the earlier processing of relevant content to be examined together.
+
+Starting from all decision steps of the output agent and their directly linked records, further tracing upstream production and adding the corresponding supply steps increases coverage from 67.2% to 78.9% and the mean step share from 40.7% to 49.3%. This additional scope reaches earlier steps that produced the handed-off content and incorporates other requirements and inputs needed to assess those steps. Retaining all decision steps of both the output and upstream agents further raises coverage to 87.4%, with a mean step share of 71.9%. Of the 20,126 upstream steps excluded by CoLFA, 76 are annotated decisive error steps. These results characterize the trade-off in the current scope. Tracing upstream production expands error coverage while controlling how much internal upstream history is included.
+
+Stopping expansion at supply steps adds directly relevant requirements and inputs while limiting further inclusion of other participants’ internal histories. In the closure comparison, starting from the final step and repeatedly following both execution links and each agent’s preceding steps expands the scope to all decision steps. This shows why expansion paths and stopping points need to be specified. These analyses measure how well different scopes retain annotated error steps and characterize their trade-offs in size. Final localization performance is evaluated in the main experiments and component ablations.
+
+Appendix B 
+Attribution Input
+
+After step expansion identifies the formation steps 
+ and execution links 
+, attribution still requires examining the processing in these executions and assessing the role of errors in light of overall execution progress. Following Section 
+3.3
+, CoLFA retains a separate detailed record for each formation step, uses content references and step references to support comparisons between earlier and later processing, and supplements these records with a trace overview of progress throughout the execution. The task description, detailed records, and trace overview form the attribution input. The model uses this input together with the outcome information and judgment criteria in the prompt to identify the decisive error step.
+
+Algorithm 
+1
+ summarizes the complete procedure from step expansion to the final judgment. Here, 
+ denotes the union of the execution links of the steps indexed by 
+, and 
+ denotes closure under content correspondence within the selected upstream agent only. 
+ is the set of decision step indices of that upstream agent, and 
+ is the set of decision step indices of agents other than the output agent and the selected upstream agent. Appendix 
+A
+ describes the execution links and expansion scopes for different collaboration configurations. Record organization and judgment prompts are described below.
+
+Algorithm 1
+ 
+ CoLFA
+
+1:
+
+            
+            
+          A task description 
+, a failed execution trace 
+, and a reference answer if provided by the evaluation protocol, as described in Appendix 
+C
+.
+
+2:
+
+            
+            
+          The predicted decisive error step 
+ and responsible agent.
+
+3:
+
+            
+            
+          Obtain the execution links 
+ of each decision step from handoffs and content correspondence, following Appendix 
+A
+.
+
+4:
+
+            
+            
+          Identify the output agent and selected upstream agent as defined in Section 
+3.2
+. Set 
+ all decision steps of the output agent.
+
+5:
+
+            
+            
+          If there is no upstream agent, set 
+. For a broadcast group chat, set 
+. For delegation and handoffs, set 
+.
+
+6:
+
+            
+            
+          Set 
+.
+
+7:
+
+            
+            
+          Set 
+.
+
+8:
+
+            
+            
+          Extract authors and key points of actions and results across the execution according to the entry inclusion rules in Section 
+B.1
+. Arrange them chronologically to form the trace overview.
+
+9:
+
+            
+            
+          Construct a separate detailed record for each step in 
+, ordered chronologically and equipped with content references. Add step references for output steps and production steps.
+
+10:
+
+            
+            
+          Assemble the judgment prompt as described in Section 
+B.2
+ and use a single model call to identify the decisive error step 
+ from 
+.
+
+11:
+
+return
+ 
+ and its author.
+
+B.1 
+Organization of Execution Records
+
+Content can be reused across steps, but each decision involving it has its own execution context. Attribution requires comparing earlier and later processing of shared content while retaining evidence about each execution’s task, information, and actions. We organize detailed records of the formation steps accordingly and provide references across steps. The trace overview adds information about execution progress outside the detailed records, allowing local processing to be checked against subsequent use, rejection, or correction.
+
+Detailed records and level of detail.
+
+The same content may be produced by one agent and received and processed by another, while these executions may have different requirements and access to different information. We therefore retain a separate record for each formation step, ordered chronologically and labeled with its original index and author, presenting its reasoning, action, and tool outputs or environment feedback. These records keep each execution as a distinct object of assessment. They allow the model to use relevant requirements and inputs to check whether a particular action was erroneous and whether the error was introduced earlier or arose in later interpretation or processing.
+
+Actions directly show the processing performed at a step and are not truncated for length. Overly long reasoning, tool outputs, and environment feedback are truncated to the lengths in Table 
+5
+, with omissions marked. We retain the beginning of reasoning on LongRCA and both the beginning and end of reasoning on Who&When. For overly long tool outputs or environment feedback, we retain both ends on both benchmarks. On Who&When, the length limit is applied separately to each returned observation. These choices control the presentation of lengthy text while retaining actions for inspection. Repeated content is organized using the content references described below.
+
+Preprocessing tool outputs and environment feedback.
+
+Tool outputs and environment feedback may contain task content alongside execution environment messages and formatting fields. In Who&When records, we remove blank lines, execution environment warnings, and stack-location lines, and process repeated or formatting-related fields in webpage metadata while retaining page addresses and descriptions. These steps reduce the presentation of environment formatting and repeated fields, making the returned content easier to read and check.
+
+Content references.
+
+The same content may recur in records of its production, handoff, and subsequent processing, providing a shared point of comparison across executions. We share repeated text through references while retaining a separate record for each execution. This allows the model to examine different processing of the shared content without repeatedly reading the same lengthy text in every record.
+
+Specifically, we index identical word sequences in the task description and previously presented detailed records. We match 8-word sequences and mark word positions in the current record that are covered by earlier text. Consecutive covered positions are merged into contiguous regions. Each region of at least 12 words is replaced with a reference such as 
+repeats content shown at step i
+ or a reference to the task description. This minimum covered length corresponds to the content-reference parameter in Table 
+5
+. If a region has matches from multiple sources, the reference points to the primary matching source that covers the most word positions in that region. Both benchmarks apply content references to actions and tool outputs or environment feedback. The same rules also apply to the reasoning field on Who&When.
+
+These references provide pointers to relevant original text, allowing the model to compare how shared content was interpreted and processed in different records while reducing repeated presentation. The model uses the records to compare and assess paraphrases and modifications. It also uses execution context to assess actual content use and the role of each instance of processing.
+
+Step references.
+
+Assessing whether the current processing is appropriate may require revisiting requirements, inputs, or earlier processing from other agents. We reuse the execution links identified during step expansion. For each step 
+, we obtain
+
+The original index and author of each step in 
+ are listed in the detailed record of step 
+. This provides explicit pointers for checking the current action against relevant requirements, inputs, and earlier processing, helping distinguish erroneous requirements or inputs from errors in the current execution’s processing. Content references provide shared text for comparison, and step references identify where to revisit related executions. Together with separate records, they allow related executions to be examined together and each decision to be assessed in its own context.
+
+Trace overview.
+
+A local error’s role in the final failure depends on subsequent processing. Content use, rejection, or correction may occur outside the formation steps. To capture these developments, we extract key points of actions and tool outputs or environment feedback across the complete execution and arrange brief entries in the original chronological order. Each entry retains its original step index and author and presents brief key points from the recorded content. On Who&When, the overview includes only decision steps with action content. On LongRCA, it includes all decision steps, with brief records also provided for steps without action content.
+
+The key points of an action are extracted according to its recorded format and summarize the processing performed at that step, such as the called tool and its arguments, the beginning of a code block, or the recipient and instructions of a dispatch. The key points of a result provide brief outcome indicators and selected returned fields, such as an exit code, a webpage’s title and address, or the opening text of a result and the amounts and quantities it states. When longer action key points recur for the same author, we use pointers to their first corresponding entries. This preserves the recurrence while reducing repeated presentation. It helps the model connect earlier and later attempts with execution progress and check whether execution recovered or an earlier error continued to affect subsequent processing.
+
+Detailed records support examination of specific executions, while the overview provides overall progress as context. The model can use both to examine where errors were introduced, how they changed, and what role they played in the final failure. The answer remains restricted to the formation steps 
+.
+
+B.2 
+Judgment Prompts and Answers
+
+The judgment prompt combines task and outcome information with the trace overview, detailed records, judgment criteria, and answer format. It guides the model to examine related executions together and assess each action in its own context. Judgment prompts for the two benchmarks are presented in Appendix 
+G
+.
+
+Input arrangement and outcome information.
+
+The task description specifies the original task’s objective. On Who&When, the reference answer provides the expected task outcome. On LongRCA, we extract the system’s own statement about its final outcome from the trace and check it against the execution records. Outcome information provides a reference for retrospective analysis, while each action is assessed against the agent’s task requirements and the information available at that step. The input protocols are described in Appendix 
+C.2
+.
+
+Following the task and outcome information, the overview presents overall execution progress and the detailed records provide evidence about specific actions and their inputs. Content references and step references connect relevant records for comparison. This arrangement allows the model to examine local processing alongside earlier requirements and inputs, as well as subsequent use or correction.
+
+Judgment criteria and output.
+
+The prompts direct the model to assess whether a step’s own action was erroneous and examine its role in the final failure through related earlier and later processing. The target is the earliest mistake that was decisive for the final failure. Judgment distinguishes the introduction of an error from later propagation or reporting, as well as from errors that were corrected and exploratory actions from which the execution recovered. Judgment also considers the content actually used in subsequent execution and its outcomes to assess whether a correction changed the error’s role in the final failure. By comparing earlier processing, later revisions, and the final outcome, the model assesses the error’s role across the execution. On Who&When, the model also considers how correcting the action would have affected the final outcome, using the reference answer and subsequent execution as evidence.
+
+The model makes a joint attribution judgment in a single call, selecting a decisive error step from the formation steps 
+ and returning its original index followed by a brief explanation. We use the selected step’s author as the predicted responsible agent.
+
+Appendix C 
+Benchmarks
+
+The two benchmarks cover different collaboration configurations, task domains, and trace lengths, providing a basis for evaluating CoLFA’s localization performance and token cost under different execution conditions. This section supplements the benchmark sources and data statistics in Section 
+4.1
+ and explains the attribution annotations and task information provided to each method.
+
+C.1 
+Evaluation Coverage and Data Statistics
+
+Evaluation coverage and sources.
+
+Collaboration configurations in multi-agent systems affect how requirements and intermediate results are transferred and where related processing occurs. Trace length affects the amount of recorded material that needs to be linked and checked. Who&When collects failed executions on GAIA and AssistantBench tasks. Its Algorithm-Generated (Alg.) split contains 126 traces produced by teams constructed by CaptainAgent, and its Hand-Crafted (Hand.) split contains 58 traces produced by Magentic-One 
+(
+Zhang et al., 2025
+)
+. The two splits respectively cover broadcast group chats and collaboration in which an orchestrator assigns work to specialized agents, capturing different ways of connecting executions.
+
+LongRCA contains 1,140 failed traces from five sources, covering code repair, terminal operations, travel planning, service-tool use, and web tasks. Its systems include fixed-role teams, group-chat collaboration, and sequential workflows. The benchmark also includes single-agent executions 
+(
+Zhang et al., 2026b
+)
+. LongRCA has a greater mean trace length than either split of Who&When and covers multiple system organizations, providing a broader range for comparing localization performance and input cost under different execution conditions. Expansion scopes for the collaboration configurations are described in Appendix 
+A.2
+. Settings for the formation-step coverage and input-size analyses are provided in Appendix 
+F
+.
+
+We use all failed execution traces released by both benchmarks and their corresponding attribution annotations for evaluation. Table 
+7
+ reports the dataset sizes and original trace lengths.
+
+Traces
+
+Steps
+
+Tokens (K)
+
+Who&When
+
+Alg.
+
+126
+
+8.7
+
+3.0
+
+Hand.
+
+58
+
+51.6
+
+16.9
+
+LongRCA
+
+TravelPlanner
+
+685
+
+165.9
+
+48.4
+
+WebArena Verified
+
+177
+
+58.8
+
+31.0
+
+SWE-bench Pro
+
+128
+
+285.0
+
+118.7
+
+VitaBench
+
+108
+
+54.6
+
+10.0
+
+Terminal-Bench 2
+
+42
+
+272.1
+
+95.8
+
+All sources
+
+1,140
+
+156.0
+
+51.7
+
+Table 7: 
+Benchmark statistics. Step and token counts are means per original execution trace.
+
+Statistical conventions.
+
+A step in Table 
+7
+ is one record in the original execution trace, including tool and environment records. Decision steps retain the original indices to preserve the correspondence between predicted positions and attribution annotations. We count trace tokens with the DeepSeek-V4-Flash tokenizer using the content of each original record to describe the text size of the original traces. Each method’s actual token consumption is measured from API usage. The accounting conventions and breakdowns are provided in Appendix 
+E.1
+.
+
+C.2 
+Annotations and Input Protocols
+
+Attribution annotations.
+
+Who&When annotates the responsible agent and the earliest erroneous step whose correction would turn task failure into success 
+(
+Zhang et al., 2025
+)
+. LongRCA annotates the earliest step that introduces an error leading to the final failure, provided the error is not subsequently corrected. Earlier errors that were corrected and later steps that merely act on, propagate, or reveal an existing error are not treated as the root cause. For handoffs, the instruction step is annotated when the instruction already contains the decisive error. The recipient’s step is annotated when the recipient erroneously deviates from the instruction or introduces a new decisive error 
+(
+Zhang et al., 2026b
+)
+. These criteria define the error to be localized and its relationship to subsequent processing.
+
+LongRCA annotates the responsible agent and root-cause step separately. CoLFA predicts the responsible agent as the author of the selected step. Both predictions are scored against their respective annotations. Scoring details are provided in Appendix 
+E
+.
+
+Input protocols.
+
+Each method receives the task description and execution trace for the evaluations in which it participates. On Who&When, each method also receives the expected answer to the original task, namely the task reference answer, following the benchmark’s With Ground Truth setting 
+(
+Zhang et al., 2025
+)
+. LongRCA does not release reference answers, and none of the methods evaluated on it receives them. The responsible agent and error step for the current case are attribution annotations used only for scoring. These protocols specify the task information available to each method on each benchmark. Appendix 
+B.2
+ describes how outcome information is organized in CoLFA’s judgment prompt.
+
+Appendix D 
+Baselines
+
+Implementation and key adaptations.
+
+Within each evaluation setting, we rerun the baselines using the same backbone and the task information specified in Appendix 
+C
+. For methods with public implementations, we build on those implementations. For ECHO and RAFFLES, complete runnable implementations are unavailable, so we reproduce them using the algorithms, prompts, and implementation descriptions in their papers.
+
+Evaluation scope.
+
+DCFA’s search requires a task reference answer, so we evaluate it only on Who&When, which provides this information. For CHIEF, the retrieval resources used for task decomposition in this reproduction come from GAIA and AssistantBench, matching Who&When’s task sources. We therefore also restrict its evaluation to Who&When.
+
+Base generation settings.
+
+For each backbone, participating methods use common base generation settings, with ECHO retaining sampling at the temperature required by its method. DeepSeek-V4.1-Flash runs with thinking disabled and temperature 0. GLM-5.3-Flash uses low reasoning effort and greedy decoding. Claude Sonnet 5.5 runs without extended thinking and uses default sampling.
+
+Appendix E 
+Complete Results
+
+Scoring.
+
+The responsible agent and decisive error step are scored separately. Agent names are compared after normalization, and the predicted step index must exactly match the annotated index. Accuracy is calculated over all evaluated execution traces.
+
+E.1 
+Token Breakdown
+
+DeepSeek-V4.1-Flash
+
+GLM-5.3-Flash
+
+Method
+
+Input
+
+Output
+
+Total
+
+Input
+
+Output
+
+Total
+
+Who&When
+
+All-at-Once
+
+7,881
+
+490
+
+8,372
+
+7,829
+
+350
+
+8,179
+
+A2P
+
+8,125
+
+182
+
+8,308
+
+8,075
+
+360
+
+8,435
+
+CORRECT
+
+21,025
+
+1,707
+
+22,732
+
+19,480
+
+1,133
+
+20,614
+
+Step-by-Step
+
+109,979
+
+1,092
+
+111,071
+
+31,188
+
+767
+
+31,955
+
+Binary Search
+
+14,684
+
+7
+
+14,691
+
+15,104
+
+175
+
+15,279
+
+ECHO
+
+52,465
+
+8,419
+
+60,884
+
+52,091
+
+6,391
+
+58,482
+
+RAFFLES
+
+33,359
+
+1,271
+
+34,630
+
+33,034
+
+1,127
+
+34,160
+
+DeepDebug
+
+13,181
+
+564
+
+13,745
+
+13,298
+
+917
+
+14,215
+
+DCFA
+
+92,341
+
+14,721
+
+107,062
+
+128,548
+
+12,627
+
+141,175
+
+CHIEF
+
+66,741
+
+6,158
+
+72,900
+
+63,224
+
+6,077
+
+69,302
+
+CoLFA
+
+6,724
+
+211
+
+6,936
+
+6,643
+
+417
+
+7,060
+
+LongRCA
+
+All-at-Once
+
+52,637
+
+183
+
+52,820
+
+51,516
+
+788
+
+52,303
+
+A2P
+
+53,445
+
+192
+
+53,637
+
+52,337
+
+593
+
+52,930
+
+CORRECT
+
+112,862
+
+1,608
+
+114,471
+
+108,594
+
+1,703
+
+110,296
+
+Step-by-Step
+
+943,739
+
+6,296
+
+950,036
+
+364,049
+
+3,788
+
+367,837
+
+Binary Search
+
+130,340
+
+13
+
+130,353
+
+114,113
+
+555
+
+114,668
+
+ECHO
+
+336,848
+
+10,519
+
+347,367
+
+329,722
+
+7,859
+
+337,581
+
+RAFFLES
+
+214,328
+
+1,556
+
+215,885
+
+210,505
+
+1,803
+
+212,308
+
+DeepDebug
+
+70,637
+
+673
+
+71,310
+
+70,369
+
+1,559
+
+71,928
+
+CoLFA
+
+22,002
+
+401
+
+22,403
+
+21,312
+
+690
+
+22,002
+
+Table 8: 
+Token consumption per execution trace, broken down into input and output. Bold indicates the lowest value in each column for each benchmark. Input and output may not sum to the total because of rounding.
+
+Table 
+8
+ breaks down the average token consumption reported in Tables 
+1
+ and 
+2
+ into input and output to examine the composition of cost across the complete attribution process. Using API-reported usage, we sum input and output tokens across all language model calls within one complete execution of each method and report the mean per trace. For GLM-5.3-Flash, output tokens include reasoning tokens. Token consumption from embedding requests is excluded. Based on the table values, input tokens account for more than 86% of total consumption for every method, showing that cumulative input constitutes most attribution cost.
+
+CoLFA achieves the lowest total token consumption in all four main evaluation settings. Compared with the baseline with the highest exact step-localization accuracy in each setting, CoLFA reduces total consumption by 66% to 90%, with lower consumption of both input and output tokens. The breakdown further shows that reduced input consumption accounts for approximately 90.5% to 99.4% of the total savings. Overall savings thus primarily come from the dominant input component and are accompanied by lower output consumption. Together, the breakdown and the localization results in the main text show that CoLFA achieves higher exact step-localization accuracy with lower input and output costs across the complete attribution process.
+
+The cost breakdown in Table 
+8
+ and the localization results in the main text jointly show that CoLFA achieves higher exact step-localization accuracy while substantially reducing cumulative input. Cumulative input measures the amount of material processed during attribution, while the support this material provides for judgment also depends on how it is organized. For a given failed execution record, rereading the same history and repeatedly presenting the same original text increase consumption without necessarily adding evidence for distinguishing errors. Attribution in multi-agent systems requires checking relationships among requirements, content production, and subsequent processing, and distinguishing the role of each decision within these relationships. Organizing which steps are examined and how their content is presented can bring scattered records together as evidence that can be jointly examined and compared, while controlling detailed expansion and repeated input. This organization can therefore reduce text processing and improve support for judgment in the same process, providing a common basis for lower overall cost and higher localization accuracy. The contributions of the two components are further examined through the controlled ablations in Appendix 
+E.2
+.
+
+E.2 
+Complete Ablation
+
+Who&When
+
+LongRCA
+
+Alg.
+
+Hand.
+
+Overall
+
+Variant
+
+Agent
+
+Step
+
+Agent
+
+Step
+
+Agent
+
+Step
+
+Tok. (K)
+
+Role
+
+Exact
+
+5
+
+MAE
+
+Tok. (K)
+
+DeepSeek-V4.1-Flash
+
+CoLFA
+
+65.87
+
+52.38
+
+62.07
+
+27.59
+
+64.67
+
+44.57
+
+6.9
+
+51.58
+
+21.84
+
+32.81
+
+35.54
+
+22.4
+
+w/o Expansion
+
+61.11
+
+46.83
+
+56.90
+
+22.41
+
+59.78
+
+39.13
+
+7.6
+
+47.02
+
+19.65
+
+30.53
+
+37.91
+
+32.9
+
+w/o Organization
+
+61.90
+
+47.62
+
+58.62
+
+24.14
+
+60.87
+
+40.22
+
+7.5
+
+49.47
+
+19.30
+
+29.47
+
+37.80
+
+30.1
+
+w/o Both
+
+57.94
+
+44.44
+
+55.17
+
+20.69
+
+57.07
+
+36.96
+
+8.4
+
+45.26
+
+17.89
+
+27.02
+
+39.45
+
+52.0
+
+GLM-5.3-Flash
+
+CoLFA
+
+68.25
+
+54.76
+
+62.07
+
+29.31
+
+66.30
+
+46.74
+
+7.1
+
+52.28
+
+23.60
+
+36.23
+
+35.42
+
+22.0
+
+w/o Expansion
+
+64.29
+
+50.79
+
+56.90
+
+24.14
+
+61.96
+
+42.39
+
+7.7
+
+49.82
+
+20.70
+
+34.04
+
+36.70
+
+32.4
+
+w/o Organization
+
+65.08
+
+51.59
+
+56.90
+
+25.86
+
+62.50
+
+43.48
+
+7.7
+
+48.07
+
+20.35
+
+33.33
+
+36.77
+
+29.9
+
+w/o Both
+
+60.32
+
+48.41
+
+51.72
+
+18.97
+
+57.61
+
+39.13
+
+8.5
+
+46.32
+
+19.30
+
+29.12
+
+40.14
+
+51.0
+
+Table 9: 
+Complete ablation results for CoLFA by split, with strict matching on Who&When. Accuracies are percentages, and MAE is measured in steps. Bold indicates the best value for each backbone.
+
+The first seven metric columns report Who&When (WW), 
