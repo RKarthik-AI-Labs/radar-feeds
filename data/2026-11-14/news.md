@@ -1,6 +1,6 @@
 # News candidates — 2026-11-14 (IST)
 
-Generated 2026-11-14 07:05 UTC. Showing 254 items first seen in the last 18 h or published in the last 30 h; 158 older items from the 3-day window are only in news.json.
+Generated 2026-11-14 07:38 UTC. Showing 255 items first seen in the last 18 h or published in the last 30 h; 156 older items from the 3-day window are only in news.json.
 Each item appears once, in the first section it matches. Dates are as reported by the source ("date unknown" = page with no date).
 
 ## By priority topic
@@ -69,12 +69,13 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-13 01:47 UTC] Gemini 4 Hydrogen Now Powers AI Mode in Google Search for All Users — AndroidPure — https://www.androidpure.com/gemini-4-hydrogen-google-search/ · (already listed on an earlier day) · GEO/AEO · +1 other hits
 - [2026-11-12 20:48 UTC] Podqi study finds ChatGPT, Gemini and Perplexity send shoppers to fake stores — Startup Fortune — (Google News link; search the headline) · GEO/AEO
 
-### Model & lab launches (news search) (44)
+### Model & lab launches (news search) (45)
+- [2026-11-14 07:23 UTC] Claude launches Whiteboards, Sheets and Data — CASRAI — (Google News link; search the headline)
+- [2026-11-14 07:23 UTC] Gemini 4 Hydrogen: Rollout and Research Workflows — CASRAI — (Google News link; search the headline)
 - [2026-11-14 05:00 UTC] Google Releases Gemini 4 Hydrogen, and It Changes the Math on Business AI Costs — Times Square Chronicles — (Google News link; search the headline)
 - [2026-11-14 02:49 UTC] OpenAI launches Daybreak Red Team and Defense Factory: AI agents that attack your code, then patch it — Howl.Link — (Google News link; search the headline)
 - [2026-11-14 02:00 UTC] DeepSeek Opens Its App's Search, File, OCR and Voice Tools as APIs So Developers Can Rebuild the App — Pandaily — (Google News link; search the headline)
 - [2026-11-14 01:02 UTC] Anthropic introduces Claude Fable 5.2, Mythos 5.2 — SD Times — (Google News link; search the headline)
-- [2026-11-13 21:50 UTC] Google unveils Gemini 4 Hydrogen, its new AI model built for speed — Mashable — https://mashable.com/tech/google-gemini-4-hydrogen-ai-model-launch · (already listed on an earlier day) · GEO/AEO · +1 other hits
 - [2026-11-13 20:56 UTC] Anthropic releases Claude Fable 5.2, a coding model it says tops Opus 5.5 on FrontierSWE v2 — Online Tech Tips — https://www.online-tech-tips.com/anthropic-claude-fable-5-2-vs-opus-5-5/
 - [2026-11-13 20:37 UTC] DeepSeek opens its full app toolkit to developers through its API — Crypto Briefing — https://cryptobriefing.com/deepseek-opens-app-features-developers-api/ · +1 other hits
 - [2026-11-13 19:54 UTC] Meta tests a prediction-market app with its own employees — Crypto Briefing — https://cryptobriefing.com/meta-tests-prediction-market-app-employees/ · +1 other hits
@@ -83,6 +84,7 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-13 17:24 UTC] OpenAI launches ChatGPT Wallet for agent purchases — TestingCatalog AI News — (Google News link; search the headline)
 - [2026-11-13 16:56 UTC] OpenAI Launches AI Wallet After Its Own Model Spent Test Crypto Without Permission — the deep dive — (Google News link; search the headline)
 - [2026-11-13 16:00 UTC] Simba 3.5 vs Qwen-Audio-3.0-TTS: Two Ways to Solve the Language Problem, Only One of Which Is Documented — orcarouter.ai — https://www.orcarouter.ai/blog/simba-3-5-vs-qwen-audio-3-0-tts
+- [2026-11-13 16:00 UTC] MiniMax-H3-Image vs Qwen-Image 2.1: Two Open Checkpoints, Two Different Locks — orcarouter.ai — https://www.orcarouter.ai/blog/minimax-h3-image-vs-qwen-image-2-1
 - [2026-11-13 15:28 UTC] OpenAI Launches ChatGPT Wallet for Agent-Assisted Purchases — Unite.AI — (Google News link; search the headline)
 - [2026-11-13 14:58 UTC] Musk's SpaceX Super Intelligence Trims About 60 Jobs in Grok Imagine Video Unit — BigGo Finance — (Google News link; search the headline)
 - [2026-11-13 14:43 UTC] DeepSeek Launches Full App Capabilities via API: Search, File Reading, and Voice Interaction — KuCoin — (Google News link; search the headline)
@@ -93,25 +95,24 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-13 13:58 UTC] Chinese AI Models From DeepSeek, Moonshot, MiniMax and Ant Group Show Signs of NVIDIA Blackwell Use — xenospectrum — https://xenospectrum.com/en/chinese-ai-models-blackwell-gpu-fingerprint-forensics/ · GEO/AEO · +1 other hits
 - [2026-11-13 13:18 UTC] Anthropic Ships 4 Office Tools to Rival Microsoft [2026] — shattered.io — (Google News link; search the headline)
 - [2026-11-13 13:04 UTC] Zimperium uncovers ArcticRAT malware using xAI’s Grok to mine stolen SMS codes — Crypto Briefing — (Google News link; search the headline)
-- [2026-11-13 12:46 UTC] Anthropic launches Claude for Manufacturing, a plugin with 17 skills — Pasquale Pillitteri — (Google News link; search the headline)
 - [2026-11-13 12:12 UTC] OpenAI launches Daybreak Red Team and Defense Factory, AI agents that pen-test web apps and draft security patches — MLQ.ai — (Google News link; search the headline)
 - [2026-11-13 12:06 UTC] Google launches Gemini 4 Hydrogen, a fast model for agent workloads — Resultsense — (Google News link; search the headline)
 - [2026-11-13 12:02 UTC] Gemini 4 Hydrogen, Google launches fast model for code and agents — Meteora Web — (Google News link; search the headline)
 - [2026-11-13 11:45 UTC] Google Introduces Gemini 4 Hydrogen to Make Search More Intelligent and Responsive — Tech Times — (Google News link; search the headline)
+- [2026-11-13 09:32 UTC] OpenAI Launches AI Security Agents to Find Vulnerabilities, Test Exploits and Fix Flaws — Cyber Press — (Google News link; search the headline)
 - [2026-11-13 09:20 UTC] EU leaders told to act now to stay in AI race with US and China — South China Morning Post on MSN — https://www.msn.com/en-xl/technology/artificial-intelligence/eu-leaders-told-to-act-now-to-stay-in-ai-race-with-us-and-china/ar-AA2hnAV7
 - [2026-11-13 08:47 UTC] Meta Muse Confirmed for India Launch in 2027: AI Companion Crosses 10 Million Users in US and Canada — PaidFreeDroid — (Google News link; search the headline)
 - [2026-11-13 07:37 UTC] Anthropic Launches Claude Manufacturing Plugin With 17 AI Skills — Dataconomy — (Google News link; search the headline)
+- [2026-11-13 07:28 UTC] OpenAI Launches Two AI Cybersecurity Tools to Automate Penetration Testing and Vulnerability Remediation — CyberSecurityNews — (Google News link; search the headline)
 - [2026-11-13 07:04 UTC] Grok 5 Release Date: Is It Out? What xAI Has Confirmed — Kingy AI — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-11-13 05:14 UTC] DeepSeek V4.1 Pro Adalah Fixture Pengujian dalam Agen Pengodean — OrcaRouter — (Google News link; search the headline) · (already listed on an earlier day)
-- [2026-11-13 04:04 UTC] OpenAI launches Daybreak security tools as nonprofits seek court order to halt advanced AI development — news.lavx.hu — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-11-13 02:34 UTC] Andrew Yao and Yang Zhilin Co-Author TCSExam as Kimi K3 Adds an Edge to a Graph Record — Pandaily — (Google News link; search the headline) · (already listed on an earlier day)
+- [2026-11-13 01:24 UTC] Google launches Gemini 4 Hydrogen AI model for faster coding, search and everyday tasks — The Times of India on MSN — https://www.msn.com/en-in/news/other/google-launches-gemini-4-hydrogen-ai-model-for-faster-coding-search-and-everyday-tasks/ar-AA2hmePl · GEO/AEO
 - [2026-11-13 00:40 UTC] Qwen4 Preview Live: 470+ Open Models, Doubts [2026] — shattered.io — https://shattered.io/qwen4-launch-alibaba-open-source-promise-doubt-470-models-2026/
 - [2026-11-12 22:23 UTC] Wyoming woman joins lawsuit against Musk’s xAI over Grok, alleging at least 7,000 AI-generated explicit images of her as a child — Front Page Detectives on MSN — https://www.msn.com/en-us/technology/artificial-intelligence/wyoming-woman-joins-lawsuit-against-musk-s-xai-over-grok-alleging-at-least-7-000-ai-generated-explicit-images-of-her-as-a-child/ar-AA2hmH9C
+- [2026-11-12 20:06 UTC] KPMG Launches Cybersecurity Services Powered by Anthropic’s Claude Mythos — kpmg.com — (Google News link; search the headline)
 - [2026-11-12 18:15 UTC] Anthropic Launches Claude for Manufacturing With 17 Workflow Skills — Unite.AI — (Google News link; search the headline)
-- [2026-11-12 08:59 UTC] OpenAI Launches In-Country AI Processing For Indian Businesses — Rediff — (Google News link; search the headline)
-- [2026-11-12 07:11 UTC] Moonshot AI Turns to Europe for Nvidia Blackwell Access Amid U.S. Curb… — Rich Picks Daily — (Google News link; search the headline)
-- [2026-11-12 03:39 UTC] OpenAI Creates a "Red Button" to Shut Down AI Models in Emergencies — mezha — https://mezha.ua/en/news/openai-stvorila-sistemu-avariynogo-vimknennya-svojih-shi-modeley-317140/ · GEO/AEO
-- [2026-11-12 00:35 UTC] [November 11, 2026] 15-Minute IT News | OpenAI's domestic AI processing and new Gemini model, Pixel's AI evolution and data leaks — note — https://note.com/beginwiththeend/n/n3534fe63d616?hl=en
+- [2026-11-12 02:15 UTC] OpenAI API inference residency launches in India with local processing, in-country storage for GPT-6 Luna — Moneycontrol — https://www.moneycontrol.com/technology/openai-api-inference-residency-launches-in-india-with-local-processing-in-country-storage-for-gpt-6-luna-article-14078177.html
 - [2026-11-11 15:03 UTC] Google’s Gemini Decision 1 model scores up to 1,000 questions in one API call — VentureBeat — https://venturebeat.com/technology/googles-gemini-decision-1-model-scores-up-to-1-000-questions-in-one-api-call
 - [2026-11-11 13:15 UTC] Llama has surpassed GPT. I canceled my paid subscription. — note — https://note.com/super_robin2976/n/n0a4d3e7a8c39?hl=en
 
@@ -150,6 +151,7 @@ Each item appears once, in the first section it matches. Dates are as reported b
 ## Other items from source feeds
 
 ### Labs (official feeds + trackers) (24)
+- [2026-11-14 07:30 UTC] Sources: despite Nvidia's 20+ years of business in China, Jensen Huang struggled to gain access to policymakers driving Beijing's chip self-sufficiency campaign (Eleanor Olcott/Financial Times) — Techmeme — https://www.techmeme.com/261114/p7#a261114p7
 - [2026-11-14 07:02 UTC] Operand, which offers AI-powered due diligence tools for PE firms, raised $31M across a seed and a Series A led by Khosla Ventures at a $220M valuation (Lucinda Shen/Axios) — Techmeme — https://www.techmeme.com/261114/p6#a261114p6
 - [2026-11-14 06:55 UTC] WhiteMatter, which builds "guardian" AI agents to oversee file access, software use, decision making, and actions of existing AI agents, raised a $20M Series A (Alice Tecotzky/Business Insider) — Techmeme — https://www.techmeme.com/261114/p5#a261114p5
 - [2026-11-14 06:35 UTC] Charta Health, which offers AI-powered tools to automate medical chart review, billing, and coding workflows, raised a $55M Series B led by Insight Partners (Jessica Hagen/MobiHealthNews) — Techmeme — https://www.techmeme.com/261114/p4#a261114p4
@@ -164,7 +166,6 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-14 01:15 UTC] Doc: Amazon, wary of AI agents favoring sites with better data, plans to gather data on nearly every product sold anywhere, including by crawling rivals' sites (Greg Bensinger/Reuters) — Techmeme — https://www.techmeme.com/261113/p37#a261113p37
 - [2026-11-14 01:00 UTC] Sources and messages: Jensen Huang misled several Nvidia leaders, including general counsel Tim Teter, about the nature of his relationship with Alice Huang (Reuters) — Techmeme — https://www.techmeme.com/261113/p36#a261113p36
 - [2026-11-13 23:55 UTC] Sources: the FAA outage occurred after an update to the private communications network that connects the ATC system caused the system to reboot and crash (Kierra Frazier/CBS News) — Techmeme — https://www.techmeme.com/261113/p35#a261113p35
-- [2026-11-13 23:35 UTC] ASI, developer of AI tool SMART, says the FAA outage "is not based on or a result of the SMART system, any product of ASI, or our integration with FAA and ATC" (Asi/@airspaceintel) — Techmeme — https://www.techmeme.com/261113/p34#a261113p34
 - [2026-11-13 23:02 UTC] datasette-cluster-map 0.19 — Simon Willison — https://simonwillison.net/2026/Nov/13/datasette-cluster-map/
 - [2026-11-13 22:30 UTC] datasette-leaflet 0.3 — Simon Willison — https://simonwillison.net/2026/Nov/13/datasette-leaflet/
 - [2026-11-13 20:33 UTC] Why a new court ruling matters for press freedom and privacy — Microsoft AI Blog — https://blogs.microsoft.com/on-the-issues/2026/11/11/protecting-privacy-and-press-freedom-an-important-fourth-circuit-ruling/

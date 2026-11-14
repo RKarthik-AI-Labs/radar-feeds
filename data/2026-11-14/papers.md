@@ -1,7 +1,7 @@
 # Paper candidates — 2026-11-14 (IST)
 
-Generated 2026-11-14 07:05 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
-Totals: 1 new topic matches · 0 other new cs.IR · 95 seen in earlier runs.
+Generated 2026-11-14 07:38 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Totals: 1 new topic matches · 0 other new cs.IR · 94 seen in earlier runs.
 Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
 
 ## New papers matching your topics (1), highest score first
@@ -17,7 +17,7 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 
 ## Other new cs.IR papers, title only (0)
 
-## Already listed on an earlier day, still inside the look-back window (95)
+## Already listed on an earlier day, still inside the look-back window (94)
 - Faithful in Steps: Improving Generalization and Citation in RAG via Query Decomposition — https://arxiv.org/abs/2611.15538 (score 20)
 - Can the Confidence and Decisions of System 1 Models Be Trusted? An Explainability and Perturbation Audit of Jev-Style Decision Models — https://arxiv.org/abs/2611.12521 (score 14)
 - Protocol-Aware Auditing of Domain-Blind Feature Attribution in Network Intrusion Detection — https://arxiv.org/abs/2611.16018 (score 14)
@@ -47,7 +47,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - MobileProbe: Adaptive Security Evaluation of Mobile Agents via Trajectory-Aware Injection — https://arxiv.org/abs/2611.16693 (score 8)
 - Sketching Language Models for Context Attribution — https://arxiv.org/abs/2611.17313 (score 8)
 - PARIS: A multi-agent LLM framework for end-to-end, PRISMA-guided systematic literature reviews with pre-synthesis corpus quality assessment — https://arxiv.org/abs/2611.12222 (score 7)
-- Thermo-VLA: A Thermal-Aware Vision-Language-Action Model with Gated Residual Modulation for Robotic Manipulation — https://arxiv.org/abs/2611.11981 (score 6)
 - SadaqahStories: A Verified English-Arabic Corpus of Charity Stories for Children, with an Audit of Errors in AI-Drafted Religious Narratives — https://arxiv.org/abs/2611.12078 (score 6)
 - GeoMind: A Benchmark for Spatial Understanding in Robotic Manipulation — https://arxiv.org/abs/2611.12175 (score 6)
 - Bridging Task Planning and Execution for Language-Conditioned Bimanual Manipulation — https://arxiv.org/abs/2611.12409 (score 6)
