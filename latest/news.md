@@ -1,6 +1,6 @@
 # News candidates — 2026-11-14 (IST)
 
-Generated 2026-11-14 07:38 UTC. Showing 255 items first seen in the last 18 h or published in the last 30 h; 156 older items from the 3-day window are only in news.json.
+Generated 2026-11-14 07:57 UTC. Showing 259 items first seen in the last 18 h or published in the last 30 h; 152 older items from the 3-day window are only in news.json.
 Each item appears once, in the first section it matches. Dates are as reported by the source ("date unknown" = page with no date).
 
 ## By priority topic
@@ -22,7 +22,8 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-13 12:00 UTC] AI Bot Management: Why SEOs Need More Than Block Lists — Search Engine Journal — https://www.searchenginejournal.com/ai-bot-management-why-seos-need-more-than-block-lists/597148/ · Crawl, GEO/AEO
 - [2026-11-12 03:35 UTC] [robots.txt] Reasons why your company's website might be being read by AI — note — https://note.com/switchitupjp/n/n8ca0c3f3b93c?hl=en · Crawl
 
-### Ads (20)
+### Ads (21)
+- [2026-11-14 07:49 UTC] Benchmark brand name — PPC Land — https://ppc.land/benchmark-brand-name/ · Brand/product recommendation, Ads
 - [2026-11-14 06:49 UTC] Sponsored Display — PPC Land — https://ppc.land/sponsored-display/ · Ads
 - [2026-11-13 22:23 UTC] Sponsored Brands — PPC Land — https://ppc.land/sponsored-brands-2/ · Brand/product recommendation, Ads
 - [2026-11-13 22:20 UTC] DVA+ — PPC Land — https://ppc.land/dva/ · Ads
@@ -44,7 +45,7 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-13 01:52 UTC] Google AI Mode tests grouped sponsored ads at the bottom — Search Engine Watch — https://searchenginewatch.com/google-ai-mode-tests-grouped-sponsored-ads-at-the-bottom/ · Ads, GEO/AEO · +1 other hits
 - [2026-11-12 08:00 UTC] ChatGPT Ads increases its market presence in 44 countries — OpenAI — (Google News link; search the headline) · Ads
 
-### Search / AEO / GEO (23)
+### Search / AEO / GEO (22)
 - [2026-11-14 05:40 UTC] AISEOTX.com Launches AI Visibility Reviews to Help Businesses Assess AI Search Presence — The Detroit News — (Google News link; search the headline) · GEO/AEO
 - [2026-11-14 05:16 UTC] Perplexity Teammates bring autonomous AI agents to the Mac app — Digital Trends — (Google News link; search the headline) · GEO/AEO
 - [2026-11-14 01:03 UTC] Perplexity Launches 'Teammates' AI Agents for Ongoing Projects — iClarified — (Google News link; search the headline) · GEO/AEO
@@ -66,10 +67,9 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-13 04:04 UTC] Top 10 best GEO agencies for AI search visibility — Kingy AI — (Google News link; search the headline) · GEO/AEO
 - [2026-11-13 02:58 UTC] [Strange Happenings in Search Results] How the integration of the latest model into Google Search's "AI Overviews" since yesterday, combined with a core update, has started ... — note — https://note.com/alix78/n/neb6f423f0fa3?hl=en · GEO/AEO · +1 other hits
 - [2026-11-13 02:37 UTC] Retired senior citizen duped while booking room through ChatGPT search: Thousands of rupees stolen in the n... — Bhaskar English — (Google News link; search the headline) · GEO/AEO
-- [2026-11-13 01:47 UTC] Gemini 4 Hydrogen Now Powers AI Mode in Google Search for All Users — AndroidPure — https://www.androidpure.com/gemini-4-hydrogen-google-search/ · (already listed on an earlier day) · GEO/AEO · +1 other hits
 - [2026-11-12 20:48 UTC] Podqi study finds ChatGPT, Gemini and Perplexity send shoppers to fake stores — Startup Fortune — (Google News link; search the headline) · GEO/AEO
 
-### Model & lab launches (news search) (45)
+### Model & lab launches (news search) (46)
 - [2026-11-14 07:23 UTC] Claude launches Whiteboards, Sheets and Data — CASRAI — (Google News link; search the headline)
 - [2026-11-14 07:23 UTC] Gemini 4 Hydrogen: Rollout and Research Workflows — CASRAI — (Google News link; search the headline)
 - [2026-11-14 05:00 UTC] Google Releases Gemini 4 Hydrogen, and It Changes the Math on Business AI Costs — Times Square Chronicles — (Google News link; search the headline)
@@ -83,8 +83,10 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-13 18:42 UTC] Musk’s AI group lays off 60 staffers from Grok video unit, The Information reports — StreetInsider — (Google News link; search the headline)
 - [2026-11-13 17:24 UTC] OpenAI launches ChatGPT Wallet for agent purchases — TestingCatalog AI News — (Google News link; search the headline)
 - [2026-11-13 16:56 UTC] OpenAI Launches AI Wallet After Its Own Model Spent Test Crypto Without Permission — the deep dive — (Google News link; search the headline)
+- [2026-11-13 16:31 UTC] OpenAI launches ChatGPT Wallet for AI payments — News Karnataka — https://newskarnataka.com/technology/openai-launches-chatgpt-wallet-for-ai-payments/14112026/
 - [2026-11-13 16:00 UTC] Simba 3.5 vs Qwen-Audio-3.0-TTS: Two Ways to Solve the Language Problem, Only One of Which Is Documented — orcarouter.ai — https://www.orcarouter.ai/blog/simba-3-5-vs-qwen-audio-3-0-tts
 - [2026-11-13 16:00 UTC] MiniMax-H3-Image vs Qwen-Image 2.1: Two Open Checkpoints, Two Different Locks — orcarouter.ai — https://www.orcarouter.ai/blog/minimax-h3-image-vs-qwen-image-2-1
+- [2026-11-13 15:46 UTC] OpenAI launches ChatGPT Wallet, enabling ‘dot’ agents to make purchases — 9to5Mac — (Google News link; search the headline)
 - [2026-11-13 15:28 UTC] OpenAI Launches ChatGPT Wallet for Agent-Assisted Purchases — Unite.AI — (Google News link; search the headline)
 - [2026-11-13 14:58 UTC] Musk's SpaceX Super Intelligence Trims About 60 Jobs in Grok Imagine Video Unit — BigGo Finance — (Google News link; search the headline)
 - [2026-11-13 14:43 UTC] DeepSeek Launches Full App Capabilities via API: Search, File Reading, and Voice Interaction — KuCoin — (Google News link; search the headline)
@@ -99,24 +101,24 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-13 12:06 UTC] Google launches Gemini 4 Hydrogen, a fast model for agent workloads — Resultsense — (Google News link; search the headline)
 - [2026-11-13 12:02 UTC] Gemini 4 Hydrogen, Google launches fast model for code and agents — Meteora Web — (Google News link; search the headline)
 - [2026-11-13 11:45 UTC] Google Introduces Gemini 4 Hydrogen to Make Search More Intelligent and Responsive — Tech Times — (Google News link; search the headline)
-- [2026-11-13 09:32 UTC] OpenAI Launches AI Security Agents to Find Vulnerabilities, Test Exploits and Fix Flaws — Cyber Press — (Google News link; search the headline)
 - [2026-11-13 09:20 UTC] EU leaders told to act now to stay in AI race with US and China — South China Morning Post on MSN — https://www.msn.com/en-xl/technology/artificial-intelligence/eu-leaders-told-to-act-now-to-stay-in-ai-race-with-us-and-china/ar-AA2hnAV7
 - [2026-11-13 08:47 UTC] Meta Muse Confirmed for India Launch in 2027: AI Companion Crosses 10 Million Users in US and Canada — PaidFreeDroid — (Google News link; search the headline)
 - [2026-11-13 07:37 UTC] Anthropic Launches Claude Manufacturing Plugin With 17 AI Skills — Dataconomy — (Google News link; search the headline)
-- [2026-11-13 07:28 UTC] OpenAI Launches Two AI Cybersecurity Tools to Automate Penetration Testing and Vulnerability Remediation — CyberSecurityNews — (Google News link; search the headline)
 - [2026-11-13 07:04 UTC] Grok 5 Release Date: Is It Out? What xAI Has Confirmed — Kingy AI — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-11-13 05:14 UTC] DeepSeek V4.1 Pro Adalah Fixture Pengujian dalam Agen Pengodean — OrcaRouter — (Google News link; search the headline) · (already listed on an earlier day)
+- [2026-11-13 04:04 UTC] OpenAI launches Daybreak security tools as nonprofits seek court order to halt advanced AI development — news.lavx.hu — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-11-13 02:34 UTC] Andrew Yao and Yang Zhilin Co-Author TCSExam as Kimi K3 Adds an Edge to a Graph Record — Pandaily — (Google News link; search the headline) · (already listed on an earlier day)
-- [2026-11-13 01:24 UTC] Google launches Gemini 4 Hydrogen AI model for faster coding, search and everyday tasks — The Times of India on MSN — https://www.msn.com/en-in/news/other/google-launches-gemini-4-hydrogen-ai-model-for-faster-coding-search-and-everyday-tasks/ar-AA2hmePl · GEO/AEO
 - [2026-11-13 00:40 UTC] Qwen4 Preview Live: 470+ Open Models, Doubts [2026] — shattered.io — https://shattered.io/qwen4-launch-alibaba-open-source-promise-doubt-470-models-2026/
 - [2026-11-12 22:23 UTC] Wyoming woman joins lawsuit against Musk’s xAI over Grok, alleging at least 7,000 AI-generated explicit images of her as a child — Front Page Detectives on MSN — https://www.msn.com/en-us/technology/artificial-intelligence/wyoming-woman-joins-lawsuit-against-musk-s-xai-over-grok-alleging-at-least-7-000-ai-generated-explicit-images-of-her-as-a-child/ar-AA2hmH9C
 - [2026-11-12 20:06 UTC] KPMG Launches Cybersecurity Services Powered by Anthropic’s Claude Mythos — kpmg.com — (Google News link; search the headline)
 - [2026-11-12 18:15 UTC] Anthropic Launches Claude for Manufacturing With 17 Workflow Skills — Unite.AI — (Google News link; search the headline)
-- [2026-11-12 02:15 UTC] OpenAI API inference residency launches in India with local processing, in-country storage for GPT-6 Luna — Moneycontrol — https://www.moneycontrol.com/technology/openai-api-inference-residency-launches-in-india-with-local-processing-in-country-storage-for-gpt-6-luna-article-14078177.html
+- [2026-11-12 08:59 UTC] OpenAI Launches In-Country AI Processing For Indian Businesses — Rediff — (Google News link; search the headline)
+- [2026-11-12 07:05 UTC] OpenAI has $10B in revenue but $10.9B in losses, Australia creates regulatory body, and Notion data leak | AI News Nov 11–Nov 12 — note — https://note.com/oshiete_kurou/n/n8e0d534c5a37?hl=en
 - [2026-11-11 15:03 UTC] Google’s Gemini Decision 1 model scores up to 1,000 questions in one API call — VentureBeat — https://venturebeat.com/technology/googles-gemini-decision-1-model-scores-up-to-1-000-questions-in-one-api-call
 - [2026-11-11 13:15 UTC] Llama has surpassed GPT. I canceled my paid subscription. — note — https://note.com/super_robin2976/n/n0a4d3e7a8c39?hl=en
 
-### B2B buyer AI / adoption (10)
+### B2B buyer AI / adoption (11)
+- [2026-11-14 07:47 UTC] 82% of B2B buyers value thought leadership more as AI spreads, Edelman finds — PPC Land — https://ppc.land/82-of-b2b-buyers-value-thought-leadership-more-as-ai-spreads-edelman-finds/ · Brand/product recommendation · +2 other hits
 - [2026-11-13 20:18 UTC] CPaaS Has Changed, And The Next Transformation Is Just Starting — Forrester — (Google News link; search the headline)
 - [2026-11-13 19:05 UTC] ChatGPT Officially Reached 20% of Google's Search Volume. But B2B Buyers Mostly Use It to Check Vendors They Already Know — Inc.com — https://www.inc.com/robert-gillespie/chatgpt-20-percent-google-search-b2b-buyers-vendors/91435784 · Brand/product recommendation · +2 other hits
 - [2026-11-13 18:53 UTC] Define Your Business’s Operational Technology Before Attackers Do It For You — Forrester — (Google News link; search the headline)
@@ -176,7 +178,9 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-12 16:03 UTC] Nearly 500 AI projects, over 200 customers: Lessons on making AI work for business — Microsoft AI Blog — https://blogs.microsoft.com/blog/2026/11/12/from-ai-ambition-to-business-impact/
 - [2026-11-12 15:37 UTC] Revisit the games and moments that shaped your XBOX story with Playback — Microsoft AI Blog — https://news.xbox.com/en-us/2026/11/12/xbox-playback-25th-anniversary-review/
 
-### SEO / search press (97)
+### SEO / search press (99)
+- [2026-11-14 07:52 UTC] Brave cuts the hidden ID Meta stamps on Facebook and Instagram photos — PPC Land — https://ppc.land/brave-cuts-the-hidden-id-meta-stamps-on-facebook-and-instagram-photos/
+- [2026-11-14 07:41 UTC] LinkedIn tests a label for the profile visitors who keep coming back — PPC Land — https://ppc.land/linkedin-tests-a-label-for-the-profile-visitors-who-keep-coming-back/
 - [2026-11-14 06:59 UTC] Benchmark brand ID — PPC Land — https://ppc.land/benchmark-brand-id/ · Brand/product recommendation
 - [2026-11-14 06:53 UTC] Game: The default you never chose was negotiated in a boardroom — PPC Land — https://ppc.land/game-the-default-you-never-chose-was-negotiated-in-a-boardroom/
 - [2026-11-14 06:50 UTC] STV — PPC Land — https://ppc.land/stv/

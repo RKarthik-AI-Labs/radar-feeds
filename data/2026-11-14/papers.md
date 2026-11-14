@@ -1,7 +1,7 @@
 # Paper candidates — 2026-11-14 (IST)
 
-Generated 2026-11-14 07:38 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
-Totals: 1 new topic matches · 0 other new cs.IR · 94 seen in earlier runs.
+Generated 2026-11-14 07:57 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Totals: 1 new topic matches · 0 other new cs.IR · 93 seen in earlier runs.
 Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
 
 ## New papers matching your topics (1), highest score first
@@ -17,7 +17,7 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 
 ## Other new cs.IR papers, title only (0)
 
-## Already listed on an earlier day, still inside the look-back window (94)
+## Already listed on an earlier day, still inside the look-back window (93)
 - Faithful in Steps: Improving Generalization and Citation in RAG via Query Decomposition — https://arxiv.org/abs/2611.15538 (score 20)
 - Can the Confidence and Decisions of System 1 Models Be Trusted? An Explainability and Perturbation Audit of Jev-Style Decision Models — https://arxiv.org/abs/2611.12521 (score 14)
 - Protocol-Aware Auditing of Domain-Blind Feature Attribution in Network Intrusion Detection — https://arxiv.org/abs/2611.16018 (score 14)
@@ -33,7 +33,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Rational Use of Time for Social Coordination in Humans and AI — https://arxiv.org/abs/2611.14766 (score 9)
 - Differential Backpack Language Models: Sense Inhibition via Signed Contextualization Weights — https://arxiv.org/abs/2611.15642 (score 9)
 - RUMI: A Robotiq-Matched Universal Manipulation Interface for Robot Learning with Augmented Reality and Haptic Feedback — https://arxiv.org/abs/2611.15802 (score 9)
-- Feeling Easier, Working Harder: Cognitive Load in AI-Assisted Code Comprehension — https://arxiv.org/abs/2611.12019 (score 8)
 - Elicitation of the parameters of a multi-criteria sorting model — https://arxiv.org/abs/2611.13062 (score 8)
 - Structured Kernel Surrogate Models for Multimodal Attribution — https://arxiv.org/abs/2611.13198 (score 8)
 - Benchmarking Vendor-Guided Optimizations on Edge NPUs: From NPU Only to End-to-End Performance. Extended technical report — https://arxiv.org/abs/2611.13563 (score 8)
