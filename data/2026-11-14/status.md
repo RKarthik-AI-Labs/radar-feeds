@@ -1,6 +1,6 @@
 # Run status — 2026-11-14 (IST)
 
-Started 2026-11-14 06:56:52 UTC, took 204 s.
+Started 2026-11-14 07:05:56 UTC, took 193 s.
 Sources OK: 141 · failed: 0
 
 ## OK
@@ -9,7 +9,7 @@ Sources OK: 141 · failed: 0
 |---|---|---|---|
 | arXiv cs.IR | papers | 55 | 400 fetched, 55 with v1 inside window |
 | arXiv cs.CL | papers | 281 | 500 fetched, 281 with v1 inside window |
-| arXiv cs.AI | papers | 622 | 1000 fetched, 622 with v1 inside window |
+| arXiv cs.AI | papers | 619 | 1000 fetched, 619 with v1 inside window |
 | arXiv cs.HC | papers | 85 | 400 fetched, 85 with v1 inside window |
 | arXiv cs.CY | papers | 50 | 300 fetched, 50 with v1 inside window |
 | arXiv cs.SI | papers | 16 | 300 fetched, 16 with v1 inside window |
@@ -62,7 +62,7 @@ Sources OK: 141 · failed: 0
 | Google News: "ChatGPT Atlas" | news search | 1 | 5 off-topic hits dropped |
 | Bing News: "ChatGPT Atlas" | news search | 0 | 7 off-topic hits dropped |
 | Google News: "Perplexity Comet" | news search | 2 | 7 off-topic hits dropped |
-| Bing News: "Perplexity Comet" | news search | 0 | 9 off-topic hits dropped |
+| Bing News: "Perplexity Comet" | news search | 0 | 8 off-topic hits dropped |
 | Google News: "AI agent traffic" OR "agentic traffic" | news search | 3 | 2 off-topic hits dropped |
 | Bing News: "AI agent traffic" OR "agentic traffic" | news search | 1 | 10 off-topic hits dropped |
 | Google News: "Gemini in Chrome" agent | news search | 0 | 7 off-topic hits dropped |
@@ -72,29 +72,29 @@ Sources OK: 141 · failed: 0
 | Google News: "Web Bot Auth" | news search | 0 | 9 off-topic hits dropped |
 | Bing News: "Web Bot Auth" | news search | 1 | 8 off-topic hits dropped |
 | Google News: "pay per crawl" OR "pay-per-crawl" | news search | 0 |  |
-| Bing News: "pay per crawl" OR "pay-per-crawl" | news search | 0 | 10 off-topic hits dropped |
+| Bing News: "pay per crawl" OR "pay-per-crawl" | news search | 0 | 11 off-topic hits dropped |
 | Google News: "AI crawler" OR "AI crawlers" | news search | 0 | 3 off-topic hits dropped |
 | Bing News: "AI crawler" OR "AI crawlers" | news search | 0 | 11 off-topic hits dropped |
 | Google News: "robots.txt" AI | news search | 1 | 8 off-topic hits dropped |
-| Bing News: "robots.txt" AI | news search | 4 | 4 off-topic hits dropped |
+| Bing News: "robots.txt" AI | news search | 4 | 6 off-topic hits dropped |
 | Google News: "llms.txt" | news search | 1 | 19 off-topic hits dropped |
-| Bing News: "llms.txt" | news search | 0 | 10 off-topic hits dropped |
+| Bing News: "llms.txt" | news search | 1 | 10 off-topic hits dropped |
 | Google News: GPTBot OR ClaudeBot OR PerplexityBot OR "OAI-SearchBot" | news search | 0 |  |
-| Bing News: GPTBot OR ClaudeBot OR PerplexityBot OR "OAI-SearchBot" | news search | 0 | 11 off-topic hits dropped |
+| Bing News: GPTBot OR ClaudeBot OR PerplexityBot OR "OAI-SearchBot" | news search | 0 | 10 off-topic hits dropped |
 | Google News: "AI Crawl Control" | news search | 0 |  |
 | Bing News: "AI Crawl Control" | news search | 0 | 3 off-topic hits dropped |
-| Google News: "ChatGPT ads" | news search | 10 | 2 off-topic hits dropped |
+| Google News: "ChatGPT ads" | news search | 10 |  |
 | Bing News: "ChatGPT ads" | news search | 10 |  |
 | Google News: "AI Mode" ads | news search | 2 | 7 off-topic hits dropped |
 | Bing News: "AI Mode" ads | news search | 8 | 4 off-topic hits dropped |
-| Google News: "AI Overviews" ads | news search | 0 | 22 off-topic hits dropped |
-| Bing News: "AI Overviews" ads | news search | 1 | 5 off-topic hits dropped |
+| Google News: "AI Overviews" ads | news search | 0 | 21 off-topic hits dropped |
+| Bing News: "AI Overviews" ads | news search | 1 | 6 off-topic hits dropped |
 | Google News: Perplexity "sponsored" | news search | 0 | 1 off-topic hits dropped |
 | Bing News: Perplexity "sponsored" | news search | 0 | 9 off-topic hits dropped |
 | Google News: "Copilot ads" OR "ads in Copilot" | news search | 0 |  |
-| Bing News: "Copilot ads" OR "ads in Copilot" | news search | 0 | 8 off-topic hits dropped |
-| Google News: "AI Overviews" | news search | 9 | 12 off-topic hits dropped |
-| Bing News: "AI Overviews" | news search | 8 | 2 off-topic hits dropped |
+| Bing News: "Copilot ads" OR "ads in Copilot" | news search | 0 | 9 off-topic hits dropped |
+| Google News: "AI Overviews" | news search | 9 | 13 off-topic hits dropped |
+| Bing News: "AI Overviews" | news search | 7 | 3 off-topic hits dropped |
 | Google News: "AI Mode" Google | news search | 8 | 40 off-topic hits dropped |
 | Bing News: "AI Mode" Google | news search | 10 | 1 off-topic hits dropped |
 | Google News: Google "core update" | news search | 3 | 7 off-topic hits dropped |
@@ -108,11 +108,11 @@ Sources OK: 141 · failed: 0
 | Google News: "generative engine optimization" OR "answer engine optimization" | news search | 3 | 4 off-topic hits dropped |
 | Bing News: "generative engine optimization" OR "answer engine optimization" | news search | 0 | 11 off-topic hits dropped |
 | Google News: "AI visibility" tool | news search | 4 | 13 off-topic hits dropped |
-| Bing News: "AI visibility" tool | news search | 7 | 3 off-topic hits dropped |
+| Bing News: "AI visibility" tool | news search | 8 | 2 off-topic hits dropped |
 | Google News: "LLM visibility" OR "AI search visibility" | news search | 4 | 1 off-topic hits dropped |
 | Bing News: "LLM visibility" OR "AI search visibility" | news search | 0 | 8 off-topic hits dropped |
 | Google News: OpenAI (launches OR releases OR introduces) model | news search | 10 |  |
-| Bing News: OpenAI (launches OR releases OR introduces) model | news search | 7 | 3 off-topic hits dropped |
+| Bing News: OpenAI (launches OR releases OR introduces) model | news search | 9 | 1 off-topic hits dropped |
 | Google News: Anthropic Claude (launches OR releases OR introduces) | news search | 10 |  |
 | Bing News: Anthropic Claude (launches OR releases OR introduces) | news search | 10 |  |
 | Google News: Google Gemini (launches OR releases OR introduces) model | news search | 10 |  |
@@ -126,13 +126,13 @@ Sources OK: 141 · failed: 0
 | Google News: DeepSeek (release OR launches) model | news search | 4 | 15 off-topic hits dropped |
 | Bing News: DeepSeek (release OR launches) model | news search | 4 | 6 off-topic hits dropped |
 | Google News: Qwen Alibaba (release OR launches) model | news search | 5 | 5 off-topic hits dropped |
-| Bing News: Qwen Alibaba (release OR launches) model | news search | 10 |  |
+| Bing News: Qwen Alibaba (release OR launches) model | news search | 9 |  |
 | Google News: Moonshot Kimi (release OR launches) model | news search | 3 | 7 off-topic hits dropped |
-| Bing News: Moonshot Kimi (release OR launches) model | news search | 8 | 2 off-topic hits dropped |
+| Bing News: Moonshot Kimi (release OR launches) model | news search | 9 | 1 off-topic hits dropped |
 | Google News: B2B buyers AI ChatGPT vendors | news search | 4 | 6 off-topic hits dropped |
-| Bing News: B2B buyers AI ChatGPT vendors | news search | 8 | 3 off-topic hits dropped |
+| Bing News: B2B buyers AI ChatGPT vendors | news search | 7 | 4 off-topic hits dropped |
 | Google News: B2B buying AI assistants survey | news search | 0 | 5 off-topic hits dropped |
-| Bing News: B2B buying AI assistants survey | news search | 1 | 7 off-topic hits dropped |
+| Bing News: B2B buying AI assistants survey | news search | 2 | 7 off-topic hits dropped |
 | Google News: Gartner AI agents survey | news search | 3 | 4 off-topic hits dropped |
 | Bing News: Gartner AI agents survey | news search | 5 | 7 off-topic hits dropped |
 | Google News: Forrester AI B2B | news search | 4 | 1 off-topic hits dropped |

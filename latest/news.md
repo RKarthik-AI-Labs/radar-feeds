@@ -1,6 +1,6 @@
 # News candidates — 2026-11-14 (IST)
 
-Generated 2026-11-14 06:56 UTC. Showing 253 items first seen in the last 18 h or published in the last 30 h; 160 older items from the 3-day window are only in news.json.
+Generated 2026-11-14 07:05 UTC. Showing 254 items first seen in the last 18 h or published in the last 30 h; 158 older items from the 3-day window are only in news.json.
 Each item appears once, in the first section it matches. Dates are as reported by the source ("date unknown" = page with no date).
 
 ## By priority topic
@@ -66,7 +66,7 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-13 04:04 UTC] Top 10 best GEO agencies for AI search visibility — Kingy AI — (Google News link; search the headline) · GEO/AEO
 - [2026-11-13 02:58 UTC] [Strange Happenings in Search Results] How the integration of the latest model into Google Search's "AI Overviews" since yesterday, combined with a core update, has started ... — note — https://note.com/alix78/n/neb6f423f0fa3?hl=en · GEO/AEO · +1 other hits
 - [2026-11-13 02:37 UTC] Retired senior citizen duped while booking room through ChatGPT search: Thousands of rupees stolen in the n... — Bhaskar English — (Google News link; search the headline) · GEO/AEO
-- [2026-11-13 01:47 UTC] Gemini 4 Hydrogen Now Powers AI Mode in Google Search for All Users — AndroidPure — (Google News link; search the headline) · (already listed on an earlier day) · GEO/AEO
+- [2026-11-13 01:47 UTC] Gemini 4 Hydrogen Now Powers AI Mode in Google Search for All Users — AndroidPure — https://www.androidpure.com/gemini-4-hydrogen-google-search/ · (already listed on an earlier day) · GEO/AEO · +1 other hits
 - [2026-11-12 20:48 UTC] Podqi study finds ChatGPT, Gemini and Perplexity send shoppers to fake stores — Startup Fortune — (Google News link; search the headline) · GEO/AEO
 
 ### Model & lab launches (news search) (44)
@@ -93,6 +93,7 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-13 13:58 UTC] Chinese AI Models From DeepSeek, Moonshot, MiniMax and Ant Group Show Signs of NVIDIA Blackwell Use — xenospectrum — https://xenospectrum.com/en/chinese-ai-models-blackwell-gpu-fingerprint-forensics/ · GEO/AEO · +1 other hits
 - [2026-11-13 13:18 UTC] Anthropic Ships 4 Office Tools to Rival Microsoft [2026] — shattered.io — (Google News link; search the headline)
 - [2026-11-13 13:04 UTC] Zimperium uncovers ArcticRAT malware using xAI’s Grok to mine stolen SMS codes — Crypto Briefing — (Google News link; search the headline)
+- [2026-11-13 12:46 UTC] Anthropic launches Claude for Manufacturing, a plugin with 17 skills — Pasquale Pillitteri — (Google News link; search the headline)
 - [2026-11-13 12:12 UTC] OpenAI launches Daybreak Red Team and Defense Factory, AI agents that pen-test web apps and draft security patches — MLQ.ai — (Google News link; search the headline)
 - [2026-11-13 12:06 UTC] Google launches Gemini 4 Hydrogen, a fast model for agent workloads — Resultsense — (Google News link; search the headline)
 - [2026-11-13 12:02 UTC] Gemini 4 Hydrogen, Google launches fast model for code and agents — Meteora Web — (Google News link; search the headline)
@@ -104,20 +105,19 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-13 05:14 UTC] DeepSeek V4.1 Pro Adalah Fixture Pengujian dalam Agen Pengodean — OrcaRouter — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-11-13 04:04 UTC] OpenAI launches Daybreak security tools as nonprofits seek court order to halt advanced AI development — news.lavx.hu — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-11-13 02:34 UTC] Andrew Yao and Yang Zhilin Co-Author TCSExam as Kimi K3 Adds an Edge to a Graph Record — Pandaily — (Google News link; search the headline) · (already listed on an earlier day)
-- [2026-11-13 01:24 UTC] Google launches Gemini 4 Hydrogen AI model for faster coding, search and everyday tasks — The Times of India on MSN — https://www.msn.com/en-in/news/other/google-launches-gemini-4-hydrogen-ai-model-for-faster-coding-search-and-everyday-tasks/ar-AA2hmePl · GEO/AEO
 - [2026-11-13 00:40 UTC] Qwen4 Preview Live: 470+ Open Models, Doubts [2026] — shattered.io — https://shattered.io/qwen4-launch-alibaba-open-source-promise-doubt-470-models-2026/
 - [2026-11-12 22:23 UTC] Wyoming woman joins lawsuit against Musk’s xAI over Grok, alleging at least 7,000 AI-generated explicit images of her as a child — Front Page Detectives on MSN — https://www.msn.com/en-us/technology/artificial-intelligence/wyoming-woman-joins-lawsuit-against-musk-s-xai-over-grok-alleging-at-least-7-000-ai-generated-explicit-images-of-her-as-a-child/ar-AA2hmH9C
-- [2026-11-12 20:06 UTC] KPMG Launches Cybersecurity Services Powered by Anthropic’s Claude Mythos — kpmg.com — (Google News link; search the headline)
 - [2026-11-12 18:15 UTC] Anthropic Launches Claude for Manufacturing With 17 Workflow Skills — Unite.AI — (Google News link; search the headline)
 - [2026-11-12 08:59 UTC] OpenAI Launches In-Country AI Processing For Indian Businesses — Rediff — (Google News link; search the headline)
 - [2026-11-12 07:11 UTC] Moonshot AI Turns to Europe for Nvidia Blackwell Access Amid U.S. Curb… — Rich Picks Daily — (Google News link; search the headline)
-- [2026-11-12 02:15 UTC] OpenAI API inference residency launches in India with local processing, in-country storage for GPT-6 Luna — Moneycontrol — https://www.moneycontrol.com/technology/openai-api-inference-residency-launches-in-india-with-local-processing-in-country-storage-for-gpt-6-luna-article-14078177.html
+- [2026-11-12 03:39 UTC] OpenAI Creates a "Red Button" to Shut Down AI Models in Emergencies — mezha — https://mezha.ua/en/news/openai-stvorila-sistemu-avariynogo-vimknennya-svojih-shi-modeley-317140/ · GEO/AEO
+- [2026-11-12 00:35 UTC] [November 11, 2026] 15-Minute IT News | OpenAI's domestic AI processing and new Gemini model, Pixel's AI evolution and data leaks — note — https://note.com/beginwiththeend/n/n3534fe63d616?hl=en
 - [2026-11-11 15:03 UTC] Google’s Gemini Decision 1 model scores up to 1,000 questions in one API call — VentureBeat — https://venturebeat.com/technology/googles-gemini-decision-1-model-scores-up-to-1-000-questions-in-one-api-call
 - [2026-11-11 13:15 UTC] Llama has surpassed GPT. I canceled my paid subscription. — note — https://note.com/super_robin2976/n/n0a4d3e7a8c39?hl=en
 
 ### B2B buyer AI / adoption (10)
 - [2026-11-13 20:18 UTC] CPaaS Has Changed, And The Next Transformation Is Just Starting — Forrester — (Google News link; search the headline)
-- [2026-11-13 19:05 UTC] ChatGPT Officially Reached 20% of Google's Search Volume. But B2B Buyers Mostly Use It to Check Vendors They Already Know — Inc.com — https://www.inc.com/robert-gillespie/chatgpt-20-percent-google-search-b2b-buyers-vendors/91435784 · Brand/product recommendation · +1 other hits
+- [2026-11-13 19:05 UTC] ChatGPT Officially Reached 20% of Google's Search Volume. But B2B Buyers Mostly Use It to Check Vendors They Already Know — Inc.com — https://www.inc.com/robert-gillespie/chatgpt-20-percent-google-search-b2b-buyers-vendors/91435784 · Brand/product recommendation · +2 other hits
 - [2026-11-13 18:53 UTC] Define Your Business’s Operational Technology Before Attackers Do It For You — Forrester — (Google News link; search the headline)
 - [2026-11-13 18:47 UTC] The Microsoft Outage Demands An End To Vendor Concentration Risk And A Commitment To Resilience — Forrester — (Google News link; search the headline) · Brand/product recommendation
 - [2026-11-13 18:10 UTC] Plain Language Is A Total Experience Imperative — Forrester — (Google News link; search the headline)
@@ -150,6 +150,7 @@ Each item appears once, in the first section it matches. Dates are as reported b
 ## Other items from source feeds
 
 ### Labs (official feeds + trackers) (24)
+- [2026-11-14 07:02 UTC] Operand, which offers AI-powered due diligence tools for PE firms, raised $31M across a seed and a Series A led by Khosla Ventures at a $220M valuation (Lucinda Shen/Axios) — Techmeme — https://www.techmeme.com/261114/p6#a261114p6
 - [2026-11-14 06:55 UTC] WhiteMatter, which builds "guardian" AI agents to oversee file access, software use, decision making, and actions of existing AI agents, raised a $20M Series A (Alice Tecotzky/Business Insider) — Techmeme — https://www.techmeme.com/261114/p5#a261114p5
 - [2026-11-14 06:35 UTC] Charta Health, which offers AI-powered tools to automate medical chart review, billing, and coding workflows, raised a $55M Series B led by Insight Partners (Jessica Hagen/MobiHealthNews) — Techmeme — https://www.techmeme.com/261114/p4#a261114p4
 - [2026-11-14 06:30 UTC] Luminal, which provides an inference cloud and develops inference compiler software to test running AI models on different chips, raised a $25M Series A (Chris Metinko/Axios) — Techmeme — https://www.techmeme.com/261114/p3#a261114p3 · GEO/AEO
@@ -166,7 +167,6 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-13 23:35 UTC] ASI, developer of AI tool SMART, says the FAA outage "is not based on or a result of the SMART system, any product of ASI, or our integration with FAA and ATC" (Asi/@airspaceintel) — Techmeme — https://www.techmeme.com/261113/p34#a261113p34
 - [2026-11-13 23:02 UTC] datasette-cluster-map 0.19 — Simon Willison — https://simonwillison.net/2026/Nov/13/datasette-cluster-map/
 - [2026-11-13 22:30 UTC] datasette-leaflet 0.3 — Simon Willison — https://simonwillison.net/2026/Nov/13/datasette-leaflet/
-- [2026-11-13 22:20 UTC] Source: the FBI is probing whether the FAA outage was caused by a software update, and doesn't believe it was due to a cyberattack or criminality (Myles Miller/Bloomberg) — Techmeme — https://www.techmeme.com/261113/p33#a261113p33
 - [2026-11-13 20:33 UTC] Why a new court ruling matters for press freedom and privacy — Microsoft AI Blog — https://blogs.microsoft.com/on-the-issues/2026/11/11/protecting-privacy-and-press-freedom-an-important-fourth-circuit-ruling/
 - [2026-11-13 20:27 UTC] From the first console to the next chapter, XBOX celebrates 25 years — Microsoft AI Blog — https://news.xbox.com/en-us/2026/11/12/25-years-of-xbox/
 - [2026-11-13 17:00 UTC] Connect Google Wallet to Gemini for personal finance insights — Google Blog Gemini — https://blog.google/innovation-and-ai/products/gemini-app/google-wallet-gemini-app/
@@ -175,7 +175,8 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-12 16:03 UTC] Nearly 500 AI projects, over 200 customers: Lessons on making AI work for business — Microsoft AI Blog — https://blogs.microsoft.com/blog/2026/11/12/from-ai-ambition-to-business-impact/
 - [2026-11-12 15:37 UTC] Revisit the games and moments that shaped your XBOX story with Playback — Microsoft AI Blog — https://news.xbox.com/en-us/2026/11/12/xbox-playback-25th-anniversary-review/
 
-### SEO / search press (96)
+### SEO / search press (97)
+- [2026-11-14 06:59 UTC] Benchmark brand ID — PPC Land — https://ppc.land/benchmark-brand-id/ · Brand/product recommendation
 - [2026-11-14 06:53 UTC] Game: The default you never chose was negotiated in a boardroom — PPC Land — https://ppc.land/game-the-default-you-never-chose-was-negotiated-in-a-boardroom/
 - [2026-11-14 06:50 UTC] STV — PPC Land — https://ppc.land/stv/
 - [2026-11-14 06:30 UTC] Microsoft's Exchange outage stalls offices as eBay shuts out robot shoppers — PPC Land — https://ppc.land/microsofts-exchange-outage-stalls-offices-as-ebay-shuts-out-robot-shoppers/
