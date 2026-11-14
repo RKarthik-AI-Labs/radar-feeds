@@ -1,7 +1,7 @@
 # Paper candidates — 2026-11-14 (IST)
 
-Generated 2026-11-14 01:10 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
-Totals: 1 new topic matches · 0 other new cs.IR · 102 seen in earlier runs.
+Generated 2026-11-14 06:56 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Totals: 1 new topic matches · 0 other new cs.IR · 95 seen in earlier runs.
 Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
 
 ## New papers matching your topics (1), highest score first
@@ -17,17 +17,14 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 
 ## Other new cs.IR papers, title only (0)
 
-## Already listed on an earlier day, still inside the look-back window (102)
+## Already listed on an earlier day, still inside the look-back window (95)
 - Faithful in Steps: Improving Generalization and Citation in RAG via Query Decomposition — https://arxiv.org/abs/2611.15538 (score 20)
 - Can the Confidence and Decisions of System 1 Models Be Trusted? An Explainability and Perturbation Audit of Jev-Style Decision Models — https://arxiv.org/abs/2611.12521 (score 14)
 - Protocol-Aware Auditing of Domain-Blind Feature Attribution in Network Intrusion Detection — https://arxiv.org/abs/2611.16018 (score 14)
 - Scale-Induced Semantic Shift in Visual Prompt Injection Against VLMs and Web Agents — https://arxiv.org/abs/2611.16744 (score 14)
 - From Delegation to Coordination: Learning Efficient Multi-Agent Deep Research — https://arxiv.org/abs/2611.17041 (score 14)
 - TS-GEAR: Taobao Shangou GEnerative Ad Retrieval — https://arxiv.org/abs/2611.12180 (score 13)
-- CHO-Bench: How Do Context Hints Affect Ad Rankings in LLM Advertising? — https://arxiv.org/abs/2611.11955 (score 12)
 - RMIT-ADM+S at TREC RAG 2026: Research Agents, Retriever Ablations, and Open-Weight Replication — https://arxiv.org/abs/2611.16425 (score 12)
-- ShopMind: A Mental World Model for Personalized and Realistic E-commerce User Simulation — https://arxiv.org/abs/2611.11897 (score 11)
-- Harness Matters: Measuring and Dissecting Security Resilience in Web Agents — https://arxiv.org/abs/2611.11971 (score 11)
 - StealthyPoison: Manipulating LLM Agent Behavior through Procedural Poisoning of Third-Party Skills — https://arxiv.org/abs/2611.12155 (score 10)
 - Loyalty Capture: Reporting Relationships and Structural Sycophancy in Frontier AI Models — https://arxiv.org/abs/2611.15475 (score 10)
 - Lost in Delegation: Studying the Effectiveness of Task Orchestration in Generative Search — https://arxiv.org/abs/2611.16526 (score 10)
@@ -50,8 +47,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - MobileProbe: Adaptive Security Evaluation of Mobile Agents via Trajectory-Aware Injection — https://arxiv.org/abs/2611.16693 (score 8)
 - Sketching Language Models for Context Attribution — https://arxiv.org/abs/2611.17313 (score 8)
 - PARIS: A multi-agent LLM framework for end-to-end, PRISMA-guided systematic literature reviews with pre-synthesis corpus quality assessment — https://arxiv.org/abs/2611.12222 (score 7)
-- Decoupled Asynchronous System for Humanoids (DASH): Latency-Agnostic Scaling of Vision-Language-Action Models for Humanoid Manipulation — https://arxiv.org/abs/2611.11854 (score 6)
-- Scaling Adaptive Prompt Injection Attacks with Agent Swarms — https://arxiv.org/abs/2611.11861 (score 6)
 - Thermo-VLA: A Thermal-Aware Vision-Language-Action Model with Gated Residual Modulation for Robotic Manipulation — https://arxiv.org/abs/2611.11981 (score 6)
 - SadaqahStories: A Verified English-Arabic Corpus of Charity Stories for Children, with an Audit of Errors in AI-Drafted Religious Narratives — https://arxiv.org/abs/2611.12078 (score 6)
 - GeoMind: A Benchmark for Spatial Understanding in Robotic Manipulation — https://arxiv.org/abs/2611.12175 (score 6)
@@ -67,7 +62,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Temporal Context-Aware Spam Detection Using Transformer-Based NLP Models — https://arxiv.org/abs/2611.16139 (score 6)
 - EgoX: Egocentric Cross-Embodiment Manipulation with Embodiment Dreaming — https://arxiv.org/abs/2611.16728 (score 6)
 - A Code-Level Audit of X — https://arxiv.org/abs/2611.16800 (score 6)
-- Multi-Modal Agricultural Document Understanding at the DAGRI Task — https://arxiv.org/abs/2611.11886 (score 5)
 - Multi-Agent Screening: What Agreement and Acceptance Cannot Tell You — https://arxiv.org/abs/2611.12705 (score 5)
 - Scaling Taxonomy-Free Image Labeling with Generative AI: A Multimodal — https://arxiv.org/abs/2611.12725 (score 5)
 - SimRec: Learning to Search, Ask, and Recommend from Simulated Interaction — https://arxiv.org/abs/2611.15426 (score 5)
