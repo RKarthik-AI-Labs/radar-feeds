@@ -1,6 +1,6 @@
 # News candidates — 2026-11-15 (IST)
 
-Generated 2026-11-15 07:05 UTC. Showing 144 items first seen in the last 18 h or published in the last 30 h; 231 older items from the 3-day window are only in news.json.
+Generated 2026-11-15 07:16 UTC. Showing 143 items first seen in the last 18 h or published in the last 30 h; 231 older items from the 3-day window are only in news.json.
 Each item appears once, in the first section it matches. Dates are as reported by the source ("date unknown" = page with no date).
 
 ## By priority topic
@@ -66,8 +66,8 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-14 09:56 UTC] Google Releases Gemini 4 Hydrogen, and It Changes the Math on Business AI Costs — Times Square Chronicles — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-11-14 09:07 UTC] Grok Text Watermarking: What the Policy Actually Means — basenor — https://www.basenor.com/blogs/news/grok-text-watermarking-what-the-policy-actually-means
 - [2026-11-14 08:40 UTC] Moonshot AI Eyes IPO as Kimi K3 Drives ARR to $300M — TechRepublic — (Google News link; search the headline) · (already listed on an earlier day)
+- [2026-11-14 07:43 UTC] Claude Meetings beta launches for Google Meet — CASRAI — (Google News link; search the headline)
 - [2026-11-14 07:23 UTC] Claude launches Whiteboards, Sheets and Data — CASRAI — (Google News link; search the headline) · (already listed on an earlier day)
-- [2026-11-14 04:50 UTC] Lawyer’s eight-V100 AI server moves DeepSeek from 2-bit to near-NVFP4 precision — YAHOO! — https://tech.yahoo.com/ai/claude/articles/lawyer-eight-v100-ai-server-125000665.html
 - [2026-11-14 02:35 UTC] EU's First AI-Focused Summit Opens in Dublin as Mistral Urges Immediate Action, Warns of Two-Year Window — BigGo Finance — (Google News link; search the headline)
 - [2026-11-14 02:00 UTC] DeepSeek Opens Its App's Search, File, OCR and Voice Tools as APIs So Developers Can Rebuild the App — Pandaily — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-11-14 02:00 UTC] The Endless Frontier Open-Sources Fx-Bio-1031, a Qwen-Based Model That Runs Bioinformatics Analyses — Pandaily — (Google News link; search the headline)
@@ -80,16 +80,15 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-13 15:00 UTC] OpenAI launches ChatGPT Wallet, allowing its 'dots' AI agents to make purchases for users — CNBC — (Google News link; search the headline)
 - [2026-11-13 11:34 UTC] DeepSeek Investment Raises Nvidia Security Questions — varindia — (Google News link; search the headline)
 - [2026-11-13 10:26 UTC] OpenAI introduces Daybreak cybersecurity AI agents to find vulnerabilities, create exploits, and write patches — Dev.ua — (Google News link; search the headline)
+- [2026-11-13 09:24 UTC] Google Launches Gemini 4 Hydrogen for Faster Coding and AI Workflows — Analytics India Magazine — (Google News link; search the headline)
 - [2026-11-13 08:00 UTC] Ultimate Gemini Model Comparison 2026: 2.5 to Gemini 4 — Fello AI — (Google News link; search the headline)
 - [2026-11-13 08:00 UTC] Grok vs ChatGPT: Which AI Chatbot Wins in 2026? — Fello AI — (Google News link; search the headline)
 - [2026-11-13 08:00 UTC] I Tested DeepSeek’s New All-in-One API for 0.5 Yuan. Here’s What It Gets Right and Where It Breaks. — Vocal — (Google News link; search the headline)
 - [2026-11-13 07:47 UTC] BW LPG Limited Announces Sale of BW Mistral — Quantisnow — (Google News link; search the headline)
-- [2026-11-13 07:12 UTC] Claude Meetings launches in beta, bringing Claude into Google Meet calls — Pasquale Pillitteri — (Google News link; search the headline)
 - [2026-11-12 22:33 UTC] OpenAI to retire advanced and standard voice models in ChatGPT on December 11 — India TV News — https://www.indiatvnews.com/technology/news/openai-to-retire-advanced-and-standard-voice-models-in-chatgpt-on-december-11-2026-11-13-1059331
 
-### B2B buyer AI / adoption (5)
+### B2B buyer AI / adoption (4)
 - [2026-11-15 00:30 UTC] Forrester Research Earnings Call: AI Gains Offset Declines — TipRanks — (Google News link; search the headline)
-- [2026-11-14 10:59 UTC] VML study finds 38% of enterprise B2B purchases end with no decision — MarketScale — (Google News link; search the headline) · +1 other hits
 - [2026-11-14 07:47 UTC] 82% of B2B buyers value thought leadership more as AI spreads, Edelman finds — PPC Land — https://ppc.land/82-of-b2b-buyers-value-thought-leadership-more-as-ai-spreads-edelman-finds/ · (already listed on an earlier day) · Brand/product recommendation · +2 other hits
 - [2026-11-14 07:47 UTC] IT - Gartner, Inc. | News — OTC Markets — (Google News link; search the headline) · +1 other hits
 - [2026-11-13 15:11 UTC] Enterprise AI Security Risks Surge: AI-Enabled Breaches Cost $6 Million as Companies Struggle to Protect Data and Agents — InfotechLead — (Google News link; search the headline)
