@@ -1,6 +1,6 @@
 # News candidates — 2026-11-15 (IST)
 
-Generated 2026-11-15 07:54 UTC. Showing 146 items first seen in the last 18 h or published in the last 30 h; 225 older items from the 3-day window are only in news.json.
+Generated 2026-11-15 08:23 UTC. Showing 149 items first seen in the last 18 h or published in the last 30 h; 218 older items from the 3-day window are only in news.json.
 Each item appears once, in the first section it matches. Dates are as reported by the source ("date unknown" = page with no date).
 
 ## By priority topic
@@ -34,10 +34,10 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-13 02:24 UTC] [What is Inbound Customer Attraction?] Real Results and Challenges of Running the Buzzworthy "ChatGPT Ads" for a Yakiniku Restaurant — note — https://note.com/inbound_college/n/ndf4048415b27?hl=en · Ads
 - [2026-11-12 17:21 UTC] Reviewing Google Search Ad Budgets: Practical Checks for AI Overviews and PMax — note — https://note.com/tkjsekiya/n/n2bfb8aca1d22?hl=en · Ads, GEO/AEO · +1 other hits
 
-### Search / AEO / GEO (14)
+### Search / AEO / GEO (13)
 - [2026-11-15 04:57 UTC] Perplexity is launching AI agents on Macs to transform everyday tasks into a digital team — صوت الإمارات — (Google News link; search the headline) · GEO/AEO
 - [2026-11-14 23:03 UTC] Google integrates flights, points and hotel bookings into AI Mode — Foro3D — (Google News link; search the headline) · GEO/AEO
-- [2026-11-14 16:07 UTC] Reddit Sinks 29% in a Day as Huffman Says Google’s AI Mode “Does Not Drive Traffic” — TIKR.com — (Google News link; search the headline) · GEO/AEO
+- [2026-11-14 15:37 UTC] Reddit Sinks 29% in a Day as Huffman Says Google’s AI Mode “Does Not Drive Traffic” — TIKR.com — (Google News link; search the headline) · GEO/AEO
 - [2026-11-14 11:59 UTC] Google Tells Schools to Accept AI Overviews or Lose Search — JournalArta — (Google News link; search the headline) · GEO/AEO
 - [2026-11-14 08:50 UTC] Finally.. Perplexity Personal Computer is now available to everyone on Mac — آي-فون إسلام — (Google News link; search the headline) · (already listed on an earlier day) · GEO/AEO
 - [2026-11-14 08:18 UTC] Perplexity Teammates arrive in the Mac app for Max users — Tbreak UAE — (Google News link; search the headline) · GEO/AEO
@@ -46,21 +46,22 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-14 06:01 UTC] Perplexity teammates arrive on Mac app, expanding autonomo… — TechTimes Vietnam — (Google News link; search the headline) · GEO/AEO
 - [2026-11-14 05:16 UTC] Perplexity Teammates bring autonomous AI agents to the Mac app — Digital Trends — (Google News link; search the headline) · (already listed on an earlier day) · GEO/AEO
 - [2026-11-14 02:30 UTC] Is AI mode killing the internet’s search-based business model? — Invezz on MSN — https://www.msn.com/en-us/news/other/is-ai-mode-killing-the-internet-s-search-based-business-model/ar-AA2hqktA · GEO/AEO
-- [2026-11-13 08:00 UTC] Perplexity IPO: Status, Valuation and What to Know — Admirals — (Google News link; search the headline) · GEO/AEO
 - [2026-11-13 04:58 UTC] Unknown Sitemaps in Search Console? How to Check the Source and Restore Before Deleting — note — https://note.com/yokoyamadesuga/n/n5996d14f48ef?hl=en
 - [2026-11-13 02:34 UTC] How much can you narrow down rainy day outings with Google Search's AI mode? — note — https://note.com/act_relay/n/n544349ed4512?hl=en · GEO/AEO
 
-### Model & lab launches (news search) (36)
+### Model & lab launches (news search) (38)
 - [2026-11-15 02:13 UTC] Anthropic introduces Claude Fable 5.2, Mythos 5.2 — SD Times — (Google News link; search the headline) · (already listed on an earlier day)
+- [2026-11-15 00:25 UTC] Claude Fable 5.2 and Mythos 5.2 Arrive. Sorting Out the Differences and Key Highlights — note — https://note.com/ai_explore/n/ndb88adf35704?hl=en · GEO/AEO
 - [2026-11-15 00:20 UTC] What Developers Can Build With DeepSeek’s New Search, File, and Voice APIs — Kingy AI — https://kingy.ai/news/deepseek-api-update-web-search-file-reading-voice/ · +1 other hits
-- [2026-11-14 23:56 UTC] Claude Fable 5.2 and Mythos 5.2 Arrive. Sorting Out the Differences and Key Highlights — note — https://note.com/ai_explore/n/ndb88adf35704?hl=en · GEO/AEO
 - [2026-11-14 23:25 UTC] SpaceXAI Reportedly Cuts About 60 Staff From Its Grok Imagine Team — CASRAI — https://casrai.org/news/xai-grok-imagine-team-staff-cuts-2026 · +1 other hits
 - [2026-11-14 20:04 UTC] DeepSeek Opens Its App Tools to API Developers — Howl.Link — (Google News link; search the headline)
 - [2026-11-14 18:48 UTC] DeepSeek opens chatbot search, file and voice features to developers — Business Upturn — (Google News link; search the headline)
 - [2026-11-14 18:22 UTC] Google Launches Gemini 4 Hydrogen With 2.5x Faster Performance, Challenging GPT-6.1 and Claude — Brave New Coin — (Google News link; search the headline)
 - [2026-11-14 17:18 UTC] Anthropic Introduces New Claude Tool to Help Manufacturers Address Labor Shortages — Tekedia — https://www.tekedia.com/anthropic-introduces-new-claude-tool-to-help-manufacturers-address-labor-shortages/ · +1 other hits
 - [2026-11-14 17:00 UTC] Meta Tests Prediction Market App to Rival Polymarket and Kalshi — Analytics Insight — https://www.analyticsinsight.net/news/meta-tests-prediction-market-app-to-rival-polymarket-and-kalshi · +1 other hits
+- [2026-11-14 15:05 UTC] Grok now says Elon Musk replied to a Nazi account on X — Softonic — (Google News link; search the headline)
 - [2026-11-14 14:49 UTC] Banned Blackwell Chips Tied to Kimi K3, DeepSeek V4: 4 Gaps — shattered.io — https://shattered.io/banned-blackwell-chips-kimi-k3-deepseek-v4-four-evidence-gaps/ · GEO/AEO · +2 other hits
+- [2026-11-14 13:26 UTC] Chinese AI Models From DeepSeek, Moonshot, MiniMax and Ant Group Show Signs of NVIDIA Blackwell Use — XenoSpectrum — https://xenospectrum.com/en/chinese-ai-models-blackwell-gpu-fingerprint-forensics/ · (already listed on an earlier day) · GEO/AEO · +3 other hits
 - [2026-11-14 11:53 UTC] DeepSeek opens its app features through the API — CASRAI — (Google News link; search the headline)
 - [2026-11-14 10:37 UTC] Pichai endorses Grok's Gemini 4 Hydrogen cost efficiency assessment — TechGig — (Google News link; search the headline)
 - [2026-11-14 10:29 UTC] Tether BotPsy Beats Larger Qwen AI in Company Tests — Bitcoin Foundation — (Google News link; search the headline)
@@ -69,9 +70,10 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-14 08:40 UTC] Moonshot AI Eyes IPO as Kimi K3 Drives ARR to $300M — TechRepublic — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-11-14 07:43 UTC] Claude Meetings beta launches for Google Meet — CASRAI — (Google News link; search the headline)
 - [2026-11-14 07:23 UTC] Claude launches Whiteboards, Sheets and Data — CASRAI — (Google News link; search the headline) · (already listed on an earlier day)
+- [2026-11-14 06:28 UTC] OpenAI Enters AI Payments Race Against Google, Coinbase and Circle — FinanceFeeds — https://financefeeds.com/openai-enters-ai-payments-race-against-google-coinbase-and-circle/
 - [2026-11-14 02:35 UTC] EU's First AI-Focused Summit Opens in Dublin as Mistral Urges Immediate Action, Warns of Two-Year Window — BigGo Finance — (Google News link; search the headline)
-- [2026-11-14 02:00 UTC] DeepSeek Opens Its App's Search, File, OCR and Voice Tools as APIs So Developers Can Rebuild the App — Pandaily — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-11-14 02:00 UTC] The Endless Frontier Open-Sources Fx-Bio-1031, a Qwen-Based Model That Runs Bioinformatics Analyses — Pandaily — (Google News link; search the headline)
+- [2026-11-13 23:50 UTC] Can Qwen4-Max be used for work for free? 3 things to check before installing (November 2026) — note — https://note.com/s_kashiwakura/n/n9d13f234dd48?hl=en
 - [2026-11-13 23:06 UTC] xAI Grok Bot Joins Zoom Calls; Solo Price Is $200 a Month — FourWeekMBA — (Google News link; search the headline)
 - [2026-11-13 21:34 UTC] Anthropic now lets you self-host Claude Managed Agents. The catch? 8 hours to act if it flags a safety risk in the software — The New Stack — (Google News link; search the headline)
 - [2026-11-13 20:00 UTC] Alibaba opens a time-limited Qwen4-Max preview — casrai.org — https://casrai.org/news/alibaba-qwen4-max-preview-coding-access-2026
@@ -79,18 +81,17 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-13 18:01 UTC] Report: SpaceX AI Cuts ~60 on Grok Imagine, Shifts to Coding — FourWeekMBA — (Google News link; search the headline)
 - [2026-11-13 17:25 UTC] Anthropic releases upgraded Fable and Mythos models — The Daily Star — (Google News link; search the headline)
 - [2026-11-13 17:15 UTC] ArmourCode releases hooks tool to block Claude Code risk — IT Brief Asia — (Google News link; search the headline)
+- [2026-11-13 17:05 UTC] Anthropic Launches Claude for the Factory, Without Machine Control — Brief IA — (Google News link; search the headline)
 - [2026-11-13 15:45 UTC] OpenAI launches ChatGPT Wallet, letting AI agents pay for purchases — Reuters — (Google News link; search the headline)
 - [2026-11-13 11:34 UTC] DeepSeek Investment Raises Nvidia Security Questions — varindia — (Google News link; search the headline)
 - [2026-11-13 10:26 UTC] OpenAI introduces Daybreak cybersecurity AI agents to find vulnerabilities, create exploits, and write patches — Dev.ua — (Google News link; search the headline)
+- [2026-11-13 09:24 UTC] Google Launches Gemini 4 Hydrogen for Faster Coding and AI Workflows — Analytics India Magazine — (Google News link; search the headline)
 - [2026-11-13 09:10 UTC] OpenAI launches AI security tools, warns businesses to use them ASAP or risk getting hacked — India Today — (Google News link; search the headline)
-- [2026-11-13 08:00 UTC] Ultimate Gemini Model Comparison 2026: 2.5 to Gemini 4 — Fello AI — (Google News link; search the headline)
-- [2026-11-13 08:00 UTC] Grok vs ChatGPT: Which AI Chatbot Wins in 2026? — Fello AI — (Google News link; search the headline)
-- [2026-11-13 08:00 UTC] I Tested DeepSeek’s New All-in-One API for 0.5 Yuan. Here’s What It Gets Right and Where It Breaks. — Vocal — (Google News link; search the headline)
 - [2026-11-12 22:33 UTC] OpenAI to retire advanced and standard voice models in ChatGPT on December 11 — India TV News — https://www.indiatvnews.com/technology/news/openai-to-retire-advanced-and-standard-voice-models-in-chatgpt-on-december-11-2026-11-13-1059331
 
 ### B2B buyer AI / adoption (5)
 - [2026-11-15 00:30 UTC] Forrester Research Earnings Call: AI Gains Offset Declines — TipRanks — (Google News link; search the headline)
-- [2026-11-14 23:57 UTC] AI Agent Practice Digest No. 2: Don't Abandon RAG. Separate the Reference Paths — note — https://note.com/adam_ai_lab/n/neacc4fdfe262?hl=en
+- [2026-11-15 00:25 UTC] AI Agent Practice Digest No. 2: Don't Abandon RAG. Separate the Reference Paths — note — https://note.com/adam_ai_lab/n/neacc4fdfe262?hl=en
 - [2026-11-14 07:47 UTC] 82% of B2B buyers value thought leadership more as AI spreads, Edelman finds — PPC Land — https://ppc.land/82-of-b2b-buyers-value-thought-leadership-more-as-ai-spreads-edelman-finds/ · (already listed on an earlier day) · Brand/product recommendation · +2 other hits
 - [2026-11-14 07:47 UTC] IT - Gartner, Inc. | News — OTC Markets — (Google News link; search the headline) · +1 other hits
 - [2026-11-13 15:11 UTC] Enterprise AI Security Risks Surge: AI-Enabled Breaches Cost $6 Million as Companies Struggle to Protect Data and Agents — InfotechLead — (Google News link; search the headline)
@@ -128,7 +129,9 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-14 18:05 UTC] Jensen Huang's resignation is a setback for US open models, as his funding gave open-source developers time to find their footing and will very likely dry up (Nathan Lambert/Interconnects AI) — Techmeme — https://www.techmeme.com/261114/p15#a261114p15
 - [2026-11-14 17:09 UTC] datasette-vega 0.7 — Simon Willison — https://simonwillison.net/2026/Nov/14/datasette-vega/
 
-### SEO / search press (43)
+### SEO / search press (45)
+- [2026-11-15 08:09 UTC] Amazon to cut Echo Show 16 and Alexa Tablet prices up to 35% for Black Friday — PPC Land — https://ppc.land/amazon-to-cut-echo-show-16-and-alexa-tablet-prices-up-to-35-for-black-friday/ · Brand/product recommendation
+- [2026-11-15 08:07 UTC] Twenty books and a Kindle link apiece: Amazon picks 2026's best — PPC Land — https://ppc.land/twenty-books-and-a-kindle-link-apiece-amazon-picks-2026s-best/
 - [2026-11-15 07:50 UTC] Game: The dashboard now explains itself, and the client still asks — PPC Land — https://ppc.land/game-the-dashboard-now-explains-itself-and-the-client-still-asks/ · Brand/product recommendation
 - [2026-11-15 07:37 UTC] Italy fines Meta EUR805m over photo galleries as OpenAI hands agents a wallet — PPC Land — https://ppc.land/italy-fines-meta-eur805m-over-photo-galleries-as-openai-hands-agents-a-wallet/
 - [2026-11-15 06:57 UTC] India opens consent manager registration with a ₹2 crore net worth floor — PPC Land — https://ppc.land/india-opens-consent-manager-registration-with-a-2-crore-net-worth-floor/
