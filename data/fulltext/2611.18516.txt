@@ -1,0 +1,4769 @@
+StreamEmbed: Real-Time Indexing from Pixels for Screenshot Retrieval
+https://arxiv.org/abs/2611.18516
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+marginparsep has been altered.
+
+topmargin has been altered.
+
+marginparwidth has been altered.
+
+marginparpush has been altered.
+
+The page layout violates the ICML style.
+
+Please do not change the page layout, or include packages like geometry,
+savetrees, or fullpage, which change it for you.
+
+We’re not able to reliably undo arbitrary changes to the style. Please remove
+the offending package(s), or layout-changing commands and try again.
+
+ 
+
+ StreamEmbed: Real-Time Indexing from Pixels 
+
+for Screenshot Retrieval
+
+ 
+
+Dayoon Ko
+ 
+1 
+2 
+
+Yichuan Wang
+ 
+1 
+
+Soyeong Jeong
+ 
+3 
+
+Joseph E. Gonzalez
+ 
+1 
+
+Gunhee Kim
+ 
+2 
+
+Sewon Min
+ 
+1 
+ 
+
+github.com/StarTrail-org/StreamEmbed
+
+ 
+huggingface.co/datasets/dayoon/ScreenMemEval
+
+†
+†
+footnotetext: 
+Corresponding author.
+
+1
+University of California, Berkeley
+
+2
+Seoul National University
+
+3
+KAIST.
+
+Abstract
+
+Screen history can serve as searchable visual memory for people and agents, but unlike an offline corpus, it must be encoded and indexed as each screenshot arrives. OCR-based indexing is fast but loses visual information; visual encoding takes over two seconds. Yet screens change incrementally: most pixels repeat within and across screenshots. This raises a question: 
+do visual encoders need to recompute their representations from scratch for every new screenshot?
+ We present 
+StreamEmbed
+, a system for incremental visual embedding that exploits this redundancy. Guided solely by pixel differences, it combines 
+spatial token pruning
+, which skips blocks that repeat a neighbor, with 
+temporal KV reuse
+, which reuses cached keys and values for blocks unchanged across screenshots. A small learned adapter compensates for pruning and reuse to preserve fidelity to full-screenshot embeddings. On 
+ScreenMemEval
+, our benchmark of 10,426 questions over 184 hours of screen histories from two humans and a computer-use agent, 
+StreamEmbed
+ sets a new accuracy–latency Pareto frontier on an M2 Pro GPU: it encodes up to 3.7
+ faster than full-screenshot encoding without sacrificing accuracy and improves accuracy over OCR-based indexing by up to 6.3 Recall@10 points at matched latency.
+A memory-efficient vector index stores a simulated year of screenshots in 0.13 GB of RAM. Together, these results make real-time indexing of screen history in its native visual form practical, laying a foundation for fully local visual assistants.
+
+1 
+Introduction
+
+Figure 1: 
+StreamEmbed
+ moves the accuracy–latency frontier.
+
+Recall@10 against indexing latency per screenshot (log scale) on an M2 Pro GPU, on the three histories of 
+ScreenMemEval
+. 
+StreamEmbed
+ runs on Qwen3-VL-Embedding-2B at several input resolutions and on SigLIP 2.
+
+StreamEmbed
+ and the +LoRA baselines are fine-tuned on the training split of 
+SME-H1
+, and all results are on held-out test sets (§
+5.3
+).
+We run baselines as released, while 
+StreamEmbed
+ uses a linear patch embedding for Qwen-VL (§
+6.1
+).
+
+Much of daily computer work passes through laptop screens: reading papers, browsing products, and messaging colleagues. Yet people remember few of the details and may later ask: “Which paper had the pink and blue Pareto frontier curves I saw last week?” A searchable screen history could help people recover these details, and also provide persistent memory for locally running agents 
+(
+Packer et al., 2023
+; 
+Wu et al., 2025
+)
+. Because screenshots capture every application without specialized integration, they offer a unified interface across text and visual contents 
+(
+Hu and Lee, 2020
+)
+. Answering questions about past activity then becomes a retrieval problem over a continuously growing screenshot history.
+
+The key challenge is maintaining this visual memory continuously without exhausting system resources.
+Unlike a fixed corpus that is indexed offline 
+(
+Karpukhin et al., 2020
+)
+, this setting requires 
+real-time indexing
+: encoding and indexing each screenshot as it arrives, ideally locally to keep private content on device, while consuming only a small fraction of the laptop’s capacity.
+
+Converting each screenshot into OCR text, as existing open-source tools do 
+(
+OpenRecall, 2024
+; 
+McGhee, 2023
+)
+, is fast but loses what only pixels capture 
+(
+Wang et al., 2026c
+)
+.
+Direct visual embedding preserves this information but takes 2.3 s per screenshot on the GPU. At one screenshot every 5 s, this uses the GPU for 28 minutes per hour of the user’s work, and at one every 2 s, it cannot keep pace. Even commercial systems, such as Microsoft Recall 
+(
+Microsoft, 
+)
+, require dedicated hardware like NPUs and at least 16 GB of RAM.
+Thus, the central question is: can we retain visual retrieval quality while keeping continuous encoding lightweight enough to run silently in the background?
+
+Screen histories, however, offer a particular opportunity: they change incrementally and are largely redundant (Figure 
+2
+).
+Background elements often repeat within and across screenshots, and typing or moving the cursor changes only a few regions, leaving the rest untouched. This raises a question: 
+do we need to compute representations from scratch for every screenshot?
+
+We propose 
+StreamEmbed
+, which encodes screenshots as a stream rather than as isolated images, exploiting this redundancy.
+Within a screenshot, it drops pixel blocks that merely duplicate a neighboring block (spatial pruning), cutting the computation by 33–41%. Across screenshots, it recomputes only the changed blocks and reuses cached keys and values for the rest in both the vision encoder and the language model (temporal reuse), cutting the remaining computation by a further 34–57%.
+These two techniques are largely complementary, and combining them further reduces the computation per screenshot by 57–71%.
+A small adapter merged into the weights compensates for pruning and reuse, keeping the resulting embedding close to that of the full screenshot.
+
+Evaluating 
+StreamEmbed
+ presents another challenge, since no suitable benchmark is available. Such a benchmark needs a screenshot history, questions about it, and the screenshots that answer each question, but existing benchmarks lack a screenshot history 
+(
+Wu et al., 2026
+)
+, questions about the past 
+(
+Xie et al., 2024
+)
+, or relevance labels and public data 
+(
+Wang and Chen, 2025
+)
+. We therefore build 
+ScreenMemEval
+ (
+SME
+), consisting of 10,426 questions drawn from three screenshot histories, each labeled with the screenshots that answer it. Two histories come from human workers on Windows in a public dataset of computer-use recordings 
+(
+Howland et al., 2025
+)
+: 
+SME-H1
+ spans 117 days with 88 hours of screen time, and 
+SME-H2
+ spans 57 days with 18 hours. The third, 
+SME-Agent
+, spans 43 days with 78 hours, recorded on Ubuntu from a computer-use agent (the frontier model GPT-6.1 Sol 
+(
+OpenAI, 2026b
+)
+) performing the tasks of myPCBench 
+(
+Jang et al., 2026
+)
+.
+
+On 
+SME
+, 
+StreamEmbed
+ on Qwen3-VL-Embedding-2B 
+(
+Li et al., 2026
+)
+ sets a new accuracy–latency Pareto frontier (Figure 
+1
+).
+Against baselines on the same backbone, fine-tuned on the same data, it is up to 6.3 points more accurate than an OCR-based index at similar latency, and up to 3.7
+ faster than a screenshot index while retaining over 98% of its accuracy.
+To cut latency, one can lower the input resolution or use a smaller encoder. When we apply these to both 
+StreamEmbed
+ and the baselines, 
+StreamEmbed
+ is more accurate at every latency, by up to 11.4 points (§
+6.4
+). We also show that binary codes of the embeddings reduce memory usage without sacrificing accuracy on 
+SME
+. With them, an index of five simulated years of screenshots fits in under 1 GB of RAM, and search takes under 0.1 s. Together, this work makes real-time indexing of screen history in its native visual form practical and efficient, paving the way for fully local, visual computer-use assistants.
+
+In summary, our contributions are as follows:
+
+•
+
+We introduce real-time indexing of screenshot streams: continuously building searchable visual memory on local hardware, where existing methods face a trade-off between lossy OCR text and slow screenshot embeddings.
+
+•
+
+We propose 
+StreamEmbed
+, which exploits redundancy within and across screenshots through spatial token pruning and temporal KV reuse. Both use pixels alone, and a small adapter merged into model weights preserves fidelity to full-screenshot embeddings.
+
+•
+
+We build 
+ScreenMemEval
+, consisting of 10,426 questions over 184 hours of screen histories from two humans and a computer-use agent.
+
+•
+
+On 
+ScreenMemEval
+, 
+StreamEmbed
+ achieves the new latency-accuracy frontier among evaluated methods: it runs up to 3.7
+ faster than the base screenshot encoder at matched accuracy. We also show its index fits five years of screenshots in under 1 GB of RAM.
+
+Figure 2: 
+
+Screenshots repeat most of their blocks, unlike natural video.
+ (a) Blocks of 
+ that repeat their left or upper neighbor. (b) Blocks of 
+ unchanged from 
+. (c) (a) and (b) together split 
+ into repeated, unchanged, and changed blocks. (d) Share of repeated, unchanged, and changed blocks per source  
+(
+Lù et al., 2024
+; 
+Chen et al., 2025
+; 
+Damen et al., 2022
+)
+ (Wiki.: Wikimedia Commons).
+
+2 
+Problem Setup
+
+Real-time indexing.
+ While a human or an agent uses a computer, its screen history arrives as a stream of screenshots 
+, one every 
+ seconds. Each screenshot 
+ is indexed as it arrives, building a memory for future questions. To keep private content local, indexing runs on the user’s device. Here, indexing 
+ means encoding it into a vector 
+ with an embedding model 
+ and adding 
+ to a growing index.
+
+Indexing is 
+real-time
+ if it keeps pace with the stream, so that screenshots never accumulate faster than they are indexed. Let the indexing latency 
+ be the mean time to index one screenshot, including any preprocessing such as OCR. Keeping pace thus requires, at minimum, 
+; practical use further calls for a small 
+, since the device remains in use for other work during indexing.
+
+Retrieval runs only when a question 
+ arrives: the same model 
+ embeds 
+, and 
+ returns the 
+ indexed screenshots with the highest cosine similarity to 
+, as in dense retrieval 
+(
+Karpukhin et al., 2020
+)
+. This takes about 0.4 s (Table 
+4
+) and runs once per question rather than every 
+ seconds, so only indexing is time-constrained.
+
+The challenge thus lies in indexing, which has two competing goals: preserving in each 
+ whatever a future question may need, and keeping 
+ small. Accordingly, §
+6.2
+ reports retrieval accuracy against 
+ for each method.
+
+Questions and evaluation.
+ Each history in 
+SME
+ consists of task recordings: contiguous spans of screenshots, each covering one task. A question 
+ is answered by 
+ task recordings, and all screenshots of the 
+-th recording (
+) form the relevant set 
+. For evaluation, each history is fully indexed before any question is asked, and retrieval accuracy is the fraction of these recordings that 
+ hits with at least one screenshot,
+
+(1)
+
+averaged over test questions 
+(
+Thakur et al., 2021
+)
+.
+
+Text or screenshots.
+ An index can apply 
+ either to the OCR text of each screenshot 
+, as a 
+text index
+, or to 
+ itself, as a 
+screenshot index
+. Existing open-source tools build text indexes 
+(
+screenpipe, 2024
+; 
+OpenRecall, 2024
+; 
+McGhee, 2023
+)
+, but OCR text often discards much of what the screen shows 
+(
+Ma et al., 2024
+; 
+Faysse et al., 2025
+; 
+Wang et al., 2026c
+)
+: it mixes the answer with every other string on the screen, such as menu labels and text from other windows; it loses the layout that tells them apart; and it drops state that only the pixels show, such as which option is selected.
+
+3 
+Visual Encoding
+
+A screenshot index encodes each arriving screenshot with a vision-language embedding model. This section describes the challenge, encoding as the main cost of indexing (§
+3.1
+), and the opportunity, redundant blocks that account for most of it (§
+3.2
+).
+
+3.1 
+Challenges
+
+Indexing a screenshot has two steps: encoding and insertion. Insertion takes under a millisecond, so nearly all of the cost lies in encoding. A vision-language embedding model such as Qwen3-VL-Embedding encodes a screenshot with a vision encoder and passes the resulting hundreds of visual tokens through its language model, whereas a text index passes only the OCR text through the language model.
+
+As Table 
+1
+ shows, encoding a screenshot takes 2.33 s on an M2 Pro GPU: 7.5
+ as long as encoding its OCR text, and 3.6
+ the total latency of a text index even with OCR included. At one screenshot every 
+ s, encoding thus occupies the GPU nearly half of the time, on a laptop that remains in use for other work. This cost likely explains why existing tools index OCR text, despite a 10.1-point drop in R@10 
+(
+screenpipe, 2024
+; 
+OpenRecall, 2024
+; 
+McGhee, 2023
+)
+. Moreover, it recurs for every screenshot, since screenshot indexes encode each one from scratch.
+
+3.2 
+Opportunities
+
+Encoding each screenshot from scratch ignores how much of a screen repeats, both within a screenshot and across screenshots. (i) Spatial redundancy arises within a screenshot, where backgrounds, margins, and blank panels span large areas (Figure 
+2
+(a)). (ii) 
+Temporal redundancy
+ arises across screenshots, where typing or moving the cursor changes a few regions and leaves the rest of the screen as it was (Figure 
+2
+(b)). Natural video has little of either: texture varies within a frame, and camera motion alters most pixels between frames.
+
+Figure 
+2
+(d) quantifies this. In screen recordings, 67–77% of the pixel blocks that become visual tokens repeat a neighbor exactly or are unchanged from the previous screenshot, against 6–19% in natural video. An encoder that treats every screenshot as new thus spends most of its work on redundant tokens. It could instead skip blocks that repeat a neighbor, reuse the computation of blocks unchanged since the previous screenshot, and recompute only the rest. 
+StreamEmbed
+ builds on this idea (§
+4
+).
+
+Table 1: 
+Mean R@10 and per-screenshot latency (s) of Qwen3-VL-Embedding-2B indexes on the 
+SME
+. Enc.: encoding; Insert: adding the embedding to the index; Total: OCR + Enc. + Insert.
+
+Latency (s)
+
+Index
+
+R@10
+
+OCR
+
+Enc.
+
+Insert
+
+Total
+
+Text
+
+64.0
+
+0.34
+
+0.31
+
+0.001
+
+0.65
+
+Screenshot
+
+74.1
+
+–
+
+2.33
+
+0.001
+
+2.33
+
+4 
+StreamEmbed
+
+Figure 3: 
+Indexing with 
+StreamEmbed
+.
+ A screenshot arrives every 
+ s. Spatial pruning drops blocks that repeat their left or upper neighbors (§
+4.1
+), and change detection flags kept blocks that are new or have changed beyond a threshold (§
+4.2
+). The ViT and LM recompute only the flagged blocks (and the suffix), reusing cached keys and values for the rest. The last token’s final hidden state is the embedding of the screenshot.
+
+StreamEmbed
+ exploits this redundancy (§
+3.2
+) by encoding screenshots as a stream, computing only what has not been shown before. Spatial pruning removes redundancy within a screenshot (§
+4.1
+), temporal reuse removes redundancy across screenshots by recomputing only changed blocks (§
+4.2
+), and a consistency adapter keeps the embedding of the reduced input close to that of the full screenshot (§
+4.3
+). Figure 
+3
+ shows how a screenshot is indexed.
+
+Embedding a screenshot.
+
+A vision-language embedding model 
+(
+Ma et al., 2024
+)
+, such as Qwen3-VL-2B 
+(
+Li et al., 2026
+)
+, encodes a screenshot in three steps. First, a vision encoder (ViT) 
+(
+Dosovitskiy et al., 2021
+)
+ turns each 
+ patch into a vector. Second, each 
+ group of patches, a 
+ pixel block, forms one visual token. Third, a language model (LM) reads these tokens between a fixed text prefix and suffix, and its normalized last-layer hidden state at the last token is the embedding 
+. The ViT and the LM stack self-attention layers, in which each token forms a query, key, and value and attends to the keys and values of all tokens, bidirectionally in the ViT and causally in the LM. A 
+ screenshot, resized to 
+, becomes a 
+ grid of 880 blocks and tokens.
+
+Notation.
+
+We write 
+ for the block at grid position 
+ of 
+, so 
+ and 
+ cover the same screen region, and 
+ for the largest absolute pixel difference between blocks 
+ and 
+ over all RGB channels.
+
+4.1 
+Spatial Token Pruning
+
+We prune before the ViT, so a dropped block is processed by neither the ViT nor the LM.
+
+Neighbor rule.
+
+We write 
+ and 
+ for the left and upper neighbors of block 
+. A block is dropped if it repeats either neighbor within 
+, 8 of 255 levels, and kept otherwise,
+
+(2)
+
+A block on the left or top edge is compared only with the neighbor it has, and the top-left block is always kept. Kept blocks keep their original position embeddings in the ViT and the LM, so each token still encodes where its block lies.
+
+Grid keep.
+
+The neighbor rule reduces a large uniform region, such as a blank panel, to a few blocks, which shifts the embedding away from that of the full screenshot. We thus also keep 
+, one block of each uniform region in every fixed 
+ tile of blocks, so the kept set is 
+.
+
+Wang et al. (2026a)
+ decide block by block in raster order, so each decision depends on all earlier ones. We instead compare each block with its neighbors in the original screenshot, so all blocks are decided independently and in parallel.
+
+4.2 
+Temporal KV Reuse
+
+We reuse the keys and values of earlier screenshots and recompute only changed blocks. Reuse is exact only if every token a reused token attends to is unchanged. Otherwise, it approximates, and periodic refresh bounds the error.
+
+Change detection.
+
+Let 
+ be block 
+ as it was when its cached keys and values were last computed. Among the kept blocks 
+, we recompute those that have no cache or have changed by more than 
+ since then,
+
+(3)
+
+with 
+. Comparing with 
+ rather than 
+ keeps every reused block within 
+ of 
+, even when it changes slowly over many screenshots.
+
+ViT.
+ In every layer, we recompute the queries, keys, and values of the blocks in 
+ and update their cache. They attend to all kept blocks, taking the keys and values of unchanged ones from the cache, so each changed block still sees every kept block. The outputs of the other kept blocks come from the cache. The ViT approximates in that an unchanged block does not see what changed elsewhere on the screen.
+
+LM.
+ In the LM, we likewise recompute, in every layer, the visual tokens of 
+ and the fixed suffix and update their cache. They attend causally to all earlier tokens, taking the keys and values of the others from the cache. The suffix is always recomputed because it attends to every visual token, and its last token yields the embedding. The LM approximates in that unchanged visual tokens keep their cached keys and values even when earlier tokens have changed.
+
+Refresh.
+ Reused keys and values drift from those of a full encoding. We therefore re-encode all kept blocks, setting 
+, when
+
+(4)
+
+where 
+ is the last refreshed screenshot, 
+, and 
+. The first condition catches a new screen, on which partial recomputation saves little, and the second bounds the drift.
+
+4.3 
+Consistency Adapter
+
+We fine-tune the embedding model with LoRA 
+(
+Hu et al., 2022
+)
+ on the training split of 
+ScreenMemEval
+ (§
+5.3
+) and use it to embed questions. Pruning and reuse, however, shift the embedding of a reduced screenshot away from that of the full one. We therefore train a consistency adapter, a second LoRA initialized from the first and used only to encode screenshots, by distilling the fine-tuned model 
+ on full screenshots into the adapter 
+ on pruned ones. For a screenshot 
+ and its pruned input 
+, the loss is
+
+(5)
+
+where 
+ and 
+ are softmax distributions of the teacher’s and student’s similarities over a question’s candidate screenshots, and 
+ is Margin-MSE loss on a relevant screenshot and a hard negative.
+
+Following multi-objective distillation 
+(
+Sanh et al., 2019
+; 
+Jiao et al., 2020
+)
+, the three terms match the teacher’s embedding 
+(
+Hwang et al., 2025
+)
+, its ranking over candidates 
+(
+Abbasi Koohpayegani et al., 2020
+; 
+Fang et al., 2021
+)
+, and its score gap on hard pairs 
+(
+Hofstätter et al., 2020
+)
+. Merged into the screenshot encoder’s weights, the adapter adds no computation.
+
+5 
+The 
+ScreenMemEval
+ Benchmark
+
+Evaluating screenshot retrieval under real-time indexing (§
+2
+) requires a screenshot history, questions about its past, and relevance labels. The closest benchmark 
+(
+Wang and Chen, 2025
+)
+ asks questions over a person’s screenshot history, but scores generated answers without relevance labels, and its data is not public.
+
+We therefore build 
+ScreenMemEval
+ (
+SME
+), with 10,426 test questions (plus 1,315 for training and validation) over three screenshot histories, two from human workers and one from a computer-use agent (Table 
+2
+). Each question is labeled with the task recordings that answer it. 
+SME
+ consists of three sets, 
+SME-H1
+, 
+SME-H2
+, and 
+SME-Agent
+. The appendix gives further details.
+
+5.1 
+Screen Histories
+
+Histories from human workers.
+ 
+SME-H1
+ and 
+SME-H2
+ each hold one worker’s task recordings, in time order, from 
+Howland et al. (2025)
+, a public dataset of instructed tasks on websites and desktop applications on Windows. Screenshot are sampled every 
+ s at 
+.
+
+History from a computer-use agent.
+ 
+SME-Agent
+ extends the 
+SME
+ to a computer-use agent’s screen. This reflects an emerging workflow: agents perform tasks, and humans later verify what they did; the history can also serve as the agent’s own memory. We run GPT-6.1-sol 
+(
+OpenAI, 2026b
+)
+, a frontier model, on the 184 tasks of myPCBench 
+(
+Jang et al., 2026
+)
+. The tasks are built around one persona, whose Ubuntu virtual machine holds personal files, 17 self-hosted web applications, and desktop applications. Since each task involves many steps, we use an LLM to split them into 787 sub-tasks, which we then place on a 43-day calendar. Each sub-task forms one recording, captured at the same resolution and interval as the human histories.
+
+Table 2: 
+Statistics of the three screenshot histories of 
+SME
+.
+
+SME-H1
+
+SME-H2
+
+SME-Agent
+
+Recorded from
+
+human
+
+human
+
+agent
+
+Days
+
+117
+
+57
+
+43
+
+Recordings
+
+2,105
+
+946
+
+787
+
+Screenshots
+
+63.5k
+
+12.8k
+
+55.9k
+
+Questions
+
+5,111
+
+3,507
+
+1,808
+
+single / multi
+
+4,265 / 846
+
+3,096 / 411
+
+1,654 / 154
+
+5.2 
+Questions
+
+SME
+ has single- and multi-recording questions 
+, answered by one (
+) or several (
+) recordings (Table 
+3
+).
+
+Single-recording questions.
+ A single-recording question asks where, when, what, or how a task was done, or which value was entered, and is phrased in the first person, as the worker or the persona would ask it. Opus 5.5 
+(
+Anthropic, 2026
+)
+ writes one of each type for each recording, based on its annotations, which describe the task, application, and time. The generator never sees screenshots or OCR text, so it favors neither index type. Most screenshots in every history show a clock, so times can be matched on screen.
+
+To keep each answer unique, the same model, as a judge, compares each question with similar recordings, discards it if another recording answers differently, and labels recordings with the same answer as relevant. For 
+SME-Agent
+, GPT-6-astra 
+(
+OpenAI, 2026a
+)
+ also checks that the recording’s screens and actions support the answer.
+
+Multi-recording questions.
+ A multi-recording question counts how often an event occurred, compares two values, orders two events, or compares two durations. Its answer is computed from the annotations or verified answers of single recordings, and an LLM only phrases the question. To ensure each question needs all its evidence, a comparison, order, or duration, a question is kept only if an LLM answers it correctly from the relevant recordings, but fails once any one is removed. A count must match two independent LLM recounts exactly. In 
+SME-Agent
+, GPT-6-astra also checks that every recording a question combines shows its task done on screen.
+
+Table 3: 
+Question types in 
+SME
+, with examples.
+
+Type
+
+Example question and answer
+
+Single-recording
+
+where
+
+Where did I look up highly rated Vienna hotels with parking and breakfast? 
+ 
+Booking.com
+
+when
+
+When did I check the airline’s size rules for flying with a bike? 
+ 
+Jul 29, 4:44 pm
+
+what
+
+What did I do on Rent.com on the afternoon of August 7? 
+ 
+Checked utility costs
+
+how
+
+How did I create the battery report? 
+ 
+Ran 
+powercfg
+
+value
+
+What return date did I set for the JFK round-trip flight? 
+ 
+June 20th
+
+Multi-recording
+
+count
+
+How many times in September did I search for places to stay on Airbnb? 
+ 
+3
+
+comparison
+
+Did I search for more nights for the Sydney hotel or for the Jakarta hotel? 
+ 
+Sydney
+
+order
+
+Did I look up a pivot table tutorial first, or check the price of Bitcoin? 
+ 
+Pivot table
+
+duration
+
+Which took me longer: finding hiking trails nearby, or looking up the symbol for gold? 
+ 
+Hiking trails
+
+5.3 
+Relevance Labels and Splits
+
+Relevance labels.
+ Questions ask about tasks, not single screenshots, so relevance is labeled per task recording. For a single-recording question (
+), 
+ in Eq. (
+1
+) holds the screenshots of its recording and of every recording the judge labeled relevant. A multi-recording question has one set per piece of evidence, holding the screenshots of the recording that supplies it and of any recording judged to give the same evidence. As in parallel multi-hop search 
+(
+Ko et al., 2026
+)
+, each piece of evidence can be retrieved independently and then combined. Comparison, order, and duration questions have 
+, and for a count question 
+ equals its answer, from 2 to 8. Since a 
+SME-Agent
+ recording averages 71 screenshots, we also score 
+SME-Agent
+ on only the screenshots that show the evidence.
+
+Figure 4: 
+Main results.
+ 
+StreamEmbed
+ approaches the accuracy of a screenshot index at close to the latency of a text index. Recall@10 and mean indexing latency per screenshot on the GPU and CPU of an M2 Pro (§
+6.1
+), latency on a log scale. Text indexes use Apple Vision OCR on the GPU and RapidOCR on the CPU, since Apple Vision OCR runs on the Neural Engine. OCR latency is almost equal to the BM25 latency, since BM25 adds under 0.1 ms.
+
+6 
+Experiments
+
+We first compare 
+StreamEmbed
+ with text and screenshot indexes (§
+6.2
+). We then index a long stream, simulating up to five years of screenshots to test how different index types scale (§
+6.3
+). Finally, we apply 
+StreamEmbed
+ to other encoders (§
+6.4
+) and ablate its components (§
+6.5
+).
+
+6.1 
+Setup
+
+Datasets.
+ We evaluate on the three histories of 
+SME
+ (§
+5
+). Fine-tuned models are trained on 1,000 questions about the earliest recordings of 
+SME-H1
+, and all checkpoints and settings are selected on 315 questions about the next 79 recordings; neither set overlaps with the test questions. 
+SME-H1
+ is thus in-domain for every fine-tuned model, 
+SME-H2
+ tests transfer to another worker, and 
+SME-Agent
+ is out-of-domain, recorded from a computer-use agent on another operating system (§
+5.1
+).
+
+Baselines.
+ We compare 
+StreamEmbed
+ with text and screenshot indexes. A 
+text
+ index extracts the OCR text of each screenshot with Apple Vision OCR 
+(
+Apple Inc., 
+)
+ for GPU latency and with RapidOCR 
+(
+RapidAI, 2021
+)
+ for CPU latency, since Apple Vision OCR runs on the Neural Engine. It then ranks the text with BM25 
+(
+Robertson and Zaragoza, 2009
+)
+, or embeds it with Qwen3-Emb-0.6B, -4B, or -8B 
+(
+Zhang et al., 2025
+)
+ (and gte-modernbert-base 
+(
+Li et al., 2023
+; 
+Zhang et al., 2024
+)
+ in Figure 
+1
+) or with the embedding model Qwen3-VL-2B 
+(
+Li et al., 2026
+)
+. We also fuse the ranking of Qwen3-VL-2B with that of BM25 by reciprocal rank fusion 
+(
+Cormack et al., 2009
+)
+. A 
+screenshot
+ index embeds the full screenshot with the NaFlex variants of SigLIP2-B and SigLIP2-So400m (SigLIP2-So) 
+(
+Tschannen et al., 2025
+)
+, VultronRetriever-Flash (Vultron) 
+(
+Vultr, 2026
+)
+, or Qwen3-VL-2B or -8B 
+(
+Li et al., 2026
+)
+. Qwen3-VL-2B serves as both a text and a screenshot encoder in the main comparison, used base or fine-tuned with LoRA (FT).
+
+Implementation.
+ 
+StreamEmbed
+ uses 
+, tiles of 
+ blocks, 
+, and 
+, chosen on the 
+SME-H1
+ validation questions, and encodes screenshots with the consistency adapter (§
+4.3
+).
+The Qwen3-VL screenshot baselines run as released, with a Conv3d patch embedding. 
+StreamEmbed
+ computes it with an equivalent linear one (§
+6.5
+).
+LoRA and the consistency adapter are merged into the weights and do not change latency.
+
+Metrics.
+ We report (i) Recall@10 of each dataset for accuracy and (ii) indexing latency for cost, the mean time to encode a screenshot and add it to the index on the GPU and CPU of an Apple M2 Pro, including OCR for the text index. We measure latency over the first 50 consecutive screenshots, or all if fewer, of 30, 30, and 20 recordings sampled from 
+SME-H1
+, 
+SME-H2
+, and 
+SME-Agent
+.
+
+Figure 5: 
+StreamEmbed
+ with lower resolution and smaller encoders.
+ Bands are the Pareto frontiers of Qwen3-VL (top) and SigLIP2 (bottom) over encoder size and resolution, with and without 
+StreamEmbed
+; arrows give the R@10 gain of 
+StreamEmbed
+ at a similar or lower latency. Labels give the encoder size and input width (SigLIP2: maximum patches, p) and, for 
+StreamEmbed
+, the fraction of dropped blocks. Gray crosses are other indexes, off both frontiers.
+
+6.2 
+Main Results
+
+Figure 
+4
+ compares 
+StreamEmbed
+ against all text and screenshot indexes across the three histories, reporting R@10 and mean latency on the GPU and CPU.
+
+StreamEmbed
+ is 2.8–3.7
+ faster than the screenshot index and stays within 1.3 R@10 of it.
+ Against the fine-tuned Qwen3-VL-2B screenshot index, which takes 2.33–2.34 s per screenshot on the GPU, 
+StreamEmbed
+ takes 0.66, 0.84, and 0.63 s on 
+SME-H1
+, 
+SME-H2
+, and 
+SME-Agent
+ and scores 1.3, 1.2, and 0.6 R@10 lower (Figure 
+4
+). It is more accurate than the base screenshot index on 
+SME-H1
+ and 
+SME-H2
+ and 1.0 R@10 below it on 
+SME-Agent
+. Only Qwen3-VL-8B is clearly more accurate, on 
+SME-Agent
+, at about eight times the latency.
+
+StreamEmbed
+ is more accurate than every text index, at a similar latency.
+ The strongest text index, the fine-tuned Qwen3-VL-2B fused with BM25, scores 3.5–4.6 R@10 below 
+StreamEmbed
+, and larger text encoders such as Qwen3-Emb-8B do not close this gap while taking longer. On the GPU, 
+StreamEmbed
+ nearly matches its latency on 
+SME-H1
+ (0.66 vs. 0.62 s) and is faster on 
+SME-Agent
+ (0.63 vs. 0.69 s). On 
+SME-H2
+ it takes 0.84 against 0.65 s, but it still fits within a capture interval of 1 s, which the screenshot index (2.34 s) does not. The same holds on the CPU. 
+StreamEmbed
+ takes 1.87–2.61 s, close to the strongest text index (1.86–2.12 s), while the fine-tuned screenshot index takes 5.42–5.81 s, longer than even a 5 s capture interval.
+
+StreamEmbed
+ moves the Pareto frontier beyond lower resolution and smaller encoders.
+ A common way to cut indexing latency is to lower the input resolution or to use a smaller encoder. Whereas Figure 
+1
+ runs each baseline at its default resolution, Figure 
+5
+ revisits the comparison by applying both to the screenshot index as well as to 
+StreamEmbed
+, which can also raise its drop ratio. Even then, on both encoder families and all three histories, 
+StreamEmbed
+ scores 2.6–11.4 R@10 higher than the baseline at a similar or lower latency. The gain is largest at low latency, where the baseline must fall back to a small input. At 0.19 s on 
+SME-H1
+, Qwen3-VL-2B with 
+StreamEmbed
+ at 480
+270 reaches 75.3 R@10, against 65.0 for the full screenshot at 320
+180. The gain narrows near 0.7 s, where both sides approach the accuracy of the full encoder, yet 
+StreamEmbed
+ on Qwen3-VL-2B still scores 2.7 R@10 above Qwen3-VL-8B at 480
+270 while running faster. Lowering the resolution or the encoder size applies to 
+StreamEmbed
+ as well, and 
+StreamEmbed
+ makes each resolution cheaper, so most points on its frontier pair 
+StreamEmbed
+ with a lower resolution.
+
+Table 4: 
+Index types as the index grows.
+ B/entry is RAM per screenshot. R@10 is on real histories, and subscripts give the change from Flat. RAM, search, and insertion on CPU are for 1–5 years of screenshots (2.1M/year), simulated from the real embeddings with Gaussian noise. PQ and 1-bit re-rank the top 1,000 with fp16 vectors on the SSD. Search times the index only; encoding a query adds 52 ms on average. – exceeds 24 GB of RAM.
+
+R@10
+
+RAM (GB)
+
+Search (ms)
+
+Insert (ms)
+
+Index
+
+B/entry
+
+SME-H1
+
+SME-Agent
+
+1 yr
+
+2 yr
+
+5 yr
+
+1 yr
+
+2 yr
+
+5 yr
+
+1 yr
+
+2 yr
+
+5 yr
+
+Flat
+
+4,096
+
+82.1
+
+57.6
+
+8.6
+
+17.2
+
+–
+
+440
+
+881
+
+–
+
+0.002
+
+0.002
+
+–
+
+IVF
+
+4,104
+
+80.9
+1.2
+
+54.8
+2.8
+
+8.6
+
+17.3
+
+–
+
+92
+
+184
+
+–
+
+0.09
+
+0.09
+
+–
+
+HNSW
+
+4,368
+
+81.7
+0.4
+
+56.2
+1.4
+
+9.2
+
+18.4
+
+–
+
+0.96
+
+1.3
+
+–
+
+0.55
+
+0.67
+
+–
+
+PQ (128 B)
+
+128
+
+82.0
+0.1
+
+57.5
+0.1
+
+0.27
+
+0.54
+
+1.35
+
+65
+
+129
+
+359
+
+0.14
+
+0.14
+
+0.14
+
+1-bit (all 2048 dims)
+
+256
+
+82.1
+
+57.6
+
+0.54
+
+1.08
+
+2.69
+
+24.8
+
+44.1
+
+102
+
+0.007
+
+0.007
+
+0.007
+
+1-bit (first 512 dims)
+
+64
+
+82.1
+
+57.6
+
+0.13
+
+0.27
+
+0.67
+
+15.5
+
+29.5
+
+56.0
+
+0.010
+
+0.010
+
+0.010
+
+Table 5: 
+StreamEmbed
+ on other encoders.
+ Full screenshot and 
+StreamEmbed
+ for each encoder, all fine-tuned with LoRA on 
+SME-H1
+. Latency is GPU / CPU in seconds per screenshot.
+Darker blue marks higher R@10 and darker pink marks lower GPU latency, within each column.
+
+SME-H1
+
+SME-H2
+
+SME-Agent
+
+R@10
+
+Latency
+
+R@10
+
+Latency
+
+R@10
+
+Latency
+
+Qwen3-VL-8B
+
+84.0
+
+5.15 / 14.82
+
+85.0
+
+5.19 / 14.88
+
+61.9
+
+5.16 / 14.68
+
+StreamEmbed
+
+83.0
+
+1.59 / 6.31
+
+83.0
+
+2.08 / 7.78
+
+60.7
+
+1.49 / 5.93
+
+Qwen3-VL-2B
+
+83.4
+
+2.33 / 5.42
+
+84.5
+
+2.34 / 5.47
+
+58.2
+
+2.34 / 5.81
+
+StreamEmbed
+
+82.1
+
+0.66 / 1.97
+
+83.3
+
+0.84 / 2.61
+
+57.6
+
+0.63 / 1.87
+
+SigLIP2-So (1.1B)
+
+77.5
+
+0.34 / 0.81
+
+78.7
+
+0.34 / 0.80
+
+49.6
+
+0.34 / 0.81
+
+StreamEmbed
+
+76.3
+
+0.19 / 0.39
+
+78.8
+
+0.23 / 0.51
+
+46.9
+
+0.18 / 0.37
+
+Vultron (0.8B)
+
+78.9
+
+1.05 / 2.47
+
+80.7
+
+1.05 / 2.51
+
+60.4
+
+1.05 / 2.44
+
+StreamEmbed
+
+77.8
+
+0.71 / 1.22
+
+79.7
+
+0.79 / 1.49
+
+56.8
+
+0.67 / 1.21
+
+SigLIP2-B (0.4B)
+
+68.7
+
+0.13 / 0.22
+
+71.4
+
+0.13 / 0.22
+
+39.4
+
+0.13 / 0.22
+
+StreamEmbed
+
+68.2
+
+0.09 / 0.12
+
+70.3
+
+0.10 / 0.15
+
+38.1
+
+0.09 / 0.12
+
+6.3 
+Indexing a Long Stream
+
+So far, we have shown that 
+StreamEmbed
+ makes real-time encoding practical, but on-device retrieval poses a second challenge: can a growing screenshot index fit within a laptop’s RAM? Memory already constrains deployment (
+e.g.
+, Recall 
+(
+Microsoft, 
+)
+ requires at least 16 GB).
+
+To quantify how far an index can go, we grow a simulated index from one to five years of screenshots (2.1M per year at one every 5 s over eight hours a day, whose fp16 embeddings take 8.6 GB) by adding Gaussian noise to copies of the real embeddings. We compare exact search (Flat), approximate search with an inverted file (IVF) 
+(
+Jégou et al., 2011
+)
+ or a graph (HNSW) 
+(
+Malkov and Yashunin, 2020
+)
+, and compressed codes kept in RAM whose top 1,000 candidates are re-ranked with the full embeddings on disk, namely product quantization (PQ) 
+(
+Jégou et al., 2011
+)
+ and 1-bit codes 
+(
+Shakir et al., 2024
+; 
+Yamada et al., 2021
+)
+, all implemented in Faiss 
+(
+Douze et al., 2024
+)
+.
+
+Table 
+4
+ reports the accuracy of each index on 
+SME-H1
+ and 
+SME-Agent
+, and its RAM, search time, and insertion time as the history grows, on the CPU of the M2 Pro.
+
+Indexes that keep full embeddings in RAM may not scale to years of screenshots.
+ Flat needs 8.6 GB of RAM per year and exceeds 24 GB at five years, and its search time grows with the index, from 440 ms at one year to 881 ms at two. IVF searches about five times faster than Flat but loses up to 2.8 R@10, since relevant screenshots can fall outside the clusters it searches. HNSW searches in about 1 ms but needs 7% more RAM than Flat for its graph and loses up to 1.4 R@10.
+
+Compressed codes with re-ranking from disk keep R@10 at a small fraction of the RAM.
+ PQ and 1-bit codes stay within 0.1 R@10 of Flat, since the codes only need to place the relevant screenshots among the top 1,000, and re-ranking with the full embeddings restores their order. 1-bit codes of the first 512 dimensions take 64 bytes per screenshot, 64 times less than Flat, and hold five years in 0.67 GB. Comparing bit codes is also cheap, so they search in 56 ms after five years, against 359 ms for PQ. With the 52 ms of encoding a question, retrieval takes about 0.1 s even after five years.
+
+Insertion stays negligible even with five years of history.
+ Inserting a screenshot takes at most 0.67 ms, for HNSW, and 0.01 ms for 1-bit codes, against 0.63–0.84 s to encode it with 
+StreamEmbed
+. This confirms the premise of §
+3.1
+ that the cost of real-time indexing lies in encoding, not insertion, even as the history grows, and it is this cost that 
+StreamEmbed
+ reduces.
+
+Table 6: 
+Ablation.
+ Components of 
+StreamEmbed
+ added one at a time to the fine-tuned Qwen3-VL-2B screenshot index. Latency is GPU / CPU in sec per screenshot.
+
+SME-H1
+
+SME-H2
+
+SME-Agent
+
+R@10
+
+Latency
+
+R@10
+
+Latency
+
+R@10
+
+Latency
+
+Screenshot (FT)
+
+83.4
+
+2.33 / 5.42
+
+84.5
+
+2.34 / 5.47
+
+58.2
+
+2.34 / 5.81
+
++ Linear patch embed.
+
+83.4
+
+1.65 / 5.42
+
+84.5
+
+1.64 / 5.47
+
+58.2
+
+1.66 / 5.81
+
++ Spatial pruning
+
+82.8
+
+1.00 / 2.96
+
+83.8
+
+1.17 / 3.64
+
+57.1
+
+1.08 / 3.48
+
+w/o grid keep
+
+82.6
+
+0.84 / 2.49
+
+83.5
+
+1.03 / 3.07
+
+55.2
+
+0.91 / 2.60
+
++ Temporal reuse
+
+81.8
+
+0.66 / 1.97
+
+82.9
+
+0.84 / 2.61
+
+56.2
+
+0.63 / 1.87
+
++ Consistency adapter
+
+82.1
+
+0.66 / 1.97
+
+83.3
+
+0.84 / 2.61
+
+57.6
+
+0.63 / 1.87
+
+6.4 
+Generalization to Other Encoders
+
+Table 
+5
+ applies 
+StreamEmbed
+ with the same thresholds to four other screenshot encoders, each fine-tuned with LoRA on 
+SME-H1
+, and compares it with each encoder on full screenshots.
+
+StreamEmbed
+ generalizes to every encoder, staying close to its full-screenshot accuracy.
+ It lowers the GPU latency of all five encoders, by 1.3–1.9
+ on SigLIP2 and Vultron and by 2.5–3.7
+ on Qwen3-VL, while losing only 1.3 R@10 on average.
+
+The speedup grows with the computation that reuse can skip.
+ 
+StreamEmbed
+ speeds up the Qwen3-VL encoders by 2.5–3.7
+ on the GPU, since temporal reuse also saves computation in the language model. On SigLIP2, which has no language model, and on Vultron, whose language model mostly uses linear attention, 
+StreamEmbed
+ reuses keys and values only in the vision encoder and still speeds them up by 1.3–1.9
+ on the GPU and 1.5–2.2
+ on the CPU. On Vultron, which stores one vector per visual token, pruning also stores 23–30% fewer vectors per screenshot, trading some accuracy on 
+SME-Agent
+ for a smaller index.
+
+6.5 
+Ablation
+
+Table 
+6
+ adds the components of 
+StreamEmbed
+ one at a time to the released Qwen3-VL-2B, fine-tuned with LoRA, starting with the equivalent linear patch embedding that 
+StreamEmbed
+ uses for Qwen3-VL (§
+6.1
+).
+
+StreamEmbed
+ speeds up encoding by 2.8–3.7
+ over the released model, mostly through spatial pruning and temporal reuse.
+ Spatial pruning removes the repetition within a screenshot and temporal reuse removes the repetition across screenshots, each speeding up encoding by about 1.5
+ at about 1 R@10. Their savings thus multiply, to 2.0–2.6
+ together. Their overhead is small, as pruning and change detection add about 0.01 s per screenshot, and in the final configuration the vision encoder and the language model each run two to three times faster than without them.
+
+Grid keep and the consistency adapter recover the accuracy lost due to pruning on 
+SME-Agent
+.
+ Pruning every redundant block costs far more on 
+SME-Agent
+ than on the human histories, suggesting that dropping every redundant block shifts the embedding. Grid keep recovers most of this loss for about 0.15 s per screenshot, and the consistency adapter recovers more at no latency cost, leaving 
+StreamEmbed
+ within 1.3 R@10 of the full screenshot on all three histories.
+
+7 
+Related Work
+
+Screen history.
+
+Re-finding what was once on a computer screen has long been studied, with people searching the files, e-mail, and web pages they have opened 
+(
+Dumais et al., 2003
+)
+ or browsing past screenshots 
+(
+Hu and Lee, 2020
+)
+.
+Such histories serve not only people but also agents, which complete more later tasks when they reuse past experience 
+(
+Wang et al., 2024
+; 
+Agashe et al., 2025
+)
+ or see past screenshots rather than summaries 
+(
+Luo et al., 2026
+)
+.
+Recent systems build such histories using vision-language models (VLMs), turning screenshots into the text memory of an agent 
+(
+Wang and Chen, 2025
+)
+ or a log of each task 
+(
+Yin et al., 2026
+)
+, or answering questions over them 
+(
+Li et al., 2025
+)
+.
+These systems rely on large cloud models 
+(
+Wang and Chen, 2025
+; 
+Li et al., 2025
+)
+ or, to run on the device, process only some screenshots 
+(
+Yin et al., 2026
+)
+, and either way represent screenshots as text.
+Yet retrieving from pixels is more accurate than from text on documents and the web 
+(
+Ma et al., 2024
+; 
+Faysse et al., 2025
+)
+.
+We thus keep every screenshot as an embedding of its pixels, computed on the device.
+
+Growing indexes.
+
+Earlier work has studied indexes that grow over time, but it rarely treats the cost of encoding each new item as the bottleneck. Real-time search indexes text, which is cheap 
+(
+Busch et al., 2012
+)
+, and updatable vector indexes leave embedding as a separate step 
+(
+Xu et al., 2023
+)
+. Work on evolving corpora studies how to add documents to a trained retriever 
+(
+Kishore et al., 2023
+)
+ and when to update it 
+(
+Ko et al., 2025
+; 
+Kim et al., 2024
+)
+. For screenshots, however, encoding is the bottleneck. Work that faces this cost encodes less or defers it, using cheaper models 
+(
+Hsieh et al., 2018
+)
+, fewer frames 
+(
+Kang et al., 2020
+)
+, early exit 
+(
+Cai et al., 2025
+)
+, smaller encoders 
+(
+Teiletche et al., 2025
+)
+, or lower resolution 
+(
+Wang et al., 2026c
+)
+. Instead, we remove only the computation that screens repeat, which is combined with a smaller encoder, lower resolution, or a skip gate. A growing index must also stay small. 
+Lyu et al. (2026)
+ re-rank compressed codes from disk, and 
+Wang et al. (2026b)
+ recompute embeddings at search time on a laptop.
+We study how to fit a screenshot index in a laptop’s memory.
+
+Streaming VLMs.
+
+Streaming VLMs keep each arriving frame in their context to answer questions about the video at any time 
+(
+Chen et al., 2024
+)
+, so their main concern is what to keep.
+Instead, we store each screenshot in an index for later queries, as in 
+Jeong et al. (2025)
+, so our main concern is how fast each one is encoded.
+This leads to three differences.
+These models keep tokens or their keys and values, which they evict, compress 
+(
+Xu et al., 2025a
+)
+, or retrieve for each question 
+(
+Di et al., 2025
+; 
+Ning et al., 2026
+)
+.
+Our index holds only one embedding per screenshot.
+Methods that cut computation across frames decide what to skip inside or after the vision encoder 
+(
+Yao et al., 2025
+; 
+Wang et al., 2026d
+)
+.
+Others decide from pixels but reuse computation in at most one of the encoder and the LM 
+(
+Choudhury et al., 2024
+; 
+Xu et al., 2025b
+)
+.
+In contrast, our method decides fast from pixels before the encoder and reuses unchanged blocks in both.
+Finally, prior work keeps accuracy with modules added at inference 
+(
+Aggarwal and Welleck, 2026
+; 
+Hwang et al., 2025
+; 
+Soldan et al., 2025
+)
+.
+Our adapter is instead a LoRA merged into the weights, adding no latency.
+
+8 
+Conclusion
+
+We introduced 
+StreamEmbed
+, which indexes a growing screenshot history in real time by encoding it as a stream. Since a rendered screen repeats most of its blocks, 
+StreamEmbed
+ prunes blocks that repeat a neighbor, reuses keys and values of unchanged blocks in both the vision encoder and the language model, and keeps the reduced embedding close to the full one at no added cost. On 
+ScreenMemEval
+, built from the screenshot histories of human workers and a computer-use agent, 
+StreamEmbed
+ matches a text index in latency and a screenshot index in accuracy, while binary codes keep a year of screenshots within the laptop’s memory. Future work could learn what to recompute from the stream itself, lowering cost and raising accuracy further. Agents could also search a person’s screenshot history to complete long-horizon tasks that depend on screens seen days or weeks earlier.
+
+Acknowledgments
+
+We sincerely thank Donghyun Lee, Prasann Singhal, and Ryan Wang for their valuable feedback and support.
+
+References
+
+Abbasi Koohpayegani 
+et al.
+ (2020)
+
+S. Abbasi Koohpayegani, A. Tejankar, and H. Pirsiavash
+
+Compress: self-supervised learning by compressing representations
+.
+
+Advances in neural information processing systems
+ 
+33
+, 
+pp. 12980–12992
+.
+
+Cited by: 
+§4.3
+.
+
+Agashe 
+et al.
+ (2025)
+
+S. Agashe, J. Han, S. Gan, J. Yang, A. Li, and X. Wang
+
+Agent S: an open agentic framework that uses computers like a human
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Vol. 
+2025
+, 
+pp. 22924–22946
+.
+
+Cited by: 
+§7
+.
+
+Aggarwal and Welleck (2026)
+
+P. Aggarwal and S. Welleck
+
+Visual token routing: learning to keep tokens that matter
+.
+
+External Links: 
+2611.06854
+,
+
+Link
+
+Cited by: 
+§7
+.
+
+Anthropic (2026)
+
+Anthropic
+
+System card: Claude Opus 5.5
+.
+
+Note: 
+https://www-cdn.anthropic.com/fc1b44717c85dc068bc6ba5024219938094694bd/Claude%20Opus%205.5%20System%20Card.pdf
+Accessed: 2026-10-19
+
+Cited by: 
+§5.2
+.
+
+[5]
+
+Apple Inc.
+
+Recognizing text in images
+.
+
+Note: 
+Apple Developer Documentation, Vision framework. 
+https://developer.apple.com/documentation/vision/recognizing-text-in-images
+
+Cited by: 
+§6.1
+.
+
+Busch 
+et al.
+ (2012)
+
+M. Busch, K. Gade, B. Larson, P. Lok, S. Luckenbill, and J. Lin
+
+Earlybird: real-time search at twitter
+.
+
+In 
+2012 ieee 28th international conference on data engineering
+,
+
+pp. 1360–1369
+.
+
+Cited by: 
+§7
+.
+
+Cai 
+et al.
+ (2025)
+
+D. Cai, S. Wang, C. Peng, Z. Zhang, Z. Lu, T. Qi, N. D. Lane, and M. Xu
+
+Ubiquitous memory augmentation via mobile multimodal embedding system
+.
+
+Nature Communications
+ 
+16
+ (
+1
+), 
+pp. 5339
+.
+
+Cited by: 
+§7
+.
+
+Chen 
+et al.
+ (2025)
+
+D. Chen, Y. Huang, S. Wu, J. Tang, H. Zhou, Q. Zhang, Z. He, Y. Bai, C. Gao, L. Chen, Y. Li, C. Wang, Y. Yu, T. Zhou, Z. Li, Y. Gui, Y. Wan, P. Zhou, J. Gao, and L. Sun
+
+Gui-world: a video benchmark and dataset for multimodal gui-oriented understanding
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Vol. 
+2025
+, 
+pp. 22812–22864
+.
+
+Cited by: 
+Appendix G
+,
+
+Figure 2
+.
+
+Chen 
+et al.
+ (2024)
+
+J. Chen, Z. Lv, S. Wu, K. Q. Lin, C. Song, D. Gao, J. Liu, Z. Gao, D. Mao, and M. Z. Shou
+
+Videollm-online: online video large language model for streaming video
+.
+
+In 
+2024 IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)
+,
+
+pp. 18407–18418
+.
+
+Cited by: 
+§7
+.
+
+Choudhury 
+et al.
+ (2024)
+
+R. Choudhury, G. Zhu, S. Liu, K. Niinuma, K. M. Kitani, and L. A. Jeni
+
+Don’t look twice: faster video transformers with run-length tokenization
+.
+
+Advances in Neural Information Processing Systems
+ 
+37
+, 
+pp. 28127–28149
+.
+
+Cited by: 
+§7
+.
+
+Cormack 
+et al.
+ (2009)
+
+G. V. Cormack, C. L. Clarke, and S. Buettcher
+
+Reciprocal rank fusion outperforms condorcet and individual rank learning methods
+.
+
+In 
+Proceedings of the 32nd international ACM SIGIR conference on Research and development in information retrieval
+,
+
+pp. 758–759
+.
+
+Cited by: 
+§6.1
+.
+
+Damen 
+et al.
+ (2022)
+
+D. Damen, H. Doughty, G. M. Farinella, A. Furnari, E. Kazakos, J. Ma, D. Moltisanti, J. Munro, T. Perrett, W. Price, and M. Wray
+
+Rescaling egocentric vision: collection, pipeline and challenges for epic-kitchens-100
+.
+
+International Journal of Computer Vision
+ 
+130
+ (
+1
+), 
+pp. 33–55
+.
+
+Cited by: 
+Appendix G
+,
+
+Figure 2
+.
+
+Di 
+et al.
+ (2025)
+
+S. Di, Z. Yu, G. Zhang, H. Li, H. Cheng, B. Li, W. He, F. Shu, and H. Jiang
+
+Streaming video question-answering with in-context video kv-cache retrieval
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Vol. 
+2025
+, 
+pp. 42115–42127
+.
+
+Cited by: 
+§7
+.
+
+Dosovitskiy 
+et al.
+ (2021)
+
+A. Dosovitskiy, L. Beyer, A. Kolesnikov, D. Weissenborn, X. Zhai, T. Unterthiner, M. Dehghani, M. Minderer, G. Heigold, S. Gelly, J. Uszkoreit, and N. Houlsby
+
+An image is worth 16x16 words: transformers for image recognition at scale
+.
+
+In 
+International Conference on Learning Representations (ICLR)
+,
+
+Cited by: 
+§4
+.
+
+Douze 
+et al.
+ (2024)
+
+M. Douze, A. Guzhva, C. Deng, J. Johnson, G. Szilvasy, P. Mazaré, M. Lomeli, L. Hosseini, and H. Jégou
+
+The Faiss library
+.
+
+arXiv preprint arXiv:2401.08281
+.
+
+Cited by: 
+§6.3
+.
+
+Dumais 
+et al.
+ (2003)
+
+S. Dumais, E. Cutrell, J. J. Cadiz, G. Jancke, R. Sarin, and D. C. Robbins
+
+Stuff i’ve seen: a system for personal information retrieval and re-use
+.
+
+In 
+Proceedings of the 26th annual international ACM SIGIR conference on Research and development in informaion retrieval
+,
+
+pp. 72–79
+.
+
+Cited by: 
+§7
+.
+
+Fang 
+et al.
+ (2021)
+
+Z. Fang, J. Wang, L. Wang, L. Zhang, Y. Yang, and Z. Liu
+
+{SEED}: self-supervised distillation for visual representation
+.
+
+In 
+International Conference on Learning Representations
+,
+
+External Links: 
+Link
+
+Cited by: 
+§4.3
+.
+
+Faysse 
+et al.
+ (2025)
+
+M. Faysse, H. Sibille, T. Wu, B. Omrani, G. Viaud, C. Hudelot, and P. Colombo
+
+Colpali: efficient document retrieval with vision language models
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Vol. 
+2025
+, 
+pp. 61424–61449
+.
+
+Cited by: 
+§2
+,
+
+§7
+.
+
+Hofstätter 
+et al.
+ (2020)
+
+S. Hofstätter, S. Althammer, M. Schröder, M. Sertkan, and A. Hanbury
+
+Improving efficient neural ranking models with cross-architecture knowledge distillation
+.
+
+arXiv preprint arXiv:2010.02666
+.
+
+Cited by: 
+§4.3
+.
+
+Howland 
+et al.
+ (2025)
+
+A. Howland, A. Thinnappan, and J. S. Mohammed
+
+Computer use data - paradigm shift ai
+.
+
+ 
+HuggingFace
+,  
+Paradigm Shift AI
+.
+
+External Links: 
+Link
+
+Cited by: 
+Appendix A
+,
+
+§1
+,
+
+§5.1
+.
+
+Hsieh 
+et al.
+ (2018)
+
+K. Hsieh, G. Ananthanarayanan, P. Bodik, S. Venkataraman, P. Bahl, M. Philipose, P. B. Gibbons, and O. Mutlu
+
+Focus: querying large video datasets with low latency and low cost
+.
+
+In 
+13th USENIX Symposium on Operating Systems Design and Implementation (OSDI 18)
+,
+
+pp. 269–286
+.
+
+Cited by: 
+§7
+.
+
+Hu and Lee (2020)
+
+D. Hu and S. W. Lee
+
+ScreenTrack: using a visual history of a computer screen to retrieve documents and web pages
+.
+
+In 
+Proceedings of the 2020 CHI Conference on Human Factors in Computing Systems
+,
+
+pp. 1–13
+.
+
+Cited by: 
+§1
+,
+
+§7
+.
+
+Hu 
+et al.
+ (2022)
+
+E. J. Hu, Y. Shen, P. Wallis, Z. Allen-Zhu, Y. Li, S. Wang, L. Wang, and W. Chen
+
+LoRA: low-rank adaptation of large language models
+.
+
+In 
+International Conference on Learning Representations
+,
+
+External Links: 
+Link
+
+Cited by: 
+Appendix C
+,
+
+§4.3
+.
+
+Hwang 
+et al.
+ (2025)
+
+J. Hwang, D. Kim, S. Lee, Y. Kim, G. Heo, H. Kim, Y. Jeong, T. Meaza, E. Park, J. Ahn, and J. Park
+
+Déjà vu: efficient video-language query engine with learning-based inter-frame computation reuse
+.
+
+arXiv preprint arXiv:2506.14107
+.
+
+Cited by: 
+§4.3
+,
+
+§7
+.
+
+Jang 
+et al.
+ (2026)
+
+L. K. Jang, A. K. Jang, J. Y. Koh, and R. Salakhutdinov
+
+MyPCBench: a benchmark for personally intelligent computer-use agents
+.
+
+arXiv preprint arXiv:2606.16748
+.
+
+Cited by: 
+§1
+,
+
+§5.1
+.
+
+Järvelin and Kekäläinen (2002)
+
+K. Järvelin and J. Kekäläinen
+
+Cumulated gain-based evaluation of ir techniques
+.
+
+ACM Transactions on Information Systems (TOIS)
+ 
+20
+ (
+4
+), 
+pp. 422–446
+.
+
+Cited by: 
+Appendix B
+.
+
+Jégou 
+et al.
+ (2011)
+
+H. Jégou, M. Douze, and C. Schmid
+
+Product quantization for nearest neighbor search
+.
+
+IEEE Transactions on Pattern Analysis and Machine Intelligence
+ 
+33
+ (
+1
+), 
+pp. 117–128
+.
+
+External Links: 
+Document
+
+Cited by: 
+§6.3
+.
+
+Jeong 
+et al.
+ (2025)
+
+S. Jeong, K. Kim, J. Baek, and S. J. Hwang
+
+Videorag: retrieval-augmented generation over video corpus
+.
+
+In 
+Findings of the Association for Computational Linguistics: ACL 2025
+,
+
+pp. 21278–21298
+.
+
+Cited by: 
+§7
+.
+
+Jiao 
+et al.
+ (2020)
+
+X. Jiao, Y. Yin, L. Shang, X. Jiang, X. Chen, L. Li, F. Wang, and Q. Liu
+
+Tinybert: distilling bert for natural language understanding
+.
+
+In 
+Findings of the association for computational linguistics: EMNLP 2020
+,
+
+pp. 4163–4174
+.
+
+Cited by: 
+§4.3
+.
+
+Kang 
+et al.
+ (2020)
+
+D. Kang, J. Guibas, P. Bailis, T. Hashimoto, and M. Zaharia
+
+Semantic indexes for machine learning-based queries over unstructured data
+.
+
+arXiv preprint arXiv:2009.04540
+.
+
+Cited by: 
+§7
+.
+
+Karpukhin 
+et al.
+ (2020)
+
+V. Karpukhin, B. Oguz, S. Min, P. Lewis, L. Wu, S. Edunov, D. Chen, and W. Yih
+
+Dense passage retrieval for open-domain question answering
+.
+
+In 
+Proceedings of the 2020 conference on empirical methods in natural language processing (EMNLP)
+,
+
+pp. 6769–6781
+.
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+Kim 
+et al.
+ (2024)
+
+J. Kim, D. Ko, and G. Kim
+
+DynamicER: resolving emerging mentions to dynamic entities for rag
+.
+
+In 
+Proceedings of the 2024 Conference on Empirical Methods in Natural Language Processing
+,
+
+pp. 13752–13770
+.
+
+Cited by: 
+§7
+.
+
+Kishore 
+et al.
+ (2023)
+
+V. Kishore, C. Wan, J. Lovelace, Y. Artzi, and K. Q. Weinberger
+
+Incdsi: incrementally updatable document retrieval
+.
+
+In 
+International conference on machine learning
+,
+
+pp. 17122–17134
+.
+
+Cited by: 
+§7
+.
+
+Ko 
+et al.
+ (2026)
+
+D. Ko, J. Kim, H. Park, S. Kim, D. Lee, Y. Jo, G. Kim, M. Lee, and K. Lee
+
+Hybrid deep searcher: scalable parallel and sequential search reasoning
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Vol. 
+2026
+, 
+pp. 38580–38616
+.
+
+Cited by: 
+§5.3
+.
+
+Ko 
+et al.
+ (2025)
+
+D. Ko, J. Kim, S. Kim, J. Kim, J. Lee, S. Song, M. Lee, and G. Kim
+
+When should dense retrievers be updated in evolving corpora? detecting out-of-distribution corpora using gradnormir
+.
+
+In 
+Findings of the Association for Computational Linguistics: ACL 2025
+,
+
+pp. 25977–25996
+.
+
+Cited by: 
+§7
+.
+
+Li 
+et al.
+ (2025)
+
+J. N. Li, Z. Zhang, and J. Ma
+
+Omniquery: contextually augmenting captured multimodal memories to enable personal question answering
+.
+
+In 
+Proceedings of the 2025 CHI Conference on Human Factors in Computing Systems
+,
+
+pp. 1–20
+.
+
+Cited by: 
+§7
+.
+
+Li 
+et al.
+ (2026)
+
+M. Li, Y. Zhang, D. Long, K. Chen, S. Song, S. Bai, Z. Yang, P. Xie, A. Yang, D. Liu, J. Zhou, and J. Lin
+
+Qwen3-vl-embedding and qwen3-vl-reranker: a unified framework for state-of-the-art multimodal retrieval and ranking
+.
+
+arXiv preprint arXiv:2601.04720
+.
+
+Cited by: 
+§1
+,
+
+§4
+,
+
+§6.1
+.
+
+Li 
+et al.
+ (2023)
+
+Z. Li, X. Zhang, Y. Zhang, D. Long, P. Xie, and M. Zhang
+
+Towards general text embeddings with multi-stage contrastive learning
+.
+
+arXiv preprint arXiv:2308.03281
+.
+
+Cited by: 
+§6.1
+.
+
+Lù 
+et al.
+ (2024)
+
+X. H. Lù, Z. Kasner, and S. Reddy
+
+Weblinx: real-world website navigation with multi-turn dialogue
+.
+
+arXiv preprint arXiv:2402.05930
+.
+
+Cited by: 
+Appendix G
+,
+
+Figure 2
+.
+
+Luo 
+et al.
+ (2026)
+
+J. Luo, Z. Liao, J. Teng, and Y. Wang
+
+CausalCache: conditional high-fidelity restoration for long-horizon gui agents
+.
+
+arXiv preprint arXiv:2608.22577
+.
+
+Cited by: 
+§7
+.
+
+Lyu 
+et al.
+ (2026)
+
+X. Lyu, M. Duan, R. Shao, P. W. Koh, and S. Min
+
+Frustratingly simple retrieval improves challenging, reasoning-intensive benchmarks
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Vol. 
+2026
+, 
+pp. 10248–10285
+.
+
+Cited by: 
+§7
+.
+
+Ma 
+et al.
+ (2024)
+
+X. Ma, S. Lin, M. Li, W. Chen, and J. Lin
+
+Unifying multimodal retrieval via document screenshot embedding
+.
+
+In 
+Proceedings of the 2024 Conference on Empirical Methods in Natural Language Processing
+,
+
+pp. 6492–6505
+.
+
+Cited by: 
+§2
+,
+
+§4
+,
+
+§7
+.
+
+Malkov and Yashunin (2020)
+
+Y. A. Malkov and D. A. Yashunin
+
+Efficient and robust approximate nearest neighbor search using hierarchical navigable small world graphs
+.
+
+IEEE Transactions on Pattern Analysis and Machine Intelligence
+ 
+42
+ (
+4
+), 
+pp. 824–836
+.
+
+External Links: 
+Document
+
+Cited by: 
+§6.3
+.
+
+McGhee (2023)
+
+J. McGhee
+
+Rem: an open source approach to locally record and enable searching everything you view on your Mac
+.
+
+Note: 
+https://github.com/jasonjmcghee/rem
+GitHub repository. Accessed: 2026-10-15
+
+Cited by: 
+§1
+,
+
+§2
+,
+
+§3.1
+.
+
+[45]
+
+Microsoft
+
+Retrace your steps with Recall
+.
+
+Note: 
+https://support.microsoft.com/en-us/windows/ai/ai-features/retrace-your-steps-with-recall
+Microsoft Support.
+
+Cited by: 
+§1
+,
+
+§6.3
+.
+
+Ning 
+et al.
+ (2026)
+
+Z. Ning, G. Liu, Q. Jin, C. Li, W. Ding, M. Guo, and J. Zhao
+
+Livevlm: efficient online video understanding via streaming-oriented kv cache and retrieval
+.
+
+In 
+Proceedings of the 63rd ACM/IEEE Design Automation Conference
+,
+
+pp. 1–7
+.
+
+Cited by: 
+§7
+.
+
+OpenAI (2026a)
+
+OpenAI
+
+GPT-6 Astra: a new generation of intelligence
+.
+
+Note: 
+https://openai.com/index/gpt-6-astra/
+Released Sep. 3, 2026. Accessed: 2026-10-29
+
+Cited by: 
+§5.2
+.
+
+OpenAI (2026b)
+
+OpenAI
+
+Introducing GPT-6.1 Sol
+.
+
+Note: 
+https://openai.com/index/introducing-gpt-6-1-sol/
+Released Sep. 29, 2026. Accessed: 2026-10-29
+
+Cited by: 
+§1
+,
+
+§5.1
+.
+
+OpenRecall (2024)
+
+OpenRecall
+
+OpenRecall: a fully open-source, privacy-first alternative to Microsoft’s Windows Recall
+.
+
+Note: 
+https://github.com/openrecall/openrecall
+GitHub repository. Accessed: 2026-10-15
+
+Cited by: 
+§1
+,
+
+§2
+,
+
+§3.1
+.
+
+Packer 
+et al.
+ (2023)
+
+C. Packer, S. Wooders, K. Lin, V. Fang, S. G. Patil, I. Stoica, and J. E. Gonzalez
+
+Memgpt: towards llms as operating systems
+.
+
+arXiv preprint arXiv:2310.08560
+.
+
+Cited by: 
+§1
+.
+
+RapidAI (2021)
+
+T. RapidAI
+
+Rapid OCR: ocr toolbox
+.
+
+Note: 
+https://github.com/RapidAI/RapidOCR
+
+Cited by: 
+§6.1
+.
+
+Robertson and Zaragoza (2009)
+
+S. Robertson and H. Zaragoza
+
+The probabilistic relevance framework: BM25 and beyond
+.
+
+Foundations and Trends in Information Retrieval
+ 
+3
+ (
+4
+), 
+pp. 333–389
+.
+
+External Links: 
+Document
+
+Cited by: 
+§6.1
+.
+
+Sanh 
+et al.
+ (2019)
+
+V. Sanh, L. Debut, J. Chaumond, and T. Wolf
+
+DistilBERT, a distilled version of bert: smaller, faster, cheaper and lighter
+.
+
+arXiv preprint arXiv:1910.01108
+.
+
+Cited by: 
+§4.3
+.
+
+screenpipe (2024)
+
+screenpipe
+
+Screenpipe: open computer history
+.
+
+Note: 
+https://github.com/screenpipe/screenpipe
+GitHub repository. Accessed: 2026-10-15
+
+Cited by: 
+§2
+,
+
+§3.1
+.
+
+Shakir 
+et al.
+ (2024)
+
+A. Shakir, T. Aarsen, and S. Lee
+
+Binary and scalar embedding quantization for significantly faster & cheaper retrieval
+.
+
+Note: 
+https://huggingface.co/blog/embedding-quantization
+Hugging Face Blog
+
+Cited by: 
+§6.3
+.
+
+Soldan 
+et al.
+ (2025)
+
+M. Soldan, F. C. Heilbron, B. Ghanem, J. Sivic, and B. Russell
+
+Residualvit for efficient temporally dense video encoding
+.
+
+In 
+2025 IEEE/CVF International Conference on Computer Vision (ICCV)
+,
+
+pp. 22305–22315
+.
+
+Cited by: 
+§7
+.
+
+Teiletche 
+et al.
+ (2025)
+
+P. Teiletche, Q. Macé, M. Conti, A. Loison, G. Viaud, P. Colombo, and M. Faysse
+
+Modernvbert: towards smaller visual document retrievers
+.
+
+arXiv preprint arXiv:2510.01149
+.
+
+Cited by: 
+§7
+.
+
+Thakur 
+et al.
+ (2021)
+
+N. Thakur, N. Reimers, A. Rücklé, A. Srivastava, and I. Gurevych
+
+Beir: a heterogenous benchmark for zero-shot evaluation of information retrieval models
+.
+
+arXiv preprint arXiv:2104.08663
+.
+
+Cited by: 
+§2
+.
+
+Tschannen 
+et al.
+ (2025)
+
+M. Tschannen, A. Gritsenko, X. Wang, M. F. Naeem, I. Alabdulmohsin, N. Parthasarathy, T. Evans, L. Beyer, Y. Xia, B. Mustafa, O. Hénaff, J. Harmsen, A. Steiner, and X. Zhai
+
+SigLIP 2: multilingual vision-language encoders with improved semantic understanding, localization, and dense features
+.
+
+arXiv preprint arXiv:2502.14786
+.
+
+Cited by: 
+§6.1
+.
+
+Vultr (2026)
+
+Vultr
+
+VultronRetrieverFlash-Qwen3.5-0.8B
+.
+
+Note: 
+https://huggingface.co/vultr/VultronRetrieverFlash-Qwen3.5-0.8B
+Hugging Face model card. Accessed: 2026-10-28
+
+Cited by: 
+§6.1
+.
+
+Wang 
+et al.
+ (2026a)
+
+N. Wang, Z. Jin, C. Chen, and H. Lu
+
+PixelPrune: pixel-level adaptive visual token reduction via predictive coding
+.
+
+arXiv preprint arXiv:2604.00886
+.
+
+Cited by: 
+§4.1
+.
+
+Wang 
+et al.
+ (2026b)
+
+Y. Wang, Z. Li, S. Liu, Y. Wu, Z. Mao, Y. Zhao, X. Yan, Z. Xu, Y. Zhou, I. Stoica, S. Min, M. Zaharia, and J. E. Gonzalez
+
+LEANN: a low-storage overhead vector index
+.
+
+Proceedings of Machine Learning and Systems
+ 
+8
+, 
+pp. 944–961
+.
+
+Cited by: 
+§7
+.
+
+Wang 
+et al.
+ (2026c)
+
+Y. Wang, Z. Li, Z. Wang, P. Teiletche, L. Jin, M. Zaharia, J. E. Gonzalez, and S. Min
+
+PIXELRAG: web screenshots beat text for retrieval-augmented generation
+.
+
+arXiv preprint arXiv:2606.28344
+.
+
+Cited by: 
+§1
+,
+
+§2
+,
+
+§7
+.
+
+Wang 
+et al.
+ (2026d)
+
+Y. Wang, X. Liu, X. Gui, X. Lin, B. Yang, C. Liao, T. Chen, and L. Zhang
+
+Accelerating streaming video large language models via hierarchical token compression
+.
+
+In 
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition
+,
+
+pp. 18523–18533
+.
+
+Cited by: 
+§7
+.
+
+Wang and Chen (2025)
+
+Y. Wang and X. Chen
+
+Mirix: multi-agent memory system for llm-based agents
+.
+
+arXiv preprint arXiv:2507.07957
+.
+
+Cited by: 
+Appendix A
+,
+
+§1
+,
+
+§5
+,
+
+§7
+.
+
+Wang 
+et al.
+ (2024)
+
+Z. Z. Wang, J. Mao, D. Fried, and G. Neubig
+
+Agent workflow memory
+.
+
+arXiv preprint arXiv:2409.07429
+.
+
+Cited by: 
+§7
+.
+
+Wu 
+et al.
+ (2026)
+
+D. Wu, Z. Ji, A. Kawatkar, B. Kwan, J. Gu, N. Peng, and K. Chang
+
+LongMemEval-v2: evaluating long-term agent memory toward experienced colleagues
+.
+
+arXiv preprint arXiv:2605.12493
+.
+
+Cited by: 
+§1
+.
+
+Wu 
+et al.
+ (2025)
+
+D. Wu, H. Wang, W. Yu, Y. Zhang, K. Chang, and D. Yu
+
+LongMemEval: benchmarking chat assistants on long-term interactive memory
+.
+
+In 
+The Thirteenth International Conference on Learning Representations
+,
+
+External Links: 
+Link
+
+Cited by: 
+§1
+.
+
+Xie 
+et al.
+ (2024)
+
+T. Xie, D. Zhang, J. Chen, X. Li, S. Zhao, R. Cao, T. J. Hua, Z. Cheng, D. Shin, F. Lei, Y. Liu, Y. Xu, S. Zhou, S. Savarese, C. Xiong, V. Zhong, and T. Yu
+
+Osworld: benchmarking multimodal agents for open-ended tasks in real computer environments
+.
+
+Advances in Neural Information Processing Systems
+ 
+37
+, 
+pp. 52040–52094
+.
+
+Cited by: 
+§1
+.
+
+Xu 
+et al.
+ (2025a)
+
+R. Xu, G. Xiao, Y. Chen, L. He, K. Peng, Y. Lu, and S. Han
+
+StreamingVLM: real-time understanding for infinite video streams
+.
+
+arXiv preprint arXiv:2510.09608
+.
+
+Cited by: 
+§7
+.
+
+Xu 
+et al.
+ (2025b)
+
+S. Xu, Y. Wang, C. Xia, D. Zhu, T. Huang, and C. Xu
+
+Vla-cache: efficient vision-language-action manipulation via adaptive token caching
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+Vol. 
+38
+, 
+pp. 164448–164473
+.
+
+Cited by: 
+§7
+.
+
+Xu 
+et al.
+ (2023)
+
+Y. Xu, H. Liang, J. Li, S. Xu, Q. Chen, Q. Zhang, C. Li, Z. Yang, F. Yang, Y. Yang, P. Cheng, and M. Yang
+
+Spfresh: incremental in-place update for billion-scale vector search
+.
+
+In 
+Proceedings of the 29th Symposium on Operating Systems Principles
+,
+
+pp. 545–561
+.
+
+Cited by: 
+§7
+.
+
+Yamada 
+et al.
+ (2021)
+
+I. Yamada, A. Asai, and H. Hajishirzi
+
+Efficient passage retrieval with hashing for open-domain question answering
+.
+
+In 
+Proceedings of the 59th Annual Meeting of the Association for Computational Linguistics and the 11th International Joint Conference on Natural Language Processing (Volume 2: Short Papers)
+,
+
+pp. 979–986
+.
+
+Cited by: 
+§6.3
+.
+
+Yao 
+et al.
+ (2025)
+
+L. Yao, Y. Li, Y. Wei, L. Li, S. Ren, Y. Liu, K. Ouyang, L. Wang, S. Li, S. Li, L. Kong, Q. Liu, Y. Zhang, and X. Sun
+
+Timechat-online: 80% visual tokens are naturally redundant in streaming videos
+.
+
+In 
+Proceedings of the 33rd ACM International Conference on Multimedia
+,
+
+pp. 10807–10816
+.
+
+Cited by: 
+§7
+.
+
+Yin 
+et al.
+ (2026)
+
+H. Yin, Z. Wen, J. Cao, B. Yuan, and R. Yang
+
+FOCAL: filtered on-device continuous activity logging for efficient personal desktop summarization
+.
+
+arXiv preprint arXiv:2604.19541
+.
+
+Cited by: 
+§7
+.
+
+Zhang 
+et al.
+ (2024)
+
+X. Zhang, Y. Zhang, D. Long, W. Xie, Z. Dai, J. Tang, H. Lin, B. Yang, P. Xie, F. Huang, M. Zhang, W. Li, and M. Zhang
+
+MGTE: generalized long-context text representation and reranking models for multilingual text retrieval
+.
+
+In 
+Proceedings of the 2024 Conference on Empirical Methods in Natural Language Processing: Industry Track
+,
+
+pp. 1393–1412
+.
+
+Cited by: 
+§6.1
+.
+
+Zhang 
+et al.
+ (2025)
+
+Y. Zhang, M. Li, D. Long, X. Zhang, H. Lin, B. Yang, P. Xie, A. Yang, D. Liu, J. Lin, F. Huang, and J. Zhou
+
+Qwen3 Embedding: advancing text embedding and reranking through foundation models
+.
+
+arXiv preprint arXiv:2506.05176
+.
+
+Cited by: 
+§6.1
+.
+
+Appendix A 
+Benchmark Details
+
+Table 
+7
+ compares 
+ScreenMemEval
+ with ScreenshotVQA 
+(
+Wang and Chen, 2025
+)
+, a screen benchmark.
+
+Questions.
+ The generator writes questions for 12 recordings at a time from their annotations, which are the instruction, application, times, and planned steps for 
+SME-H1
+ and 
+SME-H2
+, and the sub-task instruction, the agent’s actions, and the scheduled time for 
+SME-Agent
+. To keep answers unique, the judge compares each question with up to 30 recordings of the same history chosen from annotations alone, such as recordings of the same task or on the same site, and always every sibling sub-task in 
+SME-Agent
+. No evaluated index chooses them, so the labels favor neither index type. Each count recount (§
+5.2
+) runs over a shuffled list of the candidate recordings.
+
+Relevance and splits.
+ For screenshot-level scoring on 
+SME-Agent
+, GPT-6-astra marks the keyframes that show each question’s evidence, and each keyframe counts with its run of near-identical screenshots. Training uses the earliest 710 recordings of 
+SME-H1
+, and the 1,121 questions about the 433 of them without training questions are test questions. Training and validation recordings stay in the index and are relevant to 54 test questions, and removing these questions changes R@10 by at most 0.03 for both the fine-tuned full screenshot and 
+StreamEmbed
+.
+
+Data.
+ 
+SME-H1
+ and 
+SME-H2
+ come from 
+Howland et al. (2025)
+, recorded by consenting workers who authorized public release, under the MIT license. 
+SME-Agent
+ shows a synthetic persona and holds no data of real people. We release all three histories with their questions, relevance labels, and splits.
+
+Table 7: 
+ScreenMemEval
+ and ScreenshotVQA.
+ Days counts days with at least one recording, as in Table 
+2
+, and Span counts calendar days from the first to the last recording, on the simulated calendar for 
+SME-Agent
+. Screen time is the number of screenshots times the 5 s interval. Relevance marks recording-level relevance labels, and Role is the use of each history when encoders are fine-tuned. For ScreenshotVQA, span and screenshots are averaged over its three histories.
+
+ScreenMemEval
+ (Ours)
+
+Screenshot-
+
+VQA
+
+SME-H1
+
+SME-H2
+
+SME-Agent
+
+History
+
+Days
+
+–
+
+117
+
+57
+
+43
+
+Span (days)
+
+22
+
+172
+
+78
+
+43
+
+Screenshots
+
+9.8k
+
+63.5k
+
+12.8k
+
+55.9k
+
+per recording
+
+–
+
+30
+
+13
+
+71
+
+Screen time (h)
+
+–
+
+88
+
+18
+
+78
+
+Questions
+
+Questions
+
+87
+
+5,111
+
+3,507
+
+1,808
+
+Evaluation
+
+Relevance
+
+✗
+
+✓
+
+✓
+
+✓
+
+Scored on
+
+answer
+
+retrieval
+
+Latency
+
+–
+
+indexing
+
+Role
+
+–
+
+train
+
++ test
+
+test
+
+(new worker)
+
+test
+
+(new source)
+
+Released
+
+✗
+
+✓
+
+✓
+
+✓
+
+Appendix B 
+Full Results
+
+Table 
+8
+ lists every system of the main results with R@10 split into single- and multi-recording questions, together with nDCG@10 
+(
+Järvelin and Kekäläinen, 2002
+)
+. For a multi-recording question, R@10 is the fraction of its evidence sets hit, as in Eq. (
+1
+). nDCG@10 gives each evidence set one unit of gain at the rank of its first retrieved screenshot and normalizes by the ideal ranking of 
+ sets.
+
+Table 8: 
+Full main results.
+ R@10 over all questions (All), single-recording questions (Single), and multi-recording questions (Multi), and nDCG@10 over all questions. FT marks fine-tuning with LoRA on 
+SME-H1
+, and other rows use base models.
+
+SME-H1
+
+SME-H2
+
+SME-Agent
+
+All
+
+Single
+
+Multi
+
+nDCG
+
+All
+
+Single
+
+Multi
+
+nDCG
+
+All
+
+Single
+
+Multi
+
+nDCG
+
+Text index (Apple Vision OCR)
+
+BM25
+
+58.6
+
+64.3
+
+29.9
+
+51.0
+
+56.7
+
+58.6
+
+42.3
+
+47.1
+
+35.3
+
+36.0
+
+27.3
+
+26.2
+
+Qwen3-Emb-0.6B
+
+69.2
+
+75.0
+
+39.9
+
+61.2
+
+69.3
+
+72.1
+
+48.8
+
+60.1
+
+40.1
+
+41.1
+
+29.6
+
+28.3
+
+Qwen3-Emb-4B
+
+73.8
+
+80.0
+
+42.3
+
+66.2
+
+71.5
+
+75.0
+
+45.3
+
+63.0
+
+49.0
+
+50.4
+
+34.1
+
+36.0
+
+Qwen3-Emb-8B
+
+75.0
+
+81.1
+
+44.5
+
+68.2
+
+72.8
+
+76.0
+
+49.1
+
+64.4
+
+46.0
+
+47.3
+
+31.1
+
+33.9
+
+Qwen3-VL-2B
+
+73.5
+
+79.4
+
+44.1
+
+65.3
+
+71.2
+
+73.6
+
+52.7
+
+62.6
+
+47.4
+
+48.7
+
+32.9
+
+34.3
+
+Qwen3-VL-2B (FT)
+
+77.4
+
+83.3
+
+47.7
+
+70.4
+
+77.4
+
+80.1
+
+57.2
+
+68.4
+
+51.3
+
+52.9
+
+34.1
+
+37.4
+
+Qwen3-VL-2B + BM25
+
+74.8
+
+80.5
+
+45.9
+
+66.5
+
+72.4
+
+74.7
+
+54.8
+
+63.5
+
+48.8
+
+50.1
+
+34.8
+
+35.2
+
+Qwen3-VL-2B (FT) + BM25
+
+78.6
+
+84.4
+
+49.4
+
+71.3
+
+78.7
+
+81.1
+
+60.0
+
+68.7
+
+53.2
+
+54.7
+
+37.0
+
+38.3
+
+Screenshot index
+
+SigLIP2-B
+
+66.2
+
+73.0
+
+31.9
+
+58.0
+
+67.5
+
+70.6
+
+44.1
+
+57.2
+
+36.1
+
+37.1
+
+25.3
+
+26.2
+
+SigLIP2-So
+
+73.3
+
+80.2
+
+38.8
+
+65.6
+
+73.3
+
+76.3
+
+51.2
+
+63.4
+
+43.8
+
+45.4
+
+26.1
+
+31.7
+
+Vultron
+
+77.8
+
+84.7
+
+43.4
+
+70.3
+
+79.9
+
+83.4
+
+53.4
+
+69.4
+
+57.6
+
+60.0
+
+31.5
+
+43.1
+
+Qwen3-VL-2B
+
+81.4
+
+87.6
+
+50.3
+
+73.8
+
+82.3
+
+85.2
+
+60.5
+
+72.2
+
+58.6
+
+60.5
+
+38.3
+
+44.5
+
+Qwen3-VL-2B (FT)
+
+83.4
+
+89.2
+
+54.2
+
+76.3
+
+84.5
+
+87.3
+
+63.7
+
+74.7
+
+58.2
+
+59.9
+
+40.9
+
+44.9
+
+Qwen3-VL-8B
+
+82.2
+
+88.4
+
+51.2
+
+75.9
+
+83.1
+
+86.2
+
+59.6
+
+74.0
+
+61.9
+
+64.4
+
+34.5
+
+47.0
+
+StreamEmbed
+ (Qwen3-VL-2B)
+
+82.1
+
+88.0
+
+52.2
+
+75.5
+
+83.3
+
+86.1
+
+62.4
+
+73.9
+
+57.6
+
+59.4
+
+39.0
+
+43.8
+
+OCR engines.
+ Table 
+9
+ compares the text indexes on the two OCR engines, Apple Vision OCR used for GPU latency and RapidOCR used for CPU latency. The engine changes R@10 by at most 1.6, so every text index stays below 
+StreamEmbed
+ with either engine.
+
+Table 9: 
+Text indexes on two OCR engines.
+ R@10 with OCR text from Apple Vision OCR or RapidOCR. FT marks fine-tuning with LoRA on 
+SME-H1
+.
+
+Apple Vision OCR
+
+RapidOCR
+
+Text encoder
+
+SME-H1
+
+SME-H2
+
+SME-Agent
+
+SME-H1
+
+SME-H2
+
+SME-Agent
+
+Qwen3-Emb-0.6B
+
+69.2
+
+69.3
+
+40.1
+
+70.0
+
+69.7
+
+39.8
+
+Qwen3-Emb-4B
+
+73.8
+
+71.5
+
+49.0
+
+74.3
+
+72.3
+
+48.8
+
+Qwen3-Emb-8B
+
+75.0
+
+72.8
+
+46.0
+
+74.6
+
+71.2
+
+46.3
+
+Qwen3-VL-2B
+
+73.5
+
+71.2
+
+47.4
+
+73.5
+
+71.7
+
+46.8
+
+Qwen3-VL-2B (FT)
+
+77.4
+
+77.4
+
+51.3
+
+78.0
+
+77.3
+
+51.7
+
+Appendix C 
+Implementation Details
+
+Training.
+ Every fine-tuned encoder uses LoRA 
+(
+Hu et al., 2022
+)
+ with rank 32 on the attention projections of the vision encoder and of the LM or text tower. It is trained with InfoNCE on the 1,000 training questions of 
+SME-H1
+, each with two hard negatives, for 300 steps at a learning rate of 
+ for Qwen3-VL, 
+ for SigLIP2, and 
+ for Vultron. The consistency adapter is a second LoRA initialized from the first and distilled from the frozen fine-tuned model with the loss of Eq. (
+5
+), on screenshots pruned by the neighbor rule, for 300 steps at 
+. Text indexes use Apple Vision OCR at its accurate level with language correction, and the fused text index combines Qwen3-VL-2B and BM25 by reciprocal rank fusion with 
+ and weight 0.5 on BM25. All checkpoints, the settings of 
+StreamEmbed
+, and the fusion are chosen on the 
+SME-H1
+ validation questions.
+
+Latency.
+ We time every index on an Amazon EC2 mac2-m2pro instance, an Apple M2 Pro with 32 GB of memory, left idle, with PyTorch on MPS in fp16 for the GPU and in fp32 on 8 threads for the CPU. Screenshots are processed one at a time in their recorded order, caches start empty at each recording, and the timer runs from reading the image to the embedding, including OCR for a text index.
+
+Patch embedding.
+ The Qwen3-VL screenshot baselines run the released Conv3d patch embedding, and 
+StreamEmbed
+ computes the same map as one matrix multiplication, whose embeddings have a cosine similarity of at least 0.99986 in fp16. Vultron runs with an equivalent but faster layout of its own Conv3d, so this baseline is faster than released.
+
+Appendix D 
+Resolution and Drop Variants
+
+Figure 6: 
+Frontiers per model size.
+ R@10 against GPU latency per screenshot for Qwen3-VL (top) and SigLIP2 (bottom). Pink and purple mark 
+StreamEmbed
+ on the small and large model, and light and dark slate the baselines. Solid lines are frontiers of 
+StreamEmbed
+ over full resolution, lower resolutions, and drop rates of 50% and 60%, and dashed lines are frontiers of the base full screenshot over lower resolutions. Stars mark 
+StreamEmbed
+ at full resolution. GTE-MB-149M is gte-modernbert-base on Apple Vision OCR text without language correction. In the Qwen3-VL row of 
+SME-Agent
+, points below 42 R@10 are omitted.
+
+Figure 
+6
+ splits the frontiers of Figure 
+5
+ by model size, so each size of 
+StreamEmbed
+ is compared with the same size of the base encoder at lower resolutions. 
+StreamEmbed
+ uses the fine-tuned encoder with its consistency adapter. Latency of the lower-resolution baselines is measured on 
+SME-H1
+ and reused for the other histories.
+
+Fine-tuned baseline.
+ The baselines in Figures 
+5
+ and 
+6
+ are base encoders. On Qwen3-VL, fine-tuning alone moves the full screenshot by 
+ to 2.2 R@10 (Tables 
+8
+ and 
+5
+), less than every Qwen3-VL gain in Figure 
+5
+. At 
+, the fine-tuned Qwen3-VL-2B needs half the computation of a full screenshot and takes 1.22 s per screenshot on the GPU with the released Conv3d, timed on 
+SME-H1
+, where full-screenshot latency matches the other histories. 
+StreamEmbed
+ is 1.4–1.9
+ faster than it and 2.0 R@10 more accurate on 
+SME-Agent
+, while staying within 1.3 R@10 on the human histories.
+
+Appendix E 
+Latency Breakdown
+
+Table 10: 
+Latency breakdown on 
+SME-H1
+.
+ Mean GPU latency per screenshot (s) of the fine-tuned Qwen3-VL-2B as parts of 
+StreamEmbed
+ are added, with preprocessing in Total. The top block is the latency sample used throughout the paper, as in Table 
+6
+, with grid keep. The bottom block is a separate set of 2,000 
+SME-H1
+ test screenshots without grid keep. Comp. is computation in TFLOPs per screenshot.
+
+Latency (s)
+
+Comp.
+
+Total
+
+ViT
+
+LM
+
+ViT
+
+LM
+
+Latency sample of the paper (994 screenshots)
+
+Screenshot, Conv3d
+
+2.33
+
+1.66
+
+0.66
+
+3.53
+
+2.64
+
++ Linear patch embed.
+
+1.65
+
+0.96
+
+0.68
+
+3.53
+
+2.64
+
++ Spatial pruning
+
+1.00
+
+0.52
+
+0.45
+
+1.87
+
+1.60
+
++ Temporal reuse
+
+0.66
+
+0.34
+
+0.29
+
+1.01
+
+0.85
+
+Separate set of 2,000 screenshots, no grid keep
+
+Screenshot, Conv3d
+
+2.35
+
+1.67
+
+0.66
+
+3.53
+
+2.64
+
++ Linear patch embed.
+
+1.65
+
+0.96
+
+0.67
+
+3.53
+
+2.64
+
++ Neighbor rule
+
+0.88
+
+0.45
+
+0.40
+
+1.56
+
+1.37
+
++ Reuse in the ViT
+
+0.75
+
+0.34
+
+0.38
+
+0.87
+
+1.16
+
++ Reuse in the LM
+
+0.67
+
+0.34
+
+0.30
+
+0.87
+
+0.75
+
+Table 
+10
+ splits the GPU latency of 
+StreamEmbed
+ into its vision encoder (ViT) and language model (LM). With reuse in the ViT only, the LM reuses the prefix before the first changed token. Pruning and reuse make the ViT 2.8
+ and the LM 2.3
+ faster than with the linear patch embedding alone, and the ViT 4.9
+ faster than in the released model. On the CPU of 
+SME-H1
+, the ViT runs 3.2
+ faster (3.72 to 1.16 s) and the LM 2.2
+ faster (1.69 to 0.78 s).
+
+Speedup and redundancy.
+ 
+StreamEmbed
+ computes 1.95, 2.67, and 1.79 TFLOPs per screenshot on 
+SME-H1
+, 
+SME-H2
+, and 
+SME-Agent
+, or 32%, 43%, and 29% of the 6.17 TFLOPs of a full screenshot. This follows the redundancy of each history, where 72.4%, 63.3%, and 75.6% of blocks repeat a neighbor or are unchanged (Appendix 
+G
+), and grid keep, refresh, and the suffix add a little work to the remaining 24–37%. On the GPU, 
+StreamEmbed
+ is accordingly 3.5
+, 2.8
+, and 3.7
+ faster than the released model. Its 99th-percentile latency, 1.47–1.77 s, stays below the mean of the released full screenshot, 2.33–2.34 s.
+
+Memory.
+ By our count from the model configuration, the cache of temporal reuse holds at most about 0.46 GB in fp16 for Qwen3-VL-2B and does not grow with the history.
+
+Appendix F 
+Sensitivity to Thresholds
+
+Tables 
+11
+ and 
+12
+ show how R@10 and computation change around the settings of 
+StreamEmbed
+, varying one at a time. 
+StreamEmbed
+ is not sensitive to its thresholds. Changing the refresh settings moves R@10 by at most 0.2 and the tile size by at most 1.4, and even raising both pixel tolerances 16-fold costs at most 2.0 R@10 while cutting computation up to 2.0
+. The settings are chosen on the 
+SME-H1
+ validation questions (§
+6.1
+), and the tables report R@10 on the test questions. Every row uses the fine-tuned Qwen3-VL-2B with all parts of 
+StreamEmbed
+, and computation is in TFLOPs per screenshot (TF).
+
+Table 11: 
+Grid keep tile size.
+ R@10 and computation (TF). None uses the neighbor rule alone, and – was not run.
+
+SME-H1
+
+SME-H2
+
+SME-Agent
+
+Tile
+
+R@10
+
+TF
+
+R@10
+
+TF
+
+R@10
+
+TF
+
+None
+
+82.4
+
+1.68
+
+82.9
+
+2.37
+
+55.5
+
+1.59
+
+82.0
+
+2.13
+
+83.1
+
+2.88
+
+56.9
+
+1.92
+
+ (
+StreamEmbed
+)
+
+82.1
+
+1.95
+
+83.3
+
+2.67
+
+57.6
+
+1.79
+
+–
+
+–
+
+–
+
+–
+
+56.2
+
+1.74
+
+Table 12: 
+Pixel tolerances and refresh.
+ R@10 and computation (TF). The top block raises 
+ and 
+ together, and the bottom block changes one reuse setting on 
+SME-H2
+. – was not run.
+
+SME-H2
+
+SME-Agent
+
+R@10
+
+TF
+
+R@10
+
+TF
+
+ (
+StreamEmbed
+)
+
+83.6
+
+2.67
+
+57.4
+
+1.79
+
+83.0
+
+2.34
+
+56.4
+
+1.59
+
+83.1
+
+1.99
+
+55.8
+
+1.31
+
+82.8
+
+1.82
+
+55.8
+
+1.04
+
+82.6
+
+1.55
+
+55.4
+
+0.88
+
+83.4
+
+2.45
+
+–
+
+–
+
+83.2
+
+2.21
+
+–
+
+–
+
+82.5
+
+2.13
+
+–
+
+–
+
+83.5
+
+2.61
+
+–
+
+–
+
+83.4
+
+2.58
+
+–
+
+–
+
+No 
+ refresh
+
+83.6
+
+2.70
+
+–
+
+–
+
+Grid keep.
+ Without grid keep, 
+SME-Agent
+ loses 2.1 R@10, while 
+SME-H1
+ and 
+SME-H2
+ change by at most 0.4. Tiles of 
+ blocks match or exceed the accuracy of 
+ tiles on every history with less computation, and 
+ tiles lose 1.4 R@10 on 
+SME-Agent
+. With 
+ tiles, 
+StreamEmbed
+ keeps 63%, 69%, and 71% of the blocks on 
+SME-H1
+, 
+SME-H2
+, and 
+SME-Agent
+.
+
+Pixel tolerances.
+ The runs of Table 
+12
+ encode screenshots in fp16, so their reference row differs from the main results by up to 0.3 R@10. Raising both tolerances from 8 to 128 levels lowers computation 1.7
+ on 
+SME-H2
+ and 2.0
+ on 
+SME-Agent
+ at 1.0 and 2.0 R@10. Over all settings we tried, R@10 changes by at most 1.1 on 
+SME-H2
+ and 2.0 on 
+SME-Agent
+. Changing 
+ or 
+ moves R@10 by at most 0.2 and computation by at most 4%.
+
+Dropping more blocks.
+ To drop a set fraction of blocks, as in Figure 
+5
+, we choose 
+ for each screenshot by binary search. Drop rates of 50% and 60% give 81.9 and 81.2 R@10 on 
+SME-H1
+ and 55.8 and 52.4 on 
+SME-Agent
+, against 82.3 and 57.4 for the fp16 reference.
+
+Appendix G 
+Redundancy by Source
+
+Table 13: 
+Redundancy by source.
+ Share of blocks (%) that repeat a neighbor (Spatial), or else are unchanged from the frame 5 s earlier (Temporal), and their sum (Combined), averaged over consecutive frame pairs. 
+SME-Agent
+ uses 142 of its 787 recordings.
+
+Source
+
+Pairs
+
+Spatial
+
+Temporal
+
+Combined
+
+Screen
+
+SME-H1
+
+64,855
+
+46.9
+
+25.5
+
+72.4
+
+SME-H2
+
+11,845
+
+41.4
+
+21.9
+
+63.3
+
+SME-Agent
+
+6,098
+
+39.4
+
+36.2
+
+75.6
+
+WebLINX
+
+2,975
+
+52.4
+
+24.5
+
+76.9
+
+GUI-World
+
+194
+
+58.2
+
+8.4
+
+66.6
+
+Natural video
+
+Wikimedia Commons
+
+1,065
+
+17.6
+
+1.3
+
+18.9
+
+YouTube
+
+470
+
+10.1
+
+0.6
+
+10.7
+
+EPIC-KITCHENS
+
+300
+
+5.6
+
+0.1
+
+5.7
+
+Table 
+13
+ gives the redundancy of §
+3.2
+ per source, including the three histories of 
+ScreenMemEval
+, measured with the same blocks, interval, and tolerance. The public sources are WebLINX 
+(
+Lù et al., 2024
+)
+, GUI-World 
+(
+Chen et al., 2025
+)
+, and natural video from Wikimedia Commons, YouTube, and EPIC-KITCHENS-100 
+(
+Damen et al., 2022
+)
+.
+
+Appendix H 
+Qualitative Examples
+
+Table 
+14
+ shows the screenshot that each index ranks first for four single-recording questions, three from 
+SME-H1
+ and one from 
+SME-H2
+. All three indexes use the fine-tuned Qwen3-VL-2B, and the text index embeds the Apple Vision OCR text of each screenshot. We chose the questions among those on which the text index and 
+StreamEmbed
+ rank different recordings first, so they are not a random sample; Figure 
+4
+ gives the accuracy over all questions.
+
+On all four questions, the screenshot index and 
+StreamEmbed
+ rank a gold screenshot first, and 
+StreamEmbed
+ indexes a screenshot in 0.66–0.84 s, against 2.33–2.34 s for the screenshot index. The text index ranks the gold recording 16th to 752nd and instead ranks first a screenshot of another task, such as setting a desktop background for the profile-photo question or adding an LG television to a Costco cart for the wishlist question.
+
+Text index
+
+Screenshot index
+
+StreamEmbed
+
+0.62–0.65 s per screenshot
+
+2.33–2.34 s per screenshot
+
+0.66–0.84 s per screenshot
+
+Question.
+ Which smartphone model did I add to my cart?
+
+Question.
+ Which work app did I update my profile photo in?
+
+Question.
+ Which all-in-one desktop did I look up the starting price of?
+
+Question.
+ Which television did I add to my newly created wishlist?
+
+Table 14: 
+Screenshots ranked first for four questions.
+ For each single-recording question, the screenshot that each index ranks first, framed in green if it belongs to a gold recording and in red otherwise. All indexes use the fine-tuned Qwen3-VL-2B. Below each index is i

@@ -1,0 +1,2165 @@
+Creative Product Design under Brand Image Constraints
+https://arxiv.org/abs/2611.17762
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+Creative Product Design under Brand Image Constraints
+
+Takeshi Onishi
+
+  
+
+Hiroya Makino
+
+  
+
+Takahiro Yamaguchi
+
+  
+
+Hiroyuki Sakai
+
+Abstract
+
+Industrial design requires creative visual exploration while satisfying constraints that are often product-specific and implicit. Existing text-to-image (T2I) approaches can generate creative designs through concept blending or multi-agent self-enhancement, but they provide limited mechanisms for ensuring that generated designs remain consistent with such constraints. We focus on brand image as a representative design constraint and propose a framework for brand-aware redesign generation. Given a product name, the framework constructs a brand image survey report that summarizes product and market information, derives a creative direction from the report, and integrates this direction into a self-enhancement loop in which generated images are critiqued and prompts are revised. We evaluate the framework on 50 redesign tasks across five product categories, comparing it with Naive T2I, IP-Adapter/IT-Blender, and unconstrained self-enhancement under the same T2I backbone. By a VLM-as-Judge protocol to measure creativity and brand identifiability, the proposed framework achieves a more favorable trade-off between the two objectives, with particularly clear gains in highly constrained categories such as automotive and motorcycle, where the plausible design space is relatively limited compared with that of other product categories. These results suggest that dynamically eliciting and textualizing brand image can guide creative product design generation under brand image constraints.
+
+TOYOTA CENTRAL R&D LABS., INC.
+
+{Takeshi.Onishi, hirom, t-yamaguchi, sakai}@mosk.tytlabs.co.jp
+
+Introduction
+
+In industrial design, a product’s distinctive appearance plays a key role in differentiating it in the market and communicating its value to customers; hence, designing such an appearance requires not only visual originality but also compliance with various industrial constraints. This requirement distinguishes industrial design from artistic creation. For example, a sculpture may take any shape as long as it remains physically stable, whereas a vehicle design must include essential components such as doors and tires and must avoid sharp exterior features to ensure pedestrian safety. Beyond such functional and safety requirements, a product is also often expected to convey the visual identity of its brand. As a result, industrial designers must explore a large design space under strict constraints. This process depends heavily on expert intuition and experience, imposing a substantial burden on designers.
+
+To reduce this burden and improve the efficiency of the design process, text-to-image (T2I) models have recently been actively studied 
+(
+Liu and Hu 2023
+; 
+Barros and Ai 2024
+)
+. Prior work has mainly introduced creativity by optimizing concept embeddings, blending internal representations, or exploring prompts with multi-agent systems. ConceptLab 
+(
+Richardson et al. 2024
+)
+, for instance, aims to generate creative images by learning vector representations that intentionally depart from known concepts. IP-Adapter 
+(
+Ye et al. 2023
+)
+ and IT-Blender 
+(
+Cho et al. 2025
+)
+ synthesize new concepts by blending the vector representations of multiple concepts within a neural network. CREA 
+(
+Venkatesh et al. 2025
+)
+ introduces creativity by iteratively generating and evaluating images through a multi-agent self-enhancement process without task-specific training data.
+
+Figure 1: 
+Overview of the proposed framework.
+
+However, these studies primarily focus on injecting creativity and rarely address whether the resulting images remain acceptable under industrial design constraints. As a result, generated images may appear visually creative while violating requirements that real products must satisfy. This mismatch limits the practical applicability of existing generative approaches to industrial design.
+
+In this study, we focus on brand image—the recognizable impression associated with a brand—as a representative industrial design constraint because it directly affects the appearance of products across a wide range of categories. Indeed, an industry survey reports that 86% of companies consider brand consistency important 
+(
+Demand Metric 2016
+)
+. Practical product design therefore requires creative visual exploration while preserving the product’s brand image. Existing T2I systems struggle to satisfy this requirement because brand image is often implicit and product-specific, rather than a fixed constraint that can be specified once in a generic prompt or encoded in model parameters.
+
+To explore creative product designs under brand image constraints, we propose a multi-agent framework. Given a product name, the framework handles the implicit and product-specific nature of brand image by retrieving product information from the web and automatically converting it into a textual description called a brand image survey report. It then derives a creative direction by comparing the report with auxiliary inspiration images and performs self-enhancement guided by that direction under brand image constraints. By representing brand image as an explicit textual description rather than embedding it as a fixed latent representation or learning it from product-specific training data, the framework can flexibly update the constraint and adapt it to each product’s brand image.
+
+To evaluate the performance of the proposed framework, we formalize the task of brand-aware redesign generation, in which a system takes an existing product name and generates an image of a new design. Then, we score each generated image in terms of creativity and brand identifiability, as defined in the Evaluation Protocol section.
+We evaluate the framework on redesign generation for ten products in each of five categories (50 products in total). To improve reproducibility, we adopt a VLM-as-Judge protocol, in which a vision-language model (VLM) performs the scoring. The results show that the framework generates highly creative designs more reliably than strong baselines while better preserving brand image.
+
+Related Work
+
+Our target task, brand-aware redesign generation, can be regarded as a special case of T2I generation in which the system takes a product name as input and produces a creative design for that product while preserving its brand image. Two major lines of T2I research are relevant to this task: instruction-following methods, which generate images from detailed user specifications, and creativity-oriented methods, which generate images from abstract design goals.
+
+Instruction-Following T2I Models
+
+Instruction-following T2I models constitute a major line of T2I research that treats generation as the problem of faithfully reproducing user-specified content 
+(
+Ramesh et al. 2022
+; 
+Saharia et al. 2022
+; 
+Rombach et al. 2022
+)
+. Several extensions enable conditioning beyond plain text prompts, including instruction-based image editing 
+(
+Brooks et al. 2023
+)
+, image-conditioned generation 
+(
+Ruiz et al. 2023
+)
+, and structure-conditioned generation 
+(
+Zhang et al. 2023
+; 
+Mou et al. 2024
+)
+. Because these approaches expect the user to specify the visual details to be rendered, they are suboptimal for our target task, in which user instructions are abstract and under-specified (e.g., “redesign the Toyota Prius”). In contrast, the proposed framework does not require the user to specify creative visual details: it retrieves product-specific information from the web, summarizes it into a brand image survey report, and uses this report as a guide to autonomously explore new creative designs.
+
+Creativity-Oriented Image Generation
+
+Our work is more closely related to creativity-oriented image generation, which aims to produce creative images without detailed user specifications. A variety of approaches have been proposed to inject creativity into T2I generation.
+
+ConceptLab 
+(
+Richardson et al. 2024
+)
+ searches for a new concept under a given abstract category, such as “pet”, while steering away from familiar instances such as “dog” or “cat”. Because it locates a point in the latent space that is close to the abstract category but far from its familiar concrete instances, it requires a predefined set of such instances and is therefore designed for relatively well-defined abstract categories such as “pet” or “vehicle”. This formulation is difficult to apply to a concrete target such as “Toyota Prius”, which is the setting we consider, because neither a clear abstract category nor a set of guiding concrete instances is readily available.
+
+Attention-based blending methods and multi-agent frameworks are more flexible with respect to the target concept. IP-Adapter and IT-Blender 
+(
+Ye et al. 2023
+; 
+Cho et al. 2025
+)
+ are attention-based blending approaches that introduce creativity by combining a textual concept and a reference image through learned attention. Another approach to combining a pair of images was proposed by 
+Makino et al. (2025)
+. CREA 
+(
+Venkatesh et al. 2025
+)
+, a multi-agent framework, is arguably the closest related work to ours: it introduces creativity by iteratively generating, critiquing, and revising images. While these systems can introduce visual details that the user does not specify, they lack a mechanism for constraining the creativity introduced, such as preserving brand image, which is crucial in practical industrial design tasks. We demonstrate this limitation in our experiments, where these approaches fail to preserve the brand image of the original product, whereas the proposed framework successfully maintains it.
+
+Proposed Multi-Agent Framework
+
+To generate creative designs while preserving brand image, the proposed multi-agent framework extends self-enhancement 
+(
+Venkatesh et al. 2025
+)
+ with two additional components: (1) a survey module that constructs a product-specific brand image survey report, and (2) a creative direction module that converts that report and auxiliary inspiration images into explicit evaluation criteria. The survey module makes the brand image explicit in textual form, whereas the creative direction module identifies a direction consistent with that brand image. Together, these two components make design constraints actionable throughout the iterative search process in the self-enhancement module. Figure 
+1
+ summarizes the overall procedure implemented in the proposed framework.
+
+Survey Module
+
+The survey module takes a product name as input and produces a brand image survey report, a natural language document that summarizes the product, the market environment, the target customer, and the expected customer value. Although a user could provide an existing product report, we generate a report for each product in four steps using a large language model (LLM) agent named the Marketer to ensure a fair evaluation. First, Deep Research
+1
+1
+
+1
+
+              
+              
+            https://openai.com/index/introducing-deep-research
+ gathers product details and reviews. Second, the LLM analyzes the market environment and competing products. Third, the LLM identifies a target customer profile from the product and market information. Fourth, the LLM summarizes the core value expected by that target customer. These outputs are then compressed into a short summary used in downstream prompting.
+
+1.
+
+Product details: What kind of product is it?
+
+2.
+
+Market environment: What market environment surrounds this product, including competing or similar products?
+
+3.
+
+Target customer: What are the primary customer demographics?
+
+4.
+
+Product key value: What core value does this product offer to customers?
+
+The specific prompt templates are given in the appendix.
+
+Creative Direction Module
+
+The creative direction module receives the survey report from the survey module and proposes a creative direction: a textual design strategy that specifies how creativity should be introduced while remaining consistent with the brand image described in the report. Then, this direction guides the self-enhancement process by extending the evaluation criteria of the Reviewer.
+
+Inspired by mood boards 
+(
+Garner and McDonagh-Philp 2001
+)
+, collections of images that stimulate designers’ creativity, this module consists of a VLM-based agent, called the Brand Manager, and a set of auxiliary inspiration images. Each inspiration image serves as a seed for a candidate creative direction. Specifically, for each inspiration image, the Brand Manager first extracts the concept or tone of the image, then describes how that concept can be integrated into the target product without losing the product’s essential identity, and finally writes a direction-specific evaluation guideline. The Brand Manager then compares the candidate creative directions obtained from all inspiration images and selects the one that is expected to most effectively appeal to the target customer identified in the survey report. In our experiments, we use 20 images randomly sampled from the web
+2
+2
+
+2
+
+              
+              
+            https://randompicturegenerator.com/picture.php
+. The corresponding prompt templates are given in the appendix.
+
+The selected creative direction is passed to the self-enhancement module in the form of an evaluation guideline and is added to the evaluation criteria of the Reviewer. Consequently, the Reviewer judges generated images not only by generic creativity but also by how well they realize this direction. When an image receives a low score on this criterion, the accompanying comments are transformed into prompt-revision requirements in the next iteration. This design creates a direct link between high-level creative intent and low-level prompt updates, enabling self-enhancement to optimize not for creativity alone, but for creativity that remains aligned with brand image.
+
+Self-Enhancement Module
+
+Following CREA 
+(
+Venkatesh et al. 2025
+)
+, we implement the self-enhancement module, which improves generated images through iterative interaction between a Designer agent and a Reviewer agent.
+The Designer writes prompts for the T2I model and generates candidate images. This process is inherently noisy because both prompt generation and T2I rendering are stochastic. Therefore, the module does not rely on a single generation step. Instead, it repeatedly revises the prompt based on the Reviewer’s feedback and regenerates the image.
+
+The Reviewer evaluates each generated image using multiple criteria, including the creative direction produced by the Brand Manager. The criteria are as follows:
+
+•
+
+Format: Does the image meet the format of the target product (e.g., no background)?
+
+•
+
+Originality: How novel or unique is the image compared with existing designs?
+
+•
+
+Unexpectedness: How much does the image combine elements in unconventional ways?
+
+•
+
+Customer-value alignment: How well does the image align with the expected customer value identified in the survey report?
+
+•
+
+Creative direction: How well does the image realize the chosen creative direction from the Brand Manager?
+
+The Reviewer outputs both scores and textual comments for these criteria. The Designer then rewrites the prompt to address the low-scoring points, and the process repeats for a fixed number of iterations while retaining the best-scoring image and prompt obtained so far. The corresponding prompt templates are given in the appendix.
+
+Experiments
+
+Category: Product Names
+
+automotive :
+
+Toyota Prius, Volkswagen Golf, Ford F-150, Honda Civic, Nissan Skyline, BMW X5, Mercedes-Benz C-Class, Tesla Model 3, Porsche 911, Audi A4
+
+motorcycle :
+
+Honda Super Cub, Hero MotoCorp Splendor, Yamaha YZF-R Series, TVS Motor Apache, Bajaj Auto Pulsar, Suzuki GSX-R Series, Royal Enfield Classic, BMW R nineT, Harley-Davidson Sportster, KTM 690 Duke
+
+beverage :
+
+Coca-Cola, Pepsi, Sprite, Fanta, Red Bull, Monster Energy, Gatorade, Pocari Sweat, Budweiser, Heineken
+
+character_series :
+
+Star Wars, Pokémon, One Piece, Dragon Ball, Harry Potter, Transformers, The Simpsons, Toy Story, Teenage Mutant Ninja Turtles, Super Mario
+
+automobile_manufacturer :
+
+Toyota Motor Corporation, Volkswagen AG, Ford Motor Company, Honda Motor Co., Ltd., Nissan Motor Co., Ltd., Bayerische Motoren Werke AG (BMW), Mercedes-Benz Group AG, Tesla, Inc., Dr. Ing. h.c. F. Porsche AG, Audi AG
+
+Table 1: 
+List of product names employed for the experiment. (5 categories 
+ 10 individual products)
+
+To evaluate the proposed framework in practical industrial design scenarios, we use a controlled redesign setting that simulates the redesign of real industrial products. The benchmark spans product categories with different types and strengths of design constraints. We compare the proposed framework with baselines under a shared T2I backbone and assess all outputs using a common VLM-based evaluation protocol (VLM-as-Judge). The details of each step are described below.
+
+Target Products
+
+We evaluate the framework on 50 redesign tasks across five product categories. Each task requires generating a redesigned image of an existing product from its name and a set of candidate inspiration images. The goal is to produce a design that is both creative and consistent with the target brand image. The categories are automobiles (
+automotive
+), motorcycles (
+motorcycle
+), beverage bottles (
+beverage
+), character series (
+character_series
+), and automobile manufacturer logos (
+automobile_manufacturer
+).
+
+These five categories were chosen to cover a range of constraint types and strengths. 
+automotive
+ and 
+motorcycle
+ are the most strongly constrained categories in our benchmark. Their designs are shaped by practical, ergonomic, and regulatory requirements, so the admissible design space is narrow and major visual changes must still preserve product identity. We treat these categories as model-change scenarios in which the product name and brand image remain fixed while the exterior is redesigned. 
+beverage
+ is also constrained by manufacturability and use, but the visual constraint is weaker because much of the variation can be expressed through labels, graphics, and surface treatment. This category therefore allows more room for visual experimentation while still requiring a plausible product form. 
+character_series
+ differs qualitatively from these product-centered cases. Here the main constraint is not physical feasibility but consistency with a shared fictional world, visual language, and audience expectation. The constraint is therefore broad but implicit, requiring contextual understanding rather than compliance with explicitly specified rules. 
+automobile_manufacturer
+ is constrained in yet another way. Because logos rely on a small set of shapes, symbols, and typographic cues, the design space is extremely compact, while the requirement to preserve brand image remains strong. This makes logo redesign a high-constraint setting in which the constraints are primarily semantic rather than geometric. The full target list is shown in Table 
+1
+.
+
+Baselines
+
+We use baselines that introduce creativity into generated images through different mechanisms to evaluate whether the proposed framework improves the practical balance between creativity and brand image consistency in industrial design. Specifically, we compare against direct prompt-based generation, multimodal concept blending, and iterative creativity-oriented refinement. For a fair comparison, all approaches use the same T2I backbone, Flux.1-dev 
+(
+Greenberg 2025
+)
+. This comparison isolates how different creativity-injection strategies affect the trade-off between creativity and brand identifiability.
+
+Naive T2I:
+ This baseline serves as the minimal reference point without any explicit creativity-injection mechanism. It uses only the product name and a brief redesign instruction as the input prompt to the T2I model. Specifically, each product is generated from a prompt such as “Newly designed 
+{product name}
+” without any survey stage, external inspiration images, or iterative prompt refinement.
+
+IP-Adapter/IT-Blender:
+ These baselines represent creativity injection through visual concept blending. For each product, we use a minimal text prompt similar to the one above together with an inspiration image, allowing external inspiration images to influence the redesign. Because these methods do not include a mechanism for selecting the most appropriate inspiration image, we generate one output for each candidate inspiration image and report the average score across them.
+
+Self-Enhancement / CREA 
+(
+Venkatesh et al. 2025
+)
+:
+ This baseline represents creativity injection through self-enhancement. To avoid confounds from implementation differences, we construct it within the proposed framework by removing the survey module and creative direction module while keeping the self-enhancement loop. The baseline therefore receives only the product name as minimal task information and performs iterative prompt revision under fixed evaluation criteria.
+
+Implementation Details
+
+All LLM- and VLM-based agents in the framework are implemented with GPT-5-mini, except that the initial product research is delegated to Deep Research. The self-enhancement loop runs for 15 iterations per product. Note that the internal Reviewer (GPT-5-mini) and the evaluation judge (Gemini 2.5 Pro) belong to different model families, which mitigates the risk of the framework optimizing directly toward the judge’s preferences.
+
+Evaluation Protocol
+
+For reproducibility and scalability, we adopt a VLM-as-Judge protocol and evaluate all generated images with Gemini 2.5 Pro 
+(
+Comanici et al. 2025
+)
+.
+Evaluating creativity and brand identifiability with human annotators is inherently challenging because such judgments are sensitive to individual background, regional context, and temporal trends. Although VLM-based evaluation is not perfectly aligned with human judgment 
+(
+Chen et al. 2024
+)
+, recent studies on multimodal automatic evaluation report rapid improvements in human alignment for T2I assessment and related multimodal judging tasks 
+(
+Tung et al. 2025
+; 
+Abe et al. 2024
+)
+.
+
+Following this line of work, we evaluate creativity and brand identifiability independently. The full prompts are provided in the appendix.
+
+Creativity Evaluation
+
+We assess creativity in terms of novelty and usefulness, following a standard view in creativity research 
+(
+Mumford 2003
+)
+. For each generated image, the VLM assigns a score from 1 to 5 on both dimensions using a category-specific evaluation prompt:
+
+•
+
+Novelty Score
+: How visually different and unexpected the design is relative to the existing product.
+
+•
+
+Usefulness Score
+: How plausible, coherent, and usable the design appears as a product.
+
+The final Creativity Score is defined as the harmonic mean of the Novelty Score and Usefulness Score. We use the harmonic mean rather than the arithmetic mean because it penalizes one-sided designs that are highly novel but implausible, or plausible but insufficiently novel. This choice reflects the view that creativity is valuable in industrial design only when novelty remains compatible with practical design constraints.
+
+Brand Identifiability Evaluation
+
+We evaluate brand image consistency in terms of recognizability rather than rule-level compliance. Although brand image can sometimes be formalized as an internal design language or a set of design rules, the more practical question in product presentation and sales is whether users can recognize the intended brand from visual appearance alone. Concretely, we ask whether a viewer could plausibly infer the intended brand or product identity from the generated image alone. Accordingly, the VLM is asked to identify the manufacturer or product represented by each image.
+
+We use answer accuracy as the Identity Score. An answer is counted as correct if it matches one of the predefined acceptable aliases for the target brand or product. For each category, we compute the mean accuracy across the 10 target products in that category.
+
+Results
+
+Figure 2: 
+Creativity Score and Identity Score with example outputs from the proposed framework and Self-Enhancement.
+
+Figure 
+2
+ summarizes the Creativity and Identity Scores of the proposed framework and the baselines, along with example outputs from the proposed framework and Self-Enhancement.
+The examples illustrate a qualitative difference between the methods: the proposed framework introduces creativity while preserving brand identifiability, whereas Self-Enhancement exhibits identity drift.
+Overall, the quantitative results indicate that the proposed framework achieves a more favorable trade-off between these two objectives than the baselines.
+
+Specifically, compared with IP-Adapter and IT-Blender, the proposed framework improves both the Creativity Score and the Identity Score.
+Against Naive T2I, the proposed framework yields a higher Creativity Score while maintaining a comparable Identity Score.
+In contrast to Self-Enhancement, which attains the highest Creativity Score, the proposed framework substantially improves the Identity Score while incurring only a moderate reduction in creativity.
+These differences are statistically significant, as shown in Figure 
+3
+.
+Taken together, these results indicate that the proposed framework is more effective at balancing creativity and brand identifiability.
+
+Figure 3: 
+Creativity Score and Identity Score by category. Error bars on the Creativity Score indicate one standard deviation. Horizontal bars indicate statistically significant differences from the proposed framework, assessed by a t-test for the Creativity Score and McNemar’s test for the Identity Score. Note that, as described in the Baselines subsection, IP-Adapter and IT-Blender generate one output for each candidate inspiration image (20 outputs per product), whereas Naive T2I and Self-Enhancement produce a single final image per product; consequently, the statistical power to detect significant differences is lower for these two methods.
+
+Figure 
+3
+ further breaks down the results by product category.
+While the performance of the baselines varies across categories, the proposed framework performs robustly across all categories.
+
+A closer inspection reveals that the advantage of the proposed framework is particularly pronounced in categories with strong structural or semantic constraints.
+In 
+automotive
+ and 
+motorcycle
+, all baselines struggle to simultaneously achieve high creativity and brand identifiability.
+In particular, IP-Adapter, IT-Blender, and Naive T2I show degraded performance on both metrics relative to their performance in other categories, while Self-Enhancement improves creativity at the expense of substantial identifiability loss.
+These results suggest that introducing creativity in these domains is inherently difficult because even small deviations can compromise critical brand-specific visual elements.
+In contrast, the proposed framework maintains relatively high scores on both metrics, indicating that its creative direction module might help find a plausible creative direction that does not violate the target brand image.
+
+In 
+character_series
+, we observe a different failure mode.
+Self-Enhancement achieves high creativity but substantially degrades brand identifiability compared with Naive T2I.
+This suggests that the underlying T2I model already encodes implicit knowledge of character identity in its parameters, and that this knowledge is partially overwritten during the unconstrained iterative self-enhancement process.
+Figure 
+4
+ traces this process, showing that the Identity Score of Self-Enhancement declines over the iterative process with sample intermediate images of Pokémon illustrating the identity drift.
+In contrast, the proposed framework suppresses this identity drift: the Identity Score remains high throughout the loop while the Creativity Score gradually increases, and the framework ultimately attains an Identity Score of 0.8 and a Creativity Score of 3.7.
+This result indicates that the brand image survey report, which explicitly encodes the visual and contextual characteristics of the series in textual form, plays a key role in stabilizing identity during the self-enhancement process.
+
+In 
+automobile_manufacturer
+ and 
+beverage
+, all methods achieve relatively high Identity Scores.
+This is likely because these categories contain strong and easily recognizable visual cues (e.g., typography or product names), which make brand identifiability less sensitive to design variation.
+Even in these easier settings, however, the proposed framework remains competitive with or superior to the baselines overall, although its Creativity Score in 
+beverage
+ is slightly lower than that of some baselines.
+
+Overall, the category-wise analysis highlights that the primary advantage of the proposed framework emerges in challenging settings where creativity and brand identifiability are in strong tension.
+This supports our claim that explicitly modeling brand image as a dynamic textual representation is critical for practical design generation under industrial design constraints.
+
+Figure 4: 
+Creativity and Identity Scores during the self-enhancement loop in 
+character_series
+. Solid lines represent the proposed framework, and dashed lines represent Self-Enhancement. The images at the top show generated samples for Pokémon at the corresponding iterations.
+
+Ablation Study
+
+Figure 5: 
+Ablation study of the proposed modules. 
+CD
+ denotes the creative direction module.
+
+Figure 6: 
+Novelty and Usefulness components of the Creativity Score for the proposed framework, 
+Ours
+, and its ablated variant, 
+Ours w/o CD
+. Each number in a circle indicates the number of products with identical score pairs.
+
+In this section, we examine the contributions of the survey module and the creative direction module.
+Figure 
+5
+ compares the full framework, 
+Ours
+, with two ablations: 
+Ours w/o CD
+, which removes the creative direction module while retaining the survey report, and 
+Ours w/o CD and Survey
+, which removes both proposed modules and is equivalent to Self-Enhancement.
+Comparing 
+Ours w/o CD and Survey
+ with 
+Ours w/o CD
+ isolates the effect of the survey report.
+The survey report substantially improves the Identity Score, but this improvement comes at the cost of a lower Creativity Score.
+This result suggests that the survey report conditions the self-enhancement process to preserve brand identifiability.
+Comparing 
+Ours w/o CD
+ with 
+Ours
+ further suggests that the creative direction module provides small, statistically non-significant gains in both scores.
+
+To better characterize these gains, Figure 
+6
+ decomposes the Creativity Score into Novelty and Usefulness Scores for 
+Ours
+ and 
+Ours w/o CD
+.
+Novelty does not show a consistent shift, whereas Usefulness improves for several lower-scoring cases and remains unchanged for many already high-scoring cases.
+This pattern suggests that the creative direction module may primarily improve usefulness by helping the framework select more plausible creative directions from among multiple inspiration images.
+
+Limitations
+
+The first limitation concerns the evaluation protocol. Our evaluation relies on a VLM-as-Judge protocol rather than assessments by human designers, domain experts, or target customers. This protocol improves scalability and reproducibility and reduces reliance on human evaluation in settings where generated designs may raise copyright concerns, but cannot fully capture subjective creativity, consumer perception, or professional judgments of brand image preservation.
+
+The second limitation is the scope of constraints considered. We consider only brand image, although industrial design also imposes safety, ergonomic, dimensional, mechanical, material, manufacturing, regulatory, and cost constraints. The proposed framework neither explicitly models these constraints nor verifies physical realizability. Supporting downstream engineering or production decisions requires handling multiple hard and soft constraints, potentially with priority-aware evaluation criteria.
+
+Conclusion
+
+This study addresses a central challenge in applying generative models to industrial design: how to explore creative designs while preserving brand image as a normative constraint. Previous T2I-based approaches can generate creative appearances through concept blending or exploratory optimization, but they do not adequately account for the constraints required in real product design. As a result, their outputs often drift away from the intended product context. We therefore introduced a framework that treats brand image as an explicit, dynamically updated design constraint rather than as a fixed prompt or latent representation.
+
+The proposed framework combines three components: (1) a survey module that uses an LLM and web search to summarize product-specific brand image and market context, (2) a creative direction module that uses the brand image survey report and inspiration images to define a creative direction and associated evaluation criteria, and (3) a self-enhancement module in which a Reviewer agent repeatedly critiques generated outputs and a Designer agent updates prompts accordingly. This design makes brand image actionable as an evaluable constraint throughout the search process and enables controlled trade-offs between creativity and brand identifiability.
+
+Across 50 redesign tasks spanning five product categories, the proposed framework improved the balance between creativity and brand identifiability compared with Naive T2I, IP-Adapter/IT-Blender, and the Self-Enhancement baseline. The gains are particularly meaningful in the highly constrained automotive and motorcycle categories.
+
+Overall, the results demonstrate that dynamically eliciting and textualizing brand image, then integrating it into iterative design exploration, is a practical way to reconcile creativity with constraint satisfaction. Although we focus on brand image, the framework can be extended to other normative constraints and may serve as a foundation for practical design-space exploration with T2I models.
+
+Ethical Statement
+
+All referenced trademarks, product designs, and characters belong to their respective owners; generated images are unofficial research artifacts used only for evaluation. The framework supports brand owners and designers in designing their products. To prevent misuse, including brand impersonation, its use should be limited to authorized brands, with final decisions made by human designers.
+
+References
+
+Abe 
+et al.
+ (2024)
+
+Y. Abe, T. Daikoku, and Y. Kuniyoshi
+
+Assessing the aesthetic evaluation capabilities of gpt-4 with vision: insights from group and individual assessments
+.
+
+External Links: 
+2403.03594
+,
+
+Link
+
+Cited by: 
+Evaluation Protocol
+.
+
+Barros and Ai (2024)
+
+M. Barros and Q. Ai
+
+Designing with words: exploring the integration of text-to-image models in industrial design
+.
+
+Digital Creativity
+ 
+35
+ (
+4
+), 
+pp. 378–391
+.
+
+External Links: 
+Document
+,
+
+Link
+,
+
+https://doi.org/10.1080/14626268.2024.2411223
+
+Cited by: 
+Introduction
+.
+
+Brooks 
+et al.
+ (2023)
+
+T. Brooks, A. Holynski, and A. A. Efros
+
+InstructPix2Pix: learning to follow image editing instructions
+.
+
+In 
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)
+,
+
+pp. 18392–18402
+.
+
+Cited by: 
+Instruction-Following T2I Models
+.
+
+Cao 
+et al.
+ (2026)
+
+S. Cao, N. Ma, J. Li, X. Li, L. Shao, K. Zhu, Y. Zhou, Y. Pu, J. Wu, J. Wang, B. Qu, W. Wang, Y. Qiao, D. Yao, and Y. Liu
+
+ArtiMuse: fine-grained image aesthetics assessment with joint scoring and expert-level understanding
+.
+
+In 
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)
+,
+
+pp. 15313–15322
+.
+
+Cited by: 
+Analysis of VLM-as-Judge Evaluation
+.
+
+Chen 
+et al.
+ (2024)
+
+D. Chen, R. Chen, S. Zhang, Y. Wang, Y. Liu, H. Zhou, Q. Zhang, Y. Wan, P. Zhou, and L. Sun
+
+MLLM-as-a-judge: assessing multimodal llm-as-a-judge with vision-language benchmark
+.
+
+In 
+Proceedings of the International Conference on Machine Learning (ICML)
+,
+
+Cited by: 
+Evaluation Protocol
+.
+
+Cho 
+et al.
+ (2025)
+
+W. Cho, Y. Zhang, Y. Chen, and D. I. Inouye
+
+Imagine for me: creative conceptual blending of real images and text via blended attention
+.
+
+External Links: 
+2506.24085
+,
+
+Link
+
+Cited by: 
+Introduction
+,
+
+Creativity-Oriented Image Generation
+.
+
+Comanici 
+et al.
+ (2025)
+
+G. Comanici, E. Bieber, M. Schaekermann, and et al.
+
+Gemini 2.5: pushing the frontier with advanced reasoning, multimodality, long context, and next generation agentic capabilities
+.
+
+External Links: 
+2507.06261
+,
+
+Link
+
+Cited by: 
+Evaluation Protocol
+.
+
+Demand Metric (2016)
+
+Demand Metric
+
+The impact of brand consistency
+.
+
+Note: 
+Benchmark report
+
+External Links: 
+Link
+
+Cited by: 
+Introduction
+.
+
+Garner and McDonagh-Philp (2001)
+
+S. Garner and D. McDonagh-Philp
+
+Problem interpretation and resolution via visual stimuli: the use of ‘mood boards’ in design education
+.
+
+Journal of Art & Design Education
+ 
+20
+ (
+1
+), 
+pp. 57–64
+.
+
+External Links: 
+Document
+
+Cited by: 
+Creative Direction Module
+.
+
+Greenberg (2025)
+
+O. Greenberg
+
+Demystifying flux architecture
+.
+
+External Links: 
+2507.09595
+,
+
+Link
+
+Cited by: 
+Baselines
+.
+
+Lee 
+et al.
+ (2024)
+
+S. Lee, S. Kim, S. Park, G. Kim, and M. Seo
+
+Prometheus-vision: vision-language model as a judge for fine-grained evaluation
+.
+
+In 
+Findings of the Association for Computational Linguistics (ACL)
+,  
+L. Ku, A. Martins, and V. Srikumar (Eds.)
+,
+
+pp. 11286–11315
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+Analysis of VLM-as-Judge Evaluation
+.
+
+Liu and Hu (2023)
+
+M. Liu and Y. Hu
+
+Application potential of stable diffusion in different stages of industrial design
+.
+
+In 
+Artificial Intelligence in HCI
+,  
+H. Degen and S. Ntoa (Eds.)
+,
+
+pp. 590–609
+.
+
+External Links: 
+ISBN 978-3-031-35891-3
+
+Cited by: 
+Introduction
+.
+
+Makino 
+et al.
+ (2025)
+
+H. Makino, T. Yamaguchi, and H. Sakai
+
+Zero-shot visual concept blending without text guidance
+.
+
+In 
+Proceedings of the Annual Conference of JSAI (JSAI)
+,
+
+External Links: 
+Document
+
+Cited by: 
+Creativity-Oriented Image Generation
+.
+
+Mou 
+et al.
+ (2024)
+
+C. Mou, X. Wang, L. Xie, Y. Wu, J. Zhang, Z. Qi, and Y. Shan
+
+T2I-adapter: learning adapters to dig out more controllable ability for text-to-image diffusion models
+.
+
+In 
+Proceedings of the AAAI Conference on Artificial Intelligence (AAAI)
+,
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+Instruction-Following T2I Models
+.
+
+Mumford (2003)
+
+M. D. Mumford
+
+Where have we been, where are we going? taking stock in creativity research
+.
+
+Creativity Research Journal
+ 
+15
+ (
+2-3
+), 
+pp. 107–120
+.
+
+External Links: 
+Document
+,
+
+Link
+,
+
+https://doi.org/10.1080/10400419.2003.9651403
+
+Cited by: 
+Creativity Evaluation
+.
+
+Ramesh 
+et al.
+ (2022)
+
+A. Ramesh, P. Dhariwal, A. Nichol, C. Chu, and M. Chen
+
+Hierarchical text-conditional image generation with clip latents
+.
+
+External Links: 
+2204.06125
+,
+
+Link
+
+Cited by: 
+Instruction-Following T2I Models
+.
+
+Richardson 
+et al.
+ (2024)
+
+E. Richardson, K. Goldberg, Y. Alaluf, and D. Cohen-Or
+
+ConceptLab: creative concept generation using vlm-guided diffusion prior constraints
+.
+
+ACM Transactions on Graphics
+ 
+43
+ (
+3
+).
+
+External Links: 
+ISSN 0730-0301
+,
+
+Link
+,
+
+Document
+
+Cited by: 
+Introduction
+,
+
+Creativity-Oriented Image Generation
+.
+
+Rombach 
+et al.
+ (2022)
+
+R. Rombach, A. Blattmann, D. Lorenz, P. Esser, and B. Ommer
+
+High-resolution image synthesis with latent diffusion models
+.
+
+In 
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)
+,
+
+pp. 10684–10695
+.
+
+Cited by: 
+Instruction-Following T2I Models
+.
+
+Ruiz 
+et al.
+ (2023)
+
+N. Ruiz, Y. Li, V. Jampani, Y. Pritch, M. Rubinstein, and K. Aberman
+
+DreamBooth: fine tuning text-to-image diffusion models for subject-driven generation
+.
+
+In 
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)
+,
+
+pp. 22500–22510
+.
+
+Cited by: 
+Instruction-Following T2I Models
+.
+
+Saharia 
+et al.
+ (2022)
+
+C. Saharia, W. Chan, S. Saxena, L. Lit, J. Whang, E. Denton, S. K. S. Ghasemipour, B. K. Ayan, S. S. Mahdavi, R. Gontijo-Lopes, T. Salimans, J. Ho, D. J. Fleet, and M. Norouzi
+
+Photorealistic text-to-image diffusion models with deep language understanding
+.
+
+In 
+Advances in Neural Information Processing Systems (NeurIPS)
+,
+
+Cited by: 
+Instruction-Following T2I Models
+.
+
+Tung 
+et al.
+ (2025)
+
+Y. Tung, Z. Yang, M. Shen, C. Chang, C. Chen, and L. Ho
+
+Research note: assessing human preferences for natural landscapes—an analysis of chatgpt-4 and llava models
+.
+
+Landscape and Urban Planning
+ 
+259
+, 
+pp. 105371
+.
+
+External Links: 
+ISSN 0169-2046
+,
+
+Document
+,
+
+Link
+
+Cited by: 
+Evaluation Protocol
+.
+
+Venkatesh 
+et al.
+ (2025)
+
+K. Venkatesh, C. Dunlop, and P. Yanardag
+
+CREA: a collaborative multi-agent framework for creative image editing and generation
+.
+
+In 
+Advances in Neural Information Processing Systems (NeurIPS)
+,
+
+pp. 171332–171392
+.
+
+Cited by: 
+Introduction
+,
+
+Creativity-Oriented Image Generation
+,
+
+Self-Enhancement Module
+,
+
+Proposed Multi-Agent Framework
+,
+
+Baselines
+.
+
+Ye 
+et al.
+ (2023)
+
+H. Ye, J. Zhang, S. Liu, X. Han, and W. Yang
+
+IP-adapter: text compatible image prompt adapter for text-to-image diffusion models
+.
+
+External Links: 
+2308.06721
+,
+
+Link
+
+Cited by: 
+Introduction
+,
+
+Creativity-Oriented Image Generation
+.
+
+Zhang 
+et al.
+ (2023)
+
+L. Zhang, A. Rao, and M. Agrawala
+
+Adding conditional control to text-to-image diffusion models
+.
+
+In 
+Proceedings of the IEEE/CVF International Conference on Computer Vision (ICCV)
+,
+
+pp. 3813–3824
+.
+
+Cited by: 
+Instruction-Following T2I Models
+.
+
+Supplemental Material
+
+Analysis of VLM-as-Judge Evaluation
+
+In this section, we analyze the reliability of our VLM-as-Judge evaluation protocol, with a particular focus on whether the scalar Creativity Scores it produces are consistent with alternative evaluation paradigms.
+
+Figure S1: 
+Creativity Score and win rate of the proposed framework against the baselines.
+
+Gemini
+
+Prometheus
+
+ArtMuse
+
+Self-Enhancement
+
+1 (4.0)
+
+1 (3.8)
+
+1 (63)
+
+Ours
+
+2 (3.5)
+
+3 (3.7)
+
+2 (62)
+
+IT-Blender
+
+3 (3.1)
+
+2 (3.7)
+
+4 (60)
+
+IP-Adapter
+
+4 (3.1)
+
+4 (3.6)
+
+5 (60)
+
+Naive T2I
+
+5 (2.3)
+
+5 (3.6)
+
+3 (62)
+
+Table S1: 
+Rank of generation approaches by the Creativity Scores of our evaluation protocol and previous VLM-based evaluators, Prometheus-Vision and ArtiMuse. The number in parentheses is the Creativity Score of each approach.
+
+Consistency with pairwise comparison: 
+
+We first examine whether the Creativity Scores align with preferences obtained from direct pairwise comparison, which is a commonly used evaluation method for subjective qualities such as creativity.
+To this end, we construct a direct-comparison setting in which the VLM is given a pair of images, one generated by the proposed framework and one by a baseline, and asked to select the more creative image.
+From these comparisons, we compute the win rate of the proposed framework against each baseline.
+
+Figure 
+S1
+ plots Creativity Score as a function of the win rate.
+We observe a strong monotonic relationship: the proposed framework achieves higher win rates against baselines with lower Creativity Scores, and lower win rates against those with higher Creativity Scores.
+This result indicates that the scalar Creativity Scores produced by our evaluation protocol are well aligned with pairwise preferences.
+Therefore, the proposed scoring scheme provides a reliable proxy for direct comparison while being more scalable.
+
+Robustness across different VLM-based evaluators: 
+
+We next evaluate whether our conclusions depend on the specific choice of VLM or prompting strategy.
+To this end, we compare our evaluation results with those obtained using two prior VLM-based evaluators, Prometheus-Vision 
+(
+Lee et al. 2024
+)
+ and ArtiMuse 
+(
+Cao et al. 2026
+)
+.
+Table 
+S1
+ reports the resulting Creativity Scores and rankings.
+
+Although the exact rankings differ slightly across evaluators, all methods consistently identify Self-Enhancement as the most creative approach, followed by the proposed framework.
+This agreement is consistent with our main result, where Self-Enhancement achieves the highest Creativity Score at the cost of a lower Identity Score, while our framework attains the second-highest Creativity Score with substantially better brand identifiability.
+These results support our main conclusions, which are robust to the choice of evaluator and are not an artifact of a specific VLM or prompt design.
+
+Prompt Templates Used in the Implementation
+
+This appendix lists the main prompt templates used in the implementation. We report representative prompt templates and preserve the original placeholders used in the code.
+
+The brand image survey report is constructed with four category-specific prompts (research details, market analysis, target customer, and customer value), followed by a category-independent summarization prompt. The category-specific templates are listed below.
+
+Prompt Name
+
+Template
+
+Research details
+
+You are an automotive market analyst.
+
+Research and summarize a comprehensive product overview of {item_name}.
+
+Your analysis should include:
+
+- Product positioning and purpose
+
+- Key specifications and technologies
+
+- Unique features and differentiators
+
+- Typical use cases and ownership context
+
+- Historical background and evolution (if relevant)
+
+Write objectively and factually, using clear business-oriented language.
+
+Market analysis
+
+You are conducting a professional market analysis for an automotive product.
+
+Based on the following product overview:
+
+{item_inf}
+
+Analyze the market for {item_name}, covering:
+
+- Market size and growth trends
+
+- Competitive landscape (key competitors and alternatives)
+
+- Market segmentation (e.g., price, technology, usage)
+
+- Regulatory, technological, and societal trends affecting demand
+
+- Strengths and weaknesses of {item_name} relative to competitors
+
+Focus on insights that are relevant for strategic decision-making.
+
+Target customer
+
+You are analyzing target customers for an automotive product.
+
+Using the following information:
+
+- Product overview: {item_inf}
+
+- Market analysis: {market_inf}
+
+Identify and describe the primary and secondary target customer segments for {item_name}.
+
+For each segment, include:
+
+- Demographic characteristics
+
+- Psychographic traits (values, attitudes, lifestyle)
+
+- Mobility needs and driving behavior
+
+- Purchase motivations and constraints
+
+- Why this product is relevant to them
+
+Present the segments clearly and logically.
+
+Customer value
+
+You are tasked with identifying the key customer value delivered by an automotive product.
+
+Based on the following inputs:
+
+- Product overview: {item_inf}
+
+- Market analysis: {market_inf}
+
+- Target customers: {target_inf}
+
+Identify and articulate the core customer values that {item_name} provides.
+
+Your analysis should:
+
+- Link product features to customer needs and pain points
+
+- Distinguish functional, emotional, and social value
+
+- Explain why these values matter more than competing alternatives
+
+- Highlight the primary value proposition for each key customer segment
+
+Use clear, structured, and value-oriented language.
+
+Table S2: 
+Survey report construction prompt templates for the 
+automotive
+ category
+
+Prompt Name
+
+Template
+
+Research details
+
+You are a two-wheeler and lifestyle mobility market analyst.
+
+Research and summarize a comprehensive product overview of {item_name}.
+
+Your analysis should include:
+
+- Brand positioning and cultural meaning
+
+- Engine type, performance characteristics, and core technologies
+
+- Design philosophy and signature styling elements
+
+- Riding experience and typical usage scenarios (e.g., leisure, touring, commuting)
+
+- Historical background, heritage, and model lineage (if relevant)
+
+Write objectively and factually, using clear business-oriented language.
+
+Market analysis
+
+You are conducting a professional market analysis for a motorcycle product.
+
+Based on the following product overview:
+
+{item_inf}
+
+Analyze the market for {item_name}, covering:
+
+- Market size and growth trends in the motorcycle segment
+
+- Competitive landscape (direct competitors and substitute mobility options)
+
+- Market segmentation (e.g., displacement, riding style, lifestyle orientation)
+
+- Regulatory, demographic, and cultural trends affecting demand
+
+- Strengths and weaknesses of {item_name} relative to competing models
+
+Focus on insights relevant to strategic and brand decision-making.
+
+Target customer
+
+You are analyzing target customers for a motorcycle product.
+
+Using the following information:
+
+- Product overview: {item_inf}
+
+- Market analysis: {market_inf}
+
+Identify and describe the primary and secondary target customer segments for {item_name}.
+
+For each segment, include:
+
+- Demographics (age, income, riding experience)
+
+- Psychographics (identity, lifestyle, values)
+
+- Riding needs and usage patterns
+
+- Emotional and symbolic purchase motivations
+
+- Reasons this motorcycle resonates with them
+
+Present the segments clearly and logically.
+
+Customer value
+
+You are tasked with identifying the key customer value delivered by a motorcycle product.
+
+Based on the following inputs:
+
+- Product overview: {item_inf}
+
+- Market analysis: {market_inf}
+
+- Target customers: {target_inf}
+
+Identify and articulate the core customer values that {item_name} provides.
+
+Your analysis should:
+
+- Link riding experience and design to customer desires
+
+- Distinguish functional, emotional, and identity-related value
+
+- Explain how the product delivers lifestyle or self-expression benefits
+
+- Highlight the dominant value proposition for each key customer segment
+
+Use clear, structured, and value-oriented language.
+
+Table S3: 
+Survey report construction prompt templates for the 
+motorcycle
+ category
+
+Prompt Name
+
+Template
+
+Research details
+
+You are a consumer packaged goods (CPG) and beverage market analyst.
+
+Research and summarize a comprehensive product overview of {item_name}.
+
+Your analysis should include:
+
+- Brand positioning and core promise
+
+- Product formulation and key attributes
+
+- Packaging, variants, and distribution formats
+
+- Consumption occasions and usage contexts
+
+- Brand history and evolution (if relevant)
+
+Write objectively and factually, using clear business-oriented language.
+
+Market analysis
+
+You are conducting a professional market analysis for a beverage product.
+
+Based on the following product overview:
+
+{item_inf}
+
+Analyze the market for {item_name}, covering:
+
+- Market size and category growth trends
+
+- Competitive landscape and substitute products
+
+- Market segmentation (e.g., age, lifestyle, consumption occasion)
+
+- Health, regulatory, and cultural trends affecting demand
+
+- Strengths and weaknesses of {item_name} relative to competitors
+
+Focus on insights relevant to brand and portfolio strategy.
+
+Target customer
+
+You are analyzing target customers for a beverage product.
+
+Using the following information:
+
+- Product overview: {item_inf}
+
+- Market analysis: {market_inf}
+
+Identify and describe the primary and secondary target customer segments for {item_name}.
+
+For each segment, include:
+
+- Demographic profile
+
+- Lifestyle and consumption behavior
+
+- Emotional and situational consumption drivers
+
+- Purchase motivations and barriers
+
+- Why the brand is meaningful or relevant to them
+
+Present the segments clearly and logically.
+
+Customer value
+
+You are tasked with identifying the key customer value delivered by a beverage product.
+
+Based on the following inputs:
+
+- Product overview: {item_inf}
+
+- Market analysis: {market_inf}
+
+- Target customers: {target_inf}
+
+Identify and articulate the core customer values that {item_name} provides.
+
+Your analysis should:
+
+- Link product attributes to consumption needs and emotions
+
+- Distinguish functional (taste, refreshment), emotional, and social value
+
+- Explain how the brand creates habitual or symbolic value
+
+- Highlight the primary value proposition for each customer segment
+
+Use clear, structured, and value-oriented language.
+
+Table S4: 
+Survey report construction prompt templates for the 
+beverage
+ category
+
+Prompt Name
+
+Template
+
+Research details
+
+You are an entertainment and IP (intellectual property) market analyst.
+
+Research and summarize a comprehensive product overview of the character series {item_name}.
+
+Your analysis should include:
+
+- Core concept and narrative universe
+
+- Main characters and thematic elements
+
+- Media formats and platforms (e.g., film, games, merchandise)
+
+- Audience engagement and usage contexts
+
+- Brand history and expansion strategy (if relevant)
+
+Write objectively and factually, using clear business-oriented language.
+
+Market analysis
+
+You are conducting a professional market analysis for an entertainment IP.
+
+Based on the following product overview:
+
+{item_inf}
+
+Analyze the market for {item_name}, covering:
+
+- Market size and growth of the relevant entertainment segments
+
+- Competitive landscape (other franchises and IPs)
+
+- Audience and platform segmentation
+
+- Technological and cultural trends affecting engagement
+
+- Strengths and weaknesses of {item_name} relative to competing IPs
+
+Focus on insights relevant to IP strategy and long-term value creation.
+
+Target customer
+
+You are analyzing target audiences for an entertainment character series.
+
+Using the following information:
+
+- Product overview: {item_inf}
+
+- Market analysis: {market_inf}
+
+Identify and describe the primary and secondary target audience segments for {item_name}.
+
+For each segment, include:
+
+- Age group and life stage
+
+- Emotional and psychological appeal
+
+- Engagement behavior across media and products
+
+- Motivations for attachment and loyalty
+
+- Why the characters or world resonate with them
+
+Present the segments clearly and logically.
+
+Customer value
+
+You are tasked with identifying the key audience value delivered by an entertainment character series.
+
+Based on the following inputs:
+
+- Product overview: {item_inf}
+
+- Market analysis: {market_inf}
+
+- Target audiences: {target_inf}
+
+Identify and articulate the core values that {item_name} provides to its audience.
+
+Your analysis should:
+
+- Link storytelling, characters, and world-building to emotional needs
+
+- Distinguish entertainment, emotional, social, and nostalgic value
+
+- Explain why the series sustains long-term engagement
+
+- Highlight the primary value proposition for each audience segment
+
+Use clear, structured, and value-oriented language.
+
+Table S5: 
+Survey report construction prompt templates for the 
+character_series
+ category
+
+Prompt Name
+
+Template
+
+Research details
+
+You are an automotive industry and corporate strategy analyst.
+
+Research and summarize a comprehensive overview of the automobile manufacturer {item_name}.
+
+Your analysis should include:
+
+- Corporate positioning and brand philosophy
+
+- Product portfolio and technology strategy
+
+- Manufacturing, quality, and supply chain characteristics
+
+- Global presence and key markets
+
+- Corporate history and strategic evolution
+
+Write objectively and factually, using clear business-oriented language.
+
+Market analysis
+
+You are conducting a professional market analysis for an automobile manufacturer.
+
+Based on the following overview:
+
+{item_inf}
+
+Analyze the market position of {item_name}, covering:
+
+- Global and regional market share trends
+
+- Competitive landscape across vehicle segments
+
+- Portfolio coverage and customer segmentation
+
+- Regulatory, technological, and mobility trends affecting the company
+
+- Strengths and weaknesses of {item_name} relative to major competitors
+
+Focus on insights relevant to corporate and long-term strategy.
+
+Target customer
+
+You are analyzing target customers for an automobile manufacturer.
+
+Using the following information:
+
+- Company overview: {item_inf}
+
+- Market analysis: {market_inf}
+
+Identify and describe the major customer segments served by {item_name}.
+
+For each segment, include:
+
+- Demographic and geographic characteristics
+
+- Mobility needs and usage patterns
+
+- Brand perception and expectations
+
+- Purchase motivations and decision criteria
+
+- Why this manufacturer appeals to them
+
+Present the segments clearly and logically.
+
+Customer value
+
+You are tasked with identifying the key customer value delivered by an automobile manufacturer.
+
+Based on the following inputs:
+
+- Company overview: {item_inf}
+
+- Market analysis: {market_inf}
+
+- Target customers: {target_inf}
+
+Identify and articulate the core customer values that {item_name} delivers across its portfolio.
+
+Your analysis should:
+
+- Link corporate capabilities and product strengths to customer needs
+
+- Distinguish functional, emotional, and trust-based value
+
+- Explain how the brand sustains long-term customer relationships
+
+- Highlight the primary value propositions for key customer segments
+
+Use clear, structured, and value-oriented language.
+
+Table S6: 
+Survey report construction prompt templates for the 
+automobile_manufacturer
+ category
+
+Prompt Name
+
+Template
+
+Summary
+
+Summarize the following product report in 500 words:
+
+{full_report}
+
+Table S7: 
+Category-independent summarization prompt used to compress the survey report
+
+Prompt Name
+
+Template
+
+Image concept
+
+Find the concept/message/tone of the image.
+
+Direction integration
+
+This is a market report/target customer/customer value of {model_name}.
+
+Market report:
+
+{market_report}
+
+Target customer:
+
+{target_customer}
+
+Customer values:
+
+{customer_values}
+
+Now you integrate the concept/message/tone of the image into the {model_name} design. Explain how the concept/message/tone of the image can be integrated into the visual context of new {model_name} without losing its essence.
+
+Direction guideline
+
+Write a guideline to evaluate how much the exterior of the new {model_name} aligns with the concept/message/tone by 1-10 in one paragraph.
+
+Direction selection
+
+This is a market report/target customer/customer value of {model_name}.
+
+Market report:
+
+{market_report}
+
+Target customer:
+
+{target_customer}
+
+Customer values:
+
+{customer_values}
+
+Here are candidates of design directions for the new {model_name}:
+
+{design_directions}
+
+Select the best design direction that effectively appeals to the target customers based on the market report, target customer, and customer values. Decide by ORIGINALITY, NOVELTY, SUPRISENESS and CLEARNESS of the design direction. Return just one alphabet corresponding to the best design direction.
+
+Table S8: 
+Creative direction prompt templates
+
+Prompt Name
+
+Template
+
+Initial prompt
+
+You are designing the new {model_name}:
+
+{short_summary}
+
+Write a prompt for a stable diffusion model for the new {model_name} respecting the important characteristics in the above description. No background is allowed in the image.
+
+Prompt refinement
+
+Read the description about {model_name}:
+
+{short_summary}
+
+Impvoe the following prompt to generate the image of the new {model_name} by reflecting the feedback with keeping the important characteristics in the above description.
+
+Current Prompt:
+
+{current_prompt}
+
+Feedback:
+
+{engineer_feedback}
+
+You propose a strategy to plan how you will apply the feedback to enhance the prompt. Then, you rewrite the prompt accordingly. Prompts must be in 50 words.
+
+Provide your response in the specified JSON format. {"strategy": "…", "prompt": "…"}
+
+Design review
+
+You are acting as an expert design reviewer evaluating an image of the new {model_name} generated by a diffusion model.
+
+You are provided with the following contextual information to guide your evaluation:
+
+Market Report:
+
+{market_report}
+
+Target Customer:
+
+{target_customer}
+
+Customer Values:
+
+{customer_values}
+
+Using this context, evaluate the image of new {model_name}.
+
+Score the image according to the criteria listed below:
+
+{score_metrics}
+
+You make a comment on the work by each criteria and give its score from 1 to 10. Provide your response in the specified JSON format. {json_format}
+
+Table S9: 
+Self-enhancement prompt templates for the Designer (initial prompt and prompt refinement) and the Reviewer (design review)
+
+Criterion
+
+Definition
+
+Originality
+
+Originality in creativity centers on producing novel and unique ideas. Margaret Boden defines creativity as the ability to generate outcomes that are “new, surprising, and valuable,” emphasizing novelty as a core criterion. Her theory differentiates combinational, exploratory, and transformational creativity – all mechanisms for breaking beyond existing concepts to achieve originality. J. P. Guilford’s divergent thinking framework likewise highlights originality: creative thinkers produce many varied solutions, with originality measured by the rarity and uniqueness of ideas. Together, these theories establish that genuine creativity requires ideas that depart from the ordinary and expand conceptual boundaries.
+
+UnexpectedAssociations
+
+This principle involves making surprising connections between disparate ideas – a key source of creative ingenuity. Finke, Ward, and Smith’s Geneplore model of creative cognition describes a two-stage process: a generation phase where preliminary ideas or mental structures are produced, and an exploration phase where those structures are elaborated and interpreted in novel ways. Through this process, creators often discover unforeseen linkages between concepts, leading to inventive combinations. Margaret Boden’s concept of combinational creativity similarly refers to creativity that arises by synthesizing familiar ideas into new, unexpected configurations. Both frameworks stress that many creative breakthroughs happen by recombining knowledge in unconventional ways, yielding associations that surprise because they deviate from usual patterns while still making intuitive sense in hindsight.
+
+CustomerValues
+
+The new design must effectively reflect and embody the customer values that are important to the target customers described above. Each design element should be thoughtfully chosen to resonate with these values, ensuring that the overall aesthetic and functionality align with what the customers prioritize and appreciate.
+
+Table S10: 
+Criterion definitions inserted as 
+{score_metrics}
+ into the design review prompt of the Reviewer
+
+Category
+
+Format criterion definition
+
+Automotive
+
+The image must NOT have any other object except the car. The image must shows the car from a front-left viewpoint. The entire car must be fully visible in the image. No text or watermark should be present in the image.
+
+Motorcycle
+
+The image must NOT have any other object except the motorcycle. The image must shows the motorcycle from a front-left viewpoint. The entire motorcycle must be fully visible in the image. No text or watermark should be present in the image.
+
+Beverage
+
+The image must NOT have any other object except the labeled beverage can or bottle. No text or watermark should be present in the image.
+
+Character series
+
+The image must NOT have any other object except the character. No text or watermark should be present in the image.
+
+Automobile manufacturer
+
+The image must NOT have any other object except the logo. No text or watermark should be present in the image.
+
+Table S11: 
+Category-specific 
+Format
+ criterion definitions inserted as part of 
+{score_metrics}
+ into the design review prompt of the Reviewer
+
+Category
+
+Template
+
+Automotive
+
+You are given an image that may depict an automobile or something resembling one. Based only on visual features such as body shape, headlights, grille, proportions, styling era, and brand design language, predict the most likely automobile product name.
+
+Rules:
+
+- Output exactly one specific car model name (make + model if applicable).
+
+- You must give a best guess even if the image is unclear.
+
+- Do not answer with generic terms (e.g., "sedan", "SUV").
+
+- Do not add explanations or qualifiers.
+
+Output format:
+
+Automotive: <best guess automobile model>
+
+Motorcycle
+
+You are given an image that may depict a motorcycle or motorcycle-related object. Using visual cues such as frame geometry, engine layout, exhaust placement, fairing style, and brand-specific design language, predict the most likely motorcycle model name.
+
+Rules:
+
+- Output exactly one specific motorcycle model name.
+
+- You must provide a best guess even if uncertain.
+
+- Avoid generic classes (e.g., "sport bike", "cruiser").
+
+- No explanations or disclaimers.
+
+Output format:
+
+Motorcycle: <best guess motorcycle model>
+
+Beverage
+
+You are given an image that may depict a beverage or beverage container. Based on packaging shape, label design, color scheme, typography, and common market products, predict the most likely beverage product name.
+
+Rules:
+
+- Output exactly one concrete beverage product name.
+
+- Always give a best guess, even if the image is ambiguous.
+
+- Do not output beverage categories (e.g., "soda", "energy drink").
+
+- Do not include explanations.
+
+Output format:
+
+Beverage: <best guess beverage product>
+
+Table S12: 
+VLM-as-Judge prompts for identity evaluation I
+
+Category
+
+Template
+
+Character series
+
+You are given an image that may depict a fictional character. Using visual traits such as clothing, hairstyle, facial features, accessories, color palette, and art style, predict the most likely character series or franchise the character belongs to.
+
+Rules:
+
+- Output exactly one character series or franchise name.
+
+- Do NOT output the individual character name.
+
+- You must choose the single most likely series, even if uncertain.
+
+- Do not say “original character” or “unknown”.
+
+- No explanations or alternatives.
+
+Output format:
+
+Character series: <series name>
+
+Automobile manufacturer
+
+You are given an image that may depict a logo or emblem. Based on shape, symbols, typography, color usage, and known automotive branding patterns, predict the most likely automobile manufacturer.
+
+Rules:
+
+- Output exactly one automobile manufacturer name.
+
+- Always provide a best guess, even if the logo is unclear or stylized.
+
+- Do not list multiple candidates.
+
+- Do not include explanations.
+
+Output format:
+
+Automobile manufacturer logo: <manufacturer name>
+
+Table S13: 
+VLM-as-Judge prompts for identity evaluation II
+
+Category
+
+Template
+
+Automotive
+
+You are given an image of a newly designed {item_name}.
+
+Evaluate the creativity of the vehicle’s exterior visual design as depicted in the image.
+
+Evaluation guidelines (must follow strictly):
+
+- Assess features such as overall silhouette, body proportions, surface treatment, lighting signatures, grille design, and visual coherence.
+
+- Focus on how distinctive and imaginative the exterior design appears compared to contemporary automobiles.
+
+- Do not evaluate performance, specifications, interior features, or brand reputation.
+
+Evaluate the creativity of the visual design based on the following criteria:
+
+{score_metrics}
+
+You make a comment on the design by each criteria and give its score from 1 to 5. Provide your response in the specified JSON format. {json_format}
+
+Motorcycle
+
+You are given an image of a newly designed {item_name}.
+
+Evaluate the creativity of the motorcycle’s visual design as depicted in the image.
+
+Evaluation guidelines (must follow strictly):
+
+- Assess features such as frame layout, bodywork, tank shape, seat profile, lighting, exhaust placement, and overall visual balance.
+
+- Focus on how distinctive and imaginative the design appears within the motorcycle category.
+
+- Do not evaluate engine performance, riding dynamics, or brand reputation.
+
+Evaluate the creativity of the visual design based on the following criteria:
+
+{score_metrics}
+
+You make a comment on the design by each criteria and give its score from 1 to 5. Provide your response in the specified JSON format.{json_format}
+
+Beverage
+
+You are given an image of a newly designed {item_name}.
+
+Evaluate the creativity of the beverage’s packaging and visual identity as depicted in the image.
+
+Evaluation guidelines (must follow strictly):
+
+- Assess features such as container shape, label graphics, typography, color palette, material impression, and shelf presence.
+
+- Focus on how distinctive and imaginative the packaging appears compared to existing beverage products.
+
+- Do not evaluate taste, ingredients, nutritional value, or brand popularity.
+
+Evaluate the creativity of the visual design based on the following criteria:
+
+{score_metrics}
+
+You make a comment on the design by each criteria and give its score from 1 to 5. Provide your response in the specified JSON format. {json_format}
+
+Table S14: 
+VLM-as-Judge prompts for creativity evaluation I
+
+Category
+
+Template
+
+Character series
+
+You are given an image of a newly designed character belonging to a fictional character series: {item_name}.
+
+Evaluate the creativity of the character’s visual design as depicted in the image.
+
+Evaluation guidelines (must follow strictly):
+
+- Assess features such as silhouette, costume, color palette, facial design, accessories, and iconic visual traits.
+
+- Focus on how distinctive and imaginative the character design appears within animated or fictional media.
+
+- Do not evaluate story quality, personality, or popularity of the series.
+
+Evaluate the creativity of the visual design based on the following criteria:
+
+{score_metrics}
+
+You make a comment on the design by each criteria and give its score from 1 to 5. Provide your response in the specified JSON format. {json_format}
+
+Automobile manufacturer
+
+You are given an image of a newly designed automobile manufacturer logo: {item_name}.
+
+Evaluate the creativity of the logo’s visual design as depicted in the image.
+
+Evaluation guidelines (must follow strictly):
+
+- Assess features such as shape, symbolism, typography, color usage, simplicity, and visual balance.
+
+- Focus on how distinctive and imaginative the logo appears compared to existing automobile logos.
+
+- Do not evaluate brand history, reputation, or market success.
+
+Evaluate the creativity of the visual design based on the following criteria:
+
+{score_metrics}
+
+You make a comment on the design by each criteria and give its score from 1 to 5. Provide your response in the specified JSON format. {json_format}
+
+Table S15: 
+VLM-as-Judge prompts for creativity evaluation II
+
+Metric
+
+Definition
+
+Novelty
+
+Evaluate the degree to which the product, character, label, or logo depicted in the image appears visually new, uncommon, and differentiated relative to the current (baseline) design, based solely on observable features. The assessment should focus on form, silhouette, composition, proportions, visual language, and stylistic choices, not on technical performance or functionality. Low-fidelity artifacts and stylistic abstraction are acceptable. Novelty must be supported by clear visual divergence, not subtle tweaks or conceptual claims.
+
+1 — No Novelty (Current Design / Less Novel)
+
+Visually equivalent to the current design or more conservative
+
+Differences, if any, are negligible or purely cosmetic
+
+Overall impression is familiar, expected, or generic
+
+Could be mistaken for the existing design at a glance
+
+2 — Minimal Novelty
+
+Small, incremental visual changes are present
+
+Variations do not meaningfully alter the overall impression
+
+Design remains largely conventional and unsurprising
+
+Reads as a minor update or derivative variation
+
+3 — Moderate Novelty
+
+Clear visual differences from the current design
+
+Changes affect some visible aspects (shape, layout, style)
+
+Overall concept remains familiar or within the same design family
+
+Feels like a standard evolution rather than a rethink
+
+4 — High Novelty
+
+Design is clearly distinct and visually unexpected
+
+Noticeable departure in form, styling, or visual language
+
+Maintains recognizability of purpose while reimagining appearance
+
+Would stand out among existing designs in the same category
+
+5 — Extreme Novelty
+
+Design is highly unconventional and visually striking
+
+Strong departure from existing norms, patterns, or archetypes
+
+Immediate impression of originality and surprise
+
+Unlikely to be confused with existing designs or trends
+
+Table S16: 
+Score metric definition inserted as 
+{score_metrics}
+ into the creativity evaluation prompts I: Novelty Score
+
+Metric
+
+Definition
+
+Usefulness
+
+Evaluate the degree to which the object, product, logo/label, or character depicted in the image appears functionally plausible, logically constructed, and realistically usable based only on visible elements. The assessment should judge whether the design could reasonably be produced, deployed, or appear on-screen as-is, without relying on hidden mechanisms, off-screen explanations, or idealized execution not supported by the image. Low-fidelity rendering, stylization, or AI artifacts are acceptable. However, visible functional contradictions, structural impossibilities, or incoherent design decisions should reduce the score. For existing real-world products or established characters, score 5 if they appear intact and recognizable.
+
+1 — Non-Functional / Implausible
+
+Design does not make practical or logical sense as depicted
+
+Contains clear impossibilities, contradictions, or incoherent elements
+
+Cannot reasonably be produced, used, or appear on-screen in its current form
+
+2 — Mostly Non-Functional / Conceptually Flawed
+
+Major structural, logical, or usability issues are visible
+
+Core function is compromised or unclear
+
+Design relies on unrealistic assumptions not supported by the image
+
+Would require fundamental redesign to function or appear credibly
+
+3 — Functionally Plausible but Underspecified
+
+Overall concept makes sense for its intended purpose or role
+
+Key functional details are unclear, stylized, or incomplete
+
+No direct contradictions, but realism or usability is uncertain
+
+Would require significant clarification or development to be production- or screen-ready
+
+4 — Largely Functional with Minor Uncertainty
+
+Design is logically constructed and clearly intended to function
+
+Minor ambiguities, missing details, or simplifications are present
+
+No obvious fatal flaws; issues could be resolved during refinement
+
+Appears close to production-ready or screen-ready
+
+5 — Fully Functional / Production- or Screen-Ready
+
+Design is coherent, complete, and internally consistent
+
+All visible elements logically support the intended purpose or role
+
+No apparent structural, ergonomic, or logical contradictions
+
+Could reasonably be manufactured, deployed, or appear in a movie/anime without redesign
+
+Table S17: 
+Score metric definition inserted as 
+{score_metrics}
+ into the creativity evaluation prompts II: Usefulness Score
+
