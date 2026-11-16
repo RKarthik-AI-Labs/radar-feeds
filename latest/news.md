@@ -1,6 +1,6 @@
 # News candidates — 2026-11-16 (IST)
 
-Generated 2026-11-16 07:11 UTC. Showing 136 items first seen in the last 18 h or published in the last 30 h; 182 older items from the 3-day window are only in news.json.
+Generated 2026-11-16 07:22 UTC. Showing 136 items first seen in the last 18 h or published in the last 30 h; 180 older items from the 3-day window are only in news.json.
 Each item appears once, in the first section it matches. Dates are as reported by the source ("date unknown" = page with no date).
 
 ## By priority topic
@@ -34,7 +34,7 @@ Each item appears once, in the first section it matches. Dates are as reported b
 ### Search / AEO / GEO (10)
 - [2026-11-16 06:50 UTC] Reddlix Brings The First Native AI Visibility and GEO Agency to Help UAE Brands Rank in ChatGPT and AI Search — The National Law Review — (Google News link; search the headline) · Brand/product recommendation, GEO/AEO
 - [2026-11-16 00:49 UTC] The Rise of Answer Engine Optimization and the New Search Battlefield — MarkHub24 — (Google News link; search the headline) · GEO/AEO
-- [2026-11-15 17:28 UTC] Marketing News Flash: AI Mode Content Swapped Simultaneously with Core Update (November 16, 2026 Issue) — note — https://note.com/kiyuchannel/n/n1cb9b478b4a9?hl=en · GEO/AEO · +1 other hits
+- [2026-11-15 17:28 UTC] Marketing News Flash: AI Mode Content Swapped Simultaneously with Core Update (November 16, 2026 Issue) — note — https://note.com/kiyuchannel/n/n1cb9b478b4a9?hl=en · GEO/AEO
 - [2026-11-15 16:07 UTC] ‘AI visibility doesn’t equal trust’ — BusinessMirror — (Google News link; search the headline)
 - [2026-11-15 15:00 UTC] JetDigitalPro Highlights AI Search Visibility as the Next Frontier for SEO Content Writing Services — Barchart.com — (Google News link; search the headline) · GEO/AEO
 - [2026-11-15 13:00 UTC] The Executive’s Guide To Outsourcing Generative Engine Optimization — Forbes — https://www.forbes.com/sites/johnhall/2026/11/15/the-executives-guide-to-outsourcing-generative-engine-optimization/ · GEO/AEO · +1 other hits
@@ -43,7 +43,7 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-15 03:30 UTC] Google AI Overviews: Being Cited Is Not Being Chosen — Inkbot Design — https://inkbotdesign.com/google-ai-overviews/ · Citation & source selection, GEO/AEO
 - [2026-11-15 03:00 UTC] Core Update Recovery: The 2027 Diagnostic for Professional Services — Inkbot Design — https://inkbotdesign.com/core-update-recovery/
 
-### Model & lab launches (news search) (55)
+### Model & lab launches (news search) (58)
 - [2026-11-16 06:36 UTC] Alibaba launches Qwen4-Max, saying it cuts task costs by about 60% with tighter cyber guardrails — MLQ.ai — (Google News link; search the headline)
 - [2026-11-16 06:35 UTC] Alibaba launches Qwen4-Max with lower API prices and a million-token context window — TechNode — (Google News link; search the headline)
 - [2026-11-16 06:15 UTC] DeepSeek API Adds Search, OCR and Speech: 120-Second Audio Cap, Vendor Bound by Chinese Laws — Tech Times — https://www.msn.com/en-us/technology/tech-companies/deepseek-api-adds-search-ocr-and-speech-120-second-audio-cap-vendor-bound-by-chinese-laws/ar-AA2hvMdn · Brand/product recommendation · +1 other hits
@@ -60,15 +60,15 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-16 03:43 UTC] Anthropic launches Claude Meetings for live video calls — IT Brief Australia — (Google News link; search the headline)
 - [2026-11-16 03:28 UTC] Alibaba Launches Qwen4-Max With Lower API Prices — The Defiant — (Google News link; search the headline)
 - [2026-11-16 03:12 UTC] Alibaba unveils new flagship AI model in riposte to US rivals — The Straits Times — https://www.thehindubusinessline.com/info-tech/alibaba-unveils-new-flagship-ai-model-in-riposte-to-us-rivals/article71706678.ece · GEO/AEO · +2 other hits
-- [2026-11-15 23:15 UTC] Alibaba Announces Qwen4-Max. What Changes with 1M Tokens and Revised Pricing? — note — https://note.com/0x__tom/n/n806686cb7bff?hl=en
+- [2026-11-15 23:25 UTC] Alibaba Announces Qwen4-Max. What Changes with 1M Tokens and Revised Pricing? — note — https://note.com/0x__tom/n/n806686cb7bff?hl=en
 - [2026-11-15 23:02 UTC] Alibaba Unveils Qwen4-Max Preview with Stronger Coding and Safety Controls — Analytics Insight — https://www.analyticsinsight.net/news/alibaba-unveils-qwen4-max-preview-with-stronger-coding-and-safety-controls
 - [2026-11-15 22:34 UTC] Alibaba says Qwen4-Max cuts task costs by 60%, boosts cyber safeguards — Business Standard — https://www.business-standard.com/world-news/alibaba-says-qwen4-max-cuts-task-costs-by-60-boosts-cyber-safeguards-126111600895_1.html · GEO/AEO
 - [2026-11-15 22:05 UTC] Alibaba unveils Qwen4-Max, claims it beats rival models on coding — Crypto Briefing — https://cryptobriefing.com/alibaba-unveils-qwen4-max-ai-model/ · GEO/AEO
 - [2026-11-15 21:54 UTC] Alibaba launches Qwen4-Max, claims it outperforms US AI rivals in coding and cybersecurity — India Today — https://www.indiatoday.in/technology/news/story/alibaba-launches-qwen4-max-claims-it-outperforms-us-ai-rivals-in-coding-and-cybersecurity-3039724-2026-11-16 · +1 other hits
-- [2026-11-15 21:40 UTC] OpenAI launches ChatGPT wallet: Face ID approval is sole human check on AI agent card payments — Tech Times on MSN — https://www.msn.com/en-us/technology/artificial-intelligence/openai-launches-chatgpt-wallet-face-id-approval-is-sole-human-check-on-ai-agent-card-payments/ar-AA2hw0R8
+- [2026-11-15 21:40 UTC] OpenAI launches ChatGPT wallet: Face ID approval is sole human check on AI agent card payments — Tech Times on MSN — https://www.msn.com/en-us/news/other/openai-launches-chatgpt-wallet-face-id-approval-is-sole-human-check-on-ai-agent-card-payments/ar-AA2hw0R8
 - [2026-11-15 21:00 UTC] OpenAI Says GPT-6 Astra Led Proof for Lattice Standard Model — aiweekly — https://aiweekly.co/alerts/openai-says-gpt-6-astra-led-proof-for-lattice-standard-model
 - [2026-11-15 20:53 UTC] Alibaba unveils new flagship AI model as US-China AI race accelerates — The Print — https://theprint.in/tech/alibaba-unveils-new-flagship-ai-model-as-us-china-ai-race-accelerates/3099682/ · GEO/AEO
-- [2026-11-15 19:58 UTC] Google Gemini Launches Orchestrator to Enhance Multi-Model Workflows — Small Business Trends — https://www.msn.com/en-us/technology/software/google-gemini-launches-orchestrator-to-enhance-multi-model-workflows/ar-AA2huAwd · +1 other hits
+- [2026-11-15 19:58 UTC] Google Gemini Launches Orchestrator to Enhance Multi-Model Workflows — Small Business Trends — https://www.msn.com/en-us/news/other/google-gemini-launches-orchestrator-to-enhance-multi-model-workflows/ar-AA2huAwd · +1 other hits
 - [2026-11-15 19:56 UTC] Alibaba says new flagship AI model cuts task costs by 60% while tightening cyber guardrails — South China Morning Post on MSN — https://www.msn.com/en-xl/technology/artificial-intelligence/alibaba-says-new-flagship-ai-model-cuts-task-costs-by-60-while-tightening-cyber-guardrails/ar-AA2huPaB · GEO/AEO
 - [2026-11-15 19:01 UTC] Claude Duet invites arrive, three per user, but you don't need to hunt for one — Pasquale Pillitteri — (Google News link; search the headline)
 - [2026-11-15 18:53 UTC] Google DeepMind launches Gemini Robotics 2.5 with improved dexterity and industrial capabilities — Robotics & Automation News — (Google News link; search the headline)
@@ -83,33 +83,33 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-15 09:26 UTC] OpenAI launches Daybreak, AI agents that hack your apps to secure them — Korben — (Google News link; search the headline)
 - [2026-11-15 09:01 UTC] Meet the miso-making engineer behind Anthropic’s biggest hit — CNN — https://www.cnn.com/2026/11/15/tech/anthropic-claude-code-boris-cherny
 - [2026-11-15 07:03 UTC] What Is Muse Spark? Meta’s New AI Strategy — TechJuice — (Google News link; search the headline) · (already listed on an earlier day)
+- [2026-11-15 04:00 UTC] AI from China Approaches Top-Tier US Models at Less Than Half the Price—Reading the Numbers on Kimi K3.1 Pro [Shige News] — note — https://note.com/godaidenkai/n/n1a3c9c244281?hl=en · GEO/AEO
 - [2026-11-15 02:36 UTC] OpenAI Launches ChatGPT Wallet So Agents Can Pay Without Seeing Your Card Details — gHacks — (Google News link; search the headline)
+- [2026-11-15 02:33 UTC] Gemini Can Now Read Your Google Wallet to Track Spending and Subscriptions, but It Cannot Move Money — gHacks — (Google News link; search the headline)
 - [2026-11-15 02:03 UTC] OpenAI Postpones Release of GPT-6.1 Astra—An Era Where Safety Tests Determine Launch Dates [Shige News] — note — https://note.com/godaidenkai/n/n7f2be679c100?hl=en · GEO/AEO
 - [2026-11-15 01:48 UTC] Google unveils Gemini 4, new TPUs, smart glasses in five-day AI blitz — TechGig — (Google News link; search the headline)
 - [2026-11-15 00:28 UTC] OpenAI launches ChatGPT Wallet, claiming it's a safe way to have AI shop for you — Mashable — (Google News link; search the headline)
 - [2026-11-15 00:00 UTC] Google launches Gemini 4 Hydrogen for everyday coding tasks — GCN — https://gcn.com/google-gemini-4-hydrogen-coding/23269/ · GEO/AEO
 - [2026-11-14 22:57 UTC] Pentagon filing says Elon Musk's Grok helped enable 2,000-plus munitions in four days — Briefs Finance — https://www.briefs.co/news/pentagon-filing-says-elon-musk-s-grok-helped-enable-2-000-pl/ · +1 other hits
 - [2026-11-14 18:02 UTC] Gemini 4 Argon from Google, pricing, uses and limits — Meteora Web — (Google News link; search the headline)
+- [2026-11-14 16:45 UTC] OpenAI announces ChatGPT Health chats can train its models from November 19 — Pasquale Pillitteri — (Google News link; search the headline)
 - [2026-11-14 16:00 UTC] Alibaba unveils Qwen3.8-Max AI model, challenging US rivals Anthropic, OpenAI — Crypto Briefing — https://cryptobriefing.com/alibaba-unveils-qwen38-max-ai-model-challenging-us-rivals-anthropic-openai/ · GEO/AEO
 - [2026-11-14 14:01 UTC] OpenAI Launches ChatGPT Wallet to Let AI Agents Shop—Without Crypto — Decrypt — (Google News link; search the headline)
 - [2026-11-14 13:03 UTC] Google Gemini vs. ChatGPT Wallet: Who Controls the Future of AI Shopping? — Coinpaper — (Google News link; search the headline) · Brand/product recommendation
-- [2026-11-14 12:32 UTC] OpenAI launches ChatGPT Wallet to let AI agents make purchases — jawlah.co — (Google News link; search the headline)
 - [2026-11-14 11:17 UTC] OpenAI introduces ChatGPT Wallet to enable secure agent-led payments — Indian Television Dot Com — (Google News link; search the headline)
 - [2026-11-14 10:16 UTC] Anthropic Launches Claude Meetings Beta for Team Video Calls — IT Voice Media — (Google News link; search the headline)
 - [2026-11-14 09:52 UTC] Google Launches Gemini 4 Hydrogen, a Fast, Low-Cost Model Built for Coding and AI Agents — IT Voice Media — (Google News link; search the headline)
 - [2026-11-14 08:31 UTC] OpenAI launches ChatGPT Wallet for AI agent-led shopping — Storyboard18 — (Google News link; search the headline) · Brand/product recommendation
+- [2026-11-14 07:33 UTC] Claude Duet now available to all waitlisted US subscribers, three resets for Pro — Pasquale Pillitteri — (Google News link; search the headline)
 - [2026-11-14 00:05 UTC] Stock Market Crash: A ~5x Recovery from $320 Billion at the End of 2022: The Real Reason Meta Released Llama 'Free with Conditions' and the Hegemony of Smart Glasses — note — https://note.com/stefan_smp/n/n1c89a5cd9864?hl=en
 
-### B2B buyer AI / adoption (9)
+### B2B buyer AI / adoption (6)
 - [2026-11-16 05:30 UTC] Companies spending 18 times more to get positive returns from AI than two years ago: Gartner — Moneycontrol.com — https://www.moneycontrol.com/technology/companies-spending-18-times-more-to-get-positive-returns-from-ai-than-two-years-ago-gartner-article-14080805.html · +1 other hits
 - [2026-11-16 03:20 UTC] Calysto Communications and Haas Marketing Partner expand B2B Technology Companies’ visibility across AEO, GEO and SEO — Cyprus Shipping News — (Google News link; search the headline) · GEO/AEO
 - [2026-11-16 00:38 UTC] AI Has A Scaling Problem — Forrester — (Google News link; search the headline)
+- [2026-11-15 14:48 UTC] Agentic AI adoption races ahead of governance readiness, warns Gartner — The Hindu BusinessLine — https://www.thehindubusinessline.com/info-tech/agentic-ai-adoption-races-ahead-of-governance-readiness-warns-gartner/article71707107.ece
 - [2026-11-15 11:36 UTC] VML study finds 38% of enterprise B2B purchases end with no decision — MarketScale — (Google News link; search the headline) · (already listed on an earlier day) · +1 other hits
-- [2026-11-15 10:14 UTC] Sensedia Positioned as a Leader in the 2026 Gartner® Magic Quadrant™ for API Management — The National Law Review — (Google News link; search the headline)
 - [2026-11-15 06:56 UTC] AI Agent Practice Digest No. 2: Don't Abandon RAG. Separate the Reference Paths — note — https://note.com/adam_ai_lab/n/neacc4fdfe262?hl=en · (already listed on an earlier day)
-- [2026-11-15 00:55 UTC] Gartner: AI to Create Net 1.7 Million Jobs by 2030, But One in Five Workers Will Face Job Redesign — BigGo Finance — (Google News link; search the headline)
-- [2026-11-14 20:56 UTC] AGAT Software today announced that it has been named in the 2026 Gartner® Market Overview for AI Usage Control — The National Law Review — (Google News link; search the headline)
-- [2026-11-14 15:31 UTC] Gartner Report: Critical Success Measures to Drive Your Customer Service AI Agent Strategy — Destination CRM — (Google News link; search the headline)
 
 ### Sites with no usable feed (via Google News site: search) (10)
 - [2026-11-16 03:22 UTC] Gartner Unveils the Top Enterprise Risks Set to Redefine Workforces in 2027 — Gartner — (Google News link; search the headline)
