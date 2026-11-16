@@ -1,14 +1,14 @@
-# Paper candidates — 2026-11-15 (IST)
+# Paper candidates — 2026-11-16 (IST)
 
-Generated 2026-11-15 08:23 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
-Totals: 0 new topic matches · 0 other new cs.IR · 68 seen in earlier runs.
+Generated 2026-11-16 01:10 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Totals: 0 new topic matches · 0 other new cs.IR · 49 seen in earlier runs.
 Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
 
 ## New papers matching your topics (0), highest score first
 
 ## Other new cs.IR papers, title only (0)
 
-## Already listed on an earlier day, still inside the look-back window (68)
+## Already listed on an earlier day, still inside the look-back window (49)
 - Faithful in Steps: Improving Generalization and Citation in RAG via Query Decomposition — https://arxiv.org/abs/2611.15538 (score 20)
 - Protocol-Aware Auditing of Domain-Blind Feature Attribution in Network Intrusion Detection — https://arxiv.org/abs/2611.16018 (score 14)
 - Scale-Induced Semantic Shift in Visual Prompt Injection Against VLMs and Web Agents — https://arxiv.org/abs/2611.16744 (score 14)
@@ -17,11 +17,8 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Loyalty Capture: Reporting Relationships and Structural Sycophancy in Frontier AI Models — https://arxiv.org/abs/2611.15475 (score 10)
 - Lost in Delegation: Studying the Effectiveness of Task Orchestration in Generative Search — https://arxiv.org/abs/2611.16526 (score 10)
 - Cited but Unused: Parametric Provenance in Retrieval-Augmented Generation — https://arxiv.org/abs/2611.17161 (score 10)
-- Can AI be a 'Researcher Without Borders'? Auditing Bias in AI-Assisted Social Science Research about China and the US — https://arxiv.org/abs/2611.14288 (score 9)
-- Rational Use of Time for Social Coordination in Humans and AI — https://arxiv.org/abs/2611.14766 (score 9)
 - Differential Backpack Language Models: Sense Inhibition via Signed Contextualization Weights — https://arxiv.org/abs/2611.15642 (score 9)
 - RUMI: A Robotiq-Matched Universal Manipulation Interface for Robot Learning with Augmented Reality and Haptic Feedback — https://arxiv.org/abs/2611.15802 (score 9)
-- Auditing LLM Pseudo-Label Distillation for Review Informativeness at E-Commerce Scale — https://arxiv.org/abs/2611.13797 (score 8)
 - CoLFA: Collaboration-Guided Lightweight Failure Attribution for LLM-Based Multi-Agent Systems — https://arxiv.org/abs/2611.14980 (score 8)
 - MemCredit: From Relevance to Utility for Decision-Time Memory in Long-Horizon Web Agents — https://arxiv.org/abs/2611.15600 (score 8)
 - Wayfinder: Adaptive Resource Routing from Agent Citations — https://arxiv.org/abs/2611.16053 (score 8)
@@ -29,21 +26,13 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - ReliaGuard: Reconstruction-Aware Watermarking for Source Attribution and Blind Edit Localization — https://arxiv.org/abs/2611.16368 (score 8)
 - MobileProbe: Adaptive Security Evaluation of Mobile Agents via Trajectory-Aware Injection — https://arxiv.org/abs/2611.16693 (score 8)
 - Sketching Language Models for Context Attribution — https://arxiv.org/abs/2611.17313 (score 8)
-- What a CAGE 4 Score Measures: An Audit of a Learned Cyber-Defense Benchmark, Its Reference Defenders, and the Tables Built on Them — https://arxiv.org/abs/2611.14068 (score 6)
-- What Entropy-Based View Selection Cannot See: An Audit of Test-Time Adaptation for Vision-Language Models — https://arxiv.org/abs/2611.14686 (score 6)
-- Leaderboard Hacking: Preference-Based Model Evaluations are Vulnerable to Manipulation — https://arxiv.org/abs/2611.14769 (score 6)
-- When Safety Becomes an Attack Surface: Manipulating Abstention in Tool-Using AI Agents — https://arxiv.org/abs/2611.14864 (score 6)
 - Do Large Language Models Show Racial and Sex Bias in Pain Management? A Counterfactual Audit of GPT, Claude, Gemini, Llama, DeepSeek and Qwen — https://arxiv.org/abs/2611.14935 (score 6)
 - Poison-then-Hide: Finetuning-Activated Backdoor Attack on Pretrained Vision Encoders — https://arxiv.org/abs/2611.14970 (score 6)
 - Right Answers, Inconsistent Evidence: Source-Level Counterfactual Auditing of Large Audio-Language Models — https://arxiv.org/abs/2611.15463 (score 6)
 - Temporal Context-Aware Spam Detection Using Transformer-Based NLP Models — https://arxiv.org/abs/2611.16139 (score 6)
 - EgoX: Egocentric Cross-Embodiment Manipulation with Embodiment Dreaming — https://arxiv.org/abs/2611.16728 (score 6)
-- A Code-Level Audit of X — https://arxiv.org/abs/2611.16800 (score 6)
 - SimRec: Learning to Search, Ask, and Recommend from Simulated Interaction — https://arxiv.org/abs/2611.15426 (score 5)
 - HyperPage: Learned Page Layouts for Disk-Resident Graph Vector Indexes — https://arxiv.org/abs/2611.16149 (score 5)
 - When Does a Recommendation Spark Curiosity? Theory, Measurement, and Field Evidence — https://arxiv.org/abs/2611.14938 (score 3)
 - CURATOR: Scalable Fine-grained Evidence Selection for Retrieval-Augmented Generation using Decision Models — https://arxiv.org/abs/2611.16366 (score 2)
-- Controlled Knowledge Engineering for Taxonomy Induction with Tool-Grounded LLM Agents and Runtime-Adaptive Policies — https://arxiv.org/abs/2611.13966 (score 1)
-- Data Quality Challenges in Multimodal Tourism Recommender Systems — https://arxiv.org/abs/2611.13972 (score 1)
-- From Show Programs to Linked Data — https://arxiv.org/abs/2611.14037 (score 1)
 - Calibrated Early Termination with Bounded Optimality Gaps for Constrained Vector Search — https://arxiv.org/abs/2611.16148 (score 1)
