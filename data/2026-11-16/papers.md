@@ -1,7 +1,7 @@
 # Paper candidates — 2026-11-16 (IST)
 
-Generated 2026-11-16 07:22 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
-Totals: 19 new topic matches · 6 other new cs.IR · 46 seen in earlier runs.
+Generated 2026-11-16 08:01 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Totals: 19 new topic matches · 6 other new cs.IR · 45 seen in earlier runs.
 Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
 
 ## New papers matching your topics (19), highest score first
@@ -194,7 +194,7 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - RACE: Ranking-Uncertainty Aware Capacity-Adaptive Customization for Efficient Sequential Recommendation — https://arxiv.org/abs/2611.18244
 - MeReader: An Offline, Privacy-Preserving, Progress-Aware AI Assistant for Narrative eBook Reading — https://arxiv.org/abs/2611.18513
 
-## Already listed on an earlier day, still inside the look-back window (46)
+## Already listed on an earlier day, still inside the look-back window (45)
 - Faithful in Steps: Improving Generalization and Citation in RAG via Query Decomposition — https://arxiv.org/abs/2611.15538 (score 20)
 - Protocol-Aware Auditing of Domain-Blind Feature Attribution in Network Intrusion Detection — https://arxiv.org/abs/2611.16018 (score 14)
 - Scale-Induced Semantic Shift in Visual Prompt Injection Against VLMs and Web Agents — https://arxiv.org/abs/2611.16744 (score 14)
