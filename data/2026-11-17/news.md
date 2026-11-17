@@ -1,6 +1,6 @@
 # News candidates — 2026-11-17 (IST)
 
-Generated 2026-11-17 08:24 UTC. Showing 277 items first seen in the last 18 h or published in the last 30 h; 109 older items from the 3-day window are only in news.json.
+Generated 2026-11-17 08:34 UTC. Showing 277 items first seen in the last 18 h or published in the last 30 h; 108 older items from the 3-day window are only in news.json.
 Each item appears once, in the first section it matches. Dates are as reported by the source ("date unknown" = page with no date).
 
 ## By priority topic
@@ -24,9 +24,9 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-16 05:37 UTC] Rick Orford explains Cloudflare's pay per crawl for AI agents — Rick Orford - Trading Stocks and Options For All on MSN — https://www.msn.com/en-us/news/other/rick-orford-explains-cloudflares-pay-per-crawl-for-ai-agents/vi-AA2gr8r3 · Crawl
 
 ### Ads (23)
+- [2026-11-17 08:21 UTC] OpenAI increases its ChatGPT ads presence in 44 countries through an exclusive reseller partnership with Aleph — Gulf News — (Google News link; search the headline) · (already listed on an earlier day) · Ads
 - [2026-11-17 04:43 UTC] OpenAI brings ChatGPT Ads to 44 high-growth markets through exclusive Aleph partnership — marketech apac — (Google News link; search the headline) · Ads
 - [2026-11-17 04:20 UTC] Sri Lanka among 44 markets to gain local access to ChatGPT ads through Aleph — Hiru News — (Google News link; search the headline) · Ads
-- [2026-11-17 03:17 UTC] OpenAI increases its ChatGPT Ads presence in 44 countries through an exclusive reseller partnership with Aleph — Cyprus Shipping News — (Google News link; search the headline) · (already listed on an earlier day) · Ads
 - [2026-11-16 22:01 UTC] ChatGPT Ads Reached 6,000 Brands and Still Struggle to Convert. The AI Marketing Skills 2027 Teams Need — AICERTs — (Google News link; search the headline) · (already listed on an earlier day) · Ads, Brand/product recommendation
 - [2026-11-16 21:46 UTC] Amazon blocks ZIP code targeting for housing ads in US, Canada, EU and UK — PPC Land — https://ppc.land/amazon-blocks-zip-code-targeting-for-housing-ads-in-us-canada-eu-and-uk/ · Brand/product recommendation, Ads
 - [2026-11-16 21:40 UTC] Baidu ad revenue drops 22% as AI cloud infrastructure sales nearly double — PPC Land — https://ppc.land/baidu-ad-revenue-drops-22-as-ai-cloud-infrastructure-sales-nearly-double/ · GEO/AEO, Ads
@@ -88,6 +88,7 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-15 21:00 UTC] Bloomreach Acquires AthenaHQ To Help Brands Raise Product Visibility And Revenue — Forbes — https://www.forbes.com/sites/sharonedelson/2026/11/16/bloomreach-acquires-athenahq-to-help-brands-raise-product-visibility-and-revenue/ · Brand/product recommendation, GEO/AEO
 
 ### Model & lab launches (news search) (64)
+- [2026-11-17 08:03 UTC] Qwen4-Max vs Grok 4.5: New Model vs Deprecated One — OrcaRouter — (Google News link; search the headline)
 - [2026-11-17 05:31 UTC] Anthropic introduces 10b5-1 plan: regulating employee stock sale mechanism ahead of planned IPO — AIBase — (Google News link; search the headline)
 - [2026-11-17 05:31 UTC] Gemini Notebook Launches Website Generation Feature, Supports Creating Interactive Webpages in One Sentence — AIBase — (Google News link; search the headline)
 - [2026-11-17 05:06 UTC] BlackLine Launches Availability on Anthropic’s Claude Marketplace — Market.us — https://market.us/press-release/blackline-launches-availability-on-anthropics-claude-marketplace/ · +1 other hits
@@ -96,12 +97,14 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-17 03:40 UTC] Alibaba Launches Qwen 4 Max, Tops Chinese AI Agent Rankings — KuCoin — https://www.kucoin.com/news/flash/alibaba-launches-qwen-4-max-leads-chinese-ai-agent-rankings · GEO/AEO · +1 other hits
 - [2026-11-17 03:00 UTC] Google Launches AI-powered Ask Maps in Greece — tovima.com — (Google News link; search the headline)
 - [2026-11-17 02:06 UTC] Alibaba's QwenWork Adds Third-Party Models From Kimi, GLM and DeepSeek — Pandaily — (Google News link; search the headline) · +1 other hits
-- [2026-11-17 00:31 UTC] OpenAI Launches GPT-6 Cyber — note — https://note.com/roku_07/n/n19d1bde20257?hl=en
-- [2026-11-17 00:31 UTC] Why are LLMs given away for free? 8 goals of companies releasing open models, and the story of the steam engine patent — note — https://note.com/right_ixia336/n/need6b112e6c8?hl=en
+- [2026-11-17 00:37 UTC] OpenAI Launches GPT-6 Cyber — note — https://note.com/roku_07/n/n19d1bde20257?hl=en
+- [2026-11-17 00:37 UTC] Why are LLMs given away for free? 8 goals of companies releasing open models, and the story of the steam engine patent — note — https://note.com/right_ixia336/n/need6b112e6c8?hl=en
+- [2026-11-16 23:56 UTC] New OpenAI tool aims to detect child sexual abuse — Mashable — (Google News link; search the headline)
 - [2026-11-16 23:28 UTC] Moonshot, Tencent and Zhipu trim hacking skills from new Chinese AI models — Startup Fortune — https://startupfortune.com/moonshot-tencent-and-zhipu-trim-hacking-skills-from-new-chinese-ai-models/ · GEO/AEO · +1 other hits
 - [2026-11-16 23:25 UTC] Alibaba's Qwen 4 Max Tops Chinese AI Agent Rankings, but Its Weights Stay Locked — BigGo Finance — (Google News link; search the headline)
+- [2026-11-16 22:37 UTC] BlackLine Now Available on Anthropic’s Claude Marketplace — CPA Practice Advisor — (Google News link; search the headline)
 - [2026-11-16 21:32 UTC] Alibaba Takes on Anthropic With New Qwen AI Model — PYMNTS.com — (Google News link; search the headline) · GEO/AEO
-- [2026-11-16 21:08 UTC] Anthropic Launches Claude Sheets. Is Microsoft's Stock in Trouble? — Yahoo Finance — https://www.msn.com/en-us/news/other/anthropic-launches-claude-sheets-is-microsofts-stock-in-trouble/ar-AA2hzHhP · +2 other hits
+- [2026-11-16 21:08 UTC] Anthropic Launches Claude Sheets. Is Microsoft's Stock in Trouble? — Yahoo Finance — https://www.fool.com/investing/2026/11/16/anthropic-launches-claude-sheets-is-microsoft-s-stock-in-trouble/ · +2 other hits
 - [2026-11-16 21:01 UTC] What is Kimi K3.1 Pro? The "Pros and Cons" I Found After Using the Plus Plan for One Week — note — https://note.com/csfive/n/n61bf253e010a?hl=en
 - [2026-11-16 20:52 UTC] Anthropic launches Claude Sheets, taking aim at Microsoft’s spreadsheet turf — Crypto Briefing — (Google News link; search the headline)
 - [2026-11-16 20:32 UTC] Chinese AI firms scale back cyber capabilities amid proposed export ban — Business Standard — https://www.business-standard.com/world-news/chinese-ai-firms-scale-back-cyber-capabilities-amid-proposed-export-ban-126111700190_1.html
@@ -109,25 +112,23 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-16 17:00 UTC] OpenAI releases a new image classifier and ChatGPT warnings to combat CSAM — TechCrunch AI — https://techcrunch.com/2026/11/16/openai-releases-a-new-image-classifier-and-chatgpt-warnings-to-combat-csam/ · +2 other hits
 - [2026-11-16 16:19 UTC] Alibaba releases new flagship AI 'Qwen4-Max'. Cost per task is about 40% of the previous generation, but the internal details remain private — note — https://note.com/ai_sec_note/n/ncd60686da8bf?hl=en · GEO/AEO
 - [2026-11-16 16:07 UTC] Google Wallet Users Gain Gemini Insights; ChatGPT Launches Its Wallet — Digital Transactions — (Google News link; search the headline)
+- [2026-11-16 14:49 UTC] Why tokenomics is healthcare's prescription for effective, efficient AI — Google Cloud — (Google News link; search the headline)
 - [2026-11-16 14:46 UTC] Alibaba's Qwen 4 Max Leads China's AI Agent Race—But You Can't Download It — Decrypt — https://decrypt.co/383395/alibaba-qwen-4-max-leads-china-ai-agent-race-cant-download-it
 - [2026-11-16 14:22 UTC] Anthropic IPO guide: Everything you need to know — CNBC — (Google News link; search the headline) · +1 other hits
 - [2026-11-16 14:02 UTC] SquadStack.ai launches Maya, the world’s first Sales LLM, beating OpenAI, Google and leading open-source models on real sales calls — CXOToday.com — (Google News link; search the headline)
 - [2026-11-16 14:01 UTC] Alibaba's new Qwen AI model poses challenge for Anthropic — Yahoo Finance — https://finance.yahoo.com/video/alibabas-qwen-ai-model-poses-220100168.html · GEO/AEO
 - [2026-11-16 14:00 UTC] Alibaba launches new-generation Qwen AI model with enhanced safety measures — 联合早报 — (Google News link; search the headline) · GEO/AEO
 - [2026-11-16 13:28 UTC] Researcher finds banned Blackwell chip fingerprint in DeepSeek and Kimi — Pasquale Pillitteri — (Google News link; search the headline)
-- [2026-11-16 12:27 UTC] Alibaba challenges OpenAI and Anthropic with Qwen4-Max — Techzine Global — (Google News link; search the headline)
 - [2026-11-16 11:58 UTC] Alibaba Launches Qwen4-Max, a Flagship AI Model With Tighter Safety Controls — Technology Org — (Google News link; search the headline) · GEO/AEO
 - [2026-11-16 11:14 UTC] The first 5 Googlebook laptops are here, with an OS that blends Android and Gemini — Mashable — (Google News link; search the headline)
 - [2026-11-16 11:12 UTC] Hy4 flash vs DeepSeek V4.1 Flash: price, evidence, fit — OrcaRouter — (Google News link; search the headline)
 - [2026-11-16 11:00 UTC] Weekly Recap: BW Mistral sale and Q3 2026 results release — TradingView — (Google News link; search the headline)
 - [2026-11-16 10:54 UTC] Alibaba Launches Qwen4-Max AI Model with 2.4 Trillion Parameters — ForkLog — https://forklog.com/en/alibaba-launches-qwen4-max-ai-model-with-2-4-trillion-parameters/ · GEO/AEO · +1 other hits
-- [2026-11-16 10:33 UTC] Google Connects Gemini to Wallet as OpenAI Launches ChatGPT Wallet: How Both Handle Your Money and Key Differences — Andro-News — (Google News link; search the headline)
 - [2026-11-16 10:29 UTC] What is Qwen4? Alibaba's new flagship AI model, Qwen4-Max, is out, but its weights are not public — Nacionale — (Google News link; search the headline) · GEO/AEO
 - [2026-11-16 10:22 UTC] Anthropic Is More Than a Chatbot. Here’s How the Company Behind Claude Makes Money — Investopedia — https://www.investopedia.com/anthropic-investors-aren-t-just-buying-a-chatbot-how-the-company-behind-claude-makes-money-stock-ipo-ant-12194852
 - [2026-11-16 10:00 UTC] Sage-S2.1-Flash vs DeepSeek V4.1 Flash: one shared table — OrcaRouter — (Google News link; search the headline)
-- [2026-11-16 09:32 UTC] OpenAI launches ChatGPT Wallet so AI agents can shop for you using your own card — TweakTown — (Google News link; search the headline)
 - [2026-11-16 09:18 UTC] Alibaba Launches Qwen4-Max AI Model, Claims Performance Rivaling OpenAI and Anthropic — TechStory — https://techstory.in/alibaba-launches-qwen4-max-ai-model-claims-performance-rivaling-openai-and-anthropic/ · GEO/AEO · +1 other hits
-- [2026-11-16 09:08 UTC] SquadStack.ai launches Maya, claims its Sales LLM outperforms models from OpenAI, Google — The Economic Times — (Google News link; search the headline)
+- [2026-11-16 09:08 UTC] SquadStack.ai launches Maya, claims its Sales LLM outperforms models from OpenAI, Google — The Economic Times — https://www.msn.com/en-in/technology/tech-companies/squadstack-ai-launches-maya-claims-its-sales-llm-outperforms-models-from-openai-google/ar-AA2hw7Ol · GEO/AEO · +1 other hits
 - [2026-11-16 08:53 UTC] Qwen4-Max vs DeepSeek V4.1 Pro: the clause is not a model — OrcaRouter — (Google News link; search the headline)
 - [2026-11-16 08:51 UTC] OpenAI launches ChatGPT Wallet to enable AI agents to make purchases — marketscreener.com — (Google News link; search the headline)
 - [2026-11-16 08:37 UTC] Can Europe's $24B Mistral Beat OpenAI With A Better Strategic Fit? — Forbes — https://www.forbes.com/sites/dileeprao/2026/11/16/can-europes-24b-mistral-beat-openai-with-a-better-strategic-fit/
@@ -142,7 +143,6 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-16 03:56 UTC] Alibaba launches Qwen4-Max model with strict cybersecurity guardrails — South China Morning Post — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-11-16 03:43 UTC] Anthropic launches Claude Meetings for live video calls — IT Brief UK — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-11-16 03:22 UTC] Alibaba Launches Qwen4-Max With Lower API Prices — The Defiant — (Google News link; search the headline) · (already listed on an earlier day)
-- [2026-11-16 03:17 UTC] Google's most powerful model, "Gemini 4 Carbon," is finally released to the public. Explaining the differences from Argon and how to use "thinking depth" based on the official ... — note — https://note.com/ai_easy_docs/n/n8509c30e2f0f?hl=en
 - [2026-11-16 03:12 UTC] Hy4 flash vs DeepSeek V4.1 Flash: Tencent Picked This Fight Itself — orcarouter.ai — https://www.orcarouter.ai/blog/tencent-hy4-flash-vs-deepseek-v4-1-flash
 - [2026-11-16 03:05 UTC] UiPath Launches AI Coding Agent, Integrates Claude Code and Codex to Target Development Automation — BigGo Finance — (Google News link; search the headline)
 - [2026-11-16 01:17 UTC] Qwen4-Max vs Kimi K4: One Shipped This Week, the Other Has Never Shipped at All — orcarouter.ai — https://www.orcarouter.ai/blog/qwen-4-max-vs-kimi-k4
@@ -153,8 +153,9 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-15 16:00 UTC] Claude Fable 5.2: Why Anthropic's Most Expensive Model Can End Up the Cheapest — HackerNoon — https://hackernoon.com/claude-fable-52-why-anthropics-most-expensive-model-can-end-up-the-cheapest
 - [2026-11-15 01:29 UTC] What is Grok Bot? How to use the new feature that lets AI handle your work, its pricing, and how it differs from ChatGPT Work — note — https://note.com/yohaku_hikidashi/n/na76b7ffea501?hl=en
 
-### B2B buyer AI / adoption (21)
+### B2B buyer AI / adoption (22)
 - [2026-11-17 06:24 UTC] Making the B2B Buyer’s Shortlist in the Age of AI: Inside Scoop with Ardath Albee — CustomerThink — (Google News link; search the headline)
+- [2026-11-17 05:29 UTC] Gartner Survey Reveals 27% of Australian Employees Fear AI Will Make Their Skills Obsolete — Technology For You — (Google News link; search the headline) · +1 other hits
 - [2026-11-16 21:07 UTC] An investment manager reports 1.26M Forrester Research (FORR) shares in a passive ownership amendment. — Stock Titan — (Google News link; search the headline)
 - [2026-11-16 18:58 UTC] Activate Advocates By Aligning Personality Profiles To Value Dimensions — Forrester — (Google News link; search the headline)
 - [2026-11-16 17:57 UTC] The Nuisances Of AI Assistants Are Putting Consumer Adoption At Risk — Forrester — (Google News link; search the headline)
@@ -176,11 +177,10 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-16 00:08 UTC] Gartner Says AI Risk is Rising Faster Than AI Value — IT Voice — https://www.itvoice.in/gartner-says-ai-risk-is-rising-faster-than-ai-value
 - [2026-11-15 16:00 UTC] AI Risk is Rising Faster Than AI Value — fintechbiznews — http://www.fintechbiznews.com/fintech-technology/ai-risk-is-rising-faster-than-ai-value
 
-### Sites with no usable feed (via Google News site: search) (27)
+### Sites with no usable feed (via Google News site: search) (26)
 - [2026-11-17 07:53 UTC] Gartner IT Symposium/Xpo 2026 Kochi: Day 2 Highlights — Gartner — (Google News link; search the headline)
 - [2026-11-17 07:13 UTC] Gartner Forecasts India IT Spending to Grow 10.6% in 2027 — Gartner — (Google News link; search the headline)
 - [2026-11-17 04:54 UTC] Gartner IT Symposium/Xpo 2026 Australia: Day 2 Highlights — Gartner — (Google News link; search the headline)
-- [2026-11-17 04:23 UTC] Gartner Survey Reveals 27% of Australian Employees Fear AI Will Make Their Skills Obsolete — Gartner — (Google News link; search the headline)
 - [2026-11-17 03:48 UTC] Teammates work for you — Perplexity — (Google News link; search the headline) · (already listed on an earlier day) · GEO/AEO
 - [2026-11-17 00:22 UTC] Taiwan Semiconductor Manufacturing Company Limited Stock Price: Quote, Forecast, Splits & News (TSM) — Perplexity — (Google News link; search the headline) · GEO/AEO
 - [2026-11-16 22:22 UTC] Sandisk Corporation Stock Price: Quote, Forecast, Splits & News (SNDK) — Perplexity — (Google News link; search the headline) · (already listed on an earlier day) · GEO/AEO

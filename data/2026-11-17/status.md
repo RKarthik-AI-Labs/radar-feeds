@@ -1,6 +1,6 @@
 # Run status — 2026-11-17 (IST)
 
-Started 2026-11-17 08:24:47 UTC, took 454 s.
+Started 2026-11-17 08:34:15 UTC, took 245 s.
 Sources OK: 141 · failed: 0
 
 ## OK
@@ -9,8 +9,8 @@ Sources OK: 141 · failed: 0
 |---|---|---|---|
 | arXiv cs.IR | papers | 47 | 400 fetched, 47 with v1 inside window |
 | arXiv cs.CL | papers | 279 | 500 fetched, 279 with v1 inside window |
-| arXiv cs.AI | papers | 629 | 1000 fetched, 629 with v1 inside window |
-| arXiv cs.HC | papers | 78 | 400 fetched, 78 with v1 inside window |
+| arXiv cs.AI | papers | 628 | 1000 fetched, 628 with v1 inside window |
+| arXiv cs.HC | papers | 77 | 400 fetched, 77 with v1 inside window |
 | arXiv cs.CY | papers | 60 | 300 fetched, 60 with v1 inside window |
 | arXiv cs.SI | papers | 15 | 300 fetched, 15 with v1 inside window |
 | arXiv cs.CR | papers | 125 | 500 fetched, 125 with v1 inside window |
@@ -24,7 +24,7 @@ Sources OK: 141 · failed: 0
 | arXiv search abs:"product recommendation" AND abs:"large language model" | papers | 0 | 25 fetched, 0 with v1 inside window |
 | Hugging Face daily papers 2026-11-16 | papers | 40 |  |
 | Hugging Face daily papers 2026-11-17 | papers | 19 |  |
-| arXiv full text | papers | 14 | 14 saved; 16 of 30 checked not stored because of their license |
+| arXiv full text | papers | 14 | 14 saved; 16 of 16 checked not stored because of their license |
 | OpenAI News | feed | 1400 |  |
 | Anthropic News | page | 23 |  |
 | Google DeepMind Blog | feed | 100 |  |
@@ -77,7 +77,7 @@ Sources OK: 141 · failed: 0
 | Bing News: "AI crawler" OR "AI crawlers" | news search | 0 | 12 off-topic hits dropped |
 | Google News: "robots.txt" AI | news search | 2 | 2 off-topic hits dropped |
 | Bing News: "robots.txt" AI | news search | 3 | 9 off-topic hits dropped |
-| Google News: "llms.txt" | news search | 0 | 19 off-topic hits dropped |
+| Google News: "llms.txt" | news search | 0 | 18 off-topic hits dropped |
 | Bing News: "llms.txt" | news search | 1 | 10 off-topic hits dropped |
 | Google News: GPTBot OR ClaudeBot OR PerplexityBot OR "OAI-SearchBot" | news search | 0 |  |
 | Bing News: GPTBot OR ClaudeBot OR PerplexityBot OR "OAI-SearchBot" | news search | 0 | 12 off-topic hits dropped |
@@ -93,14 +93,14 @@ Sources OK: 141 · failed: 0
 | Bing News: Perplexity "sponsored" | news search | 0 | 9 off-topic hits dropped |
 | Google News: "Copilot ads" OR "ads in Copilot" | news search | 0 |  |
 | Bing News: "Copilot ads" OR "ads in Copilot" | news search | 0 | 11 off-topic hits dropped |
-| Google News: "AI Overviews" | news search | 5 | 24 off-topic hits dropped |
+| Google News: "AI Overviews" | news search | 5 | 23 off-topic hits dropped |
 | Bing News: "AI Overviews" | news search | 9 | 1 off-topic hits dropped |
-| Google News: "AI Mode" Google | news search | 9 | 13 off-topic hits dropped |
-| Bing News: "AI Mode" Google | news search | 10 |  |
-| Google News: Google "core update" | news search | 1 | 9 off-topic hits dropped |
+| Google News: "AI Mode" Google | news search | 9 | 12 off-topic hits dropped |
+| Bing News: "AI Mode" Google | news search | 10 | 1 off-topic hits dropped |
+| Google News: Google "core update" | news search | 1 | 8 off-topic hits dropped |
 | Bing News: Google "core update" | news search | 7 | 3 off-topic hits dropped |
 | Google News: "Search Console" new | news search | 2 | 8 off-topic hits dropped |
-| Bing News: "Search Console" new | news search | 6 | 5 off-topic hits dropped |
+| Bing News: "Search Console" new | news search | 6 | 6 off-topic hits dropped |
 | Google News: "ChatGPT search" | news search | 0 | 8 off-topic hits dropped |
 | Bing News: "ChatGPT search" | news search | 1 | 3 off-topic hits dropped |
 | Google News: Perplexity search launch | news search | 8 | 1 off-topic hits dropped |
@@ -109,7 +109,7 @@ Sources OK: 141 · failed: 0
 | Bing News: "generative engine optimization" OR "answer engine optimization" | news search | 2 | 9 off-topic hits dropped |
 | Google News: "AI visibility" tool | news search | 5 | 22 off-topic hits dropped |
 | Bing News: "AI visibility" tool | news search | 8 | 4 off-topic hits dropped |
-| Google News: "LLM visibility" OR "AI search visibility" | news search | 3 | 4 off-topic hits dropped |
+| Google News: "LLM visibility" OR "AI search visibility" | news search | 3 | 5 off-topic hits dropped |
 | Bing News: "LLM visibility" OR "AI search visibility" | news search | 1 | 11 off-topic hits dropped |
 | Google News: OpenAI (launches OR releases OR introduces) model | news search | 10 |  |
 | Bing News: OpenAI (launches OR releases OR introduces) model | news search | 10 | 1 off-topic hits dropped |
@@ -119,7 +119,7 @@ Sources OK: 141 · failed: 0
 | Bing News: Google Gemini (launches OR releases OR introduces) model | news search | 10 |  |
 | Google News: Meta Llama (release OR launches) model | news search | 0 | 6 off-topic hits dropped |
 | Bing News: Meta Llama (release OR launches) model | news search | 5 | 7 off-topic hits dropped |
-| Google News: xAI Grok (release OR launches) | news search | 2 | 6 off-topic hits dropped |
+| Google News: xAI Grok (release OR launches) | news search | 3 | 6 off-topic hits dropped |
 | Bing News: xAI Grok (release OR launches) | news search | 10 |  |
 | Google News: Mistral AI (release OR launches) model | news search | 1 | 7 off-topic hits dropped |
 | Bing News: Mistral AI (release OR launches) model | news search | 3 | 8 off-topic hits dropped |
@@ -133,7 +133,7 @@ Sources OK: 141 · failed: 0
 | Bing News: B2B buyers AI ChatGPT vendors | news search | 6 | 4 off-topic hits dropped |
 | Google News: B2B buying AI assistants survey | news search | 2 | 2 off-topic hits dropped |
 | Bing News: B2B buying AI assistants survey | news search | 2 | 6 off-topic hits dropped |
-| Google News: Gartner AI agents survey | news search | 5 | 3 off-topic hits dropped |
+| Google News: Gartner AI agents survey | news search | 6 | 3 off-topic hits dropped |
 | Bing News: Gartner AI agents survey | news search | 10 | 2 off-topic hits dropped |
 | Google News: Forrester AI B2B | news search | 4 |  |
 | Bing News: Forrester AI B2B | news search | 4 | 6 off-topic hits dropped |
