@@ -1,7 +1,7 @@
 # Paper candidates — 2026-11-17 (IST)
 
-Generated 2026-11-17 09:16 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
-Totals: 34 new topic matches · 20 other new cs.IR · 40 seen in earlier runs.
+Generated 2026-11-17 09:41 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Totals: 34 new topic matches · 20 other new cs.IR · 39 seen in earlier runs.
 Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
 
 ## New papers matching your topics (34), highest score first
@@ -352,11 +352,10 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Leveraging Binary Hashing for Scalable Index Assignment in Semantic Communications — https://arxiv.org/abs/2611.21260
 - ExRel: Learning Directed Reuse Relevance between Rich-Text K-12 Question Images with Executable Relation Contracts — https://arxiv.org/abs/2611.21461
 
-## Already listed on an earlier day, still inside the look-back window (40)
+## Already listed on an earlier day, still inside the look-back window (39)
 - Scale-Induced Semantic Shift in Visual Prompt Injection Against VLMs and Web Agents — https://arxiv.org/abs/2611.16744 (score 14)
 - From Delegation to Coordination: Learning Efficient Multi-Agent Deep Research — https://arxiv.org/abs/2611.17041 (score 14)
 - Beyond Bot Labels: Retrospective Consequence-Grounded Ranking of Attributed Cache Harm in E-Commerce Logs — https://arxiv.org/abs/2611.18027 (score 12)
-- Lost in Delegation: Studying the Effectiveness of Task Orchestration in Generative Search — https://arxiv.org/abs/2611.16526 (score 10)
 - Cited but Unused: Parametric Provenance in Retrieval-Augmented Generation — https://arxiv.org/abs/2611.17161 (score 10)
 - Can You Trust Your Finance Agent? Drift, Diagnosis and Auditable Intervention on One Shipped Financial Research Agent — https://arxiv.org/abs/2611.17939 (score 10)
 - AI-Voyager: A Public-Interest System for Human-AI Civic Reasoning to Contest and Shape the Rules That Govern AI — https://arxiv.org/abs/2611.17564 (score 9)
