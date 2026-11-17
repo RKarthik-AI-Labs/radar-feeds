@@ -1,0 +1,804 @@
+VoiceGuard: An Audio-Native LLM-VLA Pipeline for Wheelchair-Mounted Assistive Manipulation
+https://arxiv.org/abs/2611.19984
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+VoiceGuard: An Audio-Native LLM–VLA Pipeline for Wheelchair-Mounted Assistive Manipulation
+
+CCS: 
+Human-centered computing Accessibility systems and tools
+CCS: 
+Human-centered computing Interaction techniques
+
+Bang Xiao
+
+Affiliation: 
+NYU Shanghai
+, 
+Shanghai
+, 
+China
+
+email: 
+bx2181@nyu.edu
+
+ and 
+
+Rodolfo Cossovich
+
+Affiliation: 
+Carleton University
+, 
+Ottawa
+, 
+Canada
+
+email: 
+rodolfocossovich@cmail.carleton.ca
+
+Figure 1. 
+Pipeline overview. After the wake phrase, the Router turns the request into a Packet, the ToolDispatcher checks it, and SmolVLA and the ArmController carry it out. At any moment, “stop” at the Local Gate skips this path and halts the arm.
+Pipeline diagram with six components in a row, left to right, grouped as local, cloud, and local. Local Gate (on device): a wake-phrase detector that opens the audio stream and an always-on stop/pause detector, above a photo of a person at the wheelchair setup. Router (cloud): server-side voice activity detection for the start and end of speech, an audio-native LLM, and a function call with a fixed schema. Packet: six fields, namely function, target, destination, module, checks, and transcript. ToolDispatcher (local): packet validation with five ordered checks, leading to four outcomes: Accepted, Clarify, Rejected, and Logged. Accepted packets go to SmolVLA, a VLA policy that takes the instruction and camera images and outputs action chunks, and then to the ArmController, which sends LeRobot move, grasp, release, and home commands to the SO-101 arm and has a stop command. An execution-state arrow returns from the ArmController to the ToolDispatcher. A red arrow, labeled as the stop/pause fast path, runs from the stop/pause detector over the top of the figure directly to the arm's stop, never passing through the cloud or the ToolDispatcher. Below, a Packet example panel shows function deliver, target cup, destination mouth pose, module smolvla cup mouth pose, checks target visible and controller ready, and the transcript "bring the cup up so I can drink". A second panel lists the ToolDispatcher checks in order: (1) schema, function and fields match the schema; (2) arguments, target and destination present and unambiguous; (3) module, a trained module exists and the task is authorized; (4) state, controller ready, target visible, and no interruption; (5) limits on step size, speed, and reach.
+
+Abstract.
+
+Wheelchair-mounted robotic arms can help people with limited upper-limb mobility reach and manipulate everyday objects, but operating them typically requires stepwise joystick control and frequent mode switching. Natural-language interfaces could let users express task-level goals, yet they must handle ambiguous requests, distinguish commands from nearby conversation, and support interruption. We present VoiceGuard, a voice interface that separates spoken intent from robot execution through structured request validation and a local stop mechanism. On-device detectors handle the wake phrase and stop commands, an audio-native large language model (LLM) routes each request into a structured function packet, a rule-based ToolDispatcher accepts, rejects, or clarifies the packet, and a SmolVLA vision-language-action (VLA) policy executes accepted tasks on a low-cost SO-101 arm. Preliminary tests showed that the system correctly handled 55 of 60 voice commands, including ambiguous and non-directed utterances, completed 16 of 20 deliveries, and stopped the arm on all 20 stop commands with a median latency of 210 ms. We demonstrate the feasibility of combining flexible spoken input with constrained task execution and local interruption for wheelchair-mounted assistive manipulation.
+
+Keywords: 
+assistive robotics, wheelchair-mounted robotic arm, voice interaction, large language models, vision-language-action models
+
+1. 
+Introduction
+
+Wheelchair-mounted robotic arms help people with limited upper-limb mobility reach and grasp nearby objects 
+(
+Rahman et al., 2025
+)
+. While this technology has the potential to reduce the caregiving time needed for daily tasks, their user interfaces are typically driven through a joystick one axis and one mode at a time 
+(
+Maheu et al., 2011
+)
+. Even performing a simple task like picking up a cup requires the users to steer the gripper along each axis, switch modes to rotate the wrist, and switch again to close the gripper.
+
+With the introduction of Large Language Models (LLMs) and Vision-Language-Action (VLA) Models, task-level control makes robotic arms control more feasible 
+(
+Liu et al., 2026
+; 
+Shukor et al., 2025
+)
+.
+In assistive use, however, the arm moves toward the user’s body while the user often cannot physically intervene 
+(
+Vasic and Billard, 2013
+; 
+Adesiji et al., 2026
+)
+, and speech from caregivers reaches the microphone as easily as the user’s.
+A voice interface for this setting therefore needs a checkable step between language and motion, and a way to stop the arm at any moment.
+
+We present VoiceGuard, a voice-controlled system for a wheelchair-mounted robotic arm that validates every request before execution. This paper makes three contributions: (1) an interface architecture design that separates spoken intent from arm motion through an on-device stop path and a validated, logged packet; (2) a working prototype integrating the proposed architecture on a low-cost SO-101 arm mounted on a wheelchair; and (3) preliminary tests of routing, delivery, and stopping performance.
+
+2. 
+Related Work
+
+Research with people with physical disabilities
+has shown that retrieving everyday objects ranks among their highest priorities in their daily life activities 
+(
+Anderson, 2004
+; 
+Choi et al., 2009
+; 
+Hutmacher et al., 2025
+)
+. Commercial
+wheelchair-mounted arms
+address their interface using a joystick 
+(
+Kinova, 
+; 
+Rahman et al., 2025
+)
+.
+
+Intelligent Interfaces for assistive arms: 
+
+Existing interfaces reduce the burden of joystick control through shared autonomy, target selection, and speech. Shared-autonomy systems automate mode switching 
+(
+Herlant et al., 2016
+)
+ or infer the user’s goal 
+(
+Jain and Argall, 2019
+)
+, but keep the user on the joystick. Selection-based systems let users pick a target by eye gaze or pointing 
+(
+Abayasiri et al., 2024
+; 
+Choi and others, 2009
+; 
+Jain and Kemp, 2010
+; 
+Muraleedharan et al., 2024
+)
+. LLM-based speech interfaces for feeding 
+(
+Yuan et al., 2024
+)
+ and joint wheelchair and arm control 
+(
+Liu et al., 2026
+)
+ accept free-form requests. Our system differs by placing validation and stopping outside the model.
+
+Language and VLA models for robot action: 
+
+Technically, our work builds on LLM task planning and VLA policies. SayCan, Code as Policies, and ProgPrompt use LLMs to select or program robot tasks 
+(
+Ahn et al., 2023
+; 
+Liang et al., 2023
+; 
+Singh et al., 2023
+)
+, and VLA models such as RT-2, OpenVLA, and SmolVLA map an instruction and camera images to actions 
+(
+Brohan et al., 2023
+; 
+Kim et al., 2024
+; 
+Shukor et al., 2025
+)
+. These approaches were mostly evaluated in tabletop settings, where model output is executed directly. We adapt them for assistive use by restricting the LLM to a fixed function schema and giving each VLA policy only the task instruction it was trained on.
+
+Safe motion near the user: 
+
+Robots that work next to people rely on low-level protections such as collision detection from joint torque or motor current and limits on speed, force, and power 
+(
+Haddadin et al., 2017
+; 
+Villani et al., 2018
+)
+. These protections respond to contact or to exceeded limits, and do not capture what the user wants the arm to do. Our work adds a software layer above them: the ToolDispatcher bounds each task before the arm moves, and the local stop lets the user halt motion by voice at any point.
+
+3. 
+System Design
+
+We designed the system around four goals: to let users phrase task-level requests in their own words (DG1); to check, reject, or clarify every request before the arm moves, and log it (DG2); to keep stopping independent of network or model failures (DG3); and to send audio off the device only after the wake phrase, so that nearby conversations never reach the cloud model (DG4). We realize these goals with six components (Fig. 
+1
+).
+The local gate listens on the device for the wake phrase and for stop commands. After the wake phrase, the audio-native router turns the spoken request into a structured function packet. The ToolDispatcher checks the packet and decides whether it may run. If it passes, the SmolVLA policy generates arm actions, and the ArmController sends them to the SO-101 arm.
+
+3.1. 
+Audio-Native Routing
+
+The local gate runs two detectors on the device: a wake-phrase detector, which we set to “Hey Rudi,” that opens a streaming session to an audio-native LLM (DG4), and a stop and pause detector that stays always on. The LLM, Gemini 3.5 Flash-Lite in our prototype, returns a function call over a fixed schema of supported functions (DG1); any audio-native model with function calling can replace it. We route raw audio instead of a transcript, which removes a separate speech-to-text stage and its errors on short commands.
+
+The function call becomes a packet with six fields (Fig. 
+1
+, top right). For “bring the cup up so I can drink,” the router fills 
+target=cup
+ and 
+destination=mouth_pose
+, names the action module, lists the checks the packet must pass, and records a 
+transcript
+ so that each decision can be audited (DG2). “Bring that” yields a clarification request, and a remark addressed to a caregiver yields no packet.
+
+3.2. 
+Validation
+
+The ToolDispatcher applies five checks in order: (1) the function and fields match the schema; (2) the target and destination are present and unambiguous; (3) a trained module exists and the task is authorized; (4) the controller is ready, the target is visible, and no interruption is active; and (5) step size, speed, and reach stay within configured limits. A packet that passes all checks is accepted; a missing or ambiguous argument returns a clarification request, and any other failure is rejected without motion. Every packet and outcome is logged.
+
+3.3. 
+Execution and Stop
+
+An accepted packet is converted into the fixed task instruction its module was trained on, so the policy never receives open-ended speech. Each module is a SmolVLA policy 
+(
+Shukor et al., 2025
+)
+ fine-tuned for one target and destination pair. The policy takes the instruction together with wrist and agent camera images and outputs action chunks, which the ArmController converts into LeRobot commands (move, grasp, release, home) for the SO-101 arm. Stop and pause go from the local gate straight to the ArmController, so the arm halts without a network round trip or a model call (DG3).
+
+4. 
+Prototype and Interaction
+
+The prototype mounts an SO-101 arm beside a wheelchair tray, with a wrist camera and a fixed agent camera (Fig. 
+2
+). The local gate runs openWakeWord on a laptop, and the router uses the Gemini Live API with Gemini 3.5 Flash-Lite. Each SmolVLA module was fine-tuned on 50 teleoperated demonstrations and runs on an RTX 4070 GPU through LeRobot. A delivery takes one utterance (Fig. 
+2
+). “Stop” or “pause” halts the arm at any point, and “bring that” leads to a spoken prompt to name the object.
+
+Figure 2. 
+A delivery on the physical prototype, from the ready pose (a) to the requested pose (e).
+Five photographs in a row, labeled (a) to (e), showing one delivery at a wheelchair tray. A seated person, face blurred, sits beside an SO-101 robotic arm mounted next to a blue tray. (a) Standby pose, awaiting task input: labels mark the wrist camera, the agent camera, and the arm's safe ready pose. (b) Voice input, command received: a speech bubble shows the request "bring me the water". (c) VLA perception, scene grounding: the policy grounds the task in the current camera view. (d) VLA planning, action generation: the policy generates an executable motion plan and the arm moves toward the cup on the tray. (e) Target reached, task completed: the arm brings the cup to the requested position near the person.
+
+5. 
+Preliminary Evaluation
+
+We tested the prototype’s three core functions (Table 
+1
+). For command routing, the first author said 10 phrasings for each of four supported requests plus 20 ambiguous or non-directed utterances; a command counted as correct when it produced the expected packet, clarification request, or no packet. Deliveries used the setup in Fig. 
+2
+. For stopping, we used the word “stop” while the arm approached the target, and we measured latency from the end of the utterance to the arm’s last joint motion. Most failed deliveries were missed grasps, and delivery success varied with lighting and background, as reported for other VLA policies 
+(
+Fei et al., 2025
+; 
+Pumacay et al., 2024
+)
+.
+
+Table 1. 
+Preliminary tests on the physical prototype.
+
+Function
+
+Trials
+
+Result
+
+Command routing
+
+60
+
+55/60 correct packet, clarification, or no packet
+
+Physical execution
+
+20
+
+16/20 deliveries completed
+
+Stop mechanism
+
+20
+
+20/20 halted; median latency 210 ms
+
+6. 
+Conclusion and Future Work
+
+We presented VoiceGuard, a voice interface for a wheelchair-mounted robotic arm that turns spoken requests into validated packets and keeps stop on the device; in our prototype, it halted the arm on every stop command. More broadly, by treating language-model output as a proposal to check before execution, such systems can help assistive robotics move from step-by-step teleoperation toward task-level requests the user still controls.
+
+Our tests involved lab members running trained routines on a fixed tray setup. A study with wheelchair users is now under ethics review and will examine how they phrase requests and respond to clarification prompts. We also plan to run routing on the device, removing the need for a network connection, and to improve the robustness of the VLA modules to the lighting and background changes that lowered delivery success in our tests.
+
+References
+
+Abayasiri 
+et al.
+ (2024)
+
+R. A. M. Abayasiri, A. G. B. P. Jayasekara, R. A. R. C. Gopura, and K. Kiguchi
+
+Intelligent object manipulation for a wheelchair-mounted robotic arm
+.
+
+Journal of Robotics
+ 
+2024
+, 
+pp. 1516737
+.
+
+External Links: 
+Document
+
+Cited by: 
+§2
+.
+
+Adesiji 
+et al.
+ (2026)
+
+A. D. Adesiji, S. E. Ibitoye, R. M. Mahamood, O. A. Olayemi, P. O. Omoniyi, T. Jen, and E. T. Akinlabi
+
+Safety considerations in deployment of robotic systems – a systematic review
+.
+
+Journal of Field Robotics
+ 
+43
+ (
+1
+), 
+pp. 5–33
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+.
+
+Ahn 
+et al.
+ (2023)
+
+M. Ahn, A. Brohan, N. Brown, Y. Chebotar, O. Cortes, B. David, C. Finn, C. Fu, K. Gopalakrishnan, K. Hausman, A. Herzog, D. Ho, J. Hsu, J. Ibarz, B. Ichter, A. Irpan, E. Jang, R. J. Ruano, K. Jeffrey, S. Jesmonth, N. J. Joshi, R. Julian, D. Kalashnikov, Y. Kuang, K. Lee, S. Levine, Y. Lu, L. Luu, C. Parada, P. Pastor, J. Quiambao, K. Rao, J. Rettinghouse, D. Reyes, P. Sermanet, N. Sievers, C. Tan, A. Toshev, V. Vanhoucke, F. Xia, T. Xiao, P. Xu, S. Xu, M. Yan, and A. Zeng
+
+Do as I can, not as I say: grounding language in robotic affordances
+.
+
+In 
+Proceedings of the Conference on Robot Learning (CoRL)
+,
+
+Cited by: 
+§2
+.
+
+Anderson (2004)
+
+K. D. Anderson
+
+Targeting recovery: priorities of the spinal cord-injured population
+.
+
+Journal of Neurotrauma
+ 
+21
+ (
+10
+), 
+pp. 1371–1383
+.
+
+External Links: 
+Document
+
+Cited by: 
+§2
+.
+
+Brohan 
+et al.
+ (2023)
+
+A. Brohan, N. Brown, J. Carbajal, Y. Chebotar, X. Chen, K. Choromanski, T. Ding, D. Driess, A. Dubey, C. Finn, P. Florence, C. Fu, M. G. Arenas, K. Gopalakrishnan, K. Han, K. Hausman, A. Herzog, J. Hsu, B. Ichter, A. Irpan, N. Joshi, R. Julian, D. Kalashnikov, Y. Kuang, I. Leal, L. Lee, T. E. Lee, S. Levine, Y. Lu, H. Michalewski, I. Mordatch, K. Pertsch, K. Rao, K. Reymann, M. Ryoo, G. Salazar, P. Sanketi, P. Sermanet, J. Singh, A. Singh, R. Soricut, H. Tran, V. Vanhoucke, Q. Vuong, A. Wahid, S. Welker, P. Wohlhart, J. Wu, F. Xia, T. Xiao, P. Xu, S. Xu, T. Yu, and B. Zitkovich
+
+RT-2: vision-language-action models transfer web knowledge to robotic control
+.
+
+In 
+Proceedings of the Conference on Robot Learning (CoRL)
+,
+
+Cited by: 
+§2
+.
+
+Choi 
+et al.
+ (2009)
+
+Y. S. Choi, T. Deyle, T. Chen, J. D. Glass, and C. C. Kemp
+
+A list of household objects for robotic retrieval prioritized by people with ALS
+.
+
+In 
+2009 IEEE International Conference on Rehabilitation Robotics
+,
+
+pp. 510–517
+.
+
+External Links: 
+Document
+
+Cited by: 
+§2
+.
+
+Choi 
+et al.
+ (2009)
+
+Y. S. Choi 
+et al.
+
+Hand it over or set it down: a user study of object delivery with an assistive mobile manipulator
+.
+
+In 
+IEEE International Conference on Robotics and Automation (ICRA)
+,
+
+Cited by: 
+§2
+.
+
+Fei 
+et al.
+ (2025)
+
+S. Fei, S. Wang, J. Shi, Z. Dai, J. Cai, P. Qian, L. Ji, X. He, S. Zhang, Z. Fei, J. Fu, J. Gong, and X. Qiu
+
+LIBERO-Plus: in-depth robustness analysis of vision-language-action models
+.
+
+arXiv preprint arXiv:2510.13626
+.
+
+Cited by: 
+§5
+.
+
+Haddadin 
+et al.
+ (2017)
+
+S. Haddadin, A. De Luca, and A. Albu-Schäffer
+
+Robot collisions: a survey on detection, isolation, and identification
+.
+
+IEEE Transactions on Robotics
+ 
+33
+ (
+6
+), 
+pp. 1292–1312
+.
+
+External Links: 
+Document
+
+Cited by: 
+§2
+.
+
+Herlant 
+et al.
+ (2016)
+
+L. V. Herlant, R. M. Holladay, and S. S. Srinivasa
+
+Assistive teleoperation of robot arms via automatic time-optimal mode switching
+.
+
+In 
+ACM/IEEE International Conference on Human-Robot Interaction (HRI)
+,
+
+pp. 35–42
+.
+
+Cited by: 
+§2
+.
+
+Hutmacher 
+et al.
+ (2025)
+
+N. Hutmacher, A. Bellwald, R. Rätz, G. Gruener, P. Eichelberger, N. Lutz, V. Steiner, and A. M. Raab
+
+Identification of needs for an assistive robotic arm in individuals with tetraplegia: a mixed-methods approach
+.
+
+Journal of NeuroEngineering and Rehabilitation
+ 
+22
+, 
+pp. 113
+.
+
+External Links: 
+Document
+
+Cited by: 
+§2
+.
+
+Jain and Kemp (2010)
+
+A. Jain and C. C. Kemp
+
+EL-E: an assistive mobile manipulator that autonomously fetches objects from flat surfaces
+.
+
+Autonomous Robots
+ 
+28
+ (
+1
+), 
+pp. 45–64
+.
+
+Cited by: 
+§2
+.
+
+Jain and Argall (2019)
+
+S. Jain and B. Argall
+
+Probabilistic human intent recognition for shared autonomy in assistive robotics
+.
+
+ACM Transactions on Human-Robot Interaction
+ 
+9
+ (
+1
+).
+
+Cited by: 
+§2
+.
+
+Kim 
+et al.
+ (2024)
+
+M. J. Kim, K. Pertsch, S. Karamcheti, T. Xiao, A. Balakrishna, S. Nair, R. Rafailov, E. Foster, G. Lam, P. Sanketi, Q. Vuong, T. Kollar, B. Burchfiel, R. Tedrake, D. Sadigh, S. Levine, P. Liang, and C. Finn
+
+OpenVLA: an open-source vision-language-action model
+.
+
+External Links: 
+2406.09246
+
+Cited by: 
+§2
+.
+
+[15]
+
+Kinova
+
+Jaco robotic arm
+.
+
+Note: 
+https://assistive.kinovarobotics.com/product/jaco-robotic-arm
+Accessed: 2026-06-22
+
+Cited by: 
+§2
+.
+
+Liang 
+et al.
+ (2023)
+
+J. Liang, W. Huang, F. Xia, P. Xu, K. Hausman, B. Ichter, P. Florence, and A. Zeng
+
+Code as policies: language model programs for embodied control
+.
+
+In 
+IEEE International Conference on Robotics and Automation (ICRA)
+,
+
+pp. 9493–9500
+.
+
+Cited by: 
+§2
+.
+
+Liu 
+et al.
+ (2026)
+
+G. Liu, N. Hawkins, B. Madden, T. Sultan, and M. Babaiasl
+
+A dialogue-based human-robot interaction protocol for wheelchair and robotic arm integrated control
+.
+
+External Links: 
+2602.06243
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+Maheu 
+et al.
+ (2011)
+
+V. Maheu, P. S. Archambault, J. Frappier, and F. Routhier
+
+Evaluation of the JACO robotic arm: clinico-economic study for powered wheelchair users with upper-extremity disabilities
+.
+
+In 
+2011 IEEE International Conference on Rehabilitation Robotics
+,
+
+pp. 1–5
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+.
+
+Muraleedharan 
+et al.
+ (2024)
+
+A. Muraleedharan, A. J H, H. Vishwakarma, K. Kashyap, and P. Biswas
+
+Eye-gaze-enabled assistive robotic stamp printing system for individuals with severe speech and motor impairment
+.
+
+In 
+Companion Proceedings of the 29th International Conference on Intelligent User Interfaces (IUI Companion ’24)
+,
+
+New York, NY, USA
+.
+
+External Links: 
+Document
+
+Cited by: 
+§2
+.
+
+Pumacay 
+et al.
+ (2024)
+
+W. Pumacay, I. Singh, J. Duan, R. Krishna, J. Thomason, and D. Fox
+
+THE COLOSSEUM: a benchmark for evaluating generalization for robotic manipulation
+.
+
+arXiv preprint arXiv:2402.08191
+.
+
+Cited by: 
+§5
+.
+
+Rahman 
+et al.
+ (2025)
+
+M. M. Rahman, N. Banik, M. S. H. Sunny, M. I. I. Zarif, D. Bedolla-Martinez, K. Schultz, S. I. Ahamed, and M. H. Rahman
+
+Wheelchair-mounted robotic arms: a systematic review of technical design and activities of daily living outcomes
+.
+
+Disability and Rehabilitation: Assistive Technology
+ 
+20
+ (
+7
+), 
+pp. 2532–2556
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+Shukor 
+et al.
+ (2025)
+
+M. Shukor, D. Aubakirova, F. Capuano, P. Kooijmans, S. Palma, A. Zouitine, M. Aractingi, C. Pascal, M. Russi, A. Marafioti, S. Alibert, M. Cord, T. Wolf, and R. Cadene
+
+SmolVLA: a vision-language-action model for affordable and efficient robotics
+.
+
+External Links: 
+2506.01844
+
+Cited by: 
+§1
+,
+
+§2
+,
+
+§3.3
+.
+
+Singh 
+et al.
+ (2023)
+
+I. Singh, V. Blukis, A. Mousavian, A. Goyal, D. Xu, J. Tremblay, D. Fox, J. Thomason, and A. Garg
+
+ProgPrompt: generating situated robot task plans using large language models
+.
+
+In 
+IEEE International Conference on Robotics and Automation (ICRA)
+,
+
+pp. 11523–11530
+.
+
+Cited by: 
+§2
+.
+
+Vasic and Billard (2013)
+
+M. Vasic and A. Billard
+
+Safety issues in human-robot interactions
+.
+
+In 
+2013 IEEE International Conference on Robotics and Automation (ICRA)
+,
+
+pp. 197–204
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+.
+
+Villani 
+et al.
+ (2018)
+
+V. Villani, F. Pini, F. Leali, and C. Secchi
+
+Survey on human–robot collaboration in industrial settings: safety, intuitive interfaces and applications
+.
+
+Mechatronics
+ 
+55
+, 
+pp. 248–266
+.
+
+External Links: 
+Document
+
+Cited by: 
+§2
+.
+
+Yuan 
+et al.
+ (2024)
+
+J. Yuan, J. Gupta, A. Padmanabha, Z. Karachiwalla, C. Majidi, H. Admoni, and Z. Erickson
+
+Towards an LLM-based speech interface for robot-assisted feeding
+.
+
+In 
+Adjunct Proceedings of the 37th Annual ACM Symposium on User Interface Software and Technology (UIST Adjunct)
+,
+
+New York, NY, USA
+, 
+pp. 1–4
+.
+
+External Links: 
+Document
+
+Cited by: 
+§2
+.
+

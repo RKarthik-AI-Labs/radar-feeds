@@ -1,0 +1,3669 @@
+EDITORS Know Your Style! Editing LoRA Subspaces for Stylistic Attribution and Imitation
+https://arxiv.org/abs/2611.20846
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+EDITORS Know Your Style! 
+Edit
+ing L
+oR
+A 
+S
+ubspaces for Stylistic Attribution and Imitation
+
+Zixuan Wang
+
+†
+†
+thanks: 
+These authors contributed equally.
+
+Affiliation: 
+CNRS@CREATE, 1 Create Way, #08-01 Create Tower, Singapore 138602
+
+Email: 
+e0492448@u.nus.edu
+
+  
+
+Gregory Kang Ruey Lau
+1
+1
+footnotemark: 
+
+1
+
+Affiliation: 
+CNRS@CREATE, 1 Create Way, #08-01 Create Tower, Singapore 138602
+
+Email: 
+gregorylau@u.nus.edu
+
+  
+
+Xiao Tian
+
+Affiliation: 
+Agency for Science, Technology and Research (A*STAR), Singapore
+
+Email: 
+xiao.tian@u.nus.edu
+
+  
+
+Jue Fan
+
+Affiliation: 
+Agency for Science, Technology and Research (A*STAR), Singapore
+
+Email: 
+jue.fan@u.nus.edu
+
+  
+
+Caroline Chaux
+
+Affiliation: 
+Aix Marseille Univ, CNRS, I2M, Marseille, France
+
+Email: 
+caroline.chaux@cnrs.fr
+
+  
+
+Bryan Kian Hsiang Low
+
+Affiliation: 
+School of Computing, National University of Singapore, Singapore
+
+Email: 
+dcslkh@nus.edu.sg
+
+Abstract
+
+Disentangling writing style from semantic content is a fundamental challenge in literary text modeling. Style-content entanglement causes models to rely on semantic content for 
+authorship attribution
+ (AA) tasks and memorize author-specific content for 
+style imitation
+ (SI) tasks. We propose EDITORS (
+Edit
+ing L
+oR
+A 
+S
+ubspaces), a 
+diagnose-then-deflate
+ framework that adapts pretrained large language models and prioritizes stylistic features, making it effective for both AA and SI tasks. EDITORS first trains a diagnostic LoRA adapter using style-neutral statements derived from the training corpus to identify a content-oriented subspace. It then trains the final style adapter under activation-space deflation that projects input activations away from the identified content-oriented directions. We empirically demonstrate that EDITORS is effective. On three AA benchmarks spanning literature, social media, and news, EDITORS achieves state-of-the-art accuracy, outperforming the strongest existing baseline by up to 29%. On SI, EDITORS generates stylistically faithful and diverse passages, outperforming baselines in achieving style similarity while adhering to content specifications. Our code is available at 
+https://github.com/zixuan-n/editors
+.
+
+1 
+Introduction
+
+The disentanglement of style and content has been extensively studied in images 
+[
+24
+, 
+31
+, 
+43
+, 
+46
+, 
+51
+]
+, yet its generalization to literary text remains a complex challenge: style and content are deeply entangled in natural languages. The disentanglement is crucial in the era of large language models (LLMs) due to two important real-world applications: 
+authorship attribution
+ (AA), which identifies the most likely author of a given text, and 
+style imitation
+ (SI), which generates text in the style of a target author and preserves user-provided content.
+However, in AA, current methods either (a) conflate style with content 
+[
+12
+, 
+27
+, 
+26
+, 
+54
+]
+ due to their over-reliance on content and fail when an author writes across topics or when attribution must generalize across domains, or (b) aggressively remove useful content information 
+[
+7
+, 
+22
+, 
+25
+, 
+45
+, 
+57
+]
+. Likewise, in SI, existing methods (a) risk memorizing training content and provide limited support for content customization 
+[
+36
+, 
+39
+, 
+50
+]
+, or (b) forcefully avoid content with expensive data pairs and only perform narrow paragraph-to-paragraph rewriting 
+[
+18
+, 
+37
+, 
+52
+, 
+59
+]
+.
+These approaches reveal a persistent trade-off: retaining content can improve task performance but risks shortcut learning and memorization, while ignoring content can discard information that remains useful for attribution and generation.
+
+To tackle the challenge of balancing style and content in both AA and SI, this paper presents 
+EDITORS
+ (
+Edit
+ing L
+oR
+A 
+S
+ubspaces), a framework that uses LoRA adapters to diagnose and suppress content-oriented directions during supervised fine-tuning (SFT)
+1
+1
+
+1
+
+            
+            
+            
+            
+            
+            
+            
+          EDITORS can be applied to any SFT method besides LoRA (
+Section
+ 
+C.1
+), but we focus on LoRA in this paper because it is efficient and simplifies our computation. See 
+Appendix
+ 
+D
+ for more explanations and demonstration on non-LoRA methods.
+ to 
+encourage stylistic features while retaining useful content information
+. Our framework is motivated by the intuition that style and content are partially, but not fully, separated in the model’s activation space. By diagnosing the content-oriented subspace and projecting away from it during style learning, we can train a style adapter which is encouraged to rely on stylistic features (
+Section
+ 
+3.1
+). Based on this, EDITORS adopts a 
+diagnose-then-deflate
+ strategy:
+We first 
+diagnose important content-oriented directions
+ using a set of 
+style-neutral statements
+ (
+Section
+ 
+3.2
+).
+We then 
+prioritize learning stylistic features
+ by suppressing these selected content-oriented directions through 
+activation-space 
+deflation
+ (i.e., projecting training data away from them) (
+Section
+ 
+3.3
+).
+Our framework EDITORS can be applied to both AA and SI tasks with slight adjustments (
+Section
+ 
+3.4
+).
+Our specific contributions include:
+
+•
+
+We propose EDITORS, a diagnose-then-deflate framework that prioritizes style learning by suppressing selected content directions in activation space (
+Section
+ 
+3
+);
+
+•
+
+On AA, EDITORS consistently improves over baselines across various domains (
+Section
+ 
+4.1
+);
+
+•
+
+On SI, EDITORS achieves 
+higher style similarity, lower memorization of training content and better preservation of user-provided content
+, demonstrating that the learned author-specific stylistic features transfer beyond direct copying (
+Section
+ 
+4.2
+).
+
+2 
+Problem Formulation
+
+Let 
+ be a finite set of authors, 
+ be the
+space of semantic content specifications, and 
+ be the space of text passages. We consider the setting where each author
+
+ is associated with two distributions: a 
+content
+
+distribution 
+ over 
+ that captures what author 
+ tends
+to write about, and an expression distribution 
+
+over text passages 
+ that captures how the author expresses a given content
+specification 
+ as text, which we associate with author 
+style
+.
+The text passage distribution over 
+ that we can observe for author 
+ is then the marginal
+
+.
+Text samples 
+ from 
+ entangle two author-specific signals: the author’s
+typical content 
+ and style of realizing content 
+. In this work, given a training dataset 
+ covering all authors 
+, our goal is to develop a framework to address such entanglement and prioritize stylistic features when fine-tuning LLMs, which is essential to tasks including AA and SI.
+
+Authorship attribution (AA).
+
+In the closed-set AA task, given a passage 
+ and a
+candidate author set 
+, our goal is to predict the most likely author
+
+. We aim to do so by training an attribution model based on training data 
+, so that it can perform well on held-out passages 
+ too.
+Ideally, the model should identify which author-specific marginal distribution 
+ most likely produced the passage, while avoiding brittle reliance on content shortcuts from 
+. This distinction matters because different authors may write about similar content, and the same author may write about different content across topics,
+genres, or domains unseen in training.
+
+Style imitation (SI).
+
+In the general SI task, the model is given a target author 
+ and the goal is to generate a passage 
+ that approximates author 
+’s marginal distribution 
+. A useful variant is 
+content-controlled SI
+,
+where the model is additionally given a content specification 
+. The goal is to generate a passage
+
+that approximates author 
+’s expression distribution 
+, or essentially how the author would likely express the requested content 
+. The ideal generative model should (1) be stylistically faithful to the target author 
+, (2) accurately convey the specified content 
+, and (3) avoid just copying from its training data 
+.
+
+Note that both tasks require learning from samples 
+, where content 
+ and style 
+ are observed entangled in text passage form. For AA, content information from 
+ can be
+useful but misleading: some content patterns may help identify an
+author easily during training, but over-reliance on 
+ can lead to poor
+generalization under topic or domain shift (e.g., when an author writes about a different topic). For SI, the issue may
+be more problematic: preserving author-specific content patterns from 
+ can cause
+the model to reproduce training
+passages or ignore the user-provided content specification 
+ in content-controlled SI. 
+Hence, our method must rely less on content information from 
+ while retaining the author style information from 
+.
+ As 
+ and 
+ are latent, our method does not estimate them directly but instead adopts a geometric intervention that reduces content-oriented components to achieve our objective (
+Section
+ 
+3.1
+).
+
+2.1 
+Related Works
+
+Authorship attribution (AA).
+
+Existing AA methods typically either:
+
+(a)
+ rely primarily on content information, and 
+(b)
+ attempt to reduce content information.
+Works in 
+(a)
+ (e.g., BertAA 
+[
+12
+]
+, STAR 
+[
+27
+]
+, PART 
+[
+26
+]
+ and TRACE 
+[
+54
+]
+) treat each text as a single representation, often cause content signals to dominate and may exploit semantic content shortcuts.
+Recent LLM-based AA methods use in-context learning 
+[
+23
+]
+ where reference texts for all candidate authors are provided in prompts, but face challenges in scaling due to context-window limits and high inference cost, and do not generalize well across domains.
+In contrast, works in 
+(b)
+ explicitly emphasize style and attempt to reduce content dependence.
+
+Stylometry
+[
+16
+]
+ directly extracts numeric stylistic features to train classification models, but its performance declines quickly with number of authors. Other works include those training content-independent style embeddings by contrastive learning 
+[
+57
+, 
+45
+]
+ and separate style and content encoders by minimizing their mutual information 
+[
+57
+, 
+45
+]
+.
+However, these methods tend to remove semantic information and yield low performance in real AA tasks. Recent works such as Waterfall 
+[
+35
+]
+ proposed an active AA approach where text are paraphrased with LLMs to embed author-specific watermarks. Such watermarks are robust and can be used to track LLM data provenance 
+[
+20
+, 
+41
+]
+, but require active data processing that may impact the author’s original style. EDITOR presents a complementary approach for attribution without edits to the original text.
+
+Style imitation (SI).
+ Similarly, existing SI methods typically either: 
+(a)
+ do not attempt to separate content and style, and 
+(b)
+ focus on learning style by controlling or removing content. For 
+(a)
+, 
+[
+50
+, 
+39
+, 
+36
+]
+ directly fine-tune a language model on a target author corpus but risk memorizing training passages. Prompt-based methods 
+[
+10
+, 
+56
+]
+ are tuning-free and flexible, but their stylistic control is limited by context-window size and prompt sensitivity 
+[
+4
+, 
+34
+]
+, tending to capture surface markers rather than implicit writing habits. For 
+(b)
+,
+early methods 
+[
+28
+]
+ use true parallel source-target pairs which are rare and expensive to construct for real authors. Recent methods such as ASTRAPOP 
+[
+37
+]
+ relax this constraint by constructing pseudo-parallel data by neutral paraphrasing or back-translation, then training models against style, content, and fluency rewards. However, most RL-based methods operate on coarse attributes such as sentiment, genre or formality 
+[
+42
+, 
+19
+, 
+38
+]
+ rather than individual author style. Methods such as StyleLM 
+[
+52
+]
+, StoryTrans 
+[
+59
+]
+ and ParChoice 
+[
+18
+]
+ rewrite arbitrary input text in a target style through denoising autoencoders, combinatorial paraphrasing etc. However, they are typically evaluated on a few authors with highly distinctive voices and only operate on paragraph-level rewriting rather than long-passage generation from compact content specification. While not applied to SI, past works have studied parameter-space subspace projection for model editing and LoRA fusion of separate tasks 
+[
+55
+, 
+13
+, 
+6
+]
+. Unlike these works, EDITORS applies activation-space deflation that allows it to disentangle style and content within text (see 
+Section
+ 
+C.2
+ for details).
+
+Unlike existing works, our method EDITORS learn style while optionally retaining content information with our diagnose-then-deflate approach, significantly improving AA and SI performance over baselines. It does not require specially curated data, scales to larger author sets, and can generate long stylized passages from compact content specifications.
+
+3 
+The EDITORS Framework
+
+Our training framework EDITORS adapts a pretrained LLM to perform AA and SI and prioritizes stylistic features. 
+Fig.
+ 
+1
+ gives an overview of the EDITORS framework and 
+Algorithm
+ 
+1
+ gives the pseudocode. EDITORS follows a 
+diagnose-then-deflate
+ strategy, where we first train a diagnostic LoRA adapter on style-neutral statements and use it to identify activation directions that are predictive for semantic content. We then deflate the input activations of training data away from these directions and train a new LoRA adapter (i.e., 
+style adapter
+). During inference, the style adapter introduces author-specific style features, while the frozen base model provides
+necessary content support.
+
+3.1 
+Geometric Interventions in LLM Representations
+
+As described in 
+Section
+ 
+2
+, each author 
+ induces a marginal passage distribution 
+ by combining a content distribution 
+ with an expression
+distribution 
+. Ideally, for robust results, AA should avoid relying only on differences in 
+, and (content-controlled) SI should approximate 
+ for user-specified content 
+. However, in practice 
+, 
+ and the latent content 
+ are not directly observed, and cannot be clearly identified/disentangled from observed text 
+.
+
+Instead of estimating the distributions directly, EDITORS makes use of pretrained LLMs’ representation space, with its rich text semantic and stylistic features, as an operational domain to intervene on style-content entanglement. Specifically, let 
+ denote the input activation produced by the frozen pretrained model at layer 
+ (e.g., for passage 
+). Samples from the marginal distribution 
+ induce a corresponding distribution over activations 
+. As discussed in 
+Section
+ 
+2
+, variation in text and consequently the activations can arise from both the latent content 
+ and the author’s expression pattern 
+. A standard adapter trained on 
+ may therefore learn directions in activation space that are predictive of the author only due to content patterns from 
+, making it less robust to any test-time distribution shift of 
+.
+
+Our key intuition is that the dominant content-oriented variation in 
+ can be captured by a low-dimensional linear subspace. Deflating the input activations 
+ away from this subspace will then give a tractable way to focus training of a style adapter on modeling an author’s stylistic features. In 
+Section
+ 
+3.2
+, we explain how we can practically identify the diagnostic content-oriented subspace; in 
+Section
+ 
+3.3
+, we describe how we can use the identified subspace to prioritize style learning.
+
+Figure 1: 
+Overview of the EDITORS pipeline. 
+
+3.2 
+Diagnosing Content-Oriented Directions
+
+Intuitively, the content-oriented directions will dominate in an adapter trained using content-heavy and style-neutral passages. Such passages can be effectively obtained in practice by prompting an LLM to rewrite each training passage 
+ into pieces of style-neutral statements
+2
+2
+
+2
+
+              
+              
+              
+              
+              
+              
+              
+            In contrast, it is infeasible to prompt an external LLM to generate content-controlled passages with different author styles (required by existing works) due to poor SI performance.
+.
+Using this technique (more details in 
+Section
+ 
+G.1
+), we first construct an auxiliary style-neutral training corpus 
+, which contains pieces of style-neutral statements that preserve entities, events,
+claims, and other semantic information while suppressing author-specific expression patterns. These statements 
+ serve as an
+observable proxy for latent content 
+, and we make a local geometric assumption
+that
+the directions most useful for a content-oriented auxiliary task (
+) provide an approximate basis for content variation in the original task (
+). We empirically verify this assumption in 
+Section
+ 
+I.5
+.
+
+Thus, to identify the content-oriented directions, we start by training a 
+content adapter
+ 
+ from scratch using the standard next-token prediction objective on
+
+. For a selected LoRA module 
+ at layer 
+, the
+content-adapted computation is
+
+where 
+ is the frozen base model. 
+The content adapter is not used in the final
+model, but is used only as a diagnostic object.
+ As it is trained for a
+content-oriented task, the input directions to which it is most oriented provide an estimate of content-oriented directions in the pretrained representation space.
+
+To extract the content-oriented directions, we then apply singular value decomposition (SVD) 
+[
+1
+]
+ to the content adapter weights
+
+for every LoRA module 
+. Since 
+ acts on the input activation
+
+, its right singular vectors 
+ describe directions in the
+input activation space. We select the top-
+ of them as the
+
+principal content input basis
+ :
+
+(1)
+
+The dimension 
+ controls the strength of the intervention: larger 
+
+removes more diagnosed content-oriented directions, while smaller 
+ retains
+more content-oriented directions. Note that this parameter is distinct
+from the LoRA rank 
+, which controls adapter capacity.
+
+3.3 
+Deflated Style Learning
+
+Given the content-oriented basis 
+, we define the deflation operator
+3
+3
+
+3
+
+              
+              
+              
+              
+              
+              
+              
+            More background on deflation can be found in 
+Section
+ 
+C.2
+.
+
+which projects input activation 
+ to the orthogonal complement of 
+. The deflated input is 
+.
+By construction, 
+ and hence the component of the activation lying in the diagnosed content-oriented subspace will be absent from the module input.
+Note that EDITORS only removes the top-
+ directions identified by the content adapter 
+ at selected modules, instead of all semantic information.
+
+We then train the final 
+style adapter
+ 
+ on the
+original author-labeled corpus using the deflated input activation 
+ at each layer 
+ (also used during inference):
+
+(2)
+
+Eq.
+ 
+2
+ applies deflation to the full module input rather than only to the LoRA branch: neither the frozen base weights nor the trainable style update receives the component from the selected content input basis. Note however that the intervention is local and partial: it is applied only to selected attention modules and only removes a 
+-dimensional subspace, leaving the remaining activation space and other layers available for linguistic processing.
+
+Activation- vs. parameter-space intervention.
+ EDITORS intervenes in the input activation space rather than directly constraining the style LoRA weights. Note that the diagnosed basis 
+ is in the input activation space where content-oriented variation was analyzed, and not the parameter space of the style adapter unlike past works
+[
+55
+, 
+13
+, 
+6
+]
+. In contrast, a constraint such as
+
+ would only impose a parameter-space relation between two matrices and not ensure that the style adapter avoids content-correlated directions in the actual input
+distribution. Deflating activations constrains the signal available during
+training, forcing the style adapter to learn from the residual
+representation from the start rather than have the style adapter first learn an entangled mixture of content and style before trying to reduce content influence post hoc. We empirically justify this design choice in 
+Section
+ 
+I.7
+.
+
+3.4 
+Task-Specific Training
+
+EDITORS can be applied to both AA and SI tasks. The main 
+diagnose-then-deflate
+ procedure above is shared by AA and SI: In both settings, the same deflation operators 
+ are used during training. The deployed EDITORS model consists of the frozen base model 
+, the deflation operators 
+, and only the final style adapter 
+. The difference lies only in what supervision the model receives and how the final style adapter is initialized. We will describe the details below.
+
+Authorship attribution (AA).
+ The adapter is trained with a classification objective: Given a passage
+
+, the model is trained to output its author label 
+. During inference for AA, the model is used to predict an author label from an input passage.
+
+To initialize the style adapter, we first perform domain/task warm-up by training a separate LoRA 
+ on the original training corpus 
+ for a few steps. We then initialize the style adapter from this domain-adapted adapter:
+
+and then train it on 
+ using the deflated forward pass in 
+Section
+ 
+3.3
+. Specifically, the domain warm-up initialization preserves useful task and corpus information (see ablation in 
+Sections
+ 
+I.1
+ and 
+9
+) which aligns with broader findings in training data mixture optimization and domain adaption
+[
+9
+, 
+58
+]
+,
+while the deflated training reduces access to the dominant
+content-oriented directions.
+
+Style imitation (SI).
+ The adapter is trained on 
+ with an author-conditioned language modeling objective: given the target author
+
+, the model is trained to generate the corresponding passage 
+. During inference for SI, the model receives a target author 
+ and a content specification 
+ (for content-controlled SI), and generates a passage conditioned on them.
+
+For SI, we instead initialize the style adapter from zero:
+
+There is no domain warm-up initialization like AA because an adapter first trained on the target authors’ original passages may encode author-specific topics, entities, or narrative patterns. Such content patterns can increase memorization risk and weaken control by the user-provided content specification 
+, as we show empirically in 
+Section
+ 
+4.2
+. For readers’ convenience, we summarize all objects that appear in the EDITORS pipeline in 
+Table
+ 
+1
+.
+
+Table 1: 
+
+Lifecycles of objects in EDITORS. The content adapter
+
+ is discarded after extracting the operator
+
+. The deployed model uses the frozen base
+
+, 
+, and the style adapter 
+.
+
+Object
+
+Trained on
+
+Purpose
+
+Used at inference?
+
+Initialization
+
+Pretraining
+
+Frozen base model
+
+Yes
+
+–
+
+ (optional)
+
+Domain/task warm-up
+
+No
+
+Style-neutral 
+
+Diagnose content directions
+
+No
+
+Derived from 
+
+Deflate content directions
+
+Yes
+
+SVD of 
+
+ (under deflation)
+
+Final style adapter
+
+Yes
+
+Task-dependent
+
+4 
+Experiments
+
+We evaluate EDITORS on AA (Sec. 
+4.1
+) and
+SI (Sec. 
+4.2
+). For main LoRA-based experiments, we target the attention query, key, and value projections with rank 
+, scaling factor 
+, and dropout 
+. Full implementation settings, more details and results are in 
+Appendix
+ 
+E
+-
+I
+.
+
+4.1 
+Authorship Attribution (AA)
+
+Datasets & evaluation metric.
+
+We evaluate on three closed-set AA benchmarks spanning distinct domains: 
+CCAT10/50
+ 
+[
+40
+]
+, 
+Blogs10/50
+ 
+[
+53
+]
+, and 
+Gutenberg30
+ 
+[
+32
+]
+, covering news, blog, and literary domains. Further details of datasets are provided in App. 
+E
+. We use classification accuracy (i.e., 
+) as the evaluation metric (more in App. 
+H.1
+).
+
+Base LLMs & baselines.
+
+Our main backbone is Llama-3.1-8B-Instruct 
+[
+17
+]
+. To evaluate whether EDITORS generalizes across architectures, we also test on BERT 
+[
+11
+]
+ (without LoRA), Phi-4-mini-Instruct 
+[
+2
+]
+, Mistral-7B-Instruct-v0.3 
+[
+29
+]
+, Gemma2-9B-it 
+[
+14
+]
+, Qwen3.5-9B 
+[
+48
+]
+ and Gemma-4-E4B-it 
+[
+15
+]
+. We compare against representative baselines from three families: 
+SFT methods
+ (
+BertAA
+ 
+[
+12
+]
+ and 
+STAR
+ 
+[
+27
+]
+), 
+pure style embedding methods
+ (
+StyleEmbedding
+ 
+[
+57
+]
+ and 
+StyleDistance
+ 
+[
+45
+]
+), and 
+prompt-based LLM attribution
+ (
+GPT-4, GPT-5 nano, Qwen3.5-27B 
+[
+48
+]
+ + LIP
+ 
+[
+23
+]
+). We also include a plain SFT baseline without deflation to isolate the contribution of EDITORS. Implementation details and inference prompts are provided in App. 
+F.1
+ and  
+G.2
+.
+
+Main results.
+
+We first compare EDITORS on five benchmarks with AA baselines, along with an additional naïve baseline that we introduced – an LLM finetuned on the benchmark’s respective training data (Llama-3.1-8B SFT).
+Each of the benchmarks evaluates methods on different types of challenges associated with AA. CCAT50 is a topic-controlled news benchmark where authors often discuss overlapping corporate events and entities, making coarse topical cues less reliable.
+Blogs50 is noisy and naturally imbalanced, testing robustness to uneven author coverage and informal writing. Gutenberg30 is a long-form literary benchmark where AA depends on discourse-level style cues that are difficult for short-context encoder baselines to capture.
+
+As seen in 
+Table
+ 
+2
+, EDITORS achieves the best accuracy on all five benchmarks, outperforming all baselines by a significant margin. Note that our newly introduced SFT baseline (Llama SFT) surprisingly also performs very competitively against baselines, indicating that several of the baseline methods may have specialized approaches that might have disadvantaged them in achieving generalizable performance, unlike EDITORS which consistently outperforms across benchmarks. EDITORS’s gains are especially large on more challenging 50-author settings, increasing accuracy from 
+ to 
+ on CCAT50 and from 
+ to 
+ on Blogs50. As the candidate author set grows, authors are more likely to share overlapping topics. EDITORS’s approach of deflating content-oriented directions may have supported its strong performance in such realistic scenarios with more overlapping content and the model must rely more heavily on style cues.
+
+The inconsistent performance of baselines may be indicative of challenges around their method’s generalizability. For example, BertAA is competitive on shorter news and blog texts but performs poorly on Gutenberg30, likely because long literary passages exceed the effective input constraints of BERT-style encoders. STAR, which is pretrained on large datasets, does not consistently scale across domains and larger candidate sets. StyleEmbedding and StyleDistance underperform broadly, suggesting that aggressively removing content loses useful author-discriminative information. GPT-4 + LIP is limited to small candidate sets because reference-passage prompting does not scale to 30-50 authors. While our SFT baseline (Llama SFT) is surprisingly robust, it faces challenges in generalizing beyond its training dataset when required to handle larger candidate sets.
+
+Table 2: 
+AA accuracy (%). 
+Bold
+ and 
+underline
+ mark the best and second-best values. Some results for GPT-4 + LIP are marked with – because providing necessary reference passages for 
+ authors exceeds its context window.
+
+Method
+
+CCAT10
+
+CCAT50
+
+Blogs10
+
+Blogs50
+
+Gutenberg30
+
+BertAA
+
+84.00
+
+65.72
+
+65.40
+
+59.69
+
+42.76
+
+STAR
+
+91.75
+
+67.33
+
+73.40
+
+65.43
+
+53.30
+
+StyleEmbedding
+
+18.20
+
+4.28
+
+40.67
+
+15.60
+
+5.00
+
+StyleDistance
+
+20.60
+
+8.00
+
+52.33
+
+15.40
+
+11.67
+
+GPT-4 + LIP
+
+57.80
+
+–
+
+68.00
+
+–
+
+–
+
+GPT-5-nano + LIP
+
+57.00
+
+–
+
+35.18
+
+–
+
+–
+
+Qwen3.5-27B + LIP
+
+57.00
+
+–
+
+38.16
+
+–
+
+–
+
+Llama-3.1-8B SFT
+
+86.00
+
+67.33
+
+93.67
+
+65.33
+
+75.67
+
+EDITORS
+
+96.33
+
+80.40
+
+95.67
+
+83.80
+
+82.33
+
+Table 3: 
+AA accuracy (%) across backbone architectures. 
+ denotes the average absolute improvement over plain SFT across the five benchmarks; 
+ is the standard deviation across benchmarks. For BERT, the baseline is BertAA; for LLM backbones, the baseline is plain LoRA SFT.
+
+Backbone
+
+Setting
+
+CCAT10
+
+CCAT50
+
+Blogs10
+
+Blogs50
+
+Gutenberg30
+
+BERT
+
+BertAA
+
+84.00
+
+65.72
+
+65.40
+
+59.69
+
+42.76
+
+–
+
+–
+
+EDITORS
+
+90.75
+
+77.47
+
+92.68
+
+83.39
+
+43.57
+
++14.1
+
+10.0
+
+Phi-4-mini-3.8B
+
+SFT
+
+93.70
+
+69.07
+
+91.25
+
+71.60
+
+48.03
+
+–
+
+–
+
+EDITORS
+
+95.70
+
+70.40
+
+92.08
+
+77.74
+
+53.37
+
++3.1
+
+2.2
+
+Mistral-7B
+
+SFT
+
+93.00
+
+80.53
+
+94.17
+
+75.79
+
+72.37
+
+–
+
+–
+
+EDITORS
+
+97.25
+
+86.80
+
+95.77
+
+85.65
+
+73.00
+
++4.5
+
+3.3
+
+Llama-3.1-8B
+
+SFT
+
+86.00
+
+67.33
+
+93.67
+
+65.33
+
+75.67
+
+–
+
+–
+
+EDITORS
+
+96.33
+
+80.40
+
+95.67
+
+83.80
+
+82.33
+
++10.1
+
+6.3
+
+Gemma2-9B
+
+SFT
+
+85.30
+
+53.87
+
+64.52
+
+50.40
+
+61.53
+
+–
+
+–
+
+EDITORS
+
+96.30
+
+74.53
+
+93.27
+
+81.61
+
+65.10
+
++19.0
+
+10.5
+
+Qwen3.5-9B
+
+SFT
+
+52.50
+
+74.40
+
+93.37
+
+73.36
+
+54.93
+
+–
+
+–
+
+EDITORS
+
+92.50
+
+75.00
+
+95.18
+
+83.80
+
+57.83
+
++11.2
+
+14.8
+
+Gemma-4-E4B-it
+
+SFT
+
+84.33
+
+60.80
+
+67.27
+
+52.26
+
+46.33
+
+–
+
+–
+
+EDITORS
+
+92.75
+
+74.33
+
+94.05
+
+72.13
+
+47.90
+
++14.0
+
+8.8
+
+Generalization across base LLMs.
+
+Table
+ 
+3
+ shows that EDITORS consistently improves over our SFT baseline across all backbone LLMs and benchmarks (including the encoder-only BERT backbone). Gemma2-9B benefits most with a gain of 
+, though with higher variance across datasets (
+), suggesting the degree of style-content entanglement in Gemma2 varies substantially by domain. Phi4-mini-3.8B, as the most compact LLM base model, shows the smallest and most uniform gain (
+, 
+). In general for LLM base models, EDITORS’ performance gain over SFT seems to be correlated with model size, though the gains vary fairly widely. This might suggest LLM backbones having different extent of entangled content and style features in their internal representations, and compact models have less redundant capacity for deflation to exploit. Despite these differences, EDITORS achieves consistent gains, suggesting its generalizability.
+
+4.2 
+Style Imitation (SI)
+
+We consider two settings from 
+Section
+ 
+2
+: (1) SI, where the model only conditions on the target author 
+, and (2) content-controlled SI, where it must also follow a user-provided content specification 
+. Detailed prompts are provided in App. 
+G.3
+.
+
+Dataset & evaluation metric.
+
+We focus on 
+Gutenberg30
+ for SI since it exhibits the clearest authorial voice and richest narrative structure among the benchmarks. Specific LoRA configuration can be found in App. 
+F.2
+. We evaluate SI along the following axes:
+
+•
+
+Attribution-based style similarity.
+ We use an ensemble of AA classifiers, including the best performing existing AA methods BertAA and STAR, along with Gemma2-, Llama-, Phi4-, and Mistral-based EDITORS classifiers (from 
+Section
+ 
+4.1
+), to measure whether each generation can be attributed to the intended author. We found that while each AA classifier might give different absolute scores, all provide consistent rankings when evaluating SI methods (e.g., see 
+Fig.
+ 
+2
+).
+
+•
+
+Diversity.
+ We report BLEU-4 
+[
+44
+, 
+50
+]
+ against the target author’s training corpus, lower BLEU indicates less training-set copying. We also report Self-BLEU, which measures content overlap among same-author generations to assess whether a model repeatedly generates similar author-specific content (lower is better).
+
+•
+
+Preservation of user-provided content
+ (for (2) content-controlled SI)
+.
+ We use an ensemble of GPT-4o mini and Qwen3.5-27B to measure content consistency between generated text 
+ and user-provided content specification 
+.
+
+Figure 2: 
+All AA evaluators give consistent judgements.
+
+App. 
+H.2
+ provides the detailed metrics, calculation protocols, threshold settings and judge prompts.
+
+Base LLMs & baselines.
+
+We evaluate 
+EDITORS
+ with Llama-3.1-8B-Instruct as the base model. We compare against four representative SI baselines: 
+GPT-4 prompting
+ 
+[
+56
+]
+ for tuning-free prompting imitation, 
+StyleTunedLM
+ 
+[
+39
+]
+ for direct author-corpus fine-tuning, 
+ASTRAPOP
+ 
+[
+37
+]
+ for RL/preference-based style transfer and 
+StoryTrans
+ 
+[
+59
+]
+ for non-parallel rewriting. Since ASTRAPOP and StoryTrans require an explicit content input, they are only evaluated in (2) content-controlled SI.
+
+Table 4: 
+SI results on Gutenberg30.
+Higher is better for style similarity and lower is better for BLEU and Self-BLEU.
+
+Model
+
+Style Similarity
+
+BLEU
+
+Self-BLEU
+
+GPT-4
+
+23.93
+8.55
+
+4.42
+1.20
+
+27.35
+3.49
+
+StyleTunedLM
+
+53.39
+9.43
+
+40.38
+5.42
+
+37.48
+5.60
+
+EDITORS
+
+56.50
+8.74
+
+27.09
+4.76
+
+24.35
+4.90
+
+Table 5: 
+Content-controlled SI results on Gutenberg30. 
+Content preservation
+ refers to how much the generated passages adhere to the user-provided content specifications 
+. Higher is better for style similarity and content preservation, while lower BLEU and Self-BLEU indicate less overlap with the training corpus and greater output diversity, respectively.
+
+Model
+
+Style Similarity
+
+Content Preservation
+
+BLEU
+
+Self-BLEU
+
+GPT-4
+
+10.82
+0.47
+
+99.88
+0.06
+
+16.54
+0.12
+
+11.03
+0.13
+
+StoryTrans
+
+13.44
+0.52
+
+0.68
+1.12
+
+4.96
+0.95
+
+14.36
+0.38
+
+ASTRAPOP
+
+46.03
+0.56
+
+3.73
+0.49
+
+27.08
+0.30
+
+14.85
+0.50
+
+StyleTunedLM
+
+44.34
+0.97
+
+59.63
+1.34
+
+47.18
+0.16
+
+20.54
+0.39
+
+EDITORS
+
+55.08
+0.56
+
+68.16
+1.27
+
+27.42
+0.64
+
+13.14
+0.55
+
+SI.
+ Tab. 
+4
+ shows the results for (1) SI without explicit content constraints. EDITORS achieves the highest style similarity while substantially reducing BLEU and Self-BLEU compared with StyleTunedLM, showing a better balance between style recognizability, memorization risk, and generation diversity.
+
+Content-controlled SI.
+
+Tab. 
+5
+ further evaluates whether models can imitate author styles well while preserving a user-provided content specification 
+ in (2) content-controlled SI.
+EDITORS achieves the highest style similarity (consistent ranking across all the six evaluators, see 
+Fig.
+ 
+2
+) while GPT-4 and StoryTrans fail this primary goal. EDITORS preserves user-provided content specification 
+ (while ASTRAPOP does not), copies less from training corpus (while StyleTunedLM has a larger overlap with it/BLEU), while also achieving better diversity (lower Self-BLEU).
+More comprehensive results from independent style evaluators, additional content preservation assessments, character-level overlap audits, and SI evaluation on Blogs10 are provided in 
+Section
+ 
+I.4
+ (see 
+Tables
+ 
+12
+, 
+13
+, 
+14
+ and 
+16
+). All results demonstrates EDITORS’ effectiveness in achieving balance among style similarity, content preservation and memorization of training content.
+
+Qualitative analysis.
+
+Fig.
+ 
+3
+ compares generations under the same target author and content specification. EDITORS preserves the survival content condition, receiving a content score of 
+, while all six AA evaluators recognize its generation as Hamlin Garland. The passage expresses Garland-like social observation and plain first-person narration within a survival setting. StyleTunedLM repeatedly uses “we were together,” and only two of six evaluators recognize its generation as the target author.
+ASTRAPOP develops a dialogue unrelated to the specified
+survival scenario and receives a content score of 
+.
+
+Target author:
+ Hamlin Garland. 
+Content:
+ A group works together to survive after
+getting stranded.
+
+StyleTunedLM
+ (style votes: 
+)
+
+“We were happy. We were together.
+The rain was beating upon us, but we were warm.
+The night was dark and cold, but we were together.
+The fire was almost out, but we were together.
+I was cold, but I was not unhappy. …
+We were all that was left of our world.
+I reached up and grasped Vi’s hand, and she did not pull away.
+…”
+ 
+
+ASTRAPOP
+ (content: 
+)
+
+“Half a million people will hear of it,” continued
+Mrs. Lambert. “The whole country will ring with it.”
+“But she has not consented—” began Serviss,
+only to have Clarke cut him off with a gesture of contempt.
+“She will consent when she sees how the thing is coming out.
+We have her in the hollow of our hand.
+…”
+ 
+
+EDITORS
+ (style votes: 
+; content: 
+)
+
+“We were all in this venture together, and every man was
+willing to risk his life for the sake of the others …
+In this matter the two Canadians were very shrewd and took
+a leading part in the discussion, while the three of us who
+were Americans were content to take the back seats and let
+them do the talking. …
+At this time I was a tramp,
+and I had no home to go to, but I was a tramp who had a home.”
+
+Figure 3: 
+Content-controlled SI generation excerpts.
+Style votes count AA evaluators predicting the target
+author; content is rated on a 
+–
+ scale.
+
+4.3 
+Ablation Studies
+
+Table 6: 
+Comparison of EDITORS with and without domain warm-up 
+ in content-controlled SI. Refer to 
+Table
+ 
+10
+ for the comparison in general SI task.
+
+Model
+
+Style Similarity
+
+Content Preservation
+
+BLEU
+
+EDITORS
+ w/ 
+
+54.10
+0.68
+
+39.23
+2.54
+
+45.64
+0.26
+
+EDITORS
+ w/o 
+
+55.08
+0.56
+
+68.16
+1.27
+
+27.42
+0.64
+
+In 
+Section
+ 
+3.4
+, we describe an optional domain warm-up that trains an adapter 
+ to initialize the style adapter 
+. This warm-up is removed for SI since it may cause the model to memorize training content or disregard user-provided content, as empirically validated in 
+Table
+ 
+6
+ (for content-controlled SI) and 
+Table
+ 
+10
+ (for general SI). With and without 
+, EDITORS achieves similar style similarity, suggesting that 
+ is not pivotal for inducing style.
+However,
+initializing from 
+ lowers content preservation by 
+ and increases BLEU by 
+. This suggests that marginal improvements in style similarity for EDITORS w/ 
+ may be due more to reproducing author’s training passages than successful style transfer. In contrast, EDITORS w/o 
+, our design choice for SI, preserves the user-provided content more faithfully while maintaining comparable style similarity and reducing training-corpus overlap.
+
+4
+8
+16
+Score
+Style Similarity 
+4
+8
+16
+Content Preservation 
+4
+8
+16
+BLEU-4 
+Number of deflated content directions 
+
+Figure 4: 
+Sensitivity to the selected content-basis dimension 
+ for SI. Increasing 
+ improves content preservation and reduces BLEU against the training corpus, while style similarity is relatively stable.
+
+In 
+Fig.
+ 
+4
+, we investigate how
+the retained content-basis dimension 
+ (
+Eq.
+ 
+1
+) affects SI. As 
+ grows from 
+ to 
+, content preservation increases from 
+ to 
+, while BLEU against the target author’s training corpus decreases from 
+ to 
+. This suggests that removing a larger portion of the diagnosed content subspace helps the model avoid reproducing training-passage content and better adapt to the user-provided content specification 
+. Style similarity changes only modestly across 
+, but the higher BLEU at smaller 
+ indicates that part of the apparent stylistic recognizability may come from training-corpus overlap rather than successful style transfer. In contrast, 
+ achieves the best content preservation and lowest BLEU while maintaining comparable style similarity, suggesting a better balance between style imitation and content control. App. 
+I.2
+ shows a similar effect for AA.
+
+5 
+Conclusion
+
+Existing methods often entangle author style with semantic content, causing AA to rely on content, SI to reproduce training passages, and content-controlled SI to ignore the user-specified content. Our proposed method EDITORS successfully prioritizes stylistic features without discarding semantic information aggressively by diagnosing a content-oriented subspace and learning style under activation-space deflation, so that selected content-oriented directions are suppressed during training. We demonstrate that EDITORS is highly effective on various AA and (content-controlled) SI benchmarks.
+Our results show that deflation behaves as intended: it suppresses content without destroying general semantic information, and activation-space deflation outperforms parameter-space deflation.
+
+Limitation and future work.
+
+Due to the lack of real-world datasets where the same content is expressed in different author styles, we did not provide a more direct ablation controlling for style-specific attribution. We also did not consider uncertainty quantification 
+[
+30
+, 
+33
+]
+ of our attributions, which would be valuable in practical deployment.
+Although we take the ensemble of classifiers to reduce the SI evaluator bias, the evaluation still relies on automatic evaluators which may not fully capture the real author style unlike human expert evaluations. Future work should therefore focus on building stronger benchmarks for AA with better control over semantic content, and on developing more direct evaluations of how much attribution models rely on style and content respectively.
+
+Acknowledgments
+
+This research/project is supported by the National Research Foundation, Singapore under its AI Singapore Programme (AISG Award No: AISG2-PhD/2023-01-039J) and is part of the programme DesCartes. DesCartes: this research is supported by the National Research Foundation, Prime Minister’s Office, Singapore under its Campus for Research Excellence and Technological Enterprise (CREATE) programme.
+This project is partially funded by Microsoft Research Asia.
+Xiao Tian and Jue Fan are supported by Agency for Science, Technology and Research
+(A*STAR) Graduate Academy.
+
+References
+
+[1]
+
+H. Abdi
+ (2007)
+
+Singular value decomposition (SVD) and generalized singular value decomposition
+.
+
+In 
+Encyclopedia of Measurement and Statistics
+,  
+N. J. Salkind (Ed.)
+,
+
+pp. 907–912
+.
+
+Cited by: 
+§3.2
+.
+
+[2]
+
+A. Abouelenin, A. Ashfaq, A. Atkinson, H. Awadalla, N. Bach, J. Bao, A. Benhaim, M. Cai, V. Chaudhary, C. Chen, D. Chen, D. Chen, J. Chen, W. Chen, Y. Chen, Y. Chen, Q. Dai, X. Dai, R. Fan, M. Gao, M. Gao, A. Garg, A. Goswami, J. Hao, A. Hendy, Y. Hu, X. Jin, M. Khademi, D. Kim, Y. J. Kim, G. Lee, J. Li, Y. Li, C. Liang, X. Lin, Z. Lin, M. Liu, Y. Liu, G. Lopez, C. Luo, P. Madan, V. Mazalov, A. Mitra, A. Mousavi, A. Nguyen, J. Pan, D. Perez-Becker, J. Platin, T. Portet, K. Qiu, B. Ren, L. Ren, S. Roy, N. Shang, Y. Shen, S. Singhal, S. Som, X. Song, T. Sych, P. Vaddamanu, S. Wang, Y. Wang, Z. Wang, H. Wu, H. Xu, W. Xu, Y. Yang, Z. Yang, D. Yu, I. Zabir, J. Zhang, L. L. Zhang, Y. Zhang, and X. Zhou
+ (2025)
+
+Phi-4-mini technical report: compact yet powerful multimodal language models via mixture-of-LoRAs
+.
+
+arXiv preprint arXiv:2503.01743
+.
+
+Cited by: 
+§4.1
+.
+
+[3]
+
+M. Aerni, J. Rando, E. Debenedetti, N. Carlini, D. Ippolito, and F. Tramèr
+ (2025)
+
+Measuring non-adversarial reproduction of training data in large language models
+.
+
+In 
+The Thirteenth International Conference on Learning Representations
+,
+
+Cited by: 
+2nd item
+,
+
+§H.2
+,
+
+§H.2
+,
+
+§H.2
+.
+
+[4]
+
+S. Arora, A. Narayan, M. F. Chen, L. Orr, N. Guha, K. Bhatia, I. Chami, and C. Ré
+ (2023)
+
+Ask me anything: a simple strategy for prompting language models
+.
+
+In 
+The Eleventh International Conference on Learning Representations
+,
+
+Cited by: 
+§2.1
+.
+
+[5]
+
+Y. Cai and D. Cao
+ (2024)
+
+O-Edit: orthogonal subspace editing for language model sequential editing
+.
+
+arXiv preprint arXiv:2410.11469
+.
+
+Cited by: 
+§C.2
+.
+
+[6]
+
+C. Chen, X. Zhou, G. Zhang, and Y. Huang
+ (2026)
+
+NP-LoRA: null space projection unifies subject and style in LoRA fusion
+.
+
+arXiv preprint arXiv:2511.11051
+.
+
+Cited by: 
+§C.2
+,
+
+§I.7
+,
+
+§2.1
+,
+
+§3.3
+.
+
+[7]
+
+X. Chen, X. Xie, Z. Bi, H. Ye, S. Deng, N. Zhang, and H. Chen
+ (2021)
+
+Disentangled contrastive learning for learning robust textual representations
+.
+
+arXiv preprint arXiv:2104.04907
+.
+
+Cited by: 
+§1
+.
+
+[8]
+
+Y. Chen and S. Eger
+ (2023)
+
+MENLI: robust evaluation metrics from natural language inference
+.
+
+Transactions of the Association for Computational Linguistics
+ 
+11
+, 
+pp. 804–825
+.
+
+Cited by: 
+Table 13
+.
+
+[9]
+
+Z. Chen, G. K. R. Lau, C. Foo, and B. K. H. Low
+ (2026)
+
+DUET: optimizing training data mixtures via feedback from unseen evaluation tasks
+.
+
+In 
+The Fourteenth International Conference on Learning Representations
+,
+
+Cited by: 
+§3.4
+.
+
+[10]
+
+H. J. Cho, K. Sharma, N. P. Jedema, L. F. R. Ribeiro, J. May, and A. Moschitti
+ (2025)
+
+Tuning-free personalized alignment via trial-error-explain in-context learning
+.
+
+In 
+Findings of the Association for Computational Linguistics: NAACL 2025
+,
+
+pp. 5864–5885
+.
+
+Cited by: 
+§2.1
+.
+
+[11]
+
+J. Devlin, M. Chang, K. Lee, and K. Toutanova
+ (2019)
+
+BERT: pre-training of deep bidirectional transformers for language understanding
+.
+
+In 
+Proceedings of the 2019 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies, Volume 1 (Long and Short Papers)
+,
+
+pp. 4171–4186
+.
+
+Cited by: 
+§4.1
+.
+
+[12]
+
+M. Fabien, E. Villatoro-Tello, P. Motlicek, and S. Parida
+ (2020)
+
+BertAA : BERT fine-tuning for authorship attribution
+.
+
+In 
+Proceedings of the 17th International Conference on Natural Language Processing (ICON)
+,
+
+pp. 127–137
+.
+
+Cited by: 
+§1
+,
+
+§2.1
+,
+
+§4.1
+.
+
+[13]
+
+J. Fang, H. Jiang, K. Wang, Y. Ma, J. Shi, X. Wang, X. He, and T. Chua
+ (2025)
+
+AlphaEdit: null-space constrained knowledge editing for language models
+.
+
+In 
+The Thirteenth International Conference on Learning Representations
+,
+
+Cited by: 
+§C.2
+,
+
+§I.7
+,
+
+§2.1
+,
+
+§3.3
+.
+
+[14]
+
+Gemma Team, M. Riviere, S. Pathak, P. G. Sessa, C. Hardin, S. Bhupatiraju, L. Hussenot, T. Mesnard, B. Shahriari, A. Ramé, J. Ferret, P. Liu, P. Tafti, A. Friesen, M. Casbon, S. Ramos, R. Kumar, C. L. Lan, S. Jerome, A. Tsitsulin, N. Vieillard, P. Stanczyk, S. Girgin, N. Momchev, M. Hoffman, S. Thakoor, J. Grill, B. Neyshabur, O. Bachem, A. Walton, A. Severyn, A. Parrish, A. Ahmad, A. Hutchison, A. Abdagic, A. Carl, A. Shen, A. Brock, A. Coenen, A. Laforge, A. Paterson, B. Bastian, B. Piot, B. Wu, B. Royal, C. Chen, C. Kumar, C. Perry, C. Welty, C. A. Choquette-Choo, D. Sinopalnikov, D. Weinberger, D. Vijaykumar, D. Rogozińska, D. Herbison, E. Bandy, E. Wang, E. Noland, E. Moreira, E. Senter, E. Eltyshev, F. Visin, G. Rasskin, G. Wei, G. Cameron, G. Martins, H. Hashemi, H. Klimczak-Plucińska, H. Batra, H. Dhand, I. Nardini, J. Mein, J. Zhou, J. Svensson, J. Stanway, J. Chan, J. P. Zhou, J. Carrasqueira, J. Iljazi, J. Becker, J. Fernandez, J. van Amersfoort, J. Gordon, J. Lipschultz, J. Newlan, J. Ji, K. Mohamed, K. Badola, K. Black, K. Millican, K. McDonell, K. Nguyen, K. Sodhia, K. Greene, L. L. Sjoesund, L. Usui, L. Sifre, L. Heuermann, L. Lago, L. McNealus, L. B. Soares, L. Kilpatrick, L. Dixon, L. Martins, M. Reid, M. Singh, M. Iverson, M. Görner, M. Velloso, M. Wirth, M. Davidow, M. Miller, M. Rahtz, M. Watson, M. Risdal, M. Kazemi, M. Moynihan, M. Zhang, M. Kahng, M. Park, M. Rahman, M. Khatwani, N. Dao, N. Bardoliwalla, N. Devanathan, N. Dumai, N. Chauhan, O. Wahltinez, P. Botarda, P. Barnes, P. Barham, P. Michel, P. Jin, P. Georgiev, P. Culliton, P. Kuppala, R. Comanescu, R. Merhej, R. Jana, R. A. Rokni, R. Agarwal, R. Mullins, S. Saadat, S. M. Carthy, S. Cogan, S. Perrin, S. M. R. Arnold, S. Krause, S. Dai, S. Garg, S. Sheth, S. Ronstrom, S. Chan, T. Jordan, T. Yu, T. Eccles, T. Hennigan, T. Kocisky, T. Doshi, V. Jain, V. Yadav, V. Meshram, V. Dharmadhikari, W. Barkley, W. Wei, W. Ye, W. Han, W. Kwon, X. Xu, Z. Shen, Z. Gong, Z. Wei, V. Cotruta, P. Kirk, A. Rao, M. Giang, L. Peran, T. Warkentin, E. Collins, J. Barral, Z. Ghahramani, R. Hadsell, D. Sculley, J. Banks, A. Dragan, S. Petrov, O. Vinyals, J. Dean, D. Hassabis, K. Kavukcuoglu, C. Farabet, E. Buchatskaya, S. Borgeaud, N. Fiedel, A. Joulin, K. Kenealy, R. Dadashi, and A. Andreev
+ (2024)
+
+Gemma 2: improving open language models at a practical size
+.
+
+arXiv preprint arXiv:2408.00118
+.
+
+Cited by: 
+§4.1
+.
+
+[15]
+
+Gemma Team
+ (2026)
+
+Gemma 4 technical report
+.
+
+arXiv preprint arXiv:2607.02770
+.
+
+Cited by: 
+§4.1
+.
+
+[16]
+
+H. M. Gómez-Adorno, J. Posadas-Durán, G. Ríos-Toledo, G. Sidorov, and G. Sierra
+ (2018)
+
+Stylometry-based approach for detecting writing style changes in literary texts
+.
+
+Computación y Sistemas
+ 
+22
+ (
+1
+), 
+pp. 47–53
+.
+
+Cited by: 
+§2.1
+.
+
+[17]
+
+A. Grattafiori, A. Dubey, A. Jauhri, A. Pandey, A. Kadian, A. Al-Dahle, A. Letman, A. Mathur, A. Schelten, A. Vaughan, A. Yang, A. Fan, A. Goyal, A. Hartshorn, A. Yang, A. Mitra, A. Sravankumar, A. Korenev, A. Hinsvark, A. Rao, A. Zhang, A. Rodriguez, A. Gregerson, A. Spataru, B. Roziere, B. Biron, B. Tang, B. Chern, C. Caucheteux, C. Nayak, C. Bi, C. Marra, C. McConnell, C. Keller, C. Touret, C. Wu, C. Wong, C. C. Ferrer, C. Nikolaidis, D. Allonsius, D. Song, D. Pintz, D. Livshits, D. Wyatt, D. Esiobu, D. Choudhary, D. Mahajan, D. Garcia-Olano, D. Perino, D. Hupkes, E. Lakomkin, E. AlBadawy, E. Lobanova, E. Dinan, E. M. Smith, F. Radenovic, F. Guzmán, F. Zhang, G. Synnaeve, G. Lee, G. L. Anderson, G. Thattai, G. Nail, G. Mialon, G. Pang, G. Cucurell, H. Nguyen, H. Korevaar, H. Xu, H. Touvron, I. Zarov, I. A. Ibarra, I. Kloumann, I. Misra, I. Evtimov, J. Zhang, J. Copet, J. Lee, J. Geffert, J. Vranes, J. Park, J. Mahadeokar, J. Shah, J. van der Linde, J. Billock, J. Hong, J. Lee, J. Fu, J. Chi, J. Huang, J. Liu, J. Wang, J. Yu, J. Bitton, J. Spisak, J. Park, J. Rocca, J. Johnstun, J. Saxe, J. Jia, K. V. Alwala, K. Prasad, K. Upasani, K. Plawiak, K. Li, K. Heafield, K. Stone, K. El-Arini, K. Iyer, K. Malik, K. Chiu, K. Bhalla, K. Lakhotia, L. Rantala-Yeary, L. van der Maaten, L. Chen, L. Tan, L. Jenkins, L. Martin, L. Madaan, L. Malo, L. Blecher, L. Landzaat, L. de Oliveira, M. Muzzi, M. Pasupuleti, M. Singh, M. Paluri, M. Kardas, M. Tsimpoukelli, M. Oldham, M. Rita, M. Pavlova, M. Kambadur, M. Lewis, M. Si, M. K. Singh, M. Hassan, N. Goyal, N. Torabi, N. Bashlykov, N. Bogoychev, N. Chatterji, N. Zhang, O. Duchenne, O. Çelebi, P. Alrassy, P. Zhang, P. Li, P. Vasic, P. Weng, P. Bhargava, P. Dubal, P. Krishnan, P. S. Koura, P. Xu, Q. He, Q. Dong, R. Srinivasan, R. Ganapathy, R. Calderer, R. S. Cabral, R. Stojnic, R. Raileanu, R. Maheswari, R. Girdhar, R. Patel, R. Sauvestre, R. Polidoro, R. Sumbaly, R. Taylor, R. Silva, R. Hou, R. Wang, S. Hosseini, S. Chennabasappa, S. Singh, S. Bell, S. S. Kim, S. Edunov, S. Nie, S. Narang, S. Raparthy, S. Shen, S. Wan, S. Bhosale, S. Zhang, S. Vandenhende, S. Batra, S. Whitman, S. Sootla, S. Collot, S. Gururangan, S. Borodinsky, T. Herman, T. Fowler, T. Sheasha, T. Georgiou, T. Scialom, T. Speckbacher, T. Mihaylov, T. Xiao, U. Karn, V. Goswami, V. Gupta, V. Ramanathan, V. Kerkez, V. Gonguet, V. Do, V. Vogeti, V. Albiero, V. Petrovic, W. Chu, W. Xiong, W. Fu, W. Meers, X. Martinet, X. Wang, X. Wang, X. E. Tan, X. Xia, X. Xie, X. Jia, X. Wang, Y. Goldschlag, Y. Gaur, Y. Babaei, Y. Wen, Y. Song, Y. Zhang, Y. Li, Y. Mao, Z. D. Coudert, Z. Yan, Z. Chen, Z. Papakipos, A. Singh, A. Srivastava, A. Jain, A. Kelsey, A. Shajnfeld, A. Gangidi, A. Victoria, A. Goldstand, A. Menon, A. Sharma, A. Boesenberg, A. Baevski, A. Feinstein, A. Kallet, A. Sangani, A. Teo, A. Yunus, A. Lupu, A. Alvarado, A. Caples, A. Gu, A. Ho, A. Poulton, A. Ryan, A. Ramchandani, A. Dong, A. Franco, A. Goyal, A. Saraf, A. Chowdhury, A. Gabriel, A. Bharambe, A. Eisenman, A. Yazdan, B. James, B. Maurer, B. Leonhardi, B. Huang, B. Loyd, B. D. Paola, B. Paranjape, B. Liu, B. Wu, B. Ni, B. Hancock, B. Wasti, B. Spence, B. Stojkovic, B. Gamido, B. Montalvo, C. Parker, C. Burton, C. Mejia, C. Liu, C. Wang, C. Kim, C. Zhou, C. Hu, C. Chu, C. Cai, C. Tindal, C. Feichtenhofer, C. Gao, D. Civin, D. Beaty, D. Kreymer, D. Li, D. Adkins, D. Xu, D. Testuggine, D. David, D. Parikh, D. Liskovich, D. Foss, D. Wang, D. Le, D. Holland, E. Dowling, E. Jamil, E. Montgomery, E. Presani, E. Hahn, E. Wood, E. Le, E. Brinkman, E. Arcaute, E. Dunbar, E. Smothers, F. Sun, F. Kreuk, F. Tian, F. Kokkinos, F. Ozgenel, F. Caggioni, F. Kanayet, F. Seide, G. M. Florez, G. Schwarz, G. Badeer, G. Swee, G. Halpern, G. Herman, G. Sizov, G. Zhang, G. Lakshminarayanan, H. Inan, H. Shojanazeri, H. Zou, H. Wang, H. Zha, H. Habeeb, H. Rudolph, H. Suk, H. Aspegren, H. Goldman, H. Zhan, I. Damlaj, I. Molybog, I. Tufanov, I. Leontiadis, I. Veliche, I. Gat, J. Weissman, J. Geboski, J. Kohli, J. Lam, J. Asher, J. Gaya, J. Marcus, J. Tang, J. Chan, J. Zhen, J. Reizenstein, J. Teboul, J. Zhong, J. Jin, J. Yang, J. Cummings, J. Carvill, J. Shepard, J. McPhie, J. Torres, J. Ginsburg, J. Wang, K. Wu, K. H. U, K. Saxena, K. Khandelwal, K. Zand, K. Matosich, K. Veeraraghavan, K. Michelena, K. Li, K. Jagadeesh, K. Huang, K. Chawla, K. Huang, L. Chen, L. Garg, L. A, L. Silva, L. Bell, L. Zhang, L. Guo, L. Yu, L. Moshkovich, L. Wehrstedt, M. Khabsa, M. Avalani, M. Bhatt, M. Mankus, M. Hasson, M. Lennie, M. Reso, M. Groshev, M. Naumov, M. Lathi, M. Keneally, M. Liu, M. L. Seltzer, M. Valko, M. Restrepo, M. Patel, M. Vyatskov, M. Samvelyan, M. Clark, M. Macey, M. Wang, M. J. Hermoso, M. Metanat, M. Rastegari, M. Bansal, N. Santhanam, N. Parks, N. White, N. Bawa, N. Singhal, N. Egebo, N. Usunier, N. Mehta, N. P. Laptev, N. Dong, N. Cheng, O. Chernoguz, O. Hart, O. Salpekar, O. Kalinli, P. Kent, P. Parekh, P. Saab, P. Balaji, P. Rittner, P. Bontrager, P. Roux, P. Dollar, P. Zvyagina, P. Ratanchandani, P. Yuvraj, Q. Liang, R. Alao, R. Rodriguez, R. Ayub, R. Murthy, R. Nayani, R. Mitra, R. Parthasarathy, R. Li, R. Hogan, R. Battey, R. Wang, R. Howes, R. Rinott, S. Mehta, S. Siby, S. J. Bondu, S. Datta, S. Chugh, S. Hunt, S. Dhillon, S. Sidorov, S. Pan, S. Mahajan, S. Verma, S. Yamamoto, S. Ramaswamy, S. Lindsay, S. Lindsay, S. Feng, S. Lin, S. C. Zha, S. Patil, S. Shankar, S. Zhang, S. Zhang, S. Wang, S. Agarwal, S. Sajuyigbe, S. Chintala, S. Max, S. Chen, S. Kehoe, S. Satterfield, S. Govindaprasad, S. Gupta, S. Deng, S. Cho, S. Virk, S. Subramanian, S. Choudhury, S. Goldman, T. Remez, T. Glaser, T. Best, T. Koehler, T. Robinson, T. Li, T. Zhang, T. Matthews, T. Chou, T. Shaked, V. Vontimitta, V. Ajayi, V. Montanez, V. Mohan, V. S. Kumar, V. Mangla, V. Ionescu, V. Poenaru, V. T. Mihailescu, V. Ivanov, W. Li, W. Wang, W. Jiang, W. Bouaziz, W. Constable, X. Tang, X. Wu, X. Wang, X. Wu, X. Gao, Y. Kleinman, Y. Chen, Y. Hu, Y. Jia, Y. Qi, Y. Li, Y. Zhang, Y. Zhang, Y. Adi, Y. Nam, Y. Wang, Y. Zhao, Y. Hao, Y. Qian, Y. Li, Y. He, Z. Rait, Z. DeVito, Z. Rosnbrick, Z. Wen, Z. Yang, Z. Zhao, and Z. Ma
+ (2024)
+
+The Llama 3 herd of models
+.
+
+arXiv preprint arXiv:2407.21783
+.
+
+Cited by: 
+§4.1
+.
+
+[18]
+
+T. Gröndahl and N. Asokan
+ (2020)
+
+Effective writing style imitation via combinatorial paraphrasing
+.
+
+Proceedings on Privacy Enhancing Technologies
+ 
+2020
+ (
+4
+), 
+pp. 253–271
+.
+
+Cited by: 
+§1
+,
+
+§2.1
+.
+
+[19]
+
+S. Hallinan, F. Brahman, X. Lu, J. Jung, S. Welleck, and Y. Choi
+ (2023)
+
+STEER: unified style transfer with expert reinforcement
+.
+
+In 
+Findings of the Association for Computational Linguistics: EMNLP 2023
+,
+
+pp. 7546–7562
+.
+
+Cited by: 
+§2.1
+.
+
+[20]
+
+J. R. Himawan, G. K. R. Lau, and B. K. H. Low
+ (2026)
+
+Watershed: a unified benchmark for end-to-end data provenance evaluation
+.
+
+In 
+Trustworthy AI for Good (AI4GOOD) Workshop at ICML 2026
+,
+
+Cited by: 
+§2.1
+.
+
+[21]
+
+E. J. Hu, Y. Shen, P. Wallis, Z. Allen-Zhu, Y. Li, S. Wang, L. Wang, and W. Chen
+ (2022)
+
+LoRA: low-rank adaptation of large language models
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Cited by: 
+§C.1
+.
+
+[22]
+
+Z. Hu, T. T. Nguyen, Y. Hu, C. Hung, M. S. Hee, C. W. Seah, and R. K. Lee
+ (2024)
+
+Contrastive disentanglement for authorship attribution
+.
+
+In 
+Companion Proceedings of the ACM on Web Conference 2024
+,
+
+pp. 1657–1666
+.
+
+Cited by: 
+§1
+.
+
+[23]
+
+B. Huang, C. Chen, and K. Shu
+ (2024)
+
+Can large language models identify authorship?
+.
+
+In 
+Findings of the Association for Computational Linguistics: EMNLP 2024
+,
+
+pp. 445–460
+.
+
+Cited by: 
+§2.1
+,
+
+§4.1
+.
+
+[24]
+
+X. Huang, M. Liu, S. Belongie, and J. Kautz
+ (2018)
+
+Multimodal unsupervised image-to-image translation
+.
+
+In 
+Proceedings of the European Conference on Computer Vision (ECCV)
+,
+
+pp. 172–189
+.
+
+Cited by: 
+§1
+.
+
+[25]
+
+J. Huertas-Tato, A. Girón-Jiménez, A. Martín, and D. Camacho
+ (2024)
+
+Isolating authorship from content with semantic embeddings and contrastive learning
+.
+
+arXiv preprint arXiv:2411.18472
+.
+
+Cited by: 
+§1
+.
+
+[26]
+
+J. Huertas-Tato, Á. Huertas-García, A. Martín, and D. Camacho
+ (2024)
+
+PART: pre-trained authorship representation transformer
+.
+
+Human-centric Computing and Information Sciences
+ 
+14
+, 
+pp. 39
+.
+
+Cited by: 
+§1
+,
+
+§2.1
+.
+
+[27]
+
+J. Huertas-Tato, A. Martín, and D. Camacho
+ (2024)
+
+Understanding writing style in social media with a supervised contrastively pre-trained transformer
+.
+
+Knowledge-Based Systems
+ 
+296
+, 
+pp. 111867
+.
+
+Cited by: 
+§1
+,
+
+§2.1
+,
+
+§4.1
+.
+
+[28]
+
+H. Jhamtani, V. Gangal, E. Hovy, and E. Nyberg
+ (2017)
+
+Shakespearizing modern language using copy-enriched sequence to sequence models
+.
+
+In 
+Proceedings of the Workshop on Stylistic Variation
+,
+
+pp. 10–19
+.
+
+Cited by: 
+§2.1
+.
+
+[29]
+
+A. Q. Jiang, A. Sablayrolles, A. Mensch, C. Bamford, D. S. Chaplot, D. de las Casas, F. Bressand, G. Lengyel, G. Lample, L. Saulnier, L. R. Lavaud, M. Lachaux, P. Stock, T. Le Scao, T. Lavril, T. Wang, T. Lacroix, and W. E. Sayed
+ (2023)
+
+Mistral 7B
+.
+
+arXiv preprint arXiv:2310.06825
+.
+
+Cited by: 
+§4.1
+.
+
+[30]
+
+L. Kuhn, Y. Gal, and S. Farquhar
+ (2023)
+
+Semantic uncertainty: linguistic invariances for uncertainty estimation in natural language generation
+.
+
+In 
+The Eleventh International Conference on Learning Representations
+,
+
+Cited by: 
+§5
+.
+
+[31]
+
+G. Kwon and J. C. Ye
+ (2022)
+
+CLIPstyler: image style transfer with a single text condition
+.
+
+In 
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)
+,
+
+pp. 18062–18071
+.
+
+Cited by: 
+§1
+.
+
+[32]
+
+S. Lahiri
+ (2014)
+
+Complexity of word collocation networks: a preliminary structural analysis
+.
+
+In 
+Proceedings of the Student Research Workshop at the 14th Conference of the European Chapter of the Association for Computational Linguistics
+,
+
+pp. 96–105
+.
+
+Cited by: 
+Appendix E
+,
+
+§4.1
+.
+
+[33]
+
+G. K. R. Lau, H. Dao, N. K. H. Lin, and B. K. H. Low
+ (2026)
+
+UMPIRE: uncertainty quantification for multimodal large language models with incoherence-adjusted semantic volume
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+Cited by: 
+§5
+.
+
+[34]
+
+G. K. R. Lau, W. Hu, D. Liu, J. Chen, S. Ng, and B. K. H. Low
+ (2024)
+
+DIPPER: diversity in prompts for producing large language model ensembles in reasoning tasks
+.
+
+In 
+NeurIPS 2024 Workshop on Foundation Model Interventions (MINT)
+,
+
+Cited by: 
+§2.1
+.
+
+[35]
+
+G. K. R. Lau, X. Niu, H. Dao, J. Chen, C. Foo, and B. K. H. Low
+ (2024)
+
+Waterfall: scalable framework for robust text watermarking and provenance for LLMs
+.
+
+In 
+Proceedings of the 2024 Conference on Empirical Methods in Natural Language Processing
+,
+
+pp. 20432–20466
+.
+
+Cited by: 
+§2.1
+.
+
+[36]
+
+J. H. Lau, T. Cohn, T. Baldwin, J. Brooke, and A. Hammond
+ (2018)
+
+Deep-speare: a joint neural model of poetic language, meter and rhyme
+.
+
+In 
+Proceedings of the 56th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)
+,
+
+pp. 1948–1958
+.
+
+Cited by: 
+§1
+,
+
+§2.1
+.
+
+[37]
+
+S. Liu, S. Agarwal, and J. May
+ (2024)
+
+Authorship style transfer with policy optimization
+.
+
+arXiv preprint arXiv:2403.08043
+.
+
+Cited by: 
+§1
+,
+
+§2.1
+,
+
+§4.2
+.
+
+[38]
+
+S. Liu and J. May
+ (2025)
+
+Style transfer with multi-iteration preference optimization
+.
+
+In 
+Proceedings of the 2025 Conference of the Nations of the Americas Chapter of the Association for Computational Linguistics: Human Language Technologies (Volume 1: Long Papers)
+,
+
+pp. 2663–2681
+.
+
+Cited by: 
+§2.1
+.
+
+[39]
+
+X. Liu, H. Diddee, and D. Ippolito
+ (2024)
+
+Customizing large language model generation style using parameter-efficient finetuning
+.
+
+In 
+Proceedings of the 17th International Natural Language Generation Conference
+,
+
+pp. 412–426
+.
+
+Cited by: 
+§1
+,
+
+§2.1
+,
+
+§4.2
+.
+
+[40]
+
+Z. Liu
+ (2006)
+
+Reuter_50_50
+.
+
+Note: 
+UCI Machine Learning RepositoryDOI: https://doi.org/10.24432/C5DS42
+
+Cited by: 
+Appendix E
+,
+
+§4.1
+.
+
+[41]
+
+X. Lu, X. Niu, G. K. R. Lau, B. T. C. Nhung, R. H. L. Sim, J. R. Himawan, F. Wen, C. Foo, S. Ng, and B. K. H. Low
+ (2026)
+
+WaterDrum: watermarking for data-centric unlearning metric
+.
+
+In 
+The Fourteenth International Conference on Learning Representations
+,
+
+Cited by: 
+§2.1
+.
+
+[42]
+
+F. Luo, P. Li, J. Zhou, P. Yang, B. Chang, Z. Sui, and X. Sun
+ (2019)
+
+A dual reinforcement learning framework for unsupervised text style transfer
+.
+
+In 
+Proceedings of the Twenty-Eighth International Joint Conference on Artificial Intelligence, IJCAI-19
+,
+
+pp. 5116–5122
+.
+
+Cited by: 
+§2.1
+.
+
+[43]
+
+C. Mou, X. Wang, L. Xie, Y. Wu, J. Zhang, Z. Qi, Y. Shan, and X. Qie
+ (2024)
+
+T2I-Adapter: learning adapters to dig out more controllable ability for text-to-image diffusion models
+.
+
+Proceedings of the AAAI Conference on Artificial Intelligence
+ 
+38
+ (
+5
+), 
+pp. 4296–4304
+.
+
+Cited by: 
+§1
+.
+
+[44]
+
+K. Papineni, S. Roukos, T. Ward, and W. Zhu
+ (2002)
+
+Bleu: a method for automatic evaluation of machine translation
+.
+
+In 
+Proceedings of the 40th Annual Meeting of the Association for Computational Linguistics
+,
+
+pp. 311–318
+.
+
+Cited by: 
+2nd item
+,
+
+§H.2
+,
+
+§H.2
+,
+
+2nd item
+.
+
+[45]
+
+A. Patel, J. Zhu, J. Qiu, Z. Horvitz, M. Apidianaki, K. McKeown, and C. Callison-Burch
+ (2025)
+
+StyleDistance: stronger content-independent style embeddings with synthetic parallel examples
+.
+
+In 
+Proceedings of the 2025 Conference of the Nations of the Americas Chapter of the Association for Computational Linguistics: Human Language Technologies (Volume 1: Long Papers)
+,
+
+pp. 8662–8685
+.
+
+Cited by: 
+§1
+,
+
+§2.1
+,
+
+§4.1
+.
+
+[46]
+
+K. Preechakul, N. Chatthee, S. Wizadwongsa, and S. Suwajanakorn
+ (2022)
+
+Diffusion autoencoders: toward a meaningful and decodable representation
+.
+
+In 
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition (CVPR)
+,
+
+pp. 10619–10629
+.
+
+Cited by: 
+§1
+.
+
+[47]
+
+Y. Qiu, Z. Zhao, Y. Ziser, A. Korhonen, E. M. Ponti, and S. B. Cohen
+ (2024)
+
+Spectral editing of activations for large language model alignment
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+Vol. 
+37
+, 
+pp. 56958–56987
+.
+
+Cited by: 
+§C.2
+.
+
+[48]
+
+Qwen Team
+ (2026)
+
+Qwen3.5: towards native multimodal agents
+.
+
+External Links: 
+Link
+
+Cited by: 
+§4.1
+,
+
+§4.1
+.
+
+[49]
+
+S. Ravfogel, Y. Elazar, H. Gonen, M. Twiton, and Y. Goldberg
+ (2020)
+
+Null it out: guarding protected attributes by iterative nullspace projection
+.
+
+In 
+Proceedings of the 58th Annual Meeting of the Association for Computational Linguistics
+,
+
+pp. 7237–7256
+.
+
+Cited by: 
+§C.2
+.
+
+[50]
+
+P. Sawicki, M. Grześ, A. Jordanous, D. Brown, and M. Peeperkorn
+ (2022)
+
+Training GPT-2 to represent two romantic-era authors: challenges, evaluations and pitfalls
+.
+
+In 
+Proceedings of the 13th International Conference on Computational Creativity
+,
+
+pp. 34–43
+.
+
+Cited by: 
+2nd item
+,
+
+§H.2
+,
+
+§H.2
+,
+
+§1
+,
+
+§2.1
+,
+
+2nd item
+.
+
+[51]
+
+K. Sohn, L. Jiang, J. Barber, K. Lee, N. Ruiz, D. Krishnan, H. Chang, Y. Li, I. Essa, M. Rubinstein, Y. Hao, G. Entis, I. Blok, and D. C. Chin
+ (2023)
+
+StyleDrop: text-to-image synthesis of any style
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+Vol. 
+36
+, 
+pp. 66860–66889
+.
+
+Cited by: 
+§1
+.
+
+[52]
+
+B. Syed, G. Verma, B. Srinivasan, A. Natarajan, and V. Varma
+ (2020)
+
+Adapting language models for non-parallel author-stylized rewriting
+.
+
+Proceedings of the AAAI Conference on Artificial Intelligence
+ 
+34
+ (
+05
+), 
+pp. 9008–9015
+.
+
+Cited by: 
+§1
+,
+
+§2.1
+.
+
+[53]
+
+J. Tyo, B. Dhingra, and Z. C. Lipton
+ (2023)
+
+Valla: standardizing and benchmarking authorship attribution and verification through empirical evaluation and comparative analysis
+.
+
+In 
+Proceedings of the 13th International Joint Conference on Natural Language Processing and the 3rd Conference of the Asia-Pacific Chapter of the Association for Computational Linguistics (Volume 1: Long Papers)
+,
+
+pp. 649–660
+.
+
+Cited by: 
+Appendix E
+,
+
+§4.1
+.
+
+[54]
+
+C. Wang, X. Lu, S. Ng, and B. K. H. Low
+ (2024)
+
+TRACE: TRansformer-based Attribution using Contrastive Embeddings in LLMs
+.
+
+arXiv preprint arXiv:2407.04981
+.
+
+Cited by: 
+§1
+,
+
+§2.1
+.
+
+[55]
+
+X. Wang, T. Chen, Q. Ge, H. Xia, R. Bao, R. Zheng, Q. Zhang, T. Gui, and X. Huang
+ (2023)
+
+Orthogonal subspace learning for language model continual learning
+.
+
+In 
+Findings of the Association for Computational Linguistics: EMNLP 2023
+,
+
+pp. 10658–10671
+.
+
+Cited by: 
+§C.2
+,
+
+§I.7
+,
+
+§2.1
+,
+
+§3.3
+.
+
+[56]
+
+Z. Wang, N. I. Tripto, S. Park, Z. Li, and J. Zhou
+ (2025)
+
+Catch me if you can? not yet: LLMs still struggle to imitate the implicit writing styles of everyday authors
+.
+
+In 
+Findings of the Association for Computational Linguistics: EMNLP 2025
+,
+
+pp. 10040–10055
+.
+
+Cited by: 
+§2.1
+,
+
+§4.2
+.
+
+[57]
+
+A. Wegmann, M. Schraagen, and D. Nguyen
+ (2022)
+
+Same author or just same topic? towards content-independent style representations
+.
+
+In 
+Proceedings of the 7th Workshop on Representation Learning for NLP
+,
+
+pp. 249–268
+.
+
+Cited by: 
+§1
+,
+
+§2.1
+,
+
+§4.1
+.
+
+[58]
+
+S. M. Xie, H. Pham, X. Dong, N. Du, H. Liu, Y. Lu, P. Liang, Q. V. Le, T. Ma, and A. W. Yu
+ (2023)
+
+DoReMi: optimizing data mixtures speeds up language model pretraining
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+Vol. 
+36
+, 
+pp. 69798–69818
+.
+
+Cited by: 
+§3.4
+.
+
+[59]
+
+X. Zhu, J. Guan, M. Huang, and J. Liu
+ (2023)
+
+StoryTrans: non-parallel story author-style transfer with discourse representations and content enhancing
+.
+
+In 
+Proceedings of the 61st Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)
+,
+
+pp. 14803–14819
+.
+
+Cited by: 
+§1
+,
+
+§2.1
+,
+
+§4.2
+.
+
+[60]
+
+Y. Zhu, S. Lu, L. Zheng, J. Guo, W. Zhang, J. Wang, and Y. Yu
+ (2018)
+
+Texygen: a benchmarking platform for text generation models
+.
+
+In 
+The 41st International ACM SIGIR Conference on Research & Development in Information Retrieval
+,
+
+pp. 1097–1100
+.
+
+Cited by: 
+2nd item
+,
+
+§H.2
+,
+
+§H.2
+.
+
+Appendix A 
+Ethical Considerations
+
+AA and SI may be misused for deanonymization, surveillance, unsupported authorship accusations, or impersonation. Our results should therefore be interpreted as model-based evidence rather than definitive authorship proof. Practical deployment should consider uncertainty quantification of attributions to support more holistic investigation. For SI, generated text should be clearly disclosed as machine-generated. We encourage future deployment to include appropriate safeguards, such as watermarking generated text and restricting imitation of living authors without consent.
+
+Appendix B 
+Algorithm
+
+Algorithm
+ 
+1
+ summarizes the EDITORS training procedure.
+
+Algorithm 1
+ 
+ EDITORS training.
+
+1:
+
+            
+            
+          Passage-author corpus 
+;
+frozen pretrained model 
+; target modules 
+;
+LoRA rank 
+; content-subspace dimension 
+.
+
+2:
+
+            
+            
+          Final style adapter 
+ and deflation operators
+
+.
+
+3:
+
+if
+ task is AA 
+then
+
+4:
+
+            
+            
+            Train domain warm-up adapter 
+ on 
+.
+
+5:
+
+end
+ 
+if
+
+6:
+
+            
+            
+          Extract style-neutral statements from passages in 
+ to construct 
+.
+
+7:
+
+            
+            
+          Train diagnostic content adapter 
+ on
+
+.
+
+8:
+
+for
+ each layer 
+ and module 
+ 
+do
+
+9:
+
+            
+            
+            Compute SVD:
+
+.
+
+10:
+
+            
+            
+            Set
+
+.
+
+11:
+
+            
+            
+            Construct
+
+.
+
+12:
+
+end
+ 
+for
+
+13:
+
+if
+ task is AA 
+then
+
+14:
+
+            
+            
+            Initialize
+
+.
+
+15:
+
+            
+            
+            Train style adapter 
+ on the AA objective using deflated
+activations 
+.
+
+16:
+
+else
+ 
+if
+ task is SI 
+then
+
+17:
+
+            
+            
+            Initialize 
+.
+
+18:
+
+            
+            
+            Train 
+ on the author-conditioned LM objective using
+deflated activations
+
+.
+
+19:
+
+end
+ 
+if
+
+20:
+
+return
+ 
+ and
+
+.
+
+Appendix C 
+Preliminaries
+
+C.1 
+Low-Rank Adaptation (LoRA)
+
+Fully finetuning the layer weights 
+ for every layer 
+ of an LLM could be computationally infeasible.
+To address this, LoRA 
+[
+21
+]
+ freezes the pretrained weights 
+ and instead injects a smaller-scale trainable rank-
+ update. The modified weights at layer 
+ become:
+
+where 
+,
+
+ are trainable and 
+.
+The resulting forward computation at layer 
+ is
+
+, where 
+ is the input activation at layer 
+.
+
+In this paper, we specifically target the multi-head attention (MHA)
+projections. For a given block 
+, we focus on the Query, Key, and Value modules and denote 
+ as the set of target module types.
+
+C.2 
+Deflation
+
+Deflation
+ (a.k.a. 
+orthogonal projection
+) is a well-known geometric mechanism to decouple representations and mitigate interference between competing signals. It works by projecting a vector to the closest point in a subspace (i.e., the representation of interest) by removing the component orthogonal to that subspace (i.e., the competing signal). For example, in activation-space deflation, orthogonal projection
+can efficiently remove information such as gender and topic from embeddings 
+[
+49
+]
+. 
+Qiu et al. [47]
+ edits LLM at inference time by orthogonal projection at hidden activation space to reduce its undesirable behaviors. In the LoRA context, this technique is utilized in continual learning and knowledge editing by operating directly on the weight matrix. Approaches like O-LoRA 
+[
+55
+]
+, O-Edit 
+[
+5
+]
+ and AlphaEdit 
+[
+13
+]
+ constrain LoRA updates (
+) to be orthogonal to the subspaces of previously learned tasks or preserved knowledge, thereby preventing catastrophic forgetting. Similarly, NP-LoRA 
+[
+6
+]
+ prevents interference in LoRA fusion by projecting the weights of a content LoRA onto the null space of a style LoRA’s principal directions.
+
+Motivated by these ideas, we aim to use orthogonal projection to reduce interference between content information and stylistic features in texts. Unlike prior weight-centric methods that risk aggressively removing the semantic information, we propose an activation-space deflation mechanism to blind the style adapter to selected semantic signals without directly removing the semantic information.
+
+Appendix D 
+Benefits of LoRA to EDITORS
+
+In 
+Section
+ 
+C.1
+, we have introduced the benefits of LoRA to general LLM finetuning. In this section, we will explain why using LoRA can simplify the computation involved in EDITORS. We also point out that EDITORS can work with any other SFT methods besides LoRA.
+
+LoRA simplifies singular value decomposition (SVD).
+
+Recall from 
+Section
+ 
+3.2
+ that we need to perform SVD on the content LoRA adapter 
+ to extract the content-oriented basis. For each content LoRA adapter we obtained, a direct SVD of
+
+would require explicitly forming a dense matrix of the same size as the original linear layer. This is unnecessary as the update is low-rank. We therefore exploit the LoRA factorization to recover the input-side singular subspace from small matrices whose dimension is at most the LoRA rank 
+.
+
+For simplicity, we omit the layer and module indices 
+ and write
+
+The content-oriented basis used in Sec. 
+3.2
+ is the input-side right-singular subspace of 
+. Since some rank directions in 
+ may be annihilated by 
+, we first remove the null directions of 
+.
+Let 
+ be an orthonormal basis of 
+,
+where 
+. We then define
+
+Thus,
+
+Moreover, 
+ has full column rank, so
+
+where 
+ denotes the subspace spanned by the rows of a matrix 
+. Therefore, the nonzero right-singular subspace of 
+ can be
+computed from the much smaller effective factor 
+.
+
+To obtain the principal content input basis 
+ in 
+Eq.
+ 
+1
+, we apply SVD to the low-rank effective factor rather than to the full dense update matrix:
+
+The columns of 
+ form an orthonormal basis for the row space of
+
+. Since 
+ and 
+ has
+full column rank, this is the same input-side subspace spanned by the rows of
+
+. Therefore, we take
+
+as the principal content input basis used for activation-space deflation.
+
+In practice, since 
+ and the LoRA rank 
+ is small, this avoids
+forming the dense matrix
+
+.
+The expensive operation is reduced to SVD-based orthonormalization of the
+low-rank factor 
+, whose rank is at most 
+. Our
+implementation uses this SVD-based solver by default, with QR-based
+orthonormalization as an alternative. When all surviving directions are
+retained, the SVD and QR solvers yield equivalent deflation subspaces, because
+the projection depends only on the span of 
+. The SVD
+solver is useful when a truncated basis is desired, since it orders the basis
+directions by the singular values of 
+.
+
+EDITORS can be used without LoRA.
+ Despite the above benefits of LoRA to EDITORS, we point out that EDITORS can be used without LoRA too. In 
+Section
+ 
+4.2
+, we include some experiments that finetune BERT models without using LoRA. EDITORS still achieves a significantly better performance than its baselines such as BertAA.
+
+Appendix E 
+Datasets
+
+Gutenberg30
+ represents the literature domain and is derived from the Project Gutenberg archive 
+[
+32
+]
+. To make the evaluation task more challenging, we select 
+ authors who are relatively difficult to recognize, defined as those with the lowest zero-shot classification accuracy under the raw Llama-3-8B-Instruct model among authors who have at least five books available. Each book is segmented into fixed-length passages of roughly 
+ words.
+
+Blogs50
+ represents informal social media writing and is constructed from the Blog Authorship Corpus 
+[
+53
+]
+. This corpus contains 
+ blog posts written by 
+ bloggers. We select the 
+ bloggers with the largest amount of text from it . In contrast to the other datasets, Blogs50 retains the natural imbalance of the source material, with passage counts varying substantially across authors.
+
+CCAT50
+ represents the news domain and is built from a subset of Reuters Corpus Volume 1 
+[
+40
+]
+. We restrict the corpus to the corporate/industrial topic category (CCAT), yielding a dataset of 
+ authors with 
+ documents per author, for a total of 
+ documents.
+
+For all three datasets, the training, validation, and test sets are split strictly by book title or news/blogs category, so that passages originating from the same book or category never appear in multiple splits, ensuring no content overlap between splits to the largest extent.
+
+CCAT10
+ and 
+Blogs10
+ are randomly sampled subsets of 
+ authors from CCAT50 and Blogs50 respectively. Their split sizes correspond to all passages belonging to the selected 
+ authors. No further subsampling of passages is performed.
+
+Table
+ 
+7
+ summarizes the key statistics of the above datasets.
+
+Table 7: 
+Statistics of the three datasets, including split sizes, the training distribution over authors, and the average passage length. Train Dist. indicates the number of passages per author in the training split. Length denotes the average word count per passage.
+
+Split Size (Passages)
+
+Train Dist. (Per Author)
+
+Length
+
+Dataset
+
+Domain
+
+Train
+
+Val
+
+Test
+
+Avg
+
+Min
+
+Max
+
+Avg (Words)
+
+Gutenberg30
+
+Literature
+
+12,000
+
+300
+
+3,000
+
+400
+
+400
+
+400
+
+700
+
+Blogs50
+
+Social Media
+
+42,874
+
+5,346
+
+5,346
+
+643
+
+424
+
+1,967
+
+161
+
+CCAT50
+
+News
+
+4,000
+
+250
+
+750
+
+80
+
+80
+
+80
+
+504
+
+Appendix F 
+Implementation
+
+F.1 
+Authorship Attribution (AA)
+
+All models are loaded with 4-bit NF4 quantization and bfloat16 computation, and trained with gradient checkpointing. We attach LoRA adapters to the query, key, and value projection modules, using rank 
+, scaling factor 
+, and dropout 
+. The diagnostic content adapter 
+ is trained on the style-neutral statements corpus (App. 
+G.1
+) via continued instruction tuning with TRL’s 
+SFTTrainer
+. The final style adapter 
+ then uses the original passage-author supervision, formatted as an instruction-style prompt that asks the model to identify the author based on writing style.
+
+The diagnostic content adapter 
+ is trained for 
+ epochs with datasets of style-neutral statements. For CCAT, the domain warm-up 
+ (described in 
+Section
+ 
+3.4
+) is trained for 
+ epochs and the style adapter 
+ for 
+ epochs. For Blogs and Gutenberg, the domain warm-up 
+ is trained for 
+ epoch and the style adapter 
+ for 
+ epochs. We use a maximum sequence length of 
+ for both stages across all datasets. Both stages use learning rate 
+, warm-up ratio 
+, weight decay 
+, per-device batch size 
+, and gradient accumulation 
+. For the plain LoRA SFT baseline, we use the same total number of training epochs as the corresponding diagnose-then-deflate EDITORS configuration. All backbone LLMs are trained with the same hyperparameters.
+
+We do not report error bars for AA because the evaluation is deterministic: we do not use stochastic sampling/sampling-based decoding, so repeated runs of the same checkpoint on the same split produce identical predictions.
+
+F.2 
+Style Imitation (SI)
+
+We use the same LoRA configuration as in the AA experiments. The main difference lies in the supervision format. The diagnostic content adapter 
+ is reused from the AA setting, and the deflated stage then performs style fine-tuning under activation-space deflation. We evaluate two variants of our method. The default setting skips domain warm-up and trains the style adapter 
+ directly for 
+ epochs. The second variant first applies domain warm-up for 
+ epochs and then performs deflated style learning for another 
+ epochs, so that the total training budget remains comparable across settings.
+
+At inference time, each of the 
+ Gutenberg authors is paired with the same seven stylistically neutral content summaries listed in App. 
+G.3
+. We generate one passage for each author on the given summary, yielding 
+ generations for evaluation.
+
+Appendix G 
+Prompts
+
+G.1 
+Style-Neutral Statements Extraction
+
+We prompt GPT-4o mini to extract style-neutral statements from each passage (to be used in 
+Section
+ 
+3.2
+). The extracted facts are used as the continued pretraining corpus for the diagnostic content adapter 
+.
+
+System:
+
+You turn passages into neutral, styleless atomic facts. Each fact should stand alone, use plain prose, and stay faithful to the passage.
+
+User:
+
+Rewrite this passage as {min_facts} to {max_facts} standalone atomic factual statements.
+
+Capture what the passage claims (opinions become factual claims about the author/source).
+
+Keep names and entities unchanged; avoid figurative language.
+
+Output ONLY a JSON array of strings, nothing else.
+
+PASSAGE: {passage}
+
+An example of the original passage and its corresponding style-neutral statements is shown in Figure 
+5
+.
+
+Original literary passage (Edward Phillips Oppenheim, 
+Jeanne of the Marshes
+)
+
+“… ever since those few days down at that tumbledown old place of Cecil de la Borne’s, she seems to have developed in a remarkable manner … I am sure … that we are going to have trouble.” Forrest replied that, so far as he was concerned, the trouble had already arrived, and admitted that he felt exhausted by the life he had been leading. The Princess accused him of cowardice and suggested that he was no longer the man he had once been. Their conversation then turned to the De la Borne money, to De Brensault’s intentions toward Jeanne, and to the possibility that Jeanne’s obstinacy would bring consequences.
+
+Extracted style-neutral statements
+
+(1) The Princess noted that Jeanne had developed in a remarkable manner after spending time at Cecil de la Borne’s place.
+
+(2) Forrest said that trouble had already arrived for him.
+
+(3) The Princess suggested that Forrest was not the man he used to be.
+
+(4) Forrest admitted that he had bullied the Princess for many years.
+
+(5) The Princess asked about the De la Borne money, which Forrest confirmed had been paid by his brother.
+
+(6) The Princess said that De Brensault was serious about Jeanne.
+
+(7) The Princess indicated that Jeanne would suffer consequences if she remained obstinate.
+
+Figure 5: 
+Example of a literary passage and its corresponding style-neutral statements.
+
+G.2 
+Authorship Attribution (AA)
+
+For authorship attribution, the same prompt is used during both training and inference. The model is instructed to identify the author based on writing style rather than content, and to return only the exact author name. During training, only the author name tokens contribute to the loss.
+
+System:
+
+You are an expert literary analyst.
+
+Identify the author of the provided passage based on writing style rather than content.
+
+Answer with only the exact author name.
+
+User:
+
+Passage: {passage}
+
+Author:
+
+G.3 
+Style imitation (SI) prompts
+
+During training, the model receives the author name as input and learns to generate the corresponding original passage. At inference time, an additional summary field is provided so that the model can follow user-specified content while imitating the target author’s style.
+
+Training prompt:
+
+System:
+
+You are a writing assistant that creates original literary paragraphs.
+
+Write a new paragra

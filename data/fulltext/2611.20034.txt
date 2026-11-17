@@ -1,0 +1,6335 @@
+EchoSpec: Training Search Agents to Weigh Evidence Above Echoes
+https://arxiv.org/abs/2611.20034
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+ 
+EchoSpec
+:
+ 
+Training Search Agents
+
+to Weigh Evidence Above Echoes
+
+Shihao Yang
+
+  
+
+Can Zeng
+
+  
+
+Xinzhe Li
+
+Affiliation: 
+Tsinghua University
+
+Affiliation: 
+{
+yangshihao26
+,
+
+zengc26
+,
+
+li-xz26
+}@mails.tsinghua.edu.cn
+
+Abstract
+
+Search agents trained with reinforcement learning decide what to retrieve, when to search again, and when to answer. In real corpora, one claim is copied and paraphrased across many pages while the primary source settling a question appears once. We show that reinforcement-learned search agents grant echoes the credence of independent sources and lose their ability to abstain. Across five base models from 3B to 32B and seven released RL agents on multi-hop Wikipedia questions with primary evidence intact, eight paraphrased false-claim echoes overturn 58–73% of previously correct answers, while exact-match RL drives deleted-evidence abstention below 15%. Conditioning on retrieval localizes the failure to evidence acquisition: once primary evidence enters context, agents overrule eight echoes as reliably as one, whereas echoes fill top ranks and halt search early, so larger budgets, forced search turns, or passive passage filtering alone fail to recover displaced evidence. We introduce 
+EchoSpec
+, specifying reliability across five corpus transformations with known target answers and training in two stages. Verification warm-start teaches multi-hop bridge-entity recovery past echoes, after which group RL optimizes an evidence-gated 
+-reward with an outcome-independent acquisition bonus and scale-preserving advantages retaining the optimal rule 
+. Across Qwen2.5-3B, Qwen2.5-7B, and Llama-3.1-8B backbones on nine evaluation suites, 
+EchoSpec
+ cuts eight-echo deference by 30–44 points on Qwen2.5-7B down to 29–31%, nearly quadruples eight-echo reach to 26–27% with zero-shot transfer to unseen BGE and BM25 retrievers, and raises standalone QA precision to 47–55%. Code is publicly available at 
+https://github.com/unihsy/EchoSpec
+.
+
+Figure 1: 
+EchoSpec
+ at a glance.
+ 
+Top:
+ eight false echoes fill top results on a two-hop question, causing an exact-match RL agent to stop after one search and repeat the echo while 
+EchoSpec
+ looks up the bridge entity, reaches primary evidence, and abstains if it is deleted. 
+Bottom:
+ (a) Echoes flip correct answers across Qwen2.5 7B–32B and Search-R1. (b) Exact-match RL erases deleted-evidence abstention. (c) 
+EchoSpec
+ cuts deference at every echo count. (d) 
+EchoSpec
+ finds primary evidence under eight echoes while abstaining if evidence is deleted.
+
+1  Introduction
+
+Search agents trained with reinforcement learning decide for themselves what to look up, when to search again, and when to answer 
+[
+15
+, 
+31
+, 
+4
+, 
+51
+]
+. Yet real search corpora are repetitive: syndicated news, aggregators, and machine-generated pages restate one claim many times while the primary source settling a question appears once. Repetition makes statements seem truer to humans 
+[
+12
+, 
+7
+]
+, and recent audits reveal the same vulnerability in language agents, which treat paraphrased copies of a false claim as independent corroboration 
+[
+53
+]
+ or abandon retrieved evidence under a distractor 
+[
+25
+]
+. Meanwhile, reinforcement fine-tuning erodes the refusals that guard against unsupported answers in reasoning and search alike 
+[
+32
+, 
+49
+]
+.
+
+We trace both failures directly to how search agents are trained. Across five base models from 3B to 32B and seven RL agents on multi-hop Wikipedia questions with primary evidence intact, eight paraphrased echoes of a false claim overturn 58–73% of answers correct on the clean corpus in 
+Figs.
+ 
+2
+ and 
+3
+. Search-R1 defers more than its 7B base model at every echo count, and exact-match RL cuts abstention on deleted-evidence questions from 47% to below 15% in 
+Fig.
+ 
+3
+. Both behaviors follow from standard RL training: clean QA corpora never separate repetition from evidence, and binary exact-match rewards pay agents for stopping at the first passage stating an answer while pricing guesses and refusals alike.
+
+Conditioning on retrieval localizes echo deference to 
+evidence acquisition
+. Once the primary passage enters the context, agents overrule eight echoes as reliably as one, deferring on 25–34% of clean-correct items at eight echoes versus 27–39% at one. Echoes succeed by keeping primary evidence out of view: they fill top retrieval ranks, halt search after one or two queries, and slash primary-evidence reach from 53–72% to 20–31%. Defenses that filter or debate retrieved passages 
+[
+53
+, 
+52
+, 
+36
+]
+ act only on documents already fetched, whereas recovering displaced evidence requires changing the search policy itself.
+
+We introduce 
+EchoSpec
+, a training framework that builds active verification and calibrated abstention into the search policy. 
+EchoSpec
+ defines reliability across five corpus transformations with known target answers: duplicating primary evidence or injecting echoes of a true or false claim preserves the answer, rewriting primary evidence updates it, and deleting primary evidence requires 
+ABSTAIN
+. Because true and false echoes share the exact generated text with only the answer swapped, neither style nor copy count reveals veracity. Stage 1 warms up the policy on grounded multi-hop verification trajectories so the agent learns to query bridge entities past Turn-1 echoes. Stage 2 runs group RL with an evidence-gated reward scoring 
+ when grounded or rightly abstaining, 
+ on answerable refusals, and 
+ when wrong, with an acquisition bonus preserving 
+ and scale-preserving advantages preventing collapse.
+
+We evaluate 
+EchoSpec
+ across nine evaluation suites: two held-out multi-hop suites built with Qwen3-32B 
+[
+46
+]
+ and Phi-4 
+[
+1
+]
+, each spanning ten corpus worlds per question across 
+Identity
+, 
+Dup
+, 
+Inject
+, 
+Consistent
+, 
+Rewrite
+, and 
+Delete
+, plus seven standard QA benchmarks. Across Qwen2.5-3B, Qwen2.5-7B 
+[
+47
+]
+, and Llama-3.1-8B 
+[
+11
+]
+, 
+EchoSpec
+ cuts eight-echo deference to 29–31%, beating all seven released RL agents on Qwen2.5-7B by 30–44 points while transferring zero-shot to unseen BGE 
+[
+42
+]
+ and BM25 
+[
+28
+]
+ retrievers at 25–30% deference. It simultaneously lifts eight-echo evidence reach nearly fourfold to 26–27% and raises QA precision to 47–55%, yielding four main contributions:
+
+•
+
+A controlled audit localizing echo deference in RL search agents to premature search termination and showing that outcome-reward RL amplifies deference while eroding abstention on unsupported inputs.
+
+•
+
+Five corpus-transformation specifications with symmetric claim construction and complete evidence deletion, instantiated as training worlds and two evaluation suites generated by distinct model families.
+
+•
+
+EchoSpec
+, combining a multi-hop verification warm-start with 
+-calibrated group RL, an outcome-independent evidence-acquisition bonus, and scale-preserving advantage estimation.
+
+•
+
+Evaluation across Qwen2.5 and Llama-3.1 backbones, seven RL agents, five defenses, forced multi-turn baselines, and unseen dense and BM25 retrievers across nine suites, showing consistent gains.
+
+2  Related Work
+
+Table 1: 
+Positioning against prior work.
+ 
+Agentic
+: studies a multi-turn search policy. 
+Echoes
+: handles many copies of one false claim. 
+Recovers
+: brings displaced evidence back into context, beyond filtering what was retrieved. 
+Trained
+: changes the policy through training. 
+Abstains
+: models abstention when evidence is missing. 
+Template-free
+: needs no shared wording, embedding similarity, or provenance metadata among copies. 
+ marks partial coverage.
+
+Work
+
+Intervention
+
+Agentic
+
+Echoes
+
+Recovers
+
+Trained
+
+Abstains
+
+Template-free
+
+RobustRAG 
+[
+41
+]
+
+isolate and aggregate
+
+✗
+
+✗
+
+✗
+
+✗
+
+✗
+
+✓
+
+TrustRAG 
+[
+52
+]
+
+cluster filtering
+
+✗
+
+✓
+
+✗
+
+✗
+
+✗
+
+✗
+
+MADAM-RAG 
+[
+36
+]
+
+multi-agent debate
+
+✗
+
+✗
+
+✗
+
+✗
+
+✓
+
+Evidence Laundering 
+[
+53
+]
+
+provenance gate
+
+✓
+
+✓
+
+✗
+
+✗
+
+✓
+
+✗
+
+DRNOISE 
+[
+25
+]
+
+audit only
+
+✓
+
+✗
+
+✗
+
+✗
+
+✗
+
+✓
+
+Search-R1 family 
+[
+15
+, 
+31
+, 
+30
+]
+
+outcome-reward RL
+
+✓
+
+✗
+
+✗
+
+✓
+
+✗
+
+✓
+
+QREF 
+[
+5
+]
+
+query refinement
+
+✓
+
+✗
+
+✓
+
+✗
+
+✓
+
+Hallucination Tax 
+[
+32
+]
+
+unanswerable data
+
+✗
+
+✗
+
+✗
+
+✓
+
+✓
+
+✓
+
+AWA-RL 
+[
+49
+]
+
+abstention reward
+
+✓
+
+✗
+
+✗
+
+✓
+
+✓
+
+✓
+
+EchoSpec
+ (ours)
+
+warm-start, 
+-RL
+
+✓
+
+✓
+
+✓
+
+✓
+
+✓
+
+✓
+
+Reinforcement-learned search agents.
+
+Building on prompted retrieval pipelines 
+[
+35
+, 
+3
+]
+, Search-R1 
+[
+15
+]
+, R1-Searcher 
+[
+31
+]
+, ReSearch 
+[
+4
+]
+, DeepResearcher 
+[
+51
+]
+, ZeroSearch 
+[
+33
+]
+, and AutoRefine 
+[
+30
+]
+ train search policies end to end with outcome rewards, typically exact match on multi-hop QA 
+[
+48
+, 
+34
+]
+ over a fixed Wikipedia index 
+[
+20
+, 
+37
+]
+. Later work refines queries and filters evidence to cut redundant searches 
+[
+5
+]
+. 
+EchoSpec
+ keeps the standard training protocol and changes what the agent learns from: corpus variants with known target answers, a verification warm-start, and a reward pricing wrong guesses.
+
+Echoes, poisoning, and conflicting evidence.
+
+Retrieval corpora can be poisoned with a handful of crafted passages 
+[
+54
+, 
+26
+]
+, and models weigh such context against their parametric memory 
+[
+23
+, 
+43
+, 
+44
+, 
+40
+]
+. Closest to our setting, 
+Zhou et al. [53]
+ show that frozen deep research agents treat paraphrased copies of one false claim as independent support, and that a provenance gate collapsing pages with a shared writing skeleton reduces the effect. DRNOISE 
+[
+25
+]
+ shows that one misleading document can override evidence that requires multi-step derivation, and graph agents revisit redundant evidence paths 
+[
+38
+]
+. Defenses act on the retrieved set: provenance gating 
+[
+53
+]
+, clustering away injected passages 
+[
+52
+]
+, isolate-then-aggregate decoding 
+[
+41
+]
+, multi-agent debate over retrieved documents 
+[
+36
+]
+, and retrieval correction 
+[
+45
+]
+. 
+EchoSpec
+ trains the search policy that decides what enters the retrieved set, on echoes with no shared template, and studies how reinforcement learning shapes this policy in open search agents trained at scale with outcome rewards.
+
+Abstention and selective prediction.
+
+Selective prediction trades coverage for risk through a confidence threshold 
+[
+6
+, 
+9
+, 
+19
+]
+. Language models carry usable signals of their own correctness 
+[
+17
+]
+, which training can sharpen into refusals 
+[
+50
+, 
+8
+]
+, as surveyed by 
+Wen et al. [39]
+. 
+Kalai et al. [18]
+ argue that binary grading rewards guessing over expressing uncertainty, reinforcement fine-tuning measurably lowers refusal on unanswerable questions 
+[
+32
+]
+, and AWA-RL shapes an abstention reward for search agents from the model’s prior capability 
+[
+49
+]
+. 
+EchoSpec
+ prices wrong answers with a single parameter that has a closed-form answering threshold, identifies standard advantage normalization as the step that erases this threshold during training, and couples abstention with a search policy that actively seeks out the primary evidence first.
+
+Learning under controlled transformations.
+
+Counterfactually augmented data pairs inputs that differ only in the feature that should change the label 
+[
+21
+]
+, and invariance principles train predictors whose behavior is stable across environments 
+[
+2
+]
+, both aimed at the shortcut features of standard training data 
+[
+10
+]
+. 
+EchoSpec
+ brings this idea to agents acting over a corpus: each transformation has a specified effect on the answer, and true and false claims share their wording, so no stylistic shortcut reveals the injected text.
+
+3  Reinforcement-Learned Search Agents Follow Echoes
+
+Figure 2: 
+Echoes override intact evidence and end the search.
+ Qwen2.5-Instruct at 7B, 14B, and 32B alongside Search-R1-7B on 1,114 multi-hop questions over wiki-18 across two held-out test sets, with primary evidence retrievable in every condition. (a) Share of clean-correct questions that switch to the injected answer as 
+ false echoes enter the corpus. (b) Accuracy on the clean corpus and under eight echoes of a true or false claim sharing identical text with the answer swapped. (c) Mean number of searches issued per question across the same three corpus conditions.
+
+Frozen research agents treat paraphrased copies of a false claim as independent sources 
+[
+53
+]
+, and reinforcement fine-tuning weakens refusal 
+[
+32
+, 
+49
+]
+. We measure both effects on reinforcement-learned search agents over the corpus they train on and locate where in the search process the echoes take hold.
+
+Setup.
+
+We follow the Search-R1 protocol 
+[
+15
+]
+: the 21M-passage wiki-18 corpus 
+[
+20
+]
+, the e5-base-v2 retriever 
+[
+37
+]
+, top-3 passages per query, and at most four searches, reproducing released Search-R1 at 38.7 average exact match against 38.5 reported. Test questions come from the HotpotQA 
+[
+48
+]
+ and MuSiQue 
+[
+34
+]
+ development sets, each with an identified passage that states the answer. A generator writes a short claim stating the answer without support, and the false claim swaps in a plausible alternative answer across title and body. An 
+Inject
+ world adds 
+ paraphrased echoes of the false claim and a 
+Consistent
+ world adds 
+ echoes of the true claim. Generators from two model families, Qwen3-32B 
+[
+46
+]
+ and Phi-4 
+[
+1
+]
+, build test sets of 507 and 607 questions on which a TF-IDF classifier separates true from false echoes at AUC 0.60–0.68. We evaluate Qwen2.5-Instruct 
+[
+47
+]
+ at 7B, 14B, and 32B with a prompt permitting 
+ABSTAIN
+, and Search-R1-7B with its official prompt. 
+Conditional deference
+ is the share of clean-correct questions switching to the injected answer under echoes, with full world-construction details in 
+Appendix
+ 
+A
+.
+
+3.1  Echoes override evidence
+
+Deference grows with the number of echoes.
+
+A single echo overturns 29–48% of correct answers, and eight echoes overturn 58–66% across Qwen2.5 7B–32B and Search-R1 in 
+Fig.
+ 
+2
+a, reaching 62.5% on Qwen2.5-3B and 70.0% on Llama-3.1-8B 
+[
+11
+]
+. Deference rises with 
+ for every agent on both suites, and model scale leaves it intact: 32B defers on 63% of clean-correct answers at 
+ versus 61% at 7B.
+
+Reinforcement learning amplifies deference.
+
+Search-R1 defers the most at every 
+, reaching 48% at 
+ and 66% at 
+, four to five points above the 7B model it was trained from. Training the same base model with the Search-R1 recipe on our multi-hop training questions reproduces the effect, with deference at 
+ reaching 63–69% across two seeds. Outcome rewards on clean corpora pay the agent for answering from the first passage that states an answer, and echoes supply such passages in quantity at the top of the ranking.
+
+Echoes set the answer and end the search.
+
+Eight echoes of the true claim raise accuracy from 17–26% to 48–57%, while eight echoes of the false claim lower it to 5–9% in 
+Fig.
+ 
+2
+b, with the same evidence retrievable throughout. Both kinds of echo cut search effort by the same amount in 
+Fig.
+ 
+2
+c. Search-R1 drops from 2.49 searches per question to 1.89 and 1.91 because the agent stops once a passage states an answer.
+
+3.2  The failure lies in evidence acquisition
+
+Table 2: 
+Echoes act by keeping the evidence out of reach.
+ Questions each agent answers correctly on the clean corpus, split by whether it retrieved the primary evidence. 
+Reach
+ is the share of trajectories that retrieved it.
+
+Evidence reach (%)
+
+Deference, retrieved (%)
+
+Deference, missed (%)
+
+Agent
+
+Qwen2.5-7B
+
+52.6
+
+26.3
+
+20.1
+
+39.2
+
+31.4
+
+30.8
+
+52.2
+
+67.1
+
+69.7
+
+Exact-match RL
+
+72.0
+
+42.7
+
+31.2
+
+27.0
+
+42.5
+
+33.7
+
+56.8
+
+72.2
+
+81.9
+
+-reward RL
+
+65.4
+
+31.7
+
+22.1
+
+31.2
+
+27.6
+
+24.5
+
+66.3
+
+80.5
+
+84.5
+
+Search agents weigh evidence well once they have it. When a trajectory retrieves the primary evidence, deference at eight echoes is 25–34% in 
+Table
+ 
+2
+, no higher than the 27–39% at a single echo. When the evidence stays out of the context, deference reaches 70–85% at eight echoes. The echoes act on what the agent sees: they fill the top retrieval results and end the search early, and the share of trajectories that reach the primary evidence falls from 53–72% at one echo to 20–31% at eight. All three agents show this pattern. Robustness to echoes therefore requires a search policy that continues past the echoes until it reaches the primary evidence, a behavior that clean training corpora never reward in any question.
+
+3.3  Exact-match rewards remove abstention
+
+Figure 3: 
+Exact-match rewards erase abstention
+ under a prompt permitting abstention. (a) Qwen2.5-7B trained with the Search-R1 recipe sees deleted-evidence abstention collapse within 100 steps. (b) Search-R1-7B vs. Qwen2.5-7B across seven QA sets and deleted evidence. (c) Abstention with intact hollow markers vs. deleted filled markers.
+
+Exact match scores a wrong answer and an abstention identically on answerable-only training sets. Under the reward of 
+Section
+ 
+4.3
+, this corresponds to 
+, whose optimal answering threshold in 
+Proposition
+ 
+1
+ is zero: any guess with nonzero match probability beats abstaining, explaining refusal loss under RL fine-tuning 
+[
+32
+, 
+49
+]
+. Training Qwen2.5-7B with Search-R1 drops abstention on held-out deleted-evidence questions from 47% to 3–14% across three seeds within 100 steps in 
+Fig.
+ 
+3
+a. Likewise, released Search-R1-7B abstains 5–15 points less than its base model across all seven QA sets in 
+Fig.
+ 
+3
+b, and every tested model abstains only 5–10 points more often when primary evidence is deleted than when intact in 
+Fig.
+ 
+3
+c.
+
+4  
+EchoSpec
+
+Figure 4: 
+Overview of 
+EchoSpec
+.
+ 
+(a) Controlled worlds & search:
+ seed 
+ defines answer-invariant 
+Identity
+, 
+Dup
+, 
+Inject
+, and 
+Consistent
+ worlds linked by 
+, plus answer-shifting 
+Rewrite
+ and 
+Delete
+ under 
+-query top-3 search masking seen passages. 
+(b) Stage 1 
+ Verification warm-start:
+ temporary chain hints guide a 32B solver past Turn-1 echoes 
+ via 
+ to 
+, and three filters keep grounded, self-contained rollouts for LoRA SFT 
+. 
+(c) Stage 2 
+ 
+-calibrated group RL:
+ from 
+ with KL reference 
+, 
+ optimizes 
+ on paired 
+ and 
+ rollouts via 
+ with 
+ without 
+, keeping 
+.
+
+EchoSpec
+ trains a search agent to pursue primary evidence past echoes and abstain when support is absent. It specifies target behavior across five corpus transformations in 
+Section
+ 
+4.1
+, seeds multi-step verification through a trajectory warm-start in 
+Section
+ 
+4.2
+, and optimizes calibrated answering and search depth with threshold-preserving group RL in 
+Section
+ 
+4.3
+, as summarized in 
+Fig.
+ 
+4
+ for a multi-hop training question.
+
+4.1  Reliability as a specification over corpus transformations
+
+Each training question 
+ comes with gold answer 
+, bridge articles 
+, and primary passage 
+ stating 
+. A transformation 
+ fixes a known target output 
+. Answer-invariant worlds set 
+: 
+Dup
+ adds 
+ paraphrases of 
+, 
+Inject
+ adds 
+ echoes of a bare claim stating decoy 
+, and 
+Consistent
+ adds 
+ echoes of the identical claim template stating 
+. Answer-shifting worlds modify support: 
+Rewrite
+ minimally edits 
+ to state 
+, and 
+Delete
+ masks 
+ with target 
+, verified iteratively by probing the retriever with 
+, 
+, and 
+ until no unmasked passage surfaces 
+. Because true and false echoes differ solely in swapping 
+ across title and body, neither wording, length, nor copy count reveals veracity, so satisfying all worlds requires checking claims against primary evidence.
+
+4.2  Verification warm-start
+
+Policy-gradient RL can reinforce only behaviors with nonzero sampling mass, yet 
+Section
+ 
+3.2
+ shows that base agents rarely search past Turn-1 echoes. Stage 1 seeds this verification behavior via chain-guided trajectory synthesis over worlds weighted toward multi-echo 
+Inject
+ and 
+Delete
+. During synthesis only, a note appended to the prompt names the supporting article chain 
+ and instructs the solver to query entities from 
+ rather than bare claim answers until confirming 
+ in 
+ or exhausting search. Default synthesis uses Qwen2.5-32B-Instruct, which itself defers at 63% under eight echoes without guidance, while self-guided 7B synthesis is ablated in 
+Section
+ 
+5.2
+. Retained trajectories satisfy three quality criteria: (i) 
+grounded outcome
+, requiring 
+ with 
+ or 
+-search abstention on 
+Delete
+, (ii) 
+hop continuity
+, requiring every hinted title 
+ absent from 
+ to appear in an earlier retrieved passage before being queried, and (iii) 
+self-contained reasoning
+, rejecting any mention of the guidance note. Prioritizing 
+-search echo recoveries and stripping the note yields plain-prompt demonstrations 
+ for LoRA 
+[
+14
+]
+ fine-tuning.
+
+4.3  
+-calibrated group reinforcement learning
+
+Decision-theoretic reward.
+
+In world 
+, terminal output 
+ over retrieved passages 
+ receives reward
+
+(1)
+
+where 
+ discounts unverified echo matches on 
+Consistent
+ worlds relative to grounded answers, and standard exact-match RL corresponds to the degenerate special case 
+ and 
+ of 
+Eq.
+ 
+1
+.
+
+Proposition 1
+.
+
+Fix retrieved passages 
+ on an answerable world with 
+, and let 
+ be the conditional probability of 
+ given 
+. Under 
+Eq.
+ 
+1
+, answering beats abstaining in expectation iff 
+.
+
+Proof.
+
+Expected return is 
+ for answering versus 
+ for 
+ABSTAIN
+.
+∎
+
+Scale-preserving advantages.
+
+Proposition
+ 
+1
+ characterizes the Bayes-optimal stopping payoff for fixed 
+ rather than guaranteeing calibrated posteriors after finite-sample RL. However, standard GRPO 
+[
+29
+]
+ erases 
+ from the objective by dividing centered rewards by their group standard deviation:
+
+Proposition 2
+.
+
+In any failed group of 
+ rollouts with 
+ abstentions at 
+ and 
+ wrong answers at 
+ for 
+, dividing centered returns by the group standard deviation assigns advantage 
+ to abstentions and 
+ to wrong answers identically for every risk penalty 
+.
+
+Proof.
+
+Group mean 
+ and standard deviation 
+ scale in 
+ and cancel.
+∎
+
+Empirically, std-normalized GRPO at 
+ drives answerable-world abstention to 61–79% within 50 steps, whereas mean-centered advantages keep rewards in units of 
+ for monotonic control in 
+Appendix
+ 
+D
+.
+
+Outcome-independent acquisition bonus and cross-world baseline.
+
+To reward multi-hop exploration without shifting the abstention rule, we add a terminal set bonus 
+ to each episode return, where 
+. Unlike step-wise potential shaping, 
+ depends only on retrieved set 
+, not 
+, so it cancels from 
+ for every 
+ and leaves 
+Proposition
+ 
+1
+’s payoff rule intact. Each step also rolls out 
+ episodes in 
+ and 
+ in 
+. On invariant worlds 
+Dup
+, 
+Inject
+, and 
+Consistent
+, optional cross-world baseline 
+ serves as an unbiased control variate breaking uniform ties in 
+Proposition
+ 
+4
+, with 
+ once Stage 1 prevents collapse.
+
+4.4  Search protocol and inference-time modularity
+
+At training and test time, the agent queries 
+e5-base-v2
+ over 
+wiki-18
+ for top-3 passages in up to four searches without source metadata. Within each episode, 
+exclude-seen
+ retrieval masks prior passage IDs so reformulated queries surface fresh documents rather than repeating top echoes, lifting eight-echo reach while leaving deference resistance intact when disabled in 
+Sections
+ 
+5.2
+ and 
+F
+. Because 
+EchoSpec
+ updates only policy weights, it deploys directly and composes with retrieval filters in 
+Section
+ 
+5.1
+.
+
+5  Evaluation
+
+Table 3: 
+Main results
+ across two ten-world suites (1,114 items) and seven QA sets (3-seed Qwen2.5-7B means; 1-seed Llama-3.1-8B). 
+Def@m
+: conditional deference at 
+ echoes (
+). 
+Reach@8
+, 
+Acc@8
+: evidence reach and EM at 
+ (
+). 
+Abst.
+: 
+Delete
+ abstention (
+). 
+Prec.
+, 
+RA-F1
+: QA precision and RA-F1 
+[
+49
+]
+ (
+). 
+ MADAM-RAG abstains on 76% of clean items (2.8% Acc@8). Standalone 
+1st
+/
+2nd
+ and filter rows beating standalone are shaded.
+
+Method
+
+Def@1 
+
+Def@3 
+
+Def@8 
+
+Reach@8 
+
+Acc@8 
+
+Abst. 
+
+Prec. 
+
+RA-F1 
+
+Released search agents
+
+Search-R1
+
+46.0
+
+63.3
+
+69.1
+
+13.3
+
+6.8
+
+0.2
+
+38.4
+
+38.4
+
+ZeroSearch
+
+53.0
+
+69.6
+
+72.9
+
+7.3
+
+3.8
+
+0.1
+
+35.2
+
+35.2
+
+AutoRefine (Instruct)
+
+47.8
+
+63.0
+
+72.2
+
+13.0
+
+8.8
+
+0.0
+
+42.4
+
+42.4
+
+AutoRefine (Base)
+
+40.5
+
+57.2
+
+59.8
+
+18.1
+
+12.5
+
+0.0
+
+44.7
+
+44.7
+
+ReSearch
+
+43.5
+
+64.5
+
+68.9
+
+20.9
+
+9.4
+
+0.0
+
+40.6
+
+40.6
+
+R1-Searcher
+
+33.3
+
+54.2
+
+61.9
+
+21.0
+
+12.5
+
+0.0
+
+41.8
+
+41.7
+
+AWA-RL
+
+48.4
+
+55.6
+
+58.6
+
+19.8
+
+6.0
+
+0.0
+
+35.9
+
+35.9
+
+Qwen2.5-7B with inference-time defenses
+
+No defense
+
+41.9
+
+57.2
+
+58.8
+
+7.1
+
+5.5
+
+49.2
+
+41.1
+
+33.8
+
+Defensive prompt
+
+42.1
+
+58.3
+
+61.0
+
+7.9
+
+4.7
+
+52.7
+
+42.0
+
+32.9
+
+Near-duplicate removal
+
+41.3
+
+55.9
+
+63.0
+
+7.1
+
+4.8
+
+46.7
+
+40.6
+
+33.6
+
+Provenance gate
+
+44.9
+
+56.1
+
+59.4
+
+7.6
+
+5.8
+
+46.8
+
+41.0
+
+33.9
+
+TrustRAG
+
+35.4
+
+41.7
+
+22.8
+
+11.4
+
+9.4
+
+48.0
+
+40.3
+
+33.0
+
+MADAM-RAG
+†
+
+7.4
+
+40.6
+
+48.4
+
+7.0
+
+2.8
+
+84.4
+
+55.7
+
+28.3
+
+Qwen2.5-7B trained on the same questions
+
+Exact-match RL
+
+35.2
+
+59.5
+
+67.7
+
+15.9
+
+8.1
+
+1.4
+
+37.2
+
+36.8
+
+-reward RL
+
+45.4
+
+68.4
+
+69.4
+
+9.4
+
+5.2
+
+32.5
+
+42.4
+
+37.6
+
+EchoSpec
+ (3 seeds)
+
+14.3
+
+23.9
+
+28.9
+
+25.8
+
+16.7
+
+37.6
+
+47.1
+
+40.1
+
+Llama-3.1-8B cross-family replication (1 seed)
+
+No defense
+
+37.3
+
+67.5
+
+70.0
+
+10.8
+
+3.8
+
+5.0
+
+28.4
+
+27.6
+
+Exact-match RL
+
+33.8
+
+61.3
+
+66.7
+
+17.6
+
+9.8
+
+2.8
+
+42.7
+
+42.2
+
+EchoSpec
+
+11.1
+
+24.1
+
+30.6
+
+26.5
+
+17.2
+
+52.5
+
+55.4
+
+44.2
+
+Qwen2.5-7B with orthogonal retrieval filters (3 seeds)
+
+EchoSpec
+ + TrustRAG
+
+13.8
+
+19.4
+
+12.8
+
+29.4
+
+19.0
+
+36.5
+
+44.1
+
+38.3
+
+EchoSpec
+ + Sem. dedup
+
+16.7
+
+25.9
+
+28.7
+
+36.2
+
+20.2
+
+33.9
+
+46.2
+
+40.0
+
+5.1  Setup and main results
+
+Setup.
+
+Suites span Test A/B (
+Appendix
+ 
+D
+) and seven QA sets (
+Appendix
+ 
+E
+): NQ 
+[
+22
+]
+, TriviaQA 
+[
+16
+]
+, PopQA 
+[
+24
+]
+, HotpotQA 
+[
+48
+]
+, 2WikiMultiHopQA 
+[
+13
+]
+, MuSiQue 
+[
+34
+]
+, and Bamboogle 
+[
+27
+]
+. RL agents: Search-R1 
+[
+15
+]
+, ZeroSearch 
+[
+33
+]
+, AutoRefine-Base/Instruct 
+[
+30
+]
+, ReSearch 
+[
+4
+]
+, R1-Searcher 
+[
+31
+]
+, and AWA-RL 
+[
+49
+]
+. On Qwen2.5-7B 
+[
+47
+]
+, defenses cover prompts, dedup, skeleton gating 
+[
+53
+]
+, TrustRAG 
+[
+52
+]
+, and MADAM-RAG 
+[
+36
+]
+; we train Exact-match RL, 
+-reward RL, and 
+EchoSpec
+ on Qwen2.5-3B/7B and Llama-3.1-8B 
+[
+11
+]
+ with protocol, BGE 
+[
+42
+]
+, and BM25 
+[
+28
+]
+ controls (
+Appendices
+ 
+F
+ and 
+G
+).
+
+Active evidence recovery, cross-backbone, and cross-retriever transfer.
+
+On Qwen2.5-7B, standalone 
+EchoSpec
+ cuts deference to 
+, 
+, and 
+ in 
+Table
+ 
+3
+, beating all seven RL agents (58.6–72.9%) by 30–44 points and lifting Reach@8 from 7.1% to 
+ and Acc@8 to 
+. Across backbones (
+Table
+ 
+9
+), 
+EchoSpec
+ cuts Def@8 from 62.5% to 30.4% on Qwen2.5-3B and from 70.0% to 30.6% on Llama-3.1-8B at 26.5% Reach@8. Controls rule out protocol artifacts: exclude-seen (
+Table
+ 
+8
+) leaves RL agents at 59.7–74.7% Def@8, forcing three Search-R1 turns (
+Table
+ 
+10
+) gives 3.18 searches at 55.5% Def@8, and AWA-RL at 
+ runs 3.65 at 61.8%. Frozen 
+EchoSpec
+ transfers zero-shot (
+Table
+ 
+11
+) to BGE at 29.4% and BM25 at 25.1% Def@8, and filters reach 11.8–12.8% Def@8 or 36.2–36.4% Reach@8.
+
+Abstention fairness and selective risk-coverage calibration.
+
+Under native prompts in 
+Table
+ 
+3
+, released RL agents stay at 
+ 
+Delete
+ abstention. With an abstention prompt, Search-R1 reaches 36.6% versus 30.2% intact and Exact-match RL drops to 1.4–2.8%, whereas 
+EchoSpec
+ abstains on 
+ and 52.5% versus 27.8% and 25.0% intact. Across seven QA sets in 
+Appendix
+ 
+E
+, it reaches 47.1% and 55.4% precision at 44.2 RA-F1, beating baselines by 2.8–3.0 points when answering while they miss 78–80% of refusals.
+
+5.2  Ablations and behavioral mechanism
+
+Table 4: 
+Component ablations
+ vs. 
+shaded
+ 3-seed default 
+EchoSpec
+ (
+ Def@8, 
+ Reach@8, 
+ Abst., 
+ Prec.). 
+Con8-R
+: evidence reach on 
+Consistent
+; 1-seed rows use seed 1 (32.4 Def@8, 39.6 Abst., 48.4 Prec.).
+
+Variant
+
+Def@1 
+
+Def@8 
+
+Reach@8 
+
+Con8-R 
+
+Acc@8 
+
+Abst. 
+
+Prec. 
+
+RA-F1 
+
+EchoSpec
+ (default, 
+, 3 seeds)
+
+14.3
+
+28.9
+
+25.8
+
+31.3
+
+16.7
+
+37.6
+
+47.1
+
+40.1
+
+w/o Stage 2 RL (warm-start only, 3 seeds)
+
+20.8
+
+47.2
+
+21.0
+
+23.4
+
+13.9
+
+33.1
+
+47.0
+
+41.5
+
+w/o Stage 1 warm-start (
+-RL only, 1 seed)
+
+45.4
+
+69.4
+
+9.4
+
+9.2
+
+5.2
+
+32.5
+
+42.4
+
+37.6
+
+w/o wrong-answer penalty (
+, 1 seed)
+
+12.9
+
+29.3
+
+28.7
+
+32.2
+
+19.5
+
+20.6
+
+42.3
+
+39.6
+
+w/o evidence gate (
+, 1 seed)
+
+16.8
+
+31.1
+
+26.5
+
+26.3
+
+16.9
+
+39.6
+
+50.0
+
+41.6
+
+w/o acq. bonus (
+, 1 seed)
+
+16.2
+
+29.1
+
+26.2
+
+30.1
+
+15.8
+
+40.7
+
+49.7
+
+41.7
+
+w/o exclude-seen retrieval (3 seeds)
+
+17.0
+
+31.6
+
+22.5
+
+25.8
+
+15.2
+
+40.3
+
+47.9
+
+40.1
+
++ cross-world baseline (
+, 3 seeds)
+
+12.8
+
+31.5
+
+27.4
+
+29.9
+
+16.1
+
+31.6
+
+43.3
+
+37.6
+
+w/o 32B teacher (self-guided 7B, 2 seeds)
+
+19.8
+
+51.5
+
+23.5
+
+27.7
+
+11.4
+
+36.9
+
+42.9
+
+36.8
+
+w/o 32B teacher & acq. bonus (3 seeds)
+
+21.7
+
+56.0
+
+20.5
+
+24.7
+
+9.0
+
+43.1
+
+44.1
+
+37.2
+
+Figure 5: 
+Behavioral mechanism.
+ (a) Def@8 vs. Reach@8 across agents, backbones, and filters. (b) Searches per question across echo count 
+ over 3 seeds, where baselines stop early while 
+EchoSpec
+ searches deeper.
+
+Table
+ 
+4
+ separates primary structural drivers from targeted regularizers. Stage 1, Stage 2, and 
+ drive core gains: dropping Stage 1 leaves 9.4% Reach@8 and 69.4% Def@8, dropping Stage 2 leaves 47.2% Def@8, and 
+ cuts abstention to 20.6% and precision to 42.3%. With 32B warm-start, 1-seed 
+ and 
+ stay within seed noise on 
+Inject
+ and inherit seed-1’s 39.6–40.7% abstention (49.7–50.0% Prec.), yet each guards its target regime: 
+ cuts 
+Consistent
+ reach by 5.0 points (31.3% to 26.3%), while 
+ cuts self-guided 7B Def@8 from 56.0% to 51.5% and lifts Reach@8 from 20.5% to 23.5%. Disabling exclude-seen costs 3.3 points of Reach@8, and 
+ gives 12.8% Def@1 and 27.4% Reach@8 at 31.5% Def@8, favoring 
+. Reach@8 tracks Def@8 in 
+Fig.
+ 
+5
+a, and 
+-search runs rise from 49% to 61% in 
+Fig.
+ 
+5
+b.
+
+6  Conclusion and Limitations
+
+Reinforcement-learned search agents follow paraphrased echoes because standard QA corpora conflate claim frequency with provenance, and they lose abstention because binary exact-match rewards leave wrong guesses unpriced. Larger budgets, forced turns, or passage filtering fail once policies stop on bare claims or query decoys. 
+EchoSpec
+ resolves both via five corpus transformations, a bridge-entity verification warm-start, and an evidence-gated 
+-reward with an acquisition bonus and scale-preserving advantages, generalizing across Qwen2.5 and Llama-3.1 backbones and unseen dense and lexical BM25 retrievers.
+
+Limitations.
+
+While we test up to eight turns over dense and BM25 indices of 21M Wikipedia passages, live web search adds dynamic rankings, SEO manipulation, and compromised sources, and world construction requires multi-hop items with known evidence, motivating open-ended multi-source synthesis.
+
+References
+
+[1]
+
+Marah Abdin, Jyoti Aneja, Harkirat Behl, Sébastien Bubeck, Ronen Eldan,
+Suriya Gunasekar, Michael Harrison, Russell J. Hewett, Mojan Javaheripi,
+Piero Kauffmann, James R. Lee, Yin Tat Lee, Yuanzhi Li, Weishung Liu, Caio
+C. T. Mendes, Anh Nguyen, Eric Price, Gustavo de Rosa, Olli Saarikivi, Adil
+Salim, Shital Shah, Xin Wang, Rachel Ward, Yue Wu, Dingli Yu, Cyril Zhang,
+and Yi Zhang.
+
+Phi-4 technical report.
+
+arXiv preprint arXiv:2412.08905
+, 2024.
+
+[2]
+
+Martin Arjovsky, Léon Bottou, Ishaan Gulrajani, and David Lopez-Paz.
+
+Invariant risk minimization.
+
+arXiv preprint arXiv:1907.02893
+, 2019.
+
+[3]
+
+Akari Asai, Zeqiu Wu, Yizhong Wang, Avirup Sil, and Hannaneh Hajishirzi.
+
+Self-RAG: Learning to retrieve, generate, and critique through
+self-reflection.
+
+In 
+International Conference on Learning Representations
+, 2024.
+
+[4]
+
+Mingyang Chen, Linzhuang Sun, Tianpeng Li, Haoze Sun, Yijie Zhou, Chenzheng
+Zhu, Haofen Wang, Jeff Z. Pan, Wen Zhang, Huajun Chen, Fan Yang, Zenan Zhou,
+and Weipeng Chen.
+
+ReSearch: Learning to reason with search for LLMs via
+reinforcement learning.
+
+In 
+Advances in Neural Information Processing Systems
+, 2025.
+
+[5]
+
+Yujia Chen, Yuhui Wang, Junzhe Wang, Shihan Dou, Di Liang, Yujiong Shen, Yuhao
+Zhou, Zhiheng Xi, Ming Zhang, Senjie Jin, Jiayi Chen, Dingwei Zhu, Yajie
+Yang, Yuan Hua, Chenyao Lu, Tao Gui, Qi Zhang, and Xuanjing Huang.
+
+QREF: Improving deepsearch agents by aligning search with reasoning
+via query refinement and evidence filtering.
+
+arXiv preprint arXiv:2610.21512
+, 2026.
+
+[6]
+
+Ran El-Yaniv and Yair Wiener.
+
+On the foundations of noise-free selective classification.
+
+Journal of Machine Learning Research
+, 11:1605–1641,
+2010.
+
+[7]
+
+Lisa K. Fazio, Nadia M. Brashier, B. Keith Payne, and Elizabeth J. Marsh.
+
+Knowledge does not protect against illusory truth.
+
+Journal of Experimental Psychology: General
+, 144(5):993–1002, 2015.
+
+[8]
+
+Shangbin Feng, Weijia Shi, Yike Wang, Wenxuan Ding, Vidhisha Balachandran, and
+Yulia Tsvetkov.
+
+Don’t hallucinate, abstain: Identifying LLM knowledge gaps via
+multi-LLM collaboration.
+
+In 
+Proceedings of ACL
+, 2024.
+
+[9]
+
+Yonatan Geifman and Ran El-Yaniv.
+
+Selective classification for deep neural networks.
+
+In 
+Advances in Neural Information Processing Systems
+, 2017.
+
+[10]
+
+Robert Geirhos, Jörn-Henrik Jacobsen, Claudio Michaelis, Richard Zemel,
+Wieland Brendel, Matthias Bethge, and Felix A. Wichmann.
+
+Shortcut learning in deep neural networks.
+
+Nature Machine Intelligence
+, 2020.
+
+[11]
+
+Aaron Grattafiori, Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek
+Kadian, Ahmad Al-Dahle, Aiesha Letman, Akhil Mathur, Alan Schelten, Alex
+Vaughan, and Llama Team, AI @ Meta.
+
+The Llama 3 herd of models.
+
+arXiv preprint arXiv:2407.21783
+, 2024.
+
+[12]
+
+Lynn Hasher, David Goldstein, and Thomas Toppino.
+
+Frequency and the conference of referential validity.
+
+Journal of Verbal Learning and Verbal Behavior
+, 16(1):107–112, 1977.
+
+[13]
+
+Xanh Ho, Anh-Khoa Duong Nguyen, Saku Sugawara, and Akiko Aizawa.
+
+Constructing a multi-hop QA dataset for comprehensive evaluation of
+reasoning steps.
+
+In 
+Proceedings of COLING
+, 2020.
+
+[14]
+
+Edward J. Hu, Yelong Shen, Phillip Wallis, Zeyuan Allen-Zhu, Yuanzhi Li, Shean
+Wang, Lu Wang, and Weizhu Chen.
+
+LoRA: Low-rank adaptation of large language models.
+
+In 
+International Conference on Learning Representations
+, 2022.
+
+[15]
+
+Bowen Jin, Hansi Zeng, Zhenrui Yue, Jinsung Yoon, Sercan Arik, Dong Wang, Hamed
+Zamani, and Jiawei Han.
+
+Search-R1: Training LLMs to reason and leverage search engines
+with reinforcement learning.
+
+arXiv preprint arXiv:2503.09516
+, 2025.
+
+[16]
+
+Mandar Joshi, Eunsol Choi, Daniel S. Weld, and Luke Zettlemoyer.
+
+TriviaQA: A large scale distantly supervised challenge dataset for
+reading comprehension.
+
+In 
+Proceedings of ACL
+, 2017.
+
+[17]
+
+Saurav Kadavath, Tom Conerly, Amanda Askell, Tom Henighan, Dawn Drain, Ethan
+Perez, Nicholas Schiefer, Zac Hatfield-Dodds, Nova DasSarma, Eli
+Tran-Johnson, Scott Johnston, Sheer El-Showk, Andy Jones, Nelson Elhage,
+Tristan Hume, Anna Chen, Yuntao Bai, Sam Bowman, Stanislav Fort, Deep
+Ganguli, Danny Hernandez, Josh Jacobson, Jackson Kernion, Shauna Kravec,
+Liane Lovitt, Kamal Ndousse, Catherine Olsson, Sam Ringer, Dario Amodei, Tom
+Brown, Jack Clark, Nicholas Joseph, Ben Mann, Sam McCandlish, Chris Olah, and
+Jared Kaplan.
+
+Language models (mostly) know what they know.
+
+arXiv preprint arXiv:2207.05221
+, 2022.
+
+[18]
+
+Adam Tauman Kalai, Ofir Nachum, Santosh S. Vempala, and Edwin Zhang.
+
+Why language models hallucinate.
+
+arXiv preprint arXiv:2509.04664
+, 2025.
+
+[19]
+
+Amita Kamath, Robin Jia, and Percy Liang.
+
+Selective question answering under domain shift.
+
+In 
+Proceedings of ACL
+, 2020.
+
+[20]
+
+Vladimir Karpukhin, Barlas Oğuz, Sewon Min, Patrick Lewis, Ledell Wu,
+Sergey Edunov, Danqi Chen, and Wen-tau Yih.
+
+Dense passage retrieval for open-domain question answering.
+
+In 
+Proceedings of EMNLP
+, 2020.
+
+[21]
+
+Divyansh Kaushik, Eduard Hovy, and Zachary Lipton.
+
+Learning the difference that makes a difference with
+counterfactually-augmented data.
+
+In 
+International Conference on Learning Representations
+, 2020.
+
+[22]
+
+Tom Kwiatkowski, Jennimaria Palomaki, Olivia Redfield, Michael Collins, Ankur
+Parikh, Chris Alberti, Danielle Epstein, Illia Polosukhin, Jacob Devlin,
+Kenton Lee, Kristina Toutanova, Llion Jones, Matthew Kelcey, Ming-Wei Chang,
+Andrew M. Dai, Jakob Uszkoreit, Quoc Le, and Slav Petrov.
+
+Natural questions: A benchmark for question answering research.
+
+Transactions of the Association for Computational Linguistics
+,
+7:452–466, 2019.
+
+[23]
+
+Shayne Longpre, Kartik Perisetla, Anthony Chen, Nikhil Ramesh, Chris DuBois,
+and Sameer Singh.
+
+Entity-based knowledge conflicts in question answering.
+
+In 
+Proceedings of EMNLP
+, 2021.
+
+[24]
+
+Alex Mallen, Akari Asai, Victor Zhong, Rajarshi Das, Daniel Khashabi, and
+Hannaneh Hajishirzi.
+
+When not to trust language models: Investigating effectiveness of
+parametric and non-parametric memories.
+
+In 
+Proceedings of ACL
+, 2023.
+
+[25]
+
+Jun Nie, Zhiqin Yang, Zhenheng Tang, Yonggang Zhang, Xiaowen Chu, Xinmei Tian,
+and Bo Han.
+
+DRNOISE: Benchmarking deep research agents in misleading evidence
+environments.
+
+arXiv preprint arXiv:2607.17291
+, 2026.
+
+[26]
+
+Yikang Pan, Liangming Pan, Wenhu Chen, Preslav Nakov, Min-Yen Kan, and
+William Yang Wang.
+
+On the risk of misinformation pollution with large language models.
+
+In 
+Findings of EMNLP
+, 2023.
+
+[27]
+
+Ofir Press, Muru Zhang, Sewon Min, Ludwig Schmidt, Noah A. Smith, and Mike
+Lewis.
+
+Measuring and narrowing the compositionality gap in language models.
+
+In 
+Findings of EMNLP
+, 2023.
+
+[28]
+
+Stephen Robertson and Hugo Zaragoza.
+
+The probabilistic relevance framework: BM25 and beyond.
+
+Foundations and Trends in Information Retrieval
+, 3(4):333–389, 2009.
+
+[29]
+
+Zhihong Shao, Peiyi Wang, Qihao Zhu, Runxin Xu, Junxiao Song, Xiao Bi, Haowei
+Zhang, Mingchuan Zhang, Y. K. Li, Y. Wu, and Daya Guo.
+
+DeepSeekMath: Pushing the limits of mathematical reasoning in open
+language models.
+
+arXiv preprint arXiv:2402.03300
+, 2024.
+
+[30]
+
+Yaorui Shi, Sihang Li, Chang Wu, Zhiyuan Liu, Junfeng Fang, Hengxing Cai,
+An Zhang, and Xiang Wang.
+
+Search and refine during think: Facilitating knowledge refinement for
+improved retrieval-augmented reasoning.
+
+In 
+Advances in Neural Information Processing Systems
+, 2025.
+
+[31]
+
+Huatong Song, Jinhao Jiang, Yingqian Min, Jie Chen, Zhipeng Chen, Wayne Xin
+Zhao, Lei Fang, and Ji-Rong Wen.
+
+R1-Searcher: Incentivizing the search capability in LLMs via
+reinforcement learning.
+
+arXiv preprint arXiv:2503.05592
+, 2025a.
+
+[32]
+
+Linxin Song, Taiwei Shi, and Jieyu Zhao.
+
+The hallucination tax of reinforcement finetuning.
+
+In 
+Findings of the Association for Computational Linguistics:
+EMNLP 2025
+, pages 2105–2120, 2025b.
+
+[33]
+
+Hao Sun, Zile Qiao, Jiayan Guo, Xuanbo Fan, Yingyan Hou, Yong Jiang, Pengjun
+Xie, Yan Zhang, Fei Huang, and Jingren Zhou.
+
+ZeroSearch: Incentivize the search capability of LLMs without
+searching.
+
+arXiv preprint arXiv:2505.04588
+, 2025.
+
+[34]
+
+Harsh Trivedi, Niranjan Balasubramanian, Tushar Khot, and Ashish Sabharwal.
+
+MuSiQue: Multihop questions via single-hop question composition.
+
+Transactions of the Association for Computational Linguistics
+,
+2022.
+
+[35]
+
+Harsh Trivedi, Niranjan Balasubramanian, Tushar Khot, and Ashish Sabharwal.
+
+Interleaving retrieval with chain-of-thought reasoning for
+knowledge-intensive multi-step questions.
+
+In 
+Proceedings of ACL
+, 2023.
+
+[36]
+
+Han Wang, Archiki Prasad, Elias Stengel-Eskin, and Mohit Bansal.
+
+Retrieval-augmented generation with conflicting evidence.
+
+arXiv preprint arXiv:2504.13079
+, 2025.
+
+[37]
+
+Liang Wang, Nan Yang, Xiaolong Huang, Binxing Jiao, Linjun Yang, Daxin Jiang,
+Rangan Majumder, and Furu Wei.
+
+Text embeddings by weakly-supervised contrastive pre-training.
+
+arXiv preprint arXiv:2212.03533
+, 2022.
+
+[38]
+
+Sikun Wang, Yixi Zhou, Lei Fan, and Fan Zhang.
+
+GraphEcho: Structural redundancy and evidence provenance in LLM
+graph agents.
+
+arXiv preprint arXiv:2609.17695
+, 2026.
+
+[39]
+
+Bingbing Wen, Jihan Yao, Shangbin Feng, Chenjun Xu, Yulia Tsvetkov, Bill Howe,
+and Lucy Lu Wang.
+
+Know your limits: A survey of abstention in large language models.
+
+Transactions of the Association for Computational Linguistics
+,
+13, 2025.
+
+[40]
+
+Kevin Wu, Eric Wu, and James Zou.
+
+ClashEval: Quantifying the tug-of-war between an LLM’s internal
+prior and external evidence.
+
+In 
+NeurIPS Datasets and Benchmarks Track
+, 2024.
+
+[41]
+
+Chong Xiang, Tong Wu, Zexuan Zhong, David Wagner, Danqi Chen, and Prateek
+Mittal.
+
+Certifiably robust RAG against retrieval corruption.
+
+arXiv preprint arXiv:2405.15556
+, 2024.
+
+[42]
+
+Shitao Xiao, Zheng Liu, Peitian Zhang, Niklas Muennighoff, Defu Lian, and
+Jian-Yun Nie.
+
+C-Pack: Packed resources for general chinese embeddings.
+
+In 
+Proceedings of SIGIR
+, 2024.
+
+[43]
+
+Jian Xie, Kai Zhang, Jiangjie Chen, Renze Lou, and Yu Su.
+
+Adaptive chameleon or stubborn sloth: Revealing the behavior of large
+language models in knowledge conflicts.
+
+In 
+International Conference on Learning Representations
+, 2024.
+
+[44]
+
+Rongwu Xu, Zehan Qi, Zhijiang Guo, Cunxiang Wang, Hongru Wang, Yue Zhang, and
+Wei Xu.
+
+Knowledge conflicts for LLMs: A survey.
+
+In 
+Proceedings of EMNLP
+, 2024.
+
+[45]
+
+Shi-Qi Yan, Jia-Chen Gu, Yun Zhu, and Zhen-Hua Ling.
+
+Corrective retrieval augmented generation.
+
+arXiv preprint arXiv:2401.15884
+, 2024.
+
+[46]
+
+An Yang, Anfeng Li, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen
+Yu, Chang Gao, Chengen Huang, Chenxu Lv, Chujie Zheng, Dayiheng Liu, Fan
+Zhou, Fei Huang, Feng Hu, Hao Ge, Haoran Wei, Huan Lin, Jialong Tang, Jian
+Yang, Jianhong Tu, Jianwei Zhang, Jianxin Yang, Jiaxi Yang, Jing Zhou,
+Jingren Zhou, Junyang Lin, Kai Dang, Keqin Bao, Kexin Yang, Le Yu, Lianghao
+Deng, Mei Li, Mingfeng Xue, Mingze Li, Pei Zhang, Peng Wang, Qin Zhu, Rui
+Men, Ruize Gao, Shixuan Liu, Shuang Luo, Tianhao Li, Tianyi Tang, Wenbiao
+Yin, Xingzhang Ren, Xinyu Wang, Xinyu Zhang, Xuancheng Ren, Yang Fan, Yang
+Su, Yichang Zhang, Yinger Zhang, Yu Wan, Yuqiong Liu, Zekun Wang, Zeyu Cui,
+Zhenru Zhang, Zhipeng Zhou, and Zihan Qiu.
+
+Qwen3 technical report.
+
+arXiv preprint arXiv:2505.09388
+, 2025a.
+
+[47]
+
+An Yang, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen Yu,
+Chengyuan Li, Dayiheng Liu, Fei Huang, Haoran Wei, Huan Lin, Jian Yang,
+Jianhong Tu, Jianwei Zhang, Jianxin Yang, Jiaxi Yang, Jingren Zhou, Junyang
+Lin, Kai Dang, Keming Lu, Keqin Bao, Kexin Yang, Le Yu, Mei Li, Mingfeng Xue,
+Pei Zhang, Qin Zhu, Rui Men, Runji Lin, Tianhao Li, Tianyi Tang, Tingyu Xia,
+Xingzhang Ren, Xuancheng Ren, Yang Fan, Yang Su, Yichang Zhang, Yu Wan,
+Yuqiong Liu, Zeyu Cui, Zhenru Zhang, and Zihan Qiu.
+
+Qwen2.5 technical report.
+
+arXiv preprint arXiv:2412.15115
+, 2025b.
+
+[48]
+
+Zhilin Yang, Peng Qi, Saizheng Zhang, Yoshua Bengio, William W. Cohen, Ruslan
+Salakhutdinov, and Christopher D. Manning.
+
+HotpotQA: A dataset for diverse, explainable multi-hop question
+answering.
+
+In 
+Proceedings of EMNLP
+, 2018.
+
+[49]
+
+Fengji Zhang, Tianyu Fan, Yuxiang Zheng, Xinyao Niu, Chengen Huang, Jacky
+Keung, and Bei Chen.
+
+To answer or to abstain: Mitigating search-agent hallucinations via
+abstention-aware reinforcement learning.
+
+arXiv preprint arXiv:2607.10738
+, 2026.
+
+[50]
+
+Hanning Zhang, Shizhe Diao, Yong Lin, Yi R. Fung, Qing Lian, Xingyao Wang,
+Yangyi Chen, Heng Ji, and Tong Zhang.
+
+R-Tuning: Instructing large language models to say “I don’t
+know”.
+
+In 
+Proceedings of NAACL
+, 2024.
+
+[51]
+
+Yuxiang Zheng, Dayuan Fu, Xiangkun Hu, Xiaojie Cai, Lyumanshan Ye, Pengrui Lu,
+and Pengfei Liu.
+
+DeepResearcher: Scaling deep research via reinforcement learning in
+real-world environments.
+
+In 
+Proceedings of EMNLP
+, 2025.
+
+[52]
+
+Huichi Zhou, Kin-Hei Lee, Zhonghao Zhan, Yue Chen, Zhenhao Li, Zhaoyang Wang,
+Hamed Haddadi, and Emine Yilmaz.
+
+TrustRAG: Enhancing robustness and trustworthiness in
+retrieval-augmented generation.
+
+arXiv preprint arXiv:2501.00879
+, 2025.
+
+[53]
+
+Ruihua Zhou, Hao Huang, Yijie Zheng, Jiatang Luo, Yunpeng Li, Yuling Liu, and
+Dan Du.
+
+Evidence laundering: Deep research agents mistake correlated sources
+for independent evidence.
+
+In 
+Proceedings of the 2026 Conference on Empirical Methods in
+Natural Language Processing
+, pages 11682–11693, 2026.
+
+[54]
+
+Wei Zou, Runpeng Geng, Binghui Wang, and Jinyuan Jia.
+
+PoisonedRAG: Knowledge corruption attacks to retrieval-augmented
+generation of large language models.
+
+In 
+USENIX Security Symposium
+, 2025.
+
+Appendix A 
+Experimental Protocol and World Construction
+
+Corpus and dense retrieval server.
+
+All training and default evaluation runs query the 21M-passage English Wikipedia dump 
+wiki-18
+, segmented into 100-word chunks and indexed with e5-base-v2 
+[
+15
+, 
+20
+, 
+37
+]
+. Embeddings reside in fp16 on a dedicated GPU behind a micro-batched HTTP endpoint that supports per-request document overlays for 
+Dup
+, 
+Inject
+, 
+Consistent
+, and 
+Rewrite
+ worlds, document-ID masks for 
+Delete
+ and 
+Rewrite
+ worlds, and per-episode 
+exclude-seen
+ filtering that masks passage IDs already returned earlier in the trajectory. Each query returns 
+ passages under a budget of four searches per episode. Across the seven standard QA benchmarks, this pipeline reproduces the released Search-R1-7B PPO checkpoint at 38.7 macro-averaged exact match versus the 38.5 originally reported by 
+Jin et al. [15]
+.
+
+Symmetric world construction and retrieval-verified deletion.
+
+Base items come from the HotpotQA 
+[
+48
+]
+ and MuSiQue 
+[
+34
+]
+ development splits for evaluation and training splits for training, each paired with gold answer 
+, bridge articles 
+, and primary passage 
+ stating 
+. For each item, an LLM generator produces 
+ diverse paraphrases of 
+ for 
+Dup
+, a type-matched plausible decoy answer 
+ alongside 
+ paraphrased bare-claim passages stating 
+ without supporting derivation, and a minimally edited version of 
+ substituting 
+ for 
+ in 
+Rewrite
+. Both 
+Inject
+ and 
+Consistent
+ reuse the 
+same
+ 
+ generated claim passages with only the answer string swapped between 
+ and 
+ across both title and body, eliminating stylistic, length, and perplexity cues between true and false echoes. For 
+Delete
+, we iteratively probe top-30 e5 results using 
+, the primary title with 
+, and 
+ for up to four rounds, masking answer-bearing passages related to 
+ until a probe round surfaces zero leaks, and discard unverified items. Two generators from distinct model families build disjoint ten-world evaluation suites spanning 
+Identity
+, 
+Dup
+, 
+Inject
+, 
+Consistent
+, 
+Rewrite
+, and 
+Delete
+: Qwen3-32B 
+[
+46
+]
+ forms Test Set A with 507 items for 5,070 episodes, and Phi-4 
+[
+1
+]
+ forms Test Set B with 607 items for 6,070 episodes. A held-out TF-IDF classifier reaches only 0.60–0.68 AUC separating true from false echo claims across both test suites.
+
+Appendix B 
+Training, Warm-Start Synthesis, and Hyperparameters
+
+Table 5: 
+Hyperparameters
+ for 
+EchoSpec
+ Stage 1 warm-start synthesis and SFT alongside Stage 2 
+-calibrated group RL.
+
+Stage 1 Parameter
+
+Value   
+
+Stage 2 Parameter
+
+Value
+
+Base backbone
+
+Qwen2.5-7B-Instruct   
+
+Rollouts per world 
+
+6 identity + 6 transform
+
+LoRA rank / 
+
+64 / 128 on linear layers   
+
+Questions per step
+
+12, giving 144 episodes
+
+Worlds per train item
+
+1 identity + 2 transforms   
+
+Policy-gradient steps
+
+200, lr 
+, warmup 10
+
+Synthesis rollouts / temp
+
+4 per world / 
+   
+
+KL penalty / grad clip
+
+ / 
+
+Retained worlds, 32B / 7B
+
+3,582 / 2,537 of 9,892   
+
+Reward 
+
+SFT updates / batch / lr
+
+60 steps / 64 / 
+   
+
+Cross-world baseline 
+
+ default or 
+
+Warm-start trajectory synthesis and filtering.
+
+Training worlds cover 3,968 multi-hop questions from the HotpotQA and MuSiQue training splits with Qwen3-32B claim texts, sharing zero questions with Test Set A and neither questions nor generator family with Phi-4 Test Set B. For Stage 1 synthesis in 
+Table
+ 
+5
+, we sample three worlds per item with probabilities 0.60 on 
+Inject
+, 0.15 on 
+Delete
+, 0.15 on 
+Dup
+, and 0.10 on 
+Consistent
+, weighting echo counts 
+ at 
+, and roll out four trajectories per world under temporary article-chain guidance. Filtering retains 3,582 multi-hop trajectories under Qwen2.5-32B-Instruct guidance at 2.25 mean searches, comprising 940 
+Inject
+ with 541 at 
+, 246 
+Delete
+, 447 
+Dup
+, 225 
+Consistent
+, and 1,724 identity trajectories. Self-guided Qwen2.5-7B-Instruct synthesis retains 2,537 trajectories at 2.13 mean searches across 773 
+Inject
+, 308 
+Delete
+, 267 
+Rewrite
+, 304 
+Dup
+, 187 
+Consistent
+, and 698 identity episodes. Across 39,568 candidate 7B rollouts, 7,897 fail hop continuity, 3,930 fail grounded outcome or depth, and 1,213 mention the guidance note, leaving self-contained multi-hop demonstrations once the temporary guidance note is removed before supervised fine-tuning.
+
+Optimization and compute.
+
+Stage 1 fine-tunes LoRA 
+[
+14
+]
+ adapters at rank 
+, 
+, and context limit 6,144 while masking prompt and 
+<information>
+ tokens for 60 AdamW steps. Stage 2 runs 200 asynchronous GRPO steps with policy lag at most two updates over world weights 0.10 
+Dup
+, 0.40 
+Inject
+, 0.15 
+Consistent
+, 0.10 
+Rewrite
+, and 0.25 
+Delete
+, and echo weights 
+ on 
+. Each full two-stage training run completes in roughly two wall-clock hours on four 192 GB AMD Instinct MI300X GPUs sharing one dedicated GPU-resident retrieval server.
+
+Appendix C 
+Extended Theoretical Analysis
+
+Proposition 3
+ 
+(Terminal threshold invariance under outcome-independent acquisition bonuses)
+.
+
+Consider episode return 
+ at a terminal state with retrieved passages 
+, where 
+ is any bounded function of 
+ alone rather than a step-wise potential difference 
+. Let 
+ denote the conditional correctness probability of candidate answer 
+ on an answerable world, with 
+ if 
+ and 
+ if 
+. Answering beats 
+ABSTAIN
+ in expected return if and only if 
+, invariant to both the weight 
+ and the choice of terminal bonus 
+.
+
+Proof.
+
+Conditioned on fixed retrieved set 
+, choosing 
+ yields expected return 
+, whereas choosing 
+ABSTAIN
+ yields 
+. Subtracting cancels 
+ identically for every 
+, giving 
+, which characterizes the reward’s Bayes-optimal stopping rule given 
+ rather than calibrated posteriors under finite-sample RL. When 
+ so 
+, this recovers 
+, whereas when 
+ so 
+, the threshold rises to 
+, favoring further search or abstention until primary passage 
+ enters 
+.
+∎
+
+Proposition 4
+ 
+(Unbiasedness and tie-breaking of the cross-world control variate)
+.
+
+For any question 
+ and invariant transformation 
+, let 
+ and 
+ denote returns from independent rollouts in 
+ and 
+, and set 
+ with 
+ for 
+. Replacing 
+ with 
+ adds zero bias to the policy gradient in 
+ up to standard leave-one-out scaling, and whenever all 
+ rollouts in 
+ defer to echoes with 
+, every echo-deferring rollout receives strictly negative advantage 
+ across the group.
+
+Proof.
+
+Because 
+ are sampled independently of trajectory 
+ given 
+ and 
+, the cross-world baseline satisfies 
+. When 
+, the within-world advantage 
+ vanishes identically, whereas 
+, penalizing uniform echo deference on questions that the policy already answers cleanly on 
+.
+∎
+
+Appendix D 
+Per-Generator and Per-World Evaluation Breakdown
+
+Table 6: 
+Per-generator and per-world breakdown
+ separating Qwen3-32B Test Set A on disjoint questions from Phi-4 Test Set B. Columns give clean accuracy 
+Id.
+, duplicated-evidence accuracy 
+Dup3
+, 8-true-echo accuracy 
+Con8
+, rewritten-evidence accuracy 
+Rew.
+, conditional deference at 
+, primary-evidence reach and EM at 
+, and 
+Delete
+ abstention, marking standalone 
+1st
+ and 
+2nd
+ plus shaded filter compositions beating standalone best.
+
+Method
+
+Id. 
+
+Dup3 
+
+Con8 
+
+Rew. 
+
+Def@1 
+
+Def@3 
+
+Def@8 
+
+Reach@8 
+
+Acc@8 
+
+Abst. 
+
+Test Set A: Qwen3-32B generator, 507 questions 
+ 10 worlds
+
+Search-R1
+
+24.1
+
+28.2
+
+62.5
+
+15.0
+
+47.5
+
+63.1
+
+70.5
+
+11.1
+
+5.5
+
+0.0
+
+AutoRefine (Base)
+
+32.1
+
+35.9
+
+68.6
+
+20.1
+
+41.1
+
+56.4
+
+62.6
+
+16.6
+
+10.7
+
+0.0
+
+R1-Searcher
+
+31.4
+
+34.9
+
+66.7
+
+19.5
+
+35.2
+
+55.4
+
+64.8
+
+20.7
+
+11.1
+
+0.0
+
+AWA-RL
+
+23.5
+
+24.5
+
+47.1
+
+12.2
+
+52.9
+
+52.9
+
+57.1
+
+19.7
+
+4.1
+
+0.0
+
+Qwen2.5-7B (no defense)
+
+16.6
+
+16.8
+
+51.7
+
+7.9
+
+38.1
+
+58.3
+
+57.1
+
+6.5
+
+4.3
+
+50.7
+
+Qwen2.5-7B + TrustRAG
+
+15.4
+
+15.0
+
+25.1
+
+7.3
+
+37.2
+
+41.0
+
+20.5
+
+12.0
+
+9.1
+
+48.1
+
+-reward RL
+
+19.7
+
+22.9
+
+61.1
+
+12.2
+
+50.0
+
+69.0
+
+71.0
+
+8.7
+
+4.9
+
+33.1
+
+Qwen2.5-7B + 
+EchoSpec
+
+25.9
+
+29.1
+
+44.2
+
+13.5
+
+9.1
+
+14.0
+
+19.0
+
+27.7
+
+17.9
+
+37.5
+
+Llama-3.1-8B + 
+EchoSpec
+
+27.6
+
+32.4
+
+44.6
+
+13.6
+
+5.7
+
+14.3
+
+23.6
+
+28.4
+
+18.3
+
+52.3
+
+Qwen2.5-7B + 
+EchoSpec
+ + TrustRAG
+
+25.4
+
+23.4
+
+28.3
+
+13.7
+
+10.3
+
+12.4
+
+10.1
+
+31.8
+
+19.9
+
+37.2
+
+Qwen2.5-7B + 
+EchoSpec
+ + Sem. dedup
+
+25.3
+
+28.8
+
+47.3
+
+13.1
+
+9.5
+
+19.0
+
+22.1
+
+39.1
+
+22.0
+
+33.7
+
+Test Set B: Phi-4 generator, unseen family, 607 questions 
+ 10 worlds
+
+Search-R1
+
+28.5
+
+32.6
+
+50.7
+
+19.3
+
+44.5
+
+63.6
+
+67.6
+
+15.5
+
+8.1
+
+0.3
+
+AutoRefine (Base)
+
+33.8
+
+37.7
+
+57.2
+
+23.1
+
+40.0
+
+58.0
+
+57.1
+
+19.6
+
+14.3
+
+0.0
+
+R1-Searcher
+
+32.6
+
+37.7
+
+57.5
+
+21.6
+
+31.3
+
+53.0
+
+59.1
+
+21.2
+
+14.0
+
+0.0
+
+AWA-RL
+
+25.2
+
+30.3
+
+47.5
+
+16.0
+
+43.8
+
+58.2
+
+60.1
+
+19.9
+
+7.9
+
+0.0
+
+Qwen2.5-7B (no defense)
+
+18.8
+
+21.1
+
+42.5
+
+10.2
+
+45.6
+
+56.1
+
+60.5
+
+7.7
+
+6.8
+
+47.8
+
+Qwen2.5-7B + TrustRAG
+
+17.1
+
+16.0
+
+20.8
+
+9.6
+
+33.6
+
+42.3
+
+25.0
+
+10.7
+
+9.7
+
+47.8
+
+-reward RL
+
+22.6
+
+27.4
+
+50.1
+
+15.0
+
+40.9
+
+67.9
+
+67.9
+
+10.2
+
+5.4
+
+32.0
+
+Qwen2.5-7B + 
+EchoSpec
+
+28.6
+
+31.9
+
+43.3
+
+16.9
+
+19.4
+
+33.8
+
+38.8
+
+24.0
+
+15.4
+
+37.6
+
+Llama-3.1-8B + 
+EchoSpec
+
+30.1
+
+34.9
+
+45.1
+
+18.1
+
+16.4
+
+33.9
+
+37.7
+
+24.6
+
+16.0
+
+52.7
+
+Qwen2.5-7B + 
+EchoSpec
+ + TrustRAG
+
+27.3
+
+27.0
+
+27.6
+
+16.9
+
+17.4
+
+26.5
+
+15.5
+
+27.1
+
+18.2
+
+35.7
+
+Qwen2.5-7B + 
+EchoSpec
+ + Sem. dedup
+
+28.2
+
+30.8
+
+42.4
+
+17.3
+
+23.8
+
+32.8
+
+35.2
+
+33.3
+
+18.3
+
+34.1
+
+Table
+ 
+6
+ disaggregates all ten transformation worlds separately on Qwen3-32B Test Set A and unseen Phi-4 Test Set B. First, 
+EchoSpec
+ transfers substantially to unseen Phi-4 echoes on Test Set B: standalone Qwen2.5-7B 
+EchoSpec
+ achieves 19.4%, 33.8%, and 38.8% conditional deference, 24.0% Reach@8, 15.4% Acc@8, and 37.6% 
+Delete
+ abstention, while Llama-3.1-8B 
+EchoSpec
+ reaches 16.4%, 33.9%, and 37.7% deference, 24.6% Reach@8, 16.0% Acc@8, and 52.7% abstention. This cuts Def@8 by 21.7–22.8 points below Qwen2.5-7B at 60.5% and by 18.3–29.9 points below every released RL agent at 57.1–67.6% while more than tripling Reach@8 from 7.7% to 24.0–24.6%, and pairing Qwen2.5-7B 
+EchoSpec
+ with TrustRAG reaches 15.5% Phi-4 Def@8. Second, comparing the two suites reveals a cross-generator gap in standalone Def@8 between 19.0–23.6% on Test Set A and 37.7–38.8% on Test Set B even though Reach@8 transfers closely from 27.7–28.4% on A to 24.0–24.6% on B. Conditioning on retrieval pinpoints why: once primary passage 
+ is retrieved, Def@8 stays low on both generators at 5.6% on A versus 13.0% on B for Qwen2.5-7B 
+EchoSpec
+ and 11.5% versus 14.5% for Llama-3.1-8B 
+EchoSpec
+. Nearly the entire cross-generator shift occurs when 
+ is missed, where Def@8 rises from 31.9% at 30.6% abstention on A to 57.0% at 15.2% abstention on B for Qwen2.5-7B and from 38.7% to 54.2% for Llama-3.1-8B, showing that both evidence acquisition and post-retrieval verification generalize cleanly across generators whereas fallback abstention on unretrieved items still benefits from familiarity with training-generator phrasing. On 
+Rewrite
+ worlds where 
+ itself is edited to state 
+, 
+EchoSpec
+ reaches 13.5–13.6% and 16.9–18.1% accuracy on A and B, nearly doubling Qwen2.5-7B at 7.9% and 10.2% and beating 
+-reward RL at 12.2% and 15.0%, while trailing non-abstaining AutoRefine at 20.1% and 23.1% because 
+EchoSpec
+ occasionally abstains when edited passages conflict with parametric priors. On 
+Dup
+, TrustRAG lowers base accuracy from 16.8% and 21.1% to 15.0% and 16.0% by clustering away valid supporting copies, whereas 
+EchoSpec
+ reaches 29.1–32.4% and 31.9–34.9%. Across single-stage RL runs varying 
+, 
+Delete
+ abstention rises across 31.3%, 40.6%, 42.2%, and 44.9% as clean accuracy trades off from 24.7% down to 20.9% at higher 
+ values.
+
+Appendix E 
+Per-Benchmark Results on Standard QA Datasets
+
+Table 7: 
+Answering precision (%) across the seven standard QA benchmarks
+, with macro Exact Match 
+Avg EM
+, macro Precision 
+Avg Prec.
+, and Reliability-Aware F1 
+RA-F1
+. 
+ MADAM-RAG abstains on 66.0% of QA items at 18.9% Avg EM, marking standalone 
+1st
+ and 
+2nd
+ plus shaded filter compositions beating standalone best.
+
+Method
+
+NQ
+
+TriviaQA
+
+PopQA
+
+HotpotQA
+
+2Wiki
+
+MuSiQue
+
+Bamboogle
+
+Avg EM
+
+Avg Prec.
+
+RA-F1
+
+Released search agents
+
+Search-R1
+
+39.9
+
+60.7
+
+40.0
+
+38.8
+
+33.1
+
+17.2
+
+39.2
+
+38.4
+
+38.4
+
+38.4
+
+ZeroSearch
+
+38.8
+
+61.7
+
+37.9
+
+33.3
+
+32.0
+
+11.2
+
+31.2
+
+35.1
+
+35.2
+
+35.2
+
+AutoRefine (Instruct)
+
+43.5
+
+62.8
+
+42.2
+
+42.5
+
+40.2
+
+21.6
+
+44.0
+
+42.4
+
+42.4
+
+42.4
+
+AutoRefine (Base)
+
+47.7
+
+64.8
+
+45.6
+
+46.5
+
+38.9
+
+22.5
+
+47.2
+
+44.7
+
+44.7
+
+44.7
+
+ReSearch
+
+38.7
+
+61.9
+
+42.7
+
+42.6
+
+36.1
+
+22.7
+
+39.2
+
+40.6
+
+40.6
+
+40.6
+
+R1-Searcher
+
+38.4
+
+59.2
+
+35.6
+
+45.5
+
+45.8
+
+22.2
+
+45.6
+
+41.7
+
+41.8
+
+41.7
+
+AWA-RL
+
+31.3
+
+55.2
+
+40.2
+
+37.8
+
+27.7
+
+15.9
+
+43.2
+
+35.8
+
+35.9
+
+35.9
+
+Qwen2.5-7B with inference-time defenses
+
+No defense
+
+39.0
+
+65.1
+
+44.7
+
+40.3
+
+33.2
+
+18.8
+
+36.4
+
+28.8
+
+41.1
+
+33.8
+
+TrustRAG
+
+37.7
+
+63.4
+
+43.7
+
+39.8
+
+32.9
+
+18.9
+
+35.5
+
+28.0
+
+40.3
+
+33.0
+
+MADAM-RAG
+†
+
+46.3
+
+74.5
+
+58.9
+
+51.4
+
+32.3
+
+28.9
+
+47.6
+
+18.9
+
+55.7
+
+28.3
+
+Qwen2.5-7B trained on the same questions
+
+Exact-match RL
+
+37.2
+
+60.6
+
+36.8
+
+38.0
+
+31.6
+
+19.6
+
+36.0
+
+36.5
+
+37.2
+
+36.8
+
+-reward RL
+
+37.8
+
+63.9
+
+45.1
+
+41.4
+
+37.0
+
+20.3
+
+45.6
+
+33.8
+
+42.4
+
+37.6
+
+EchoSpec
+ (3 seeds)
+
+42.5
+
+66.7
+
+47.6
+
+49.0
+
+42.5
+
+28.5
+
+48.0
+
+34.9
+
+47.1
+
+40.1
+
+Llama-3.1-8B cross-family replication (1 seed)
+
+No defense
+
+29.4
+
+51.5
+
+35.6
+
+26.7
+
+18.1
+
+10.5
+
+26.2
+
+26.8
+
+28.4
+
+27.6
+
+Exact-match RL
+
+41.7
+
+64.5
+
+40.5
+
+39.9
+
+41.3
+
+21.6
+
+48.0
+
+41.7
+
+42.7
+
+42.2
+
+EchoSpec
+
+48.2
+
+71.6
+
+55.6
+
+56.5
+
+56.6
+
+36.7
+
+56.7
+
+36.7
+
+55.4
+
+44.2
+
+Qwen2.5-7B with orthogonal retrieval filters (3 seeds)
+
+EchoSpec
+ + TrustRAG
+
+40.4
+
+65.2
+
+46.6
+
+47.1
+
+36.2
+
+26.3
+
+42.5
+
+34.0
+
+44.1
+
+38.3
+
+EchoSpec
+ + Sem. dedup
+
+42.2
+
+66.1
+
+49.2
+
+46.9
+
+40.1
+
+26.2
+
+47.4
+
+35.3
+
+46.2
+
+40.0
+
+Table
+ 
+7
+ reports per-benchmark answering precision alongside macro-averaged exact match and reliability-aware F1 across the three single-hop benchmarks NQ 
+[
+22
+]
+, TriviaQA 
+[
+16
+]
+, and PopQA 
+[
+24
+]
+ and the four multi-hop benchmarks HotpotQA 
+[
+48
+]
+, 2WikiMultiHopQA 
+[
+13
+]
+, MuSiQue 
+[
+34
+]
+, and Bamboogle 
+[
+27
+]
+. Released outcome-reward RL agents never abstain, equating their precision with raw exact match. Base AutoRefine attains the highest raw exact match and RA-F1 at 44.7%, whereas multi-hop datasets with incomplete retrieval yield 11.2–22.7% precision on MuSiQue when agents always guess. Conversely, MADAM-RAG reaches 55.7% precision only by abstaining on 66.0% of standard QA questions, collapsing its macro-averaged exact match to 18.9% and RA-F1 to 28.3%. Relative to Search-R1 at 38.4% Avg EM and 38.4% Avg Prec., Qwen2.5-7B 
+EchoSpec
+ trades 3.5 points of exact-match coverage at 34.9% Avg EM to raise answering precision on every benchmark: +2.6 points on NQ, +6.0 on TriviaQA, +7.6 on PopQA, +10.2 on HotpotQA, +9.4 on 2WikiMultiHopQA, +11.3 on MuSiQue, and +8.8 on Bamboogle, lifting macro precision to 47.1% and RA-F1 to 40.1. On Llama-3.1-8B (1 seed), 
+EchoSpec
+ attains the highest standalone precision on all seven datasets at 48.2–71.6%, lifting macro precision from 28.4% base and 42.7% Exact-match RL to 55.4% at 36.7% Avg EM and 44.2 RA-F1. Partitioning each benchmark by 
+EchoSpec
+’s answering decision rules out easy-item selection by abstention: on the 66.3% of items where Llama-3.1-8B 
+EchoSpec
+ answers, it outperforms Exact-match RL on the exact same items at 54.6% versus 51.6% accuracy, whereas on the 33.7% of items where 
+EchoSpec
+ abstains, Exact-match RL errs on 80.4% of questions at only 19.6% accuracy. The same selective-calibration pattern holds on Qwen2.5-7B at 74.2% coverage, beating Search-R1 on answered items at 46.4% versus 43.6% while Search-R1 errs on 77.9% of items 
+EchoSpec
+ refuses.
+
+Appendix F 
+Fairness Controls, Failure Modes, and Reproducibility
+
+Abstention under deleted evidence and updating under rewritten evidence.
+
+Beyond multi-hop recovery under echoes, 
+Appendix
+ 
+H
+ provides full turn-by-turn benchmark trajectories, while two complementary behaviors govern 
+Delete
+ and 
+Rewrite
+ worlds. When primary evidence bearing Colin Kaepernick’s preferred childhood nickname is masked from 
+wiki-18
+, Search-R1 repeats variants of 
+Colin Kaepernick preferred nickname
+ three times and hedges in free text without abstaining, which scores as a wrong answer, while Exact-match RL fabricates a plausible nickname. 
+EchoSpec
+ queries 
+Colin Kaepernick
+, 
+Colin Kaepernick biography
+, and 
+Colin Kaepernick nickname
+ across distinct unseen biographical passages, verifies that none supports the requested fact, and outputs 
+ABSTAIN
+. Conversely, on 
+Rewrite
+ episodes where the primary passage itself is edited to state 
+, 
+EchoSpec
+ locates the edited primary passage and reports 
+ rather than falling back on stale parametric memory, separating verification from rigid refusal.
+
+Table 8: 
+Unified retrieval-protocol fairness control
+ comparing all seven released RL search agents and five Qwen2.5-7B inference defenses with episode-level 
+exclude-seen
+ enabled against 
+EchoSpec
+ evaluated both with and without 
+exclude-seen
+ across all nine evaluation suites, highlighting standalone 
+1st
+ and 
+2nd
+ in each column.
+
+Method
+
+Def@1 
+
+Def@3 
+
+Def@8 
+
+Reach@8 
+
+Acc@8 
+
+Abst. 
+
+Prec. 
+
+RA-F1 
+
+Released RL search agents under unified exclude-seen retrieval
+
+Search-R1 (+ exclude-seen)
+
+40.3
+
+59.6
+
+64.4
+
+14.0
+
+7.3
+
+0.3
+
+37.3
+
+37.3
+
+Search-R1, abstention prompt (+ exclude-seen)
+
+42.8
+
+59.8
+
+66.0
+
+11.8
+
+6.1
+
+34.7
+
+42.7
+
+37.8
+
+ZeroSearch (+ exclude-seen)
+
+55.4
+
+70.4
+
+74.7
+
+7.4
+
+4.3
+
+0.2
+
+35.1
+
+35.1
+
+AutoRefine, Instruct (+ exclude-seen)
+
+44.4
+
+63.3
+
+71.8
+
+13.5
+
+8.3
+
+0.1
+
+42.9
+
+42.9
+
+AutoRefine, Base (+ exclude-seen)
+
+36.3
+
+56.0
+
+59.7
+
+18.2
+
+12.9
+
+0.0
+
+45.3
+
+45.3
+
+ReSearch (+ exclude-seen)
+
+32.0
+
+56.4
+
+70.6
+
+21.6
+
+8.9
+
+0.0
+
+40.4
+
+40.4
+
+R1-Searcher (+ exclude-seen)
+
+24.1
+
+46.1
+
+60.7
+
+22.3
+
+13.3
+
+0.0
+
+40.8
+
+40.7
+
+AWA-RL (+ exclude-seen)
+
+35.9
+
+45.0
+
+60.3
+
+20.7
+
+5.9
+
+0.0
+
+34.3
+
+34.3
+
+Qwen2.5-7B defenses under unified exclude-seen retrieval
+
+Qwen2.5-7B, no defense (+ exclude-seen)
+
+41.0
+
+57.8
+
+60.1
+
+7.6
+
+5.7
+
+48.5
+
+41.4
+
+34.3
+
+Defensive prompt (+ exclude-seen)
+
+38.9
+
+54.5
+
+62.7
+
+8.1
+
+4.4
+
+52.2
+
+41.1
+
+32.4
+
+Near-duplicate removal (+ exclude-seen)
+
+41.9
+
+57.3
+
+61.4
+
+8.0
+
+5.9
+
+47.3
+
+41.0
+
+33.9
+
+Provenance gate (+ exclude-seen)
+
+43.3
+
+54.0
+
+64.1
+
+7.0
+
+5.2
+
+47.8
+
+40.8
+
+33.7
+
+TrustRAG (+ exclude-seen)
+
+40.2
+
+38.9
+
+24.6
+
+10.8
+
+9.5
+
+49.8
+
+40.8
+
+33.6
+
+EchoSpec
+ with and without exclude-seen retrieval
+
+Qwen2.5-7B + 
+EchoSpec
+ (w/o exclude-seen, 3 seeds)
+
+17.0
+
+28.7
+
+31.6
+
+22.5
+
+15.2
+
+40.3
+
+47.9
+
+40.1
+
+Qwen2.5-7B + 
+EchoSpec
+ (w/o exclude-seen train & eval)
+
+15.9
+
+26.1
+
+27.1
+
+23.6
+
+14.3
+
+50.1
+
+50.2
+
+40.3
+
+Qwen2.5-7B + 
+EchoSpec
+ (+ exclude-seen, 3 seeds)
+
+14.3
+
+23.9
+
+28.9
+
+25.8
+
+16.7
+
+37.6
+
+47.1
+
+40.1
+
+Llama-3.1-8B + 
+EchoSpec
+ (+ exclude-seen, 1 seed)
+
+11.1
+
+24.1
+
+30.6
+
+26.5
+
+17.2
+
+52.5
+
+55.4
+
+44.2
+
+Unified exclude-seen retrieval fairness.
+
+Because released RL checkpoints in 
+Table
+ 
+3
+ run in their native evaluation loop without episode-level passage masking while default 
+EchoSpec
+ enables exclude-seen retrieval, 
+Table
+ 
+8
+ tests both directions symmetrically across all nine suites. First, granting exclude-seen retrieval to all seven released RL search agents and all five inference defenses barely alters baseline vulnerability: released RL agents remain at 59.7–74.7% Def@8, compared with 58.6–72.9% under standard retrieval, because outcome-trained agents halt after one or two queries as soon as an echo states a candidate answer rather than issuing follow-up entity queries that benefit from unseen-passage masking. Second, disabling exclude-seen on the 3-seed Qwen2.5-7B 
+EchoSpec
+ checkpoints raises Def@8 by only 2.7 points from 28.9% to 31.6%, and disabling exclude-seen throughout both training and evaluation yields 27.1% Def@8 while lowering Reach@8 from 25.8% to 23.6% and Acc@8 from 16.7% to 14.3%. Exclude-seen retrieval therefore acts as a slot-efficiency aid for policies that already reformulate queries past echoes, whereas Qwen2.5-7B 
+EchoSpec
+ beats all seven released RL agents by 30–44 points under standard baselines and reaches 28.9% versus 59.7–74.7% when every baseline is also granted episode-level exclude-seen retrieval.
+
+Prompt protocols and abstention fairness.
+
+In 
+Table
+ 
+3
+, external checkpoints run in their native prompt and tag formats, using 
+<search>
+ and 
+<answer>
+ for Search-R1 
+[
+15
+]
+, ZeroSearch 
+[
+33
+]
+, AutoRefine 
+[
+30
+]
+, ReSearch 
+[
+4
+]
+, and R1-Searcher 
+[
+31
+]
+, and 
+<tool_call>
+ with JSON 
+<answer>
+ and special-token retention for AWA-RL 
+[
+49
+]
+. Our abstention detector matches both 
+ABSTAIN
+ and natural-language refusals such as 
+“I do not know”
+, 
+“insufficient information”
+, 
+“cannot be determined”
+, and 
+“unable to answer”
+. Because native outcome-RL prompts omit an explicit refusal token, we run two fairness controls. First, evaluating released Search-R1 under our standard prompt permitting abstention yields 36.6% 
+Delete
+ abstention versus 30.2% on intact evidence, or 34.7% with exclude-seen in 
+Table
+ 
+8
+, with 34.3% EM, 44.0% Prec., and 38.5 RA-F1 across the seven QA sets, confirming weaker sensitivity to missing evidence than Qwen2.5-7B at 49.2% and Llama-3.1-8B 
+EchoSpec
+ at 52.5% versus 25.0% intact. Second, training Exact-match RL directly under that same prompt still drives 
+Delete
+ abstention down to 1.4% on Qwen2.5-7B and 2.8% on Llama-3.1-8B. For AWA-RL, auditing all Test Set A 
+Delete
+ episodes shows 0.0% explicit refusals versus 0.2–1.1% on standard QA sets, 26.8% wrong guesses, 13.6% per-turn length truncations, and 59.6% episodes requesting a fifth 
+<tool_call>
+ at 
+, while doubling AWA-RL’s search budget to 
+ in 
+Table
+ 
+10
+ still yields only 0.5–0.6% 
+Delete
+ abstention and 61.8–67.2% Def@8. Semantic deduplication in 
+Section
+ 
+5.1
+ applies greedy cosine filtering at 
+ in 
+e5-base-v2
+ space before top-3 truncation without source labels.
+
+Reproducibility.
+
+World-construction pipelines in 
+echospec/transforms.py
+, trajectory synthesis and three-gate filtering in 
+echospec/synth.py
+, distributed LoRA SFT and asynchronous GRPO training in 
+echospec/train.py
+, dense and BM25 retrieval and evaluation modules in 
+echospec/retrieval.py
+ and 
+echospec/evaluate.py
+, shell workflows in 
+scripts/
+, and reference parameters and split manifests in 
+configs/
+ are all publicly released in our open-source repository for full reproduction.
+
+Appendix G 
+Cross-Backbone, Budget, Forced-Turn, and Cross-Retriever Evaluation
+
+Table 9: 
+Cross-scale and cross-family replication
+ across Qwen2.5-3B-Instruct (1 seed), Qwen2.5-7B-Instruct (3 seeds), and Llama-3.1-8B-Instruct (1 seed) on the two generator-disjoint suites and seven QA benchmarks, highlighting standalone 
+1st
+ and 
+2nd
+ alongside filter compositions that surpass the best standalone agent.
+
+Backbone and Method
+
+Def@1 
+
+Def@3 
+
+Def@8 
+
+Reach@8 
+
+Acc@8 
+
+Abst. 
+
+Prec. 
+
+RA-F1 
+
+Qwen2.5-3B-Instruct (3B parameters, cross-scale, 1 seed)
+
+No defense
+
+40.7
+
+67.0
+
+62.5
+
+5.1
+
+2.8
+
+36.3
+
+26.0
+
+22.9
+
+No defense (+ exclude-seen)
+
+44.5
+
+61.5
+
+65.2
+
+4.7
+
+2.4
+
+37.0
+
+26.4
+
+23.3
+
+TrustRAG
+
+38.9
+
+39.9
+
+27.2
+
+7.8
+
+4.4
+
+37.6
+
+25.7
+
+22.1
+
+Exact-match RL
+
+42.7
+
+69.4
+
+71.5
+
+11.6
+
+5.3
+
+5.2
+
+35.1
+
+34.6
+
+Warm-start only
+
+18.3
+
+35.5
+
+39.1
+
+19.3
+
+11.7
+
+25.2
+
+40.7
+
+36.7
+
+EchoSpec
+
+15.3
+
+29.6
+
+30.4
+
+22.5
+
+12.4
+
+37.5
+
+42.8
+
+36.9
+
+EchoSpec
+ + TrustRAG
+
+15.8
+
+23.5
+
+12.3
+
+23.5
+
+15.6
+
+38.6
+
+42.1
+
+36.4
+
+EchoSpec
+ + Sem. dedup
+
+20.6
+
+34.6
+
+34.5
+
+30.1
+
+14.5
+
+36.6
+
+42.7
+
+36.9
+
+Qwen2.5-7B-Instruct (7B parameters, 3-seed 
+EchoSpec
+)
+
+No defense
+
+41.9
+
+57.2
+
+58.8
+
+7.1
+
+5.5
+
+49.2
+
+41.1
+
+33.8
+
+No defense (+ exclude-seen)
+
+41.0
+
+57.8
+
+60.1
+
+7.6
+
+5.7
+
+48.5
+
+41.4
+
+34.3
+
+TrustRAG
+
+35.4
+
+41.7
+
+22.8
+
+11.4
+
+9.4
+
+48.0
+
+40.3
+
+33.0
+
+Exact-match RL (1 seed)
+
+35.2
+
+59.5
+
+67.7
+
+15.9
+
+8.1
+
+1.4
+
+37.2
+
+36.8
+
+Warm-start only (3 seeds)
+
+20.8
+
+35.0
+
+47.2
+
+21.0
+
+13.9
+
+33.1
+
+47.0
+
+41.5
+
+EchoSpec
+ (3 seeds)
+
+14.3
+
+23.9
+
+28.9
+
+25.8
+
+16.7
+
+37.6
+
+47.1
+
+40.1
+
+EchoSpec
+ + TrustRAG (3 seeds)
+
+13.8
+
+19.4
+
+12.8
+
+29.4
+
+19.0
+
+36.5
+
+44.1
+
+38.3
+
+EchoSpec
+ + Sem. dedup (3 seeds)
+
+16.7
+
+25.9
+
+28.7
+
+36.2
+
+20.2
+
+33.9
+
+46.2
+
+40.0
+
+Llama-3.1-8B-Instruct (8B parameters, cross-family, 1 seed)
+
+No defense
+
+37.3
+
+67.5
+
+70.0
+
+10.8
+
+3.8
+
+5.0
+
+28.4
+
+27.6
+
+No defense (+ exclude-seen)
+
+34.7
+
+71.8
+
+74.4
+
+11.1
+
+4.2
+
+4.2
+
+26.6
+
+25.9
+
+TrustRAG
+
+37.6
+
+52.1
+
+28.2
+
+17.1
+
+7.6
+
+4.8
+
+27.7
+
+26.8
+
+Exact-match RL
+
+33.8
+
+61.3
+
+66.7
+
+17.6
+
+9.8
+
+2.8
+
+42.7
+
+42.2
+
+Warm-start only
+
+22.7
+
+35.2
+
+45.7
+
+21.0
+
+14.6
+
+24.7
+
+45.5
+
+42.3
+
+EchoSpec
+
+11.1
+
+24.1
+
+30.6
+
+26.5
+
+17.2
+
+52.5
+
+55.4
+
+44.2
+
+EchoSpec
+ + TrustRAG
+
+11.2
+
+19.2
+
+11.8
+
+28.7
+
+20.8
+
+52.8
+
+55.3
+
+43.6
+
+EchoSpec
+ + Sem. dedup
+
+17.1
+
+26.9
+
+26.6
+
+36.4
+
+20.9
+
+54.2
+
+55.9
+
+44.4
+
+Table 10: 
+Search horizon 
+, passage depth 
+, and forced multi-turn verification
+ across Test Sets A and B with 3-seed 
+EchoSpec
+ means. 
+Srch@0
+ and 
+Srch@8
+ give mean searches on 
+Identity
+ and eight-echo 
+Inject
+ worlds, and 
+Id. Acc
+ gives clean accuracy, highlighting 
+1st
+ and 
+2nd
+ in each metric column.
+
+Agent and Budget
+
+Srch@0
+
+Srch@8
+
+Id. Acc 
+
+Def@1 
+
+Def@3 
+
+Def@8 
+
+Reach@8 
+
+Acc@8 
+
+Abst. 
+
+Search-R1
+
+ (default)
+
+2.52
+
+1.94
+
+26.3
+
+46.0
+
+63.3
+
+69.1
+
+13.3
+
+6.8
+
+0.2
+
+2.65
+
+2.00
+
+27.2
+
+48.9
+
+66.4
+
+65.7
+
+13.7
+
+7.2
+
+0.3
+
+2.71
+
+2.02
+
+26.5
+
+50.1
+
+62.0
+
+66.2
+
+13.8
+
+7.9
+
+0.1
+
+ (+ exclude-seen)
+
+2.82
+
+2.03
+
+26.6
+
+44.0
+
+58.5
+
+67.4
+
+14.1
+
+7.0
+
+0.3
+
+2.36
+
+1.80
+
+26.5
+
+49.9
+
+62.6
+
+72.1
+
+14.5
+
+6.7
+
+0.1
+
+AutoRefine (Base)
+
+ (default)
+
+2.22
+
+1.90
+
+33.0
+
+40.5
+
+57.2
+
+59.8
+
+18.1
+
+12.5
+
+0.0
+
+2.24
+
+1.90
+
+32.7
+
+39.1
+
+57.7
+
+61.3
+
+17.9
+
+12.2
+
+0.0
+
+2.24
+
+1.90
+
+33.3
+
+39.7
+
+57.1
+
+61.1
+
+18.0
+
+12.8
+
+0.0
+
+ (+ exclude-seen)
+
+2.23
+
+1.91
+
+33.0
+
+38.0
+
+56.5
+
+59.8
+
+18.8
+
+13.1
+
+0.0
+
+2.16
+
+1.86
+
+33.9
+
+33.6
+
+51.1
+
+63.4
+
+21.2
+
+11.2
+
+0.0
+
+AWA-RL
+
+ (default)
+
+3.19
+
+3.01
+
+24.3
+
+48.4
+
+55.6
+
+58.6
+
+19.8
+
+6.0
+
+0.0
+
+3.86
+
+3.38
+
+28.7
+
+43.9
+
+57.4
+
+63.0
+
+19.6
+
+7.5
+
+0.2
+
+4.26
+
+3.55
+
+30.4
+
+49.5
+
+60.0
+
+67.2
+
+21.9
+
+6.4
+
+0.5
+
+ (+ exclude-seen)
+
+4.38
+
+3.65
+
+29.2
+
+38.4
+
+53.3
+
+61.8
+
+25.6
+
+8.1
+
+0.6
+
+3.13
+
+2.86
+
+24.8
+
+42.4
+
+54.7
+
+63.6
+
+23.1
+
+5.7
+
+0.0
+
+Forced multi-turn verification baselines (
+)
+
+Qwen2.5-7B + verify prompt (+ xs)
+
+1.80
+
+1.46
+
+20.3
+
+40.7
+
+62.3
+
+64.8
+
+10.6
+
+5.1
+
+34.7
+
+Qwen2.5-7B + verify, min 3 turns (+ xs)
+
+3.01
+
+3.01
+
+21.1
+
+26.7
+
+36.5
+
+54.1
+
+27.5
+
+7.8
+
+32.1
+
+Search-R1, min 3 turns (+ exclude-seen)
+
+3.35
+
+3.18
+
+24.7
+
+20.2
+
+36.0
+
+55.5
+
+29.5
+
+11.0
+
+0.1
+
+Search-R1 + verify, min 3 turns (+ xs)
+
+3.30
+
+3.19
+
+23.4
+
+18.9
+
+35.7
+
+58.7
+
+28.1
+
+9.8
+
+22.4
+
+AutoRefine (Base), min 3 turns (+ xs)
+
+2.28
+
+1.95
+
+33.1
+
+32.1
+
+49.9
+
+53.8
+
+19.7
+
+14.3
+
+0.0
+
+EchoSpec
+ (Qwen2.5-7B, 3 seeds)
+
+ (+ exclude-seen, default)
+
+2.71
+
+2.81
+
+27.3
+
+14.3
+
+23.9
+
+28.9
+
+25.8
+
+16.7
+
+37.6
+
+ (+ exclude-seen)
+
+2.92
+
+3.02
+
+28.6
+
+12.6
+
+23.1
+
+31.1
+
+28.0
+
+17.7
+
+43.2
+
+ (+ exclude-seen)
+
+3.00
+
+3.07
+
+27.5
+
+13.5
+
+22.1
+
+29.8
+
+28.1
+
+18.3
+
+43.6
+
+ (+ exclude-seen)
+
+2.60
+
+2.65
+
+28.7
+
+13.9
+
+17.1
+
+29.1
+
+34.8
+
+20.2
+
+34.9
+
+Table 11: 
+Zero-shot cross-retriever transfer
+ on Test Sets A and B without retraining: checkpoints trained only with 
+e5-base-v2
+ are evaluated directly over 21M 
+wiki-18
+ passages indexed by an unseen neural bi-encoder 
+BAAI/bge-base-en-v1.5
+ 
+[
+42
+]
+ and by lexical Okapi BM25 
+[
+28
+]
+, marking 
+1st
+ and 
+2nd
+ within each retriever block.
+
+Retriever and Method
+
+Srch@0
+
+Srch@8
+
+Id. Acc 
+
+Def@1 
+
+Def@3 
+
+Def@8 
+
+Reach@8 
+
+Acc@8 
+
+Abst. 
+
+Zero-shot transfer to unseen dense retriever: BAAI/bge-base-en-v1.5
+
+Search-R1
+
+2.56
+
+1.97
+
+26.7
+
+53.3
+
+65.3
+
+72.2
+
+11.6
+
+6.1
+
+0.3
+
+Search-R1 (+ exclude-seen)
+
+2.60
+
+1.97
+
+27.0
+
+45.9
+
+62.6
+
+71.0
+
+12.3
+
+6.3
+
+0.3
+
+AutoRefine (Base)
+
+2.20
+
+1.87
+
+31.7
+
+41.3
+
+62.4
+
+65.3
+
+13.2
+
+10.3
+
+0.0
+
+AutoRefine, Base (+ exclude-seen)
+
+2.19
+
+1.88
+
+32.1
+
+37.3
+
+59.8
+
+66.1
+
+13.4
+
+10.2
+
+0.0
+
+R1-Searcher
+
+2.51
+
+2.27
+
+31.5
+
+34.5
+
+57.0
+
+61.3
+
+20.9
+
+11.6
+
+0.1
+
+R1-Searcher (+ exclude-seen)
+
+2.52
+
+2.29
+
+30.8
+
+22.7
+
+50.5
+
+62.2
+
+20.8
+
+11.5
+
+0.0
+
+AWA-RL (+ exclude-seen)
+
+3.19
+
+3.02
+
+23.9
+
+27.8
+
+43.5
+
+58.1
+
+21.2
+
+5.6
+
+0.2
+
+Qwen2.5-7B (no defense)
+
+1.22
+
+1.10
+
+14.8
+
+40.8
+
+58.9
+
+61.7
+
+6.1
+
+4.7
+
+48.5
+
+Qwen2.5-7B + TrustRAG
+
+1.23
+
+1.21
+
+13.5
+
+39.3
+
+49.8
+
+20.7
+
+9.8
+
+8.2
+
+49.0
+
+Qwen2.5-7B + Exact-match RL (1 seed)
+
+2.51
+
+2.01
+
+25.8
+
+37.6
+
+58.4
+
+67.7
+
+14.3
+
+7.6
+
+1.3
+
+Qwen2.5-7B + 
+EchoSpec
+ (+ xs, 3 seeds)
+
+2.80
+
+2.92
+
+26.9
+
+13.4
+
+21.2
+
+29.4
+
+26.0
+
+15.2
+
+36.3
+
+Qwen2.5-7B + 
+EchoSpec
+ (w/o xs, 1 seed)
+
+2.71
+
+2.84
+
+27.6
+
+19.6
+
+31.8
+
+34.3
+
+21.5
+
+14.2
+
+33.7
+
+Llama-3.1-8B (no defense)
+
+3.04
+
+2.16
+
+17.2
+
+31.1
+
+67.4
+
+67.2
+
+11.2
+
+4.1
+
+6.0
+
+Llama-3.1-8B + 
+EchoSpec
+ (+ xs, 1 seed)
+
+2.60
+
+2.81
+
+29.3
+
+11.3
+
+20.8
+
+30.5
+
+25.2
+
+15.4
+
+51.8
+
+Zero-shot transfer to lexical sparse retriever: Okapi BM25
+
+Search-R1
+
+2.75
+
+1.94
+
+22.8
+
+49.2
+
+63.1
+
+64.1
+
+9.9
+
+6.1
+
+0.3
+
+Search-R1 (+ exclude-seen)
+
+2.81
+
+1.94
+
+22.4
+
+38.2
+
+58.6
+
+64.8
+
+11.9
+
+6.3
+
+0.0
+
+AutoRefine (Base)
+
+2.29
+
+1.81
+
+28.9
+
+44.8
+
+60.4
+
+67.8
+
+13.3
+
+9.3
+
+0.0
+
+AutoRefine, Base (+ exclude-seen)
+
+2.30
+
+1.80
+
+29.4
+
+37.0
+
+58.5
+
+66.8
+
+14.0
+
+10.0
+
+0.0
+
+R1-Searcher
+
+2.62
+
+2.30
+
+27.0
+
+41.7
+
+53.5
+
+59.8
+
+17.5
+
+10.8
+
+0.3
+
+R1-Searcher (+ exclude-seen)
+
+2.66
+
+2.31
+
+29.0
+
+26.7
+
+47.7
+
+60.5
+
+19.8
+
+11.5
+
+0.2
+
+AWA-RL (+ exclude-seen)
+
+3.33
+
+3.04
+
+20.2
+
+34.7
+
+46.6
+
+53.6
+
+20.9
+
+5.8
+
+0.0
+
+Qwen2.5-7B (no defense)
+
+1.28
+
+1.10
+
+15.1
+
+46.4
+
+56.6
+
+60.6
+
+5.6
+
+4.7
+
+50.5
+
+Qwen2.5-7B + TrustRAG
+
+1.29
+
+1.28
+
+15.0
+
+42.3
+
+47.7
+
+33.4
+
+7.5
+
+7.3
+
+53.0
+
+Qwen2.5-7B + Exact-match RL (1 seed)
+
+2.70
+
+2.05
+
+24.3
+
+40.7
+
+58.2
+
+68.0
+
+12.6
+
+7.1
+
+1.7
+
+Qwen2.5-7B + 
+EchoSpec
+ (+ xs, 3 seeds)
+
+3.07
+
+3.05
+
+23.5
+
+12.2
+
+20.4
+
+25.1
+
+22.5
+
+14.4
+
+34.3
+
+Qwen2.5-7B + 
+EchoSpec
+ (w/o xs, 1 seed)
+
+2.94
+
+2.99
+
+22.9
+
+20.3
+
+26.7
+
+29.9
+
+16.4
+
+12.1
+
+35.6
+
+Llama-3.1-8B (no defense)
+
+3.12
+
+2.17
+
+14.3
+
+37.1
+
+56.2
+
+63.4
+
+9.8
+
+4.9
+
+6.3
+
+Llama-3.1-8B + 
+EchoSpec
+ (+ xs, 1 seed)
+
+2.88
+
+2.97
+
+25.2
+
+7.9
+
+17.1
+
+24.0
+
+24.4
+
+15.5
+
+60.1
+
+Replication across model scales and families.
+
+Table
+ 
+9
+ evaluates echo deference and 
+EchoSpec
+ training across Qwen2.5-3B-Instruct, Qwen2.5-7B-Instruct 
+[
+47
+]
+, and Llama-3.1-8B-Instruct 
+[
+11
+]
+. Without defense, Qwen2.5-3B defers at 62.5% under eight echoes with 5.1% Reach@8 and 2.8% Acc@8, while Llama-3.1-8B defers at 70.0% and 74.4% under exclude-seen with 10.8% Reach@8 and 5.0% 
+Delete
+ abstention. Applying Exact-match RL amplifies deference to 71.5% on Qwen2.5-3B and keeps it at 66.7% on Llama-3.1-8B while eroding 
+Delete
+ abstention to 5.2% and 2.8%. In contrast, 
+EchoSpec
+ converges all three backbones to 28.9–30.6% Def@8 without hyperparameter retuning: Llama-3.1-8B 
+EchoSpec
+ reaches 11.1 / 24.1 / 30.6% deference, 26.5% Reach@8, 17.2% Acc@8, 52.5% abstention, and 55.4% QA precision at 44.2 RA-F1, while Qwen2.5-3B 
+EchoSpec
+ reaches 15.3 / 29.6 / 30.4% deference, 22.5% Reach@8, and 42.8% precision, outperforming all seven 7B RL baselines in deference and reach at less than half the parameter count.
+
+Search budget scaling and forced multi-turn verification.
+
+Table
+ 
+10
+ evaluates both enlarged search caps 
+ and 
+ across all three 
+EchoSpec
+ seeds alongside protocol-enforced multi-turn verification baselines that intercept early answers before three searches under exclude-seen retrieval. Even at 
+ with exclude-seen, Search-R1 and Base AutoRefine stop voluntarily after 2.03 and 1.91 searches under eight echoes and defer at 67.4% and 59.8%, while AWA-RL issues 3.65 searches yet defers at 61.8%. Even when Search-R1 and Qwen2.5-7B are forced under an explicit bridge-verification prompt to execute at least three distinct searches, Srch@8 rises to 3.18 and 3.01 and Reach@8 climbs to 29.5% and 27.5%, yet Def@8 remains high at 55.5–58.7% and 54.1% with only 9.8–11.0% and 7.8% Acc@8 because untrained policies issue confirmatory decoy queries and still defer to eight-echo majorities after retrieving 
+. By contrast, 3-seed 
+EchoSpec
+ achieves 28.9% Def@8 and 16.7% Acc@8 at 
+, improves to 18.3% Acc@8 at 
+, and reaches 34.8% Reach@8 and 20.2% Acc@8 at 
+ as wider retrieval surfaces primary passages earlier.
+
+Zero-shot transfer across dense and lexical retrievers.
+
+To test whether 
+EchoSpec
+ learns retriever-agnostic verification rather than overfitting to 
+e5-base-v2
+ rankings, 
+Table
+ 
+11
+ evaluates frozen 
+e5
+-trained checkpoints directly under 
+BAAI/bge-base-en-v1.5
+ 
+[
+42
+]
+ and lexical Okapi BM25 
+[
+28
+]
+ over all 21M 
+wiki-18
+ passages without retraining. Under BGE, released RL agents and Exact-match RL remain at 58.1–72.2% Def@8, whereas 3-seed Qwen2.5-7B 
+EchoSpec
+ achieves 13.4 / 21.2 / 29.4% deference with 26.0% Reach@8 and 15.2% Acc@8, matching in-retriever 
+e5
+ within 0.5 points, and Llama-3.1-8B 
+EchoSpec
+ reaches 11.3 / 20.8 / 30.5% deference with 25.2% Reach@8 and 15.4% Acc@8. Under non-neural Okapi BM25, where TrustRAG degrades from 22.8% to 33.4% Def@8 at 7.5% Reach@8 and RL baselines stay at 53.6–68.0% Def@8, standalone 
+EchoSpec
+ achieves the lowest deference overall at 12.2 / 20.4 / 25.1% across 3 Qwen2.5-7B seeds, or 29.9% even without exclude-seen, and 7.9 / 17.1 / 24.0% on Llama-3.1-8B while quadrupling base Reach@8 from 5.6% to 22.5–24.4% across both generator-disjoint test suites.
+
+Appendix H 
+Step-by-Step Trajectory Examples on Real Benchmarks
+
+To illustrate how 
+EchoSpec
+ alters multi-turn search behavior in practice, 
+Tables
+ 
+12
+, 
+13
+, 
+14
+ and 
+15
+ present verbatim evaluation trajectories from our logs comparing released RL search agents and inference-time TrustRAG against 
+EchoSpec
+. 
+Tables
+ 
+12
+ and 
+13
+ come from unseen Phi-4 eight-echo 
+Inject
+ worlds on HotpotQA and MuSiQue in Test Set B, while 
+Tables
+ 
+14
+ and 
+15
+ come from unmodified clean HotpotQA and 2WikiMultiHopQA over standard 
+wiki-18
+ without any synthetic transformation. Across both settings, outcome-RL baselines either stop as soon as a Turn-1 passage states a plausible answer or latch onto homonym and distractor entities without verifying intermediate hops, whereas 
+EchoSpec
+ reformulates entity-focused queries under exclude-seen retrieval until confirming the target answer directly in the primary Wikipedia article.
+
+Table 12: 
+Trajectory comparison on HotpotQA under unseen Phi-4 echoes
+ in Test Set B 
+Inject
+ at 
+. Eight paraphrased Phi-4 claim pages state decoy year 
+1890
+, while primary Wikipedia articles 
+William Flannery
+ and 
+William Randolph Hearst
+ remain intact and retrievable throughout the standard 
+wiki-18
+ corpus.
+
+Question:
+ 
+The person that William Flannery was an architect for entered the publishing business in what year?
+ 
+Gold:
+ 
+1887
+   
+Echo 
+:
+ 
+1890
+
+Agent
+
+Search trajectory and retrieved evidence summary
+
+Answer
+
+Result
+
+Search-R1
+
+Turn 1:
+ 
+<search>William Flannery architect for</search>
+ 
+ top-3 results are Phi-4 echoes stating 
+“William Flannery, a renowned architect, worked for William Randolph Hearst, who entered the publishing business in 1890…”
+ Stops immediately without querying 
+William Randolph Hearst
+.
+
+1890
+
+✗
+ Deferred
+
+AutoRefine
+
+Turn 1:
+ 
+<search>William Flannery architect for</search>
+ 
+ retrieves the same three bare echo claims asserting 
+1890
+ and terminates after one search.
+
+1890
+
+✗
+ Deferred
+
+TrustRAG
+
+Turn 1:
+ 
+<search>William Flannery architect client publishing business entry year</search>
+ 
+ clustering removes the injected echoes from context, leaving no primary passage on Hearst’s publishing entry, and the base model halts.
+
+ABSTAIN
+
+✗
+ Missed 
+
+EchoSpec
+
+Turn 1:
+ 
+<search>William Flannery architect</search>
+ 
+ surfaces echoes alongside bridge article 
+William Flannery
+ reading 
+“American art director and architect for William Randolph Hearst.”
+ Refuses to answer from unverified bare claims.
+
+Turn 2:
+ 
+<search>William Randolph Hearst biography</search>
+ 
+ targets the resolved patron entity directly under exclude-seen retrieval.
+
+Turn 3:
+ 
+<search>William Randolph Hearst entered publishing business</search>
+ 
+ retrieves primary article 
+William Randolph Hearst
+ reading 
+“Hearst entered the publishing business in 1887 after being given control of The San Francisco Examiner by his wealthy father.”
+
+1887
+
+✓
+ Grounded
+
+Table 13: 
+Trajectory comparison on MuSiQue under unseen Phi-4 echoes
+ in Test Set B 
+Inject
+ at 
+. Search-R1 issues a second confirmatory query containing decoy name 
+Tim Hanseroth
+, Brandi Carlile’s twin bandmate, whereas 
+EchoSpec
+ resolves performer 
+Brandi Carlile
+ first and queries the primary song article directly.
+
+Question:
+ 
+Who wrote the song sung by the performer of The Story?
+ 
+Gold:
+ 
+Phil Hanseroth
+   
+Echo 
+:
+ 
+Tim Hanseroth
+
+Agent
+
+Search trajectory and retrieved evidence summary
+
+Answer
+
+Result
+
+AutoRefine
+
+Turn 1:
+ 
+<search>"The Story" performer</search>
+ 
+ top results return Phi-4 echoes stating 
+“Tim Hanseroth is the acclaimed songwriter behind the song ‘The Story,’ performed by Br
