@@ -1,7 +1,7 @@
 # Paper candidates — 2026-11-17 (IST)
 
-Generated 2026-11-17 08:34 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
-Totals: 34 new topic matches · 20 other new cs.IR · 41 seen in earlier runs.
+Generated 2026-11-17 09:16 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Totals: 34 new topic matches · 20 other new cs.IR · 40 seen in earlier runs.
 Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
 
 ## New papers matching your topics (34), highest score first
@@ -352,7 +352,7 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Leveraging Binary Hashing for Scalable Index Assignment in Semantic Communications — https://arxiv.org/abs/2611.21260
 - ExRel: Learning Directed Reuse Relevance between Rich-Text K-12 Question Images with Executable Relation Contracts — https://arxiv.org/abs/2611.21461
 
-## Already listed on an earlier day, still inside the look-back window (41)
+## Already listed on an earlier day, still inside the look-back window (40)
 - Scale-Induced Semantic Shift in Visual Prompt Injection Against VLMs and Web Agents — https://arxiv.org/abs/2611.16744 (score 14)
 - From Delegation to Coordination: Learning Efficient Multi-Agent Deep Research — https://arxiv.org/abs/2611.17041 (score 14)
 - Beyond Bot Labels: Retrospective Consequence-Grounded Ranking of Attributed Cache Harm in E-Commerce Logs — https://arxiv.org/abs/2611.18027 (score 12)
