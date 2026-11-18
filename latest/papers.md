@@ -1,7 +1,7 @@
-# Paper candidates — 2026-11-17 (IST)
+# Paper candidates — 2026-11-18 (IST)
 
-Generated 2026-11-17 09:41 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
-Totals: 34 new topic matches · 20 other new cs.IR · 39 seen in earlier runs.
+Generated 2026-11-18 01:11 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Totals: 34 new topic matches · 20 other new cs.IR · 23 seen in earlier runs.
 Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
 
 ## New papers matching your topics (34), highest score first
@@ -352,17 +352,11 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Leveraging Binary Hashing for Scalable Index Assignment in Semantic Communications — https://arxiv.org/abs/2611.21260
 - ExRel: Learning Directed Reuse Relevance between Rich-Text K-12 Question Images with Executable Relation Contracts — https://arxiv.org/abs/2611.21461
 
-## Already listed on an earlier day, still inside the look-back window (39)
-- Scale-Induced Semantic Shift in Visual Prompt Injection Against VLMs and Web Agents — https://arxiv.org/abs/2611.16744 (score 14)
-- From Delegation to Coordination: Learning Efficient Multi-Agent Deep Research — https://arxiv.org/abs/2611.17041 (score 14)
+## Already listed on an earlier day, still inside the look-back window (23)
 - Beyond Bot Labels: Retrospective Consequence-Grounded Ranking of Attributed Cache Harm in E-Commerce Logs — https://arxiv.org/abs/2611.18027 (score 12)
-- Cited but Unused: Parametric Provenance in Retrieval-Augmented Generation — https://arxiv.org/abs/2611.17161 (score 10)
 - Can You Trust Your Finance Agent? Drift, Diagnosis and Auditable Intervention on One Shipped Financial Research Agent — https://arxiv.org/abs/2611.17939 (score 10)
-- AI-Voyager: A Public-Interest System for Human-AI Civic Reasoning to Contest and Shape the Rules That Govern AI — https://arxiv.org/abs/2611.17564 (score 9)
 - DOCKET: A Pluralistic Benchmark for Evaluating AI-Assisted Policy Feedback in U.S. Rulemaking — https://arxiv.org/abs/2611.17914 (score 9)
 - Towards Explainable Sleep Stage Classification using Single-Channel Electroencephalogram — https://arxiv.org/abs/2611.18434 (score 9)
-- MobileProbe: Adaptive Security Evaluation of Mobile Agents via Trajectory-Aware Injection — https://arxiv.org/abs/2611.16693 (score 8)
-- Sketching Language Models for Context Attribution — https://arxiv.org/abs/2611.17313 (score 8)
 - Evaluating the Robustness of PRNU Source-Camera Attribution to the Fingerprint-Copy Attack: An Open Toolkit with Triangle-Test Detection — https://arxiv.org/abs/2611.17747 (score 8)
 - Creative Product Design under Brand Image Constraints — https://arxiv.org/abs/2611.17762 (score 8)
 - G-CAST: Governed Continual Self-Training for E-Commerce Agents under Evolving Demands — https://arxiv.org/abs/2611.17814 (score 8)
@@ -372,11 +366,7 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Interactive deep-learning based interface for brain tumour segmentation — https://arxiv.org/abs/2611.17983 (score 7)
 - Contagious Fingerprints: When LLMs Inherit Another Model's Identity — https://arxiv.org/abs/2611.18104 (score 7)
 - SPILLWAY: Separating Target Admission from Sanitization to Defend Tool-Using Agents against Prompt Injection — https://arxiv.org/abs/2611.07222 (score 6)
-- HALO: Human-Aligned Data Collection for WhoLe-body MObile Manipulation — https://arxiv.org/abs/2611.16439 (score 6)
-- EgoX: Egocentric Cross-Embodiment Manipulation with Embodiment Dreaming — https://arxiv.org/abs/2611.16728 (score 6)
-- A Code-Level Audit of X — https://arxiv.org/abs/2611.16800 (score 6)
 - An In-Silico Audit of Topographic Organization in a Multimodal Brain-Response Model — https://arxiv.org/abs/2611.18105 (score 6)
 - Toward On-Device Markerless 6DoF Tracking of a Physical Manipulative on a Mixed-Reality Headset: A Preliminary Study — https://arxiv.org/abs/2611.18438 (score 6)
 - Can Mechanistic Interpretability Help Explain LLM Agent Failures? A Case Study on Web Element Hallucination — https://arxiv.org/abs/2611.18514 (score 6)
-- Advancing Quantization for R&R Models with Microscaling Formats — https://arxiv.org/abs/2611.17501 (score 4)
 - StreamEmbed: Real-Time Indexing from Pixels for Screenshot Retrieval — https://arxiv.org/abs/2611.18516 (score 4)
