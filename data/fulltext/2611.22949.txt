@@ -1,0 +1,5132 @@
+Can Decision Models Replace LLMs in Real-World Contact Center Classification and Judging Tasks?
+https://arxiv.org/abs/2611.22949
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+Can Decision Models Replace LLMs in Real-World Contact Center Classification and Judging Tasks?
+
+Md Tahmid Rahman Laskar
+
+  
+
+Xue-Yong Fu
+
+  
+
+Shashi Bhushan TN
+
+Email: 
+{
+tahmid.rahman,xue-yong,sbhushan
+}
+@dialpad.com
+
+Affiliation: 
+Dialpad Inc.
+
+Abstract
+
+Contact center systems often need to make bounded decisions, such as identifying a caller’s intent, retrieving the knowledge-base article that answers a query, assessing agent compliance, or judging the output of AI models used in production. Decision models return a typed answer and its probability directly, making them a promising cost-effective alternative to generative Large Language Models (LLMs) in such bounded conversational tasks. However, their effectiveness in real-world contact center applications remains unclear. In this paper, we compare nine decision models against thirteen generative LLMs in zero-shot settings across eight contact center use cases: six classification tasks and two judging tasks. Our experiments demonstrate that many decision models can match the performance of frontier LLMs on contact center classification, and API-based closed decision models achieve this at the lowest per-request cost among the API models we evaluate. We further observe that their confident predictions are more accurate, enabling selective routing in real-world production scenarios. Across classification tasks, the main weakness of most decision models is abstention: they rarely choose the no-answer option, which accounts for most of their gap to the strongest LLMs (although Gemini-Decision-1 is the notable exception in this regard). We also find that the judging quality of decision models drops sharply for smaller models, and they are also more prone to position bias. In short, our findings provide practical guidance for selecting decision models based on abstention behavior, confidence, and deployment cost, rather than overall accuracy alone.
+
+1 
+Introduction
+
+Large Language Models (LLMs) are increasingly used to analyze business conversations, generate summaries, and power conversational agents 
+(
+Laskar et al., 2023b
+; 
+Fu et al., 2024
+; 
+Laskar et al., 2025c
+; 
+Laskar et al., 2026a
+)
+. Yet many contact center tasks require a bounded decision rather than a generated response. For instance, identifying a caller’s intent, checking whether a human agent followed a required procedure during a call, selecting the knowledge-base article that answers a customer’s question, or scoring the output of an AI model can be considered bounded decision tasks. More specifically, such tasks can only have a set of allowed answers. Applying an LLM to such decision tasks introduces substantial inference cost 
+(
+Li et al., 2026b
+)
+.
+
+Figure 1: 
+Overview of the evaluation. Decision models and generative LLMs answer the same instances zero-shot.
+
+To tackle this, decision models offer an alternative cost-effective interface. Given a context, a question, and the allowed answer options, they return a typed decision together with a probability for each option 
+(
+TypeSafe AI, 2026
+; 
+Cloudflare, 2026
+; 
+Google, 2026b
+; 
+OpenAI, 2026b
+)
+. Unlike encoder classifiers such as BERT 
+(
+Devlin et al., 2019
+)
+, decision models demonstrate strong performance in zero-shot settings, without task-specific training data. This makes them attractive for real-world contact center applications, where training data construction is not trivial since label sets may differ across customers 
+Dong et al. (2021)
+; 
+Parikh et al. (2023)
+; 
+Pattnaik et al. (2025)
+.
+
+In this paper, we investigate whether zero-shot decision models can replace generative LLMs for contact center decision problems, i.e., tasks that do not necessarily require free-form text generation. We compare nine decision models with thirteen generative LLMs on six classification and two judging tasks (Figure 
+1
+). Our major contributions:
+
+•
+
+We conduct a comprehensive zero-shot evaluation of decision models and generative LLMs on eight real-world contact center tasks, covering classification tasks to model judging.
+
+•
+
+We show that most decision models rarely choose the no-answer option, which accounts for most of their gap to the strongest LLMs.
+
+•
+
+We find that judge quality depends on the task and metric: decision models align well with frontier LLM judges on pointwise ratings, but poorly on pairwise preference, where they also show strong position bias.
+
+•
+
+We further analyze model confidence and find that confident predictions are more accurate.
+
+Task
+
+Samples
+
+Answer options
+
+Call Outcome
+
+524
+
+30 labels
+
+Purpose of Call
+
+173
+
+30 labels
+
+Quality Assurance
+
+187
+
+Yes / No
+
+Procedural Step
+
+263
+
+Yes / No
+
+Intent
+
+762
+
+4–21 options
+
+RAG Document
+
+485
+
+3 articles or none
+
+Agent Workflow Judge
+
+8,600
+
+5-way verdict, 5 ratings
+
+Generated Resp. Judge
+
+957
+
+3 ratings, pairwise preference
+
+Table 1: 
+Evaluation tasks. Quality Assurance and Procedural Step contain 1,036 and 2,938 scored questions, respectively.
+
+2 
+Related Work
+
+Zero-shot text classification uses task descriptions to predict labels without target-task training 
+(
+Yin et al., 2019
+; 
+Laskar et al., 2023a
+)
+. Decision models extend this setting with typed outputs and native probability distributions 
+(
+Cloudflare, 2026
+; 
+OpenJev Contributors, 2026
+)
+. Recent work studies confidence-based escalation when JEV is used as a judge 
+(
+Li et al., 2026b
+)
+ and delegation between decision models and LLM agents 
+(
+Zhu et al., 2026
+)
+. However, prior work mostly evaluates decision models on public academic benchmarks, where zero-shot results are exposed to data contamination 
+(
+Li et al., 2026a
+; 
+Deußer et al., 2026
+)
+. We instead examine them on proprietary real-world contact center datasets.
+
+Another important use case of decision models is to use them as the judge to evaluate different AI models’ generated responses 
+Li et al. (2026b)
+. However, prior work demonstrates that smaller, cost-effective LLM judges fail to match human assessments 
+(
+Fu et al., 2023
+)
+, require task-specific adaptation 
+(
+Laskar et al., 2025b
+)
+, and are prone to position bias 
+(
+Zheng et al., 2023
+; 
+Wang et al., 2024
+; 
+Laskar et al., 2025a
+)
+. We therefore evaluate decision-model judges on both their agreement with reference judgments and biases in verdicts.
+
+3 
+Tasks and Data
+
+We collect real-world data from Dialpad
+1
+1
+
+1
+
+https://www.dialpad.com/
+, covering customer–agent call conversation transcripts, retrieved documents for assisting agents, and AI-generated responses. We organize it into six classification tasks and two judging tasks (see Table 
+1
+ and Figure 
+1
+). Below, we describe each task.
+
+3.1 
+Classification Tasks
+
+Call outcome and purpose of call.
+
+Given a customer–agent call transcript, 
+Call Outcome
+ asks for the result of the call (e.g., issue resolved, transferred), while 
+Purpose of Call
+ asks for the customer’s reason for calling (e.g., billing questions). Both tasks require the selection of one label from 30 fixed labels (different set of labels for each task).
+
+Quality Assurance and procedural step.
+
+Both tasks answer Yes/No questions about a transcript. 
+Quality Assurance
+ asks whether the call satisfies a service-quality criterion (1–10 questions per conversation). 
+Procedural Step
+ asks whether the agent carried out a specific step, such as verifying the caller’s identity (2–20 questions per conversation).
+
+Intent classification.
+
+We evaluate whether models can correctly classify the intent of the customer utterance. Unlike call outcome and purpose of call, where 30 fixed labels are always provided, the candidate labels in intent classification are dynamically provided in the input, ranging from 4 to 21 options.
+
+RAG document selection.
+
+Given a conversation and three knowledge-base articles, this task evaluates whether models can select the most relevant article that can answer the customer’s question, or 
+ if none does.
+
+3.2 
+Judging Tasks
+
+Agent workflow judging.
+
+This dataset contains customer-agent conversations where the LLM agent is required to resolve a support issue by following a skill workflow 
+Laskar et al. (2026b)
+. The judge receives the instructions, policies, conversation turns, and tool call logs. It returns a five-way task-completion verdict (success, failure, partial, appropriately transferred, or appropriately detecting out of scope), a yes/no verdict for hallucinated actions, and five 1–5 rubric ratings for the following criteria: workflow adherence, tool-use correctness, guardrail compliance, communication quality, and resolution efficiency. An overall pass verdict is then derived by a fixed rule rather than asked directly: a conversation passes if the task completion is a success or an appropriate transfer or out-of-scope verdict, workflow adherence is at least 4, no hallucinated action is found.
+
+Model-generated response judging.
+
+Judges evaluate summaries and action items generated by two models, Qwen-3.5-9B 
+Qwen Team (2026a)
+ and Qwen-3.8-27B 
+Qwen Team (2026c)
+. We evaluate the responses using both pointwise and pairwise metrics. For pointwise, each response is rated from 1 to 5 for faithfulness, completeness, and instruction following. For pairwise, the judge chooses the better response, or a tie. To measure position bias, each pair is shown in both orders.
+
+Model
+
+Size
+
+Call Outcome
+
+Purpose of Call
+
+Quality Assurance
+
+Procedural Step
+
+Intent
+
+RAG Doc.
+
+Avg.
+
+Gemini-Decision-1
+
+API
+
+51.5
+
+76.3
+
+85.4
+
+86.4
+
+84.0
+
+73.4
+
+76.2
+
+OpenJev
+
+27B
+
+50.8
+
+78.6
+
+87.3
+
+86.6
+
+79.9
+
+72.4
+
+75.9
+
+GPT-6-Luna-Decisions
+
+API
+
+54.6
+
+80.3
+
+87.0
+
+85.4
+
+77.6
+
+70.5
+
+75.9
+
+JEV
+
+API
+
+52.7
+
+79.8
+
+86.6
+
+87.1
+
+78.7
+
+68.2
+
+75.5
+
+Clef
+
+27B
+
+52.1
+
+78.6
+
+87.5
+
+84.8
+
+76.2
+
+62.3
+
+73.6
+
+OpenJev-Flash
+
+9B
+
+44.8
+
+76.9
+
+82.0
+
+84.0
+
+73.4
+
+65.6
+
+71.1
+
+Clef-Flash
+
+9B
+
+45.8
+
+74.0
+
+81.1
+
+83.6
+
+71.3
+
+65.8
+
+70.2
+
+lev
+
+4B
+
+42.2
+
+66.5
+
+77.0
+
+83.0
+
+72.2
+
+61.4
+
+67.1
+
+Kev
+
+4B
+
+27.1
+
+45.7
+
+81.5
+
+82.7
+
+69.3
+
+61.6
+
+61.3
+
+Qwen-3.8-27B
+
+27B
+
+55.2
+
+76.9
+
+88.1
+
+87.2
+
+85.4
+
+79.0
+
+78.6
+
+Gemini-3.8-Flash
+
+API
+
+54.4
+
+76.9
+
+84.2
+
+86.7
+
+86.1
+
+76.3
+
+77.4
+
+GPT-6-Luna
+
+API
+
+51.1
+
+76.9
+
+86.9
+
+87.0
+
+81.8
+
+69.9
+
+75.6
+
+Gemma-4-26B-A4B
+
+26B
+
+53.6
+
+71.1
+
+87.2
+
+86.2
+
+79.7
+
+75.5
+
+75.5
+
+Gemini-3.5-Flash-Lite
+
+API
+
+50.6
+
+79.2
+
+86.3
+
+87.5
+
+80.1
+
+69.5
+
+75.5
+
+GPT-5.6-Luna
+
+API
+
+52.7
+
+79.2
+
+85.8
+
+86.7
+
+80.7
+
+63.3
+
+74.7
+
+Claude-Haiku-5.5
+
+API
+
+53.8
+
+82.7
+
+82.7
+
+83.5
+
+78.9
+
+61.6
+
+73.9
+
+Qwen-3.6-35B-A3B
+
+35B
+
+52.3
+
+74.6
+
+87.5
+
+84.6
+
+75.5
+
+67.4
+
+73.6
+
+Gemma-4-E4B
+
+8B
+
+51.1
+
+76.3
+
+83.8
+
+85.9
+
+78.5
+
+62.1
+
+73.0
+
+Qwen-3.5-9B
+
+9B
+
+47.5
+
+74.6
+
+85.7
+
+85.5
+
+71.5
+
+61.0
+
+71.0
+
+Gemma-4-E2B
+
+5B
+
+38.0
+
+60.1
+
+78.2
+
+79.7
+
+69.9
+
+47.0
+
+62.2
+
+Gemma-3-4B
+
+4B
+
+34.5
+
+65.3
+
+73.0
+
+74.7
+
+65.9
+
+38.6
+
+58.7
+
+Qwen-3.5-2B
+
+2B
+
+31.9
+
+52.0
+
+76.2
+
+76.7
+
+62.9
+
+39.8
+
+56.6
+
+Table 2: 
+Accuracy (%) on the six classification tasks; Avg. is the unweighted mean.
+
+Reference: GPT-6.1-Sol
+
+Reference: Claude-Sonnet-5.5
+
+Overall
+
+Generated response
+
+Agent Workflow
+
+Generated response
+
+Agent Workflow
+
+Judge
+
+Size
+
+Pointwise
+
+Pairwise
+
+Avg.
+
+Pointwise
+
+Pairwise
+
+Avg.
+
+Avg.
+
+GPT-6-Luna-Decisions
+
+API
+
+0.55
+
+0.39
+
+0.61
+
+0.60
+
+0.33
+
+0.66
+
+0.52
+
+JEV
+
+API
+
+0.47
+
+0.38
+
+0.66
+
+0.51
+
+0.36
+
+0.66
+
+0.51
+
+Clef
+
+27B
+
+0.49
+
+0.19
+
+0.68
+
+0.54
+
+0.26
+
+0.70
+
+0.48
+
+OpenJev
+
+27B
+
+0.47
+
+0.25
+
+0.57
+
+0.44
+
+0.33
+
+0.63
+
+0.45
+
+Gemini-Decision-1
+
+API
+
+0.34
+
+0.37
+
+0.58
+
+0.31
+
+0.32
+
+0.57
+
+0.42
+
+Clef-Flash
+
+9B
+
+0.25
+
+0.07
+
+0.35
+
+0.28
+
+0.02
+
+0.37
+
+0.19
+
+OpenJev-Flash
+
+9B
+
+0.04
+
+0.02
+
+0.40
+
+0.07
+
+0.05
+
+0.45
+
+0.17
+
+Kev
+
+4B
+
+0.02
+
+0.01
+
+0.28
+
+0.02
+
+0.03
+
+0.33
+
+0.11
+
+lev
+
+4B
+
+0.01
+
+0.04
+
+0.13
+
+0.03
+
+0.00
+
+0.16
+
+0.06
+
+Gemini-3.8-Flash
+
+API
+
+0.57
+
+0.64
+
+0.73
+
+0.47
+
+0.48
+
+0.70
+
+0.60
+
+GPT-5.6-Luna
+
+API
+
+0.63
+
+0.47
+
+0.78
+
+0.58
+
+0.37
+
+0.74
+
+0.59
+
+GPT-6-Luna
+
+API
+
+0.66
+
+0.56
+
+0.58
+
+0.59
+
+0.44
+
+0.65
+
+0.58
+
+Qwen-3.8-27B
+
+27B
+
+0.45
+
+0.42
+
+0.69
+
+0.45
+
+0.39
+
+0.72
+
+0.52
+
+Claude-Haiku-5.5
+
+API
+
+0.44
+
+0.18
+
+0.62
+
+0.51
+
+0.16
+
+0.66
+
+0.43
+
+Gemini-3.5-Flash-Lite
+
+API
+
+0.28
+
+0.34
+
+0.57
+
+0.28
+
+0.29
+
+0.59
+
+0.39
+
+Qwen-3.6-35B-A3B
+
+35B
+
+0.29
+
+0.23
+
+0.58
+
+0.28
+
+0.21
+
+0.62
+
+0.37
+
+Gemma-4-26B-A4B
+
+26B
+
+0.20
+
+0.35
+
+0.55
+
+0.19
+
+0.31
+
+0.56
+
+0.36
+
+Qwen-3.5-9B
+
+9B
+
+0.07
+
+0.05
+
+0.53
+
+0.11
+
+0.05
+
+0.55
+
+0.23
+
+Gemma-4-E4B
+
+8B
+
+0.21
+
+0.04
+
+0.35
+
+0.23
+
+0.12
+
+0.38
+
+0.22
+
+Gemma-4-E2B
+
+5B
+
+0.18
+
+0.06
+
+0.40
+
+0.22
+
+0.05
+
+0.43
+
+0.19
+
+Gemma-3-4B
+
+4B
+
+0.05
+
+0.05
+
+0.30
+
+0.02
+
+0.04
+
+0.32
+
+0.08
+
+Qwen-3.5-2B
+
+2B
+
+0.07
+
+0.01
+
+0.12
+
+0.06
+
+0.02
+
+0.15
+
+0.02
+
+Table 3: 
+ Agreement with two reference judges.
+
+Pointwise
+: mean Spearman’s 
+ across faithfulness, completeness, and instruction-following ratings of generated responses;
+
+Pairwise
+: Cohen’s 
+ on preference verdicts;
+
+Agent Workflow Avg.
+: the average of seven scores: Cohen’s 
+ for pass and task-completion verdicts and Spearman’s 
+ for each of the five rubric ratings.
+
+Overall Avg.
+: the average of the six displayed scores: pointwise, pairwise, and agent workflow for each of the two reference judges.
+Appendix 
+B
+ provides the individual scores, raw agreement, and rating differences.
+
+4 
+Experimental Setup
+
+Models.
+
+We evaluate nine decision models: the API-based closed JEV 1.13 
+(
+TypeSafe AI, 2026
+)
+, Gemini-Decision-1 
+(
+Google, 2026b
+)
+ and GPT-6-Luna-Decisions 
+(
+OpenAI, 2026b
+)
+; the open-weight Clef 
+(
+Cloudflare, 2026
+)
+ and OpenJev 
+(
+OpenJev Contributors, 2026
+)
+ (27B) and their 9B Flash variants; lev and Kev 
+(
+Palmer, 2026
+)
+ (4B). The generative baselines comprise eight open LLMs covering Qwen 
+(
+Qwen Team, 2026a
+; 
+Qwen Team, 2026b
+; 
+Qwen Team, 2026c
+)
+ and Gemma 
+(
+Gemma Team, 2025
+; 
+Gemma Team, 2026
+)
+ series models and five cost-effective API models: GPT-5.6-Luna 
+(
+OpenAI, 2026c
+)
+, GPT-6-Luna 
+(
+OpenAI, 2026d
+)
+, Gemini-3.8-Flash 
+(
+Doshi and Popa, 2026
+)
+, Gemini-3.5-Flash-Lite 
+(
+Google, 2026a
+)
+, and Claude-Haiku-5.5 
+(
+Anthropic, 2026b
+)
+. We use two reference judges from two model families: GPT-6.1-Sol 
+(
+OpenAI, 2026a
+)
+ (primary) and Claude-Sonnet-5.5 
+(
+Anthropic, 2026a
+)
+.
+
+Protocol.
+
+An evaluation instance is a triplet 
+: the task context 
+, a question 
+, and the allowed answers 
+. All models are evaluated zero-shot, without any fine-tuning or few-shot demonstrations. Descriptions of the candidate labels are also provided where applicable (i.e., call outcome, purpose of call, intent classification). Decision models receive 
+ as typed options and return an answer with option probabilities, while generative LLMs return the answer as structured output. Appendix 
+C
+ shows prompt templates for all tasks.
+
+Metrics.
+
+For classification, we report exact match accuracy by comparing the model-selected label with the gold label. For judging, we follow prior work that evaluates cheap smaller judges by comparing against a stronger one 
+(
+Laskar et al., 2025a
+)
+. Here, we use GPT-6.1-Sol and Claude-Sonnet-5.5 as reference judges and measure correlation between our evaluated models and reference judges in terms Cohen’s 
+ for categorical verdicts and Spearman’s 
+ for 1–5 ratings.
+
+5 
+Results
+
+5.1 
+Classification Tasks
+
+Overall ranking.
+
+Table 
+2
+ shows that Qwen-3.8-27B achieves the highest average accuracy across the six classification tasks (78.6), followed by Gemini-3.8-Flash (77.4) and Gemini-Decision-1 (76.2). Beyond the top two models, performance is closely clustered: the nine models ranked third to eleventh differ by only 2.3 percentage points. Thus, although the strongest generative models lead overall, the performance of several decision models is also comparable to the generative LLMs.
+
+Decision models.
+
+Gemini-Decision-1 is the strongest decision model (76.2), followed by OpenJev and GPT-6-Luna-Decisions (both 75.9), JEV (75.5), and Clef (73.6). These leading decision models also outperform many generative LLMs, indicating that free-form generation is not necessary for strong performance on these bounded classification tasks. Among open-weight decision models, larger variants generally achieve higher accuracy. However, performance differences remain pronounced on Intent classification and RAG document selection. Averaged over these two tasks, OpenJev (76.1), JEV (73.5), and Clef (69.3) trail Qwen-3.8-27B (82.2) and Gemini-3.8-Flash (81.2). Gemini-Decision-1 achieves 78.7, narrowing this gap and showing that the weakness is not shared equally across decision models.
+
+Task difficulty and scale.
+
+Call Outcome is the hardest task for all models (best: 55.2), whereas the strongest models reach 86–88% in Quality Assurance and Procedural Step. Accuracy increases with size within each family: moving from 9B to 27B adds 4.8 points for OpenJev and 3.3 for Clef.
+
+5.2 
+Judging Tasks
+
+Overall ranking.
+
+Gemini-3.8-Flash has the highest overall agreement (0.60), followed by GPT-5.6-Luna (0.59) and GPT-6-Luna (0.58). Meanwhile, Qwen-3.8-27B, which is the strongest classifier, reaches only 0.52.
+
+Decision models as judges.
+
+GPT-6-Luna-Decisions leads among decision models (overall 0.52), followed by JEV (0.51) and Clef (0.48); Gemini-Decision-1 reaches only 0.42 despite leading decision-model across classification tasks. For the four strongest decision models, generated-response pointwise correlations range from 0.44 to 0.60, but pairwise 
+ ranges from 0.19 to 0.39.
+
+Robustness to the reference judge.
+
+The judge rankings are nearly unchanged across references (Spearman 
+). Gemini-3.8-Flash leads under GPT-6.1-Sol (0.65), followed by GPT-5.6-Luna (0.63) and GPT-6-Luna (0.60). Under Claude-Sonnet-5.5, GPT-5.6-Luna and GPT-6-Luna lead (both 0.56), followed by Gemini-3.8-Flash (0.55). This pattern suggests that same-family preference is not a major driver of the overall rankings: the GPT judges remain competitive under the Claude reference, while the Gemini judge leads under the GPT reference.
+
+Effect of scale.
+
+Judging is more sensitive to scale than classification. Against GPT-6.1-Sol, the 9B decision models retain less than half the average agreement of their 27B counterparts: 0.18 vs. 0.45 for Clef and 0.14 vs. 0.43 for OpenJev. The 4B models perform even worse (Kev 0.10, lev 0.05).
+
+Figure 2: 
+Accuracy of the five strongest classification decision models on all predictions (empty markers) and on confident predictions with selected-option probability 
+ (filled markers), for each classification task. The number above each pair is the percentage of predictions that are confident.
+
+Intent
+
+RAG Document
+
+Model
+
+Answ.
+
+Abst.-R
+
+Answ.
+
+Abst.-R
+
+Gemini-Decision-1
+
+83.3
+
+86.8
+
+78.7
+
+64.4
+
+OpenJev
+
+92.2
+
+27.1
+
+86.2
+
+48.9
+
+GPT-6-Luna-Decisions
+
+89.8
+
+25.0
+
+76.7
+
+60.0
+
+JEV
+
+92.1
+
+21.5
+
+82.0
+
+45.0
+
+Clef
+
+89.8
+
+18.1
+
+83.9
+
+25.6
+
+OpenJev-Flash
+
+88.2
+
+9.7
+
+84.3
+
+33.9
+
+Clef-Flash
+
+86.4
+
+6.3
+
+77.4
+
+46.1
+
+lev
+
+85.0
+
+17.4
+
+78.7
+
+32.2
+
+Kev
+
+80.7
+
+20.1
+
+77.0
+
+35.6
+
+Qwen-3.8-27B
+
+86.4
+
+81.3
+
+80.3
+
+76.7
+
+Gemini-3.8-Flash
+
+86.4
+
+84.7
+
+77.7
+
+73.9
+
+GPT-6-Luna
+
+87.5
+
+56.9
+
+83.0
+
+47.8
+
+Gemma-4-26B-A4B
+
+91.4
+
+29.2
+
+83.0
+
+62.8
+
+Gemini-3.5-Flash-Lite
+
+90.3
+
+36.1
+
+79.0
+
+53.3
+
+GPT-5.6-Luna
+
+89.8
+
+41.7
+
+84.3
+
+27.8
+
+Claude-Haiku-5.5
+
+90.5
+
+29.2
+
+77.7
+
+34.4
+
+Qwen-3.6-35B-A3B
+
+87.7
+
+22.9
+
+75.1
+
+54.4
+
+Gemma-4-E4B
+
+88.7
+
+34.7
+
+81.0
+
+30.0
+
+Qwen-3.5-9B
+
+85.6
+
+11.1
+
+74.4
+
+38.3
+
+Gemma-4-E2B
+
+85.3
+
+4.2
+
+74.8
+
+0.0
+
+Gemma-3-4B
+
+80.1
+
+4.9
+
+59.3
+
+3.3
+
+Qwen-3.5-2B
+
+77.3
+
+0.7
+
+63.0
+
+0.6
+
+Table 4: 
+Answering versus abstaining (%). 
+Answ.
+: accuracy on inputs that have an answer (618 Intent utterances with a configured intent; 305 RAG conversations with a relevant article). 
+Abst.-R
+: recall of the abstention option (
+no intent
+ for Intent, “none relevant” for RAG).
+
+5.3 
+Analysis
+
+Classification versus judging.
+
+Across the 22 models, rankings of models between classification and judging are strongly but not perfectly correlated (Spearman 
+). Notably, GPT-5.6-Luna rises from tenth as a classifier to second as a judge, whereas Gemini-Decision-1 drops from third to tenth. Strong performance in classification therefore does not imply similar performance in judging.
+
+Decision Models Rarely Abstain.
+
+The largest source of error for most decision models is a reluctance to choose the no-answer option (see Table 
+4
+). On Intent, OpenJev (92.2%) and JEV (92.1%) are the most accurate of all models on requests that match a configured intent, above Gemini-3.8-Flash and Qwen-3.8-27B (both 86.4%). However, eight of the nine decision models in Table 
+2
+ could correctly classify only 6–27% of 
+no intent
+ requests, compared with 85% for Gemini-3.8-Flash and 81% for Qwen-3.8-27B. Gemini-Decision-1 is the exception: it correctly classifies 86.8% of 
+no intent
+ requests. RAG document selection shows the same pattern. When a relevant article exists, JEV, OpenJev, and Clef correctly select an acceptable one in 82–86% of cases, above Qwen-3.8-27B (80.3%) and Gemini-3.8-Flash (77.7%). When none is relevant, they answer “none” in only 26–49% of cases, compared with 77% and 74% for the respective LLMs. Some LLMs share this failure (e.g., 28% for GPT-5.6-Luna), and some smaller LLMs almost never abstain (e.g., Gemma-3-4B, Qwen-3.5-2B).
+
+Confidence as a Routing Signal.
+
+Decision models return a probability 
+ for the selected option. Across six classification tasks, confidence predicts correctness with AUROC 
+Hanley and McNeil (1982)
+ 0.69–0.92 for the seven decision models of at least 9B or accessed through APIs. Figure 
+2
+ shows accuracy when confidence is at 
+ for the five best decision models. On Intent, JEV achieves 97.1% accuracy at 
+, compared with 78.7% overall. At 
+, Gemini-Decision-1 reaches 99.6%. On Quality Assurance and Procedural Step, JEV, OpenJev, and Clef achieve 91–96% accuracy at 
+. These results support accepting confident predictions and routing the remainder to a stronger model.
+However, confidence has two limitations. Confidence coverage with 
+ varies by task: on Call Outcome, it is only 14–28% for JEV, OpenJev, Clef, and Gemini-Decision-1; GPT-6-Luna-Decisions reaches 44% coverage but only 75% accuracy. Confident errors also persist when abstention is required: 12 of JEV’s 14 confident Intent errors assign an intent to 
+no intent
+ requests.
+
+Position and order sensitivity.
+
+We test five leading pairwise judges for position bias, defined as selecting the same displayed position after reversing response order (Table 
+5
+). JEV selects the second position in both orders for 24.6% of pairs, versus 7.2% for GPT-6-Luna and 1.5% for Gemini-3.8-Flash. Conversely, GPT-6-Luna-Decisions and Gemini-Decision-1 favor the first position for 45.6% and 26.1% of pairs, consistently selecting the same response across orders in only 48.9% and 56.1%. We also find that high confidence (
+ ) weakly predicts judging correctness: pairwise-preference AUROC is only 0.57–0.66 for JEV, OpenJev, and Clef.
+
+Judge
+
+Same resp.
+
+Always 1st
+
+Always 2nd
+
+JEV
+
+67.9
+
+1.8
+
+24.6
+
+Gemini-3.8-Flash
+
+83.5
+
+7.2
+
+1.5
+
+GPT-6-Luna
+
+72.6
+
+12.2
+
+7.2
+
+Gemini-Decision-1
+
+56.1
+
+26.1
+
+0.9
+
+GPT-6-Luna-Decisions
+
+48.9
+
+45.6
+
+0.3
+
+Table 5: 
+Position bias in pairwise judging of model-generated responses. 
+Same resp.
+: the judge prefers the same response in both orders (higher is ideal). 
+Always 1st/2nd
+: the judge picks the same displayed position in both orders (lower is ideal).
+
+6 
+Cost and Deployment Guidance
+
+Model
+
+Serving
+
+p50 (s)
+
+$/1k
+
+Acc.
+
+lev
+
+local
+
+0.40
+
+–
+
+67.1
+
+OpenJev-Flash
+
+local
+
+0.40
+
+–
+
+71.1
+
+Clef-Flash
+
+local
+
+0.37
+
+–
+
+70.2
+
+Clef
+
+local
+
+1.21
+
+–
+
+73.6
+
+OpenJev
+
+local
+
+1.22
+
+–
+
+75.9
+
+Qwen-3.8-27B
+
+local
+
+1.58
+
+–
+
+78.6
+
+JEV
+
+API
+
+–
+
+0.09
+
+75.5
+
+Gemini-Decision-1
+
+API
+
+–
+
+0.20
+
+76.2
+
+GPT-6-Luna-Decisions
+
+API
+
+–
+
+0.23
+
+75.9
+
+GPT-6-Luna
+
+API
+
+–
+
+0.29
+
+75.6
+
+Claude-Haiku-5.5
+
+API
+
+–
+
+0.34
+
+73.9
+
+GPT-5.6-Luna
+
+API
+
+–
+
+0.58
+
+74.7
+
+Gemini-3.5-Flash-Lite
+
+API
+
+–
+
+0.68
+
+75.5
+
+Gemini-3.8-Flash
+
+API
+
+–
+
+1.73
+
+77.4
+
+Table 6: 
+Estimated cost per 1,000 requests and median latency per request. Local models use one NVIDIA A100 GPU (p50: median latency), and therefore no usage cost is reported; API costs use recorded usage and list prices of November 2026; the API-based closed decision models (JEV, Gemini-Decision-1, GPT-6-Luna-Decisions) do not bill output tokens. Acc. is the average from Table 
+2
+.
+
+Cost.
+
+JEV is the cheapest measured judge at $0.10 per 1,000 judgments, versus $0.22 for Gemini-Decision-1, $0.25 for GPT-6-Luna-Decisions, $0.32 for GPT-6-Luna, and $2.00 for Gemini-3.8-Flash. However, its 
+ is lower than those of the two generative models (0.38 vs. 0.56 and 0.64). For classification, the three decision APIs cost $0.09–0.23 per 1,000 requests, with similar or higher accuracy than GPT-6-Luna, the cheapest generative API at $0.29. Among open-weight models (benchmarked on one A100 GPU), 9B decision models are the fastest (median 0.4 s), but 27B models are 3–4x slower.
+
+Recommendations.
+
+Before deployment, (1) evaluate classification and judging separately; (2) measure no-answer recall; (3) calibrate confidence thresholds for classification routing; (4) validate pointwise and workflow verdicts; and (5) evaluate pairwise comparisons in both orders.
+
+7 
+Conclusion
+
+We evaluated nine decision models and thirteen generative LLMs on eight real-world contact center tasks. Many decision models can match frontier LLM performance on call classification, are competitive judges of multi-turn agent workflows, and expose confidence scores that enable selective routing; API-based closed decision models also have the lowest per-request cost among the API models we evaluated. However, most rarely abstain on unsupported intents and irrelevant documents, judge pairwise preferences poorly and with position bias, and lose most of their judging quality at smaller scale. Model selection should therefore rely on abstention tests, judge agreement, confidence audits, and measured cost alongside overall accuracy. Future work will further study calibrated abstention thresholds and evaluate across more tasks.
+
+Limitations
+
+Our study is offline and measures no live customer outcomes. The four call-level tasks use stored operational labels whose annotation process is undocumented, and the Intent utterances are synthetic.
+The confidence analysis is retrospective and uses a fixed threshold. Generalization to other settings, organizations, languages, and future model versions remains untested.
+
+Ethical Considerations
+
+Incorrect contact center decisions can misroute customers, overlook procedure failures, or pass irrelevant evidence to an answer generator. We therefore report abstention recall and confident errors, because aggregate accuracy can hide these risks, and we recommend human review before consequential use. The data come from private contact center customer interactions that are PII-redacted. Licensing requirements are followed accordingly for the evaluated models.
+
+References
+
+Anthropic (2026a)
+
+Anthropic
+
+Claude Sonnet 5.5: models overview
+.
+
+Note: 
+Model 
+claude-sonnet-5-5
+; accessed November 12, 2026
+
+External Links: 
+Link
+
+Cited by: 
+§4
+.
+
+Anthropic (2026b)
+
+Anthropic
+
+Introducing Claude Haiku 5.5
+.
+
+Note: 
+Published October 7, 2026
+
+External Links: 
+Link
+
+Cited by: 
+§4
+.
+
+Cloudflare (2026)
+
+Cloudflare
+
+Clef: model card
+.
+
+Note: 
+Model documentationAccessed October 20, 2026
+
+External Links: 
+Link
+
+Cited by: 
+§1
+,
+
+§2
+,
+
+§4
+.
+
+Deußer 
+et al.
+ (2026)
+
+T. Deußer, L. Sparrenberg, and R. Sifa
+
+Evaluating and benchmarking the system one model jev
+.
+
+arXiv preprint arXiv:2609.37647
+.
+
+Cited by: 
+§2
+.
+
+Devlin 
+et al.
+ (2019)
+
+J. Devlin, M. Chang, K. Lee, and K. Toutanova
+
+Bert: pre-training of deep bidirectional transformers for language understanding
+.
+
+In 
+Proceedings of the 2019 conference of the North American chapter of the association for computational linguistics: human language technologies, volume 1 (long and short papers)
+,
+
+pp. 4171–4186
+.
+
+Cited by: 
+§1
+.
+
+Dong 
+et al.
+ (2021)
+
+L. Dong, M. C. Spencer, and A. Biagi
+
+A semi-supervised multi-task learning approach to classify customer contact intents
+.
+
+In 
+Proceedings of the 4th Workshop on e-Commerce and NLP
+,
+
+pp. 49–57
+.
+
+Cited by: 
+§1
+.
+
+Doshi and Popa (2026)
+
+T. Doshi and R. A. Popa
+
+Introducing Gemini 3.8 Flash and 3.8 Flash Cyber
+.
+
+Note: 
+Published September 2, 2026
+
+External Links: 
+Link
+
+Cited by: 
+§4
+.
+
+Fu 
+et al.
+ (2023)
+
+X. Fu, M. T. R. Laskar, C. Chen, and S. B. Tn
+
+Are large language models reliable judges? a study on the factuality evaluation capabilities of LLMs
+.
+
+In 
+Proceedings of the Third Workshop on Natural Language Generation, Evaluation, and Metrics (GEM)
+,  
+S. Gehrmann, A. Wang, J. Sedoc, E. Clark, K. Dhole, K. R. Chandu, E. Santus, and H. Sedghamiz (Eds.)
+,
+
+Singapore
+, 
+pp. 310–316
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+Fu 
+et al.
+ (2024)
+
+X. Fu, M. T. R. Laskar, E. Khasanova, C. Chen, and S. Bhushan TN
+
+Tiny titans: can smaller large language models punch above their weight in the real world for meeting summarization?
+.
+
+In 
+Proceedings of the 2024 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies (Volume 6: Industry Track)
+,  
+Y. Yang, A. Davani, A. Sil, and A. Kumar (Eds.)
+,
+
+Mexico City, Mexico
+, 
+pp. 387–394
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§1
+.
+
+Gemma Team (2025)
+
+Gemma Team
+
+Gemma 3 technical report
+.
+
+External Links: 
+2503.19786
+,
+
+Link
+
+Cited by: 
+§4
+.
+
+Gemma Team (2026)
+
+Gemma Team
+
+Gemma 4 technical report
+.
+
+External Links: 
+2607.02770
+,
+
+Link
+
+Cited by: 
+§4
+.
+
+Google (2026a)
+
+Google
+
+Gemini 3.5 Flash-Lite: model documentation
+.
+
+Note: 
+Accessed November 6, 2026
+
+External Links: 
+Link
+
+Cited by: 
+§4
+.
+
+Google (2026b)
+
+Google
+
+Gemini Decisions API: fast, calibrated multimodal decisions
+.
+
+Note: 
+Published November 11, 2026; model 
+gemini-decision-1
+
+External Links: 
+Link
+
+Cited by: 
+§1
+,
+
+§4
+.
+
+Hanley and McNeil (1982)
+
+J. A. Hanley and B. J. McNeil
+
+The meaning and use of the area under a receiver operating characteristic (roc) curve.
+.
+
+Radiology
+ 
+143
+ (
+1
+), 
+pp. 29–36
+.
+
+Cited by: 
+§5.3
+.
+
+Laskar 
+et al.
+ (2023a)
+
+M. T. R. Laskar, M. S. Bari, M. Rahman, M. A. H. Bhuiyan, S. Joty, and J. X. Huang
+
+A systematic study and comprehensive evaluation of ChatGPT on benchmark datasets
+.
+
+In 
+Findings of the Association for Computational Linguistics: ACL 2023
+,  
+A. Rogers, J. Boyd-Graber, and N. Okazaki (Eds.)
+,
+
+Toronto, Canada
+, 
+pp. 431–469
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§2
+.
+
+Laskar 
+et al.
+ (2023b)
+
+M. T. R. Laskar, X. Fu, C. Chen, and S. B. Tn
+
+Building real-world meeting summarization systems using large language models: a practical perspective
+.
+
+In 
+Proceedings of the 2023 Conference on Empirical Methods in Natural Language Processing: Industry Track
+,
+
+pp. 343–352
+.
+
+Cited by: 
+§1
+.
+
+Laskar 
+et al.
+ (2026a)
+
+M. T. R. Laskar, X. Fu, S. S. Sarfjoo, Q. McNamara, J. Robertson, and S. B. TN
+
+From text to voice: a reproducible and verifiable framework for evaluating tool calling LLM agents
+.
+
+Transactions on Machine Learning Research
+.
+
+Note: 
+
+External Links: 
+ISSN 2835-8856
+,
+
+Link
+
+Cited by: 
+§1
+.
+
+Laskar 
+et al.
+ (2025a)
+
+M. T. R. Laskar, M. S. Islam, R. Mahbub, A. Masry, M. Rahman, A. Bhuiyan, M. T. Nayeem, S. Joty, E. Hoque, and J. X. Huang
+
+Judging the judges: can large vision-language models fairly evaluate chart comprehension and reasoning?
+.
+
+In 
+Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics (Volume 6: Industry Track)
+,
+
+pp. 1203–1216
+.
+
+Cited by: 
+§2
+,
+
+§4
+.
+
+Laskar 
+et al.
+ (2025b)
+
+M. T. R. Laskar, I. Jahan, E. Dolatabadi, C. Peng, E. Hoque, and J. X. Huang
+
+Improving automatic evaluation of large language models (LLMs) in biomedical relation extraction via LLMs-as-the-judge
+.
+
+In 
+Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)
+,  
+W. Che, J. Nabende, E. Shutova, and M. T. Pilehvar (Eds.)
+,
+
+Vienna, Austria
+, 
+pp. 25483–25497
+.
+
+External Links: 
+Link
+,
+
+Document
+,
+
+ISBN 979-8-89176-251-0
+
+Cited by: 
+§2
+.
+
+Laskar 
+et al.
+ (2026b)
+
+M. T. R. Laskar, G. Singh, X. Fu, K. Chang, K. Sanders, S. Zong, T. Habib, J. B. Tremblay, S. Gardiner, H. Saini, 
+et al.
+
+Evaluating llms as agentic workflow executors in real-world customer support skills
+.
+
+arXiv preprint arXiv:2610.14346
+.
+
+Cited by: 
+§3.2
+.
+
+Laskar 
+et al.
+ (2025c)
+
+M. T. R. Laskar, J. B. Tremblay, X. Fu, C. Chen, and S. B. Tn
+
+AI knowledge assist: an automated approach for the creation of knowledge bases for conversational AI agents
+.
+
+In 
+Proceedings of the 2025 Conference on Empirical Methods in Natural Language Processing: Industry Track
+,  
+S. Potdar, L. Rojas-Barahona, and S. Montella (Eds.)
+,
+
+Suzhou (China)
+, 
+pp. 1856–1866
+.
+
+External Links: 
+Link
+,
+
+Document
+,
+
+ISBN 979-8-89176-333-3
+
+Cited by: 
+§1
+.
+
+Li 
+et al.
+ (2026a)
+
+X. Li, Q. Chang, J. Ning, C. Xu, S. Zhang, Y. Zhang, L. Luo, and H. Lin
+
+Specialized decision models vs. general-purpose llms: benchmarking jev across knowledge, reasoning, and multilingual tasks
+.
+
+arXiv preprint arXiv:2610.11978
+.
+
+Cited by: 
+§2
+.
+
+Li 
+et al.
+ (2026b)
+
+Y. Li, Y. Miao, R. Krishnan, and R. Padman
+
+JEV-as-a-judge: accept when confident, escalate when unsure
+.
+
+Note: 
+Version 5
+
+External Links: 
+2609.26550
+,
+
+Link
+
+Cited by: 
+§1
+,
+
+§2
+,
+
+§2
+.
+
+OpenAI (2026a)
+
+OpenAI
+
+Addendum to GPT-6 Astra system card: GPT-6.1 Sol
+.
+
+Note: 
+Published September 29, 2026
+
+External Links: 
+Link
+
+Cited by: 
+§4
+.
+
+OpenAI (2026b)
+
+OpenAI
+
+Decisions API guide
+.
+
+Note: 
+Generally available with 
+gpt-6-luna
+; accessed November 11, 2026
+
+External Links: 
+Link
+
+Cited by: 
+§1
+,
+
+§4
+.
+
+OpenAI (2026c)
+
+OpenAI
+
+GPT-5.6 Luna: model documentation
+.
+
+Note: 
+Accessed November 6, 2026
+
+External Links: 
+Link
+
+Cited by: 
+§4
+.
+
+OpenAI (2026d)
+
+OpenAI
+
+GPT-6 luna: model and pricing documentation
+.
+
+Note: 
+Public standard rates accessed October 20, 2026
+
+External Links: 
+Link
+
+Cited by: 
+§4
+.
+
+OpenJev Contributors (2026)
+
+OpenJev Contributors
+
+OpenJev: typed decisions with calibrated probabilities
+.
+
+Note: 
+Project documentationAccessed October 20, 2026
+
+External Links: 
+Link
+
+Cited by: 
+§2
+,
+
+§4
+.
+
+Palmer (2026)
+
+J. Palmer
+
+Kev-4B: a calibrated decision model on Qwen3.5-4B
+.
+
+Note: 
+https://huggingface.co/jaredpalmer/kev-4b
+Kev 1.0
+
+Cited by: 
+§4
+.
+
+Parikh 
+et al.
+ (2023)
+
+S. Parikh, M. Tiwari, P. Tumbade, and Q. Vohra
+
+Exploring zero and few-shot techniques for intent classification
+.
+
+In 
+Proceedings of the 61st Annual Meeting of the Association for Computational Linguistics (Volume 5: Industry Track)
+,
+
+pp. 744–751
+.
+
+Cited by: 
+§1
+.
+
+Pattnaik 
+et al.
+ (2025)
+
+A. Pattnaik, S. Vutla, H. Dev, J. Nandan, and C. George
+
+Scalable and cost effective high-cardinality classification with llms via multi-view label representations and retrieval augmentation
+.
+
+In 
+Proceedings of the 2025 Conference on Empirical Methods in Natural Language Processing: Industry Track
+,
+
+pp. 1955–1969
+.
+
+Cited by: 
+§1
+.
+
+Qwen Team (2026a)
+
+Qwen Team
+
+Qwen3.5: towards native multimodal agents
+.
+
+External Links: 
+Link
+
+Cited by: 
+§3.2
+,
+
+§4
+.
+
+Qwen Team (2026b)
+
+Qwen Team
+
+Qwen3.6-35B-A3B: agentic coding power, now open to all
+.
+
+External Links: 
+Link
+
+Cited by: 
+§4
+.
+
+Qwen Team (2026c)
+
+Qwen Team
+
+Qwen3.8-Max: a new bar for coding and cowork
+.
+
+External Links: 
+Link
+
+Cited by: 
+§3.2
+,
+
+§4
+.
+
+TypeSafe AI (2026)
+
+TypeSafe AI
+
+TypeSafe: introduction to JEV
+.
+
+Note: 
+API documentationAccessed October 20, 2026
+
+External Links: 
+Link
+
+Cited by: 
+§1
+,
+
+§4
+.
+
+Wang 
+et al.
+ (2024)
+
+P. Wang, L. Li, L. Chen, Z. Cai, D. Zhu, B. Lin, Y. Cao, L. Kong, Q. Liu, T. Liu, and Z. Sui
+
+Large language models are not fair evaluators
+.
+
+In 
+Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics
+,
+
+pp. 9440–9450
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Yin 
+et al.
+ (2019)
+
+W. Yin, J. Hay, and D. Roth
+
+Benchmarking zero-shot text classification: datasets, evaluation and entailment approach
+.
+
+In 
+Proceedings of EMNLP-IJCNLP
+,
+
+pp. 3914–3923
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Zheng 
+et al.
+ (2023)
+
+L. Zheng, W. Chiang, Y. Sheng, S. Zhuang, Z. Wu, Y. Zhuang, Z. Lin, Z. Li, D. Li, E. P. Xing, H. Zhang, J. E. Gonzalez, and I. Stoica
+
+Judging LLM-as-a-judge with MT-bench and chatbot arena
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+Vol. 
+36
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+Zhu 
+et al.
+ (2026)
+
+K. Zhu, T. Feng, X. Han, H. Wang, L. Yang, X. Tang, J. You, and H. Ji
+
+JevAgentHarness: benchmarking, deploying and training decision models that share control with LLMs
+.
+
+External Links: 
+2610.21412
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Appendix A 
+Additional Classification Results
+
+Macro-F1.
+
+Table 
+7
+ reports macro-F1 on the four call-level tasks for all 22 models that completed them. The ranking is similar to that by accuracy: GPT-6-Luna-Decisions has the best average macro-F1 of all models (75.5), and JEV (74.1) is on par with the best generative LLMs (74.3).
+
+Model
+
+Size
+
+Call Outcome
+
+Purpose of Call
+
+Quality Assurance
+
+Procedural Step
+
+Avg. F1
+
+Avg. Acc.
+
+GPT-6-Luna-Decisions
+
+API
+
+51.9
+
+81.1
+
+86.8
+
+82.2
+
+75.5
+
+76.8
+
+JEV
+
+API
+
+49.9
+
+76.8
+
+86.5
+
+83.1
+
+74.1
+
+76.5
+
+OpenJev
+
+27B
+
+47.5
+
+79.0
+
+87.0
+
+82.3
+
+73.9
+
+75.8
+
+Gemini-Decision-1
+
+API
+
+48.6
+
+78.5
+
+85.4
+
+80.2
+
+73.2
+
+74.9
+
+Clef
+
+27B
+
+47.2
+
+79.1
+
+87.5
+
+76.3
+
+72.5
+
+75.8
+
+OpenJev-Flash
+
+9B
+
+41.2
+
+79.2
+
+81.2
+
+80.4
+
+70.5
+
+72.0
+
+Clef-Flash
+
+9B
+
+43.4
+
+75.2
+
+81.0
+
+74.6
+
+68.6
+
+71.1
+
+lev
+
+4B
+
+40.2
+
+65.9
+
+75.1
+
+77.9
+
+64.8
+
+67.2
+
+Kev
+
+4B
+
+27.4
+
+44.7
+
+81.1
+
+77.4
+
+57.7
+
+59.2
+
+GPT-5.6-Luna
+
+API
+
+49.4
+
+78.6
+
+85.6
+
+83.7
+
+74.3
+
+76.1
+
+Qwen-3.8-27B
+
+27B
+
+51.1
+
+76.7
+
+88.1
+
+81.3
+
+74.3
+
+76.8
+
+Gemini-3.5-Flash-Lite
+
+API
+
+47.8
+
+79.6
+
+86.2
+
+82.8
+
+74.1
+
+75.9
+
+Claude-Haiku-5.5
+
+API
+
+51.0
+
+82.0
+
+82.7
+
+80.2
+
+74.0
+
+75.7
+
+Gemini-3.8-Flash
+
+API
+
+50.5
+
+78.3
+
+84.2
+
+81.4
+
+73.6
+
+75.5
+
+GPT-6-Luna
+
+API
+
+48.3
+
+75.7
+
+86.7
+
+83.5
+
+73.6
+
+75.5
+
+Gemma-4-E4B
+
+8B
+
+49.0
+
+75.2
+
+83.6
+
+80.9
+
+72.1
+
+74.3
+
+Qwen-3.6-35B-A3B
+
+35B
+
+49.2
+
+75.2
+
+87.4
+
+76.3
+
+72.0
+
+74.7
+
+Gemma-4-26B-A4B
+
+26B
+
+50.7
+
+70.1
+
+87.1
+
+80.1
+
+72.0
+
+74.5
+
+Qwen-3.5-9B
+
+9B
+
+43.9
+
+74.2
+
+85.6
+
+79.7
+
+70.8
+
+73.3
+
+Gemma-4-E2B
+
+5B
+
+36.3
+
+58.5
+
+78.2
+
+65.2
+
+59.6
+
+64.0
+
+Gemma-3-4B
+
+4B
+
+31.5
+
+64.3
+
+71.4
+
+69.6
+
+59.2
+
+61.9
+
+Qwen-3.5-2B
+
+2B
+
+28.4
+
+53.3
+
+75.0
+
+60.5
+
+54.3
+
+59.2
+
+Table 7: 
+Macro-F1 (
+) on the four call-level tasks, with the corresponding average accuracy for comparison. Bold marks the best value per column within a block.
+
+Appendix B 
+Additional Judging Results
+
+Per-score agreement for both reference judges.
+
+Tables 
+8
+ and 
+9
+ give all seven agreement scores behind Table 
+3
+ for each reference judge. The two references agree with each other at 0.62, and the judge rankings under the two references correlate at Spearman 
+.
+
+Generated-response judging uses 957 test response pairs from 426 source-transcript groups: 1,914 candidate responses for pointwise ratings and 1,914 ordered pairwise judgments.
+
+Raw agreement and rating distances.
+
+Tables 
+10
+ and 
+11
+ demonstrate raw agreement, signed rating bias (candidate minus reference), mean absolute error (MAE), and the percentage of ratings within one point of the reference between each evaluated model and the reference judge GPT-6.1-Sol.
+
+Generated responses
+
+Agent workflow
+
+Judge
+
+Size
+
+Preference
+
+Faithful.
+
+Complete.
+
+Instruction
+
+Pass
+
+Task comp.
+
+Rubric
+
+Avg.
+
+GPT-6-Luna-Decisions
+
+API
+
+0.39
+
+0.68
+
+0.61
+
+0.37
+
+0.54
+
+0.50
+
+0.64
+
+0.52
+
+JEV
+
+API
+
+0.38
+
+0.66
+
+0.35
+
+0.41
+
+0.53
+
+0.60
+
+0.70
+
+0.50
+
+Clef
+
+27B
+
+0.19
+
+0.46
+
+0.56
+
+0.46
+
+0.49
+
+0.58
+
+0.74
+
+0.45
+
+OpenJev
+
+27B
+
+0.25
+
+0.62
+
+0.43
+
+0.36
+
+0.43
+
+0.58
+
+0.60
+
+0.43
+
+Gemini-Decision-1
+
+API
+
+0.37
+
+0.43
+
+0.25
+
+0.33
+
+0.35
+
+0.49
+
+0.64
+
+0.43
+
+Clef-Flash
+
+9B
+
+0.07
+
+0.30
+
+0.26
+
+0.21
+
+0.10
+
+0.36
+
+0.40
+
+0.18
+
+OpenJev-Flash
+
+9B
+
+0.02
+
+0.11
+
+0.02
+
+0.02
+
+0.40
+
+0.41
+
+0.40
+
+0.14
+
+Kev
+
+4B
+
+0.01
+
+0.07
+
+0.05
+
+0.07
+
+0.17
+
+0.31
+
+0.29
+
+0.10
+
+lev
+
+4B
+
+0.04
+
+0.02
+
+0.05
+
+0.03
+
+0.15
+
+0.42
+
+0.07
+
+0.05
+
+Gemini-3.8-Flash
+
+API
+
+0.64
+
+0.67
+
+0.52
+
+0.53
+
+0.44
+
+0.59
+
+0.81
+
+0.65
+
+GPT-5.6-Luna
+
+API
+
+0.47
+
+0.73
+
+0.64
+
+0.52
+
+0.65
+
+0.69
+
+0.82
+
+0.63
+
+GPT-6-Luna
+
+API
+
+0.56
+
+0.74
+
+0.67
+
+0.55
+
+0.54
+
+0.50
+
+0.61
+
+0.60
+
+Qwen-3.8-27B
+
+27B
+
+0.42
+
+0.51
+
+0.45
+
+0.39
+
+0.48
+
+0.57
+
+0.76
+
+0.52
+
+Claude-Haiku-5.5
+
+API
+
+0.18
+
+0.55
+
+0.54
+
+0.22
+
+0.46
+
+0.36
+
+0.70
+
+0.41
+
+Gemini-3.5-Flash-Lite
+
+API
+
+0.34
+
+0.34
+
+0.25
+
+0.24
+
+0.37
+
+0.42
+
+0.64
+
+0.40
+
+Gemma-4-26B-A4B
+
+26B
+
+0.35
+
+0.31
+
+0.17
+
+0.12
+
+0.27
+
+0.47
+
+0.62
+
+0.37
+
+Qwen-3.6-35B-A3B
+
+35B
+
+0.23
+
+0.37
+
+0.26
+
+0.24
+
+0.49
+
+0.49
+
+0.62
+
+0.36
+
+Qwen-3.5-9B
+
+9B
+
+0.05
+
+0.20
+
+0.11
+
+0.08
+
+0.44
+
+0.42
+
+0.56
+
+0.22
+
+Gemma-4-E4B
+
+8B
+
+0.04
+
+0.24
+
+0.30
+
+0.10
+
+0.18
+
+0.37
+
+0.39
+
+0.20
+
+Gemma-4-E2B
+
+5B
+
+0.06
+
+0.22
+
+0.26
+
+0.07
+
+0.28
+
+0.30
+
+0.45
+
+0.17
+
+Gemma-3-4B
+
+4B
+
+0.05
+
+0.10
+
+0.10
+
+0.05
+
+0.22
+
+0.14
+
+0.35
+
+0.07
+
+Qwen-3.5-2B
+
+2B
+
+0.01
+
+0.15
+
+0.04
+
+0.02
+
+0.13
+
+0.18
+
+0.10
+
+0.01
+
+Table 8: 
+Agreement with GPT-6.1-Sol as the reference judge: Cohen’s 
+ for categorical verdicts and Spearman’s 
+ for 1–5 ratings. Rubric is the mean 
+ over five rubric dimensions and Avg. is the mean of the pointwise, pairwise, and agent-workflow scores for this reference, using the same component definitions as Table 
+3
+. Sorted by the average within each group; bold marks the best value per column within each group.
+
+Generated responses
+
+Agent workflow
+
+Judge
+
+Size
+
+Preference
+
+Faithful.
+
+Complete.
+
+Instruction
+
+Pass
+
+Task comp.
+
+Rubric
+
+Avg.
+
+GPT-6-Luna-Decisions
+
+API
+
+0.33
+
+0.71
+
+0.58
+
+0.51
+
+0.62
+
+0.52
+
+0.69
+
+0.53
+
+JEV
+
+API
+
+0.36
+
+0.68
+
+0.42
+
+0.44
+
+0.59
+
+0.51
+
+0.70
+
+0.51
+
+Clef
+
+27B
+
+0.26
+
+0.50
+
+0.60
+
+0.52
+
+0.59
+
+0.56
+
+0.75
+
+0.50
+
+OpenJev
+
+27B
+
+0.33
+
+0.61
+
+0.41
+
+0.32
+
+0.49
+
+0.50
+
+0.69
+
+0.47
+
+Gemini-Decision-1
+
+API
+
+0.32
+
+0.40
+
+0.28
+
+0.26
+
+0.39
+
+0.39
+
+0.65
+
+0.40
+
+Clef-Flash
+
+9B
+
+0.02
+
+0.33
+
+0.31
+
+0.20
+
+0.16
+
+0.30
+
+0.43
+
+0.21
+
+OpenJev-Flash
+
+9B
+
+0.05
+
+0.13
+
+0.07
+
+0.01
+
+0.49
+
+0.36
+
+0.46
+
+0.19
+
+Kev
+
+4B
+
+0.03
+
+0.06
+
+0.09
+
+0.03
+
+0.23
+
+0.34
+
+0.35
+
+0.13
+
+lev
+
+4B
+
+0.00
+
+0.02
+
+0.07
+
+0.06
+
+0.20
+
+0.34
+
+0.11
+
+0.07
+
+GPT-5.6-Luna
+
+API
+
+0.37
+
+0.68
+
+0.63
+
+0.42
+
+0.62
+
+0.55
+
+0.80
+
+0.56
+
+GPT-6-Luna
+
+API
+
+0.44
+
+0.70
+
+0.64
+
+0.43
+
+0.62
+
+0.52
+
+0.68
+
+0.56
+
+Gemini-3.8-Flash
+
+API
+
+0.48
+
+0.55
+
+0.47
+
+0.38
+
+0.45
+
+0.54
+
+0.79
+
+0.55
+
+Qwen-3.8-27B
+
+27B
+
+0.39
+
+0.51
+
+0.54
+
+0.31
+
+0.53
+
+0.58
+
+0.78
+
+0.52
+
+Claude-Haiku-5.5
+
+API
+
+0.16
+
+0.61
+
+0.60
+
+0.32
+
+0.53
+
+0.44
+
+0.73
+
+0.44
+
+Gemini-3.5-Flash-Lite
+
+API
+
+0.29
+
+0.33
+
+0.29
+
+0.22
+
+0.45
+
+0.34
+
+0.66
+
+0.39
+
+Qwen-3.6-35B-A3B
+
+35B
+
+0.21
+
+0.37
+
+0.29
+
+0.19
+
+0.58
+
+0.43
+
+0.66
+
+0.37
+
+Gemma-4-26B-A4B
+
+26B
+
+0.31
+
+0.30
+
+0.19
+
+0.08
+
+0.29
+
+0.41
+
+0.64
+
+0.35
+
+Gemma-4-E4B
+
+8B
+
+0.12
+
+0.24
+
+0.31
+
+0.13
+
+0.23
+
+0.30
+
+0.42
+
+0.24
+
+Qwen-3.5-9B
+
+9B
+
+0.05
+
+0.19
+
+0.17
+
+0.02
+
+0.49
+
+0.39
+
+0.59
+
+0.24
+
+Gemma-4-E2B
+
+5B
+
+0.05
+
+0.26
+
+0.26
+
+0.13
+
+0.34
+
+0.22
+
+0.49
+
+0.20
+
+Gemma-3-4B
+
+4B
+
+0.04
+
+0.08
+
+0.01
+
+0.04
+
+0.26
+
+0.14
+
+0.37
+
+0.09
+
+Qwen-3.5-2B
+
+2B
+
+0.02
+
+0.14
+
+0.02
+
+0.05
+
+0.17
+
+0.18
+
+0.13
+
+0.02
+
+Table 9: 
+Agreement with Claude-Sonnet-5.5 as the reference judge, on the same instances and columns as Table 
+8
+. Sorted by the average within each group; bold marks the best value per column within each group.
+
+Pairwise
+
+Exact agreement (%)
+
+Signed bias
+
+Judge
+
+agree.
+
+Faith.
+
+Compl.
+
+Instr.
+
+Faith.
+
+Compl.
+
+Instr.
+
+MAE
+
+W-1
+
+Valid
+
+GPT-6-Luna-Decisions
+
+63.9
+
+56.6
+
+50.7
+
+46.4
+
+0.07
+
+0.21
+
+0.58
+
+0.60
+
+89.5
+
+100.0
+
+JEV
+
+62.7
+
+51.3
+
+47.1
+
+60.7
+
++0.46
+
++0.15
+
+0.17
+
+0.57
+
+91.3
+
+100.0
+
+Clef
+
+54.1
+
+46.8
+
+55.9
+
+49.7
+
++0.16
+
++0.08
+
+0.49
+
+0.58
+
+91.9
+
+100.0
+
+OpenJev
+
+58.2
+
+38.9
+
+36.9
+
+73.9
+
++0.75
+
++0.83
+
++0.23
+
+0.66
+
+85.8
+
+100.0
+
+Gemini-Decision-1
+
+60.7
+
+35.5
+
+38.9
+
+74.5
+
++0.92
+
++0.85
+
++0.30
+
+0.72
+
+81.0
+
+100.0
+
+Clef-Flash
+
+39.8
+
+41.8
+
+43.2
+
+44.5
+
++0.29
+
++0.32
+
+0.47
+
+0.79
+
+82.7
+
+100.0
+
+OpenJev-Flash
+
+42.7
+
+33.6
+
+34.8
+
+72.7
+
++1.05
+
++0.99
+
++0.36
+
+0.82
+
+76.5
+
+100.0
+
+Kev
+
+41.3
+
+32.9
+
+33.9
+
+73.5
+
++1.07
+
++0.98
+
++0.36
+
+0.83
+
+76.2
+
+100.0
+
+lev
+
+32.5
+
+29.0
+
+27.3
+
+58.7
+
++0.47
+
++0.26
+
+0.19
+
+1.04
+
+68.7
+
+100.0
+
+GPT-5.6-Luna
+
+67.3
+
+59.7
+
+60.6
+
+71.0
+
++0.29
+
++0.02
+
+0.06
+
+0.40
+
+96.7
+
+100.0
+
+Gemini-3.8-Flash
+
+78.5
+
+42.1
+
+39.5
+
+74.5
+
++0.68
+
++0.74
+
++0.09
+
+0.59
+
+89.2
+
+99.8
+
+GPT-6-Luna
+
+73.7
+
+66.0
+
+62.6
+
+74.0
+
++0.06
+
+0.05
+
++0.00
+
+0.35
+
+97.4
+
+100.0
+
+Qwen-3.8-27B
+
+64.5
+
+37.2
+
+44.3
+
+73.7
+
++0.85
+
++0.65
+
++0.23
+
+0.64
+
+86.0
+
+100.0
+
+Claude-Haiku-5.5
+
+48.2
+
+40.9
+
+33.8
+
+16.0
+
+0.43
+
+0.65
+
+1.19
+
+0.93
+
+78.9
+
+100.0
+
+Qwen-3.6-35B-A3B
+
+52.6
+
+34.5
+
+37.4
+
+70.4
+
++0.92
+
++0.85
+
++0.17
+
+0.76
+
+79.6
+
+98.3
+
+Gemini-3.5-Flash-Lite
+
+59.7
+
+34.5
+
+37.7
+
+71.8
+
++0.95
+
++0.89
+
++0.24
+
+0.76
+
+79.6
+
+99.8
+
+Gemma-4-26B-A4B
+
+60.0
+
+33.7
+
+34.8
+
+73.8
+
++1.02
+
++0.98
+
++0.37
+
+0.79
+
+77.4
+
+100.0
+
+Qwen-3.5-9B
+
+45.6
+
+33.7
+
+35.3
+
+69.9
+
++1.03
+
++0.95
+
++0.31
+
+0.83
+
+76.8
+
+100.0
+
+Gemma-4-E4B
+
+46.1
+
+33.3
+
+36.3
+
+69.2
+
++0.99
+
++0.87
+
++0.14
+
+0.82
+
+77.5
+
+100.0
+
+Gemma-4-E2B
+
+40.7
+
+34.8
+
+36.6
+
+72.2
+
++0.95
+
++0.89
+
++0.34
+
+0.77
+
+79.0
+
+100.0
+
+Gemma-3-4B
+
+41.0
+
+30.6
+
+33.0
+
+74.0
+
++1.00
+
++0.91
+
++0.39
+
+0.83
+
+76.3
+
+100.0
+
+Qwen-3.5-2B
+
+43.5
+
+29.0
+
+34.7
+
+51.4
+
++0.54
+
++0.63
+
++0.02
+
+0.80
+
+82.7
+
+95.6
+
+Table 10: 
+Model-generated response judging against GPT-6.1-Sol as reference: raw agreement, signed bias (candidate minus reference rating), MAE over the three rating dimensions, percentage of ratings within one point (W-1), and percentage of valid pointwise outputs. Pairwise and exact agreement are percentages.
+
+Agreement
+
+Spearman 
+ per rubric dimension
+
+Judge
+
+Pass
+
+Task
+
+Workflow
+
+Tool use
+
+Guardrail
+
+Commun.
+
+Efficiency
+
+MAE
+
+W-1
+
+Valid
+
+JEV
+
+86.1
+
+71.6
+
+0.71
+
+0.81
+
+0.30
+
+0.85
+
+0.82
+
+0.69
+
+84.1
+
+100.0
+
+Clef
+
+90.0
+
+69.0
+
+0.74
+
+0.77
+
+0.52
+
+0.83
+
+0.84
+
+0.59
+
+88.7
+
+100.0
+
+GPT-6-Luna-Decisions
+
+90.2
+
+64.5
+
+0.66
+
+0.61
+
+0.44
+
+0.77
+
+0.73
+
+0.74
+
+83.7
+
+100.0
+
+OpenJev
+
+79.6
+
+68.7
+
+0.73
+
+0.58
+
+0.24
+
+0.71
+
+0.73
+
+0.98
+
+76.4
+
+100.0
+
+Gemini-Decision-1
+
+73.6
+
+62.8
+
+0.68
+
+0.73
+
+0.17
+
+0.80
+
+0.82
+
+1.00
+
+69.8
+
+100.0
+
+OpenJev-Flash
+
+83.5
+
+57.7
+
+0.47
+
+0.47
+
+0.15
+
+0.47
+
+0.44
+
+1.13
+
+71.1
+
+100.0
+
+Clef-Flash
+
+80.3
+
+53.4
+
+0.26
+
+0.28
+
+0.16
+
+0.65
+
+0.63
+
+1.08
+
+69.1
+
+100.0
+
+Kev
+
+80.4
+
+52.1
+
+0.13
+
+0.35
+
+0.07
+
+0.52
+
+0.40
+
+1.25
+
+61.5
+
+100.0
+
+lev
+
+83.4
+
+56.7
+
+0.18
+
+0.01
+
+0.04
+
+0.14
+
+0.08
+
+1.55
+
+58.2
+
+100.0
+
+GPT-5.6-Luna
+
+91.2
+
+77.7
+
+0.78
+
+0.87
+
+0.68
+
+0.89
+
+0.89
+
+0.48
+
+93.3
+
+100.0
+
+Gemini-3.8-Flash
+
+78.9
+
+70.2
+
+0.83
+
+0.84
+
+0.64
+
+0.89
+
+0.86
+
+0.70
+
+84.6
+
+100.0
+
+Qwen-3.8-27B
+
+82.1
+
+68.7
+
+0.74
+
+0.76
+
+0.54
+
+0.88
+
+0.86
+
+0.71
+
+84.8
+
+100.0
+
+GPT-6-Luna
+
+90.1
+
+64.5
+
+0.65
+
+0.60
+
+0.34
+
+0.75
+
+0.69
+
+0.88
+
+80.1
+
+100.0
+
+Qwen-3.6-35B-A3B
+
+87.2
+
+63.2
+
+0.59
+
+0.56
+
+0.27
+
+0.85
+
+0.81
+
+0.83
+
+80.9
+
+100.0
+
+Claude-Haiku-5.5
+
+87.6
+
+52.0
+
+0.56
+
+0.80
+
+0.51
+
+0.83
+
+0.80
+
+0.69
+
+89.1
+
+100.0
+
+Gemini-3.5-Flash-Lite
+
+77.7
+
+58.0
+
+0.67
+
+0.78
+
+0.15
+
+0.83
+
+0.79
+
+0.99
+
+72.3
+
+100.0
+
+Qwen-3.5-9B
+
+88.0
+
+58.3
+
+0.41
+
+0.49
+
+0.35
+
+0.80
+
+0.76
+
+0.94
+
+76.2
+
+100.0
+
+Gemma-4-26B-A4B
+
+65.5
+
+62.4
+
+0.64
+
+0.74
+
+0.23
+
+0.76
+
+0.73
+
+1.26
+
+59.8
+
+100.0
+
+Gemma-4-E2B
+
+81.4
+
+47.5
+
+0.28
+
+0.57
+
+0.16
+
+0.58
+
+0.64
+
+1.12
+
+69.0
+
+100.0
+
+Gemma-4-E4B
+
+87.1
+
+53.0
+
+0.06
+
+0.30
+
+0.22
+
+0.65
+
+0.70
+
+1.03
+
+72.8
+
+100.0
+
+Gemma-3-4B
+
+74.8
+
+38.7
+
+0.28
+
+0.48
+
+0.19
+
+0.42
+
+0.36
+
+1.28
+
+57.5
+
+100.0
+
+Qwen-3.5-2B
+
+77.1
+
+37.8
+
+0.05
+
+0.04
+
+0.04
+
+0.20
+
+0.25
+
+1.97
+
+40.8
+
+100.0
+
+Table 11: 
+Agent workflow judging against GPT-6.1-Sol on 8,600 conversations: raw agreement (%) on the pass and task-completion verdicts, Spearman 
+ per rubric dimension, MAE and within-one agreement (W-1, %) over the five dimensions, and percentage of conversations with a valid output.
+
+Appendix C 
+Per Task Sample Prompt
+
+Each evaluation instance consists of a context (e.g., conversation transcript), one or more questions, and the allowed answers for each question (Section 
+4
+). Because the tasks come from production contact center workflows, the boxes below show generic templates rather than the exact prompts used in production. Decision models receive each question with its typed answer options; generative LLMs receive the same content together with the output instruction in the last box.
+
+Call Outcome
+
+CONTEXT
+
+{call transcript}
+
+QUESTION
+
+Which label best describes the outcome of this call?
+
+POSSIBLE ANSWERS
+
+One of a fixed set of outcome labels with short descriptions (e.g., issue resolved, transferred).
+
+Purpose of Call
+
+CONTEXT
+
+{call transcript}
+
+QUESTION
+
+Which label best describes why the customer called?
+
+POSSIBLE ANSWERS
+
+One of a fixed set of purpose labels (e.g., billing question).
+
+Quality Assurance
+
+CONTEXT
+
+{call transcript}
+
+QUESTION (one per criterion)
+
+Does the call satisfy {service-quality criterion}?
+
+POSSIBLE ANSWERS
+
+Yes | No
+
+Procedural Step
+
+CONTEXT
+
+{call transcript}
+
+QUESTION (one per step)
+
+Did the agent carry out {procedural step, e.g., verifying the caller’s identity}?
+
+POSSIBLE ANSWERS
+
+Yes | No
+
+Intent
+
+CONTEXT
+
+{customer utterance}
+
+QUESTION
+
+Which configured intent best matches the customer’s request?
+
+POSSIBLE ANSWERS (4--21 per sample)
+
+{intent}: {description} | … | no intent
+
+RAG Document
+
+CONTEXT
+
+{conversation}; {article 1}, {article 2}, {article 3}
+
+QUESTION
+
+Which article answers the customer’s last question?
+
+POSSIBLE ANSWERS
+
+1 | 2 | 3 | 
+ (none relevant)
+
+Agent Workflow Judge
+
+CONTEXT
+
+{agent instructions and policies}; {conversation and tool-call log}
+
+QUESTIONS
+
+Was the customer’s task completed?
+
+Did the agent claim an action it did not perform?
+
+Rate {criterion} from 1 to 5 (five criteria).
+
+POSSIBLE ANSWERS
+
+success | failure | partial | appropriately transferred | appropriately out of scope;
+
+yes | no; 1--5
+
+Generated Resp. Judge: pointwise
+
+CONTEXT
+
+{generation instruction and call transcript}; {candidate response}
+
+QUESTIONS
+
+Rate the response from 1 to 5 for faithfulness, completeness, and instruction following.
+
+POSSIBLE ANSWERS (per question)
+
+1 | 2 | 3 | 4 | 5
+
+Generated Resp. Judge: pairwise
+
+CONTEXT
+
+{generation instruction and call transcript}; {response A}; {response B} (both orders)
+
+QUESTION
+
+Which response is better?
+
+POSSIBLE ANSWERS
+
+A | B | tie | both bad
+
+Output instruction for generative LLMs
+
+Return one JSON object that maps each question to one of its allowed answers.
+

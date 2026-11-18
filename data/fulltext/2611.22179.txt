@@ -1,0 +1,5297 @@
+RAG in a Trenchcoat: When Minimal Memory Is Enough for Agentic Systems, and When It Isn't
+https://arxiv.org/abs/2611.22179
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+RAG in a Trenchcoat: When Minimal Memory Is Enough for Agentic Systems, and When It Isn’t
+
+Jingyu Liu
+
+  
+
+Zongze Li
+
+Affiliation: 
+University of Chicago
+
+  
+
+Zach Xu
+
+Affiliation: 
+University of Chicago
+
+  
+
+Zhanhui Zhou
+
+Affiliation: 
+University of California, Berkeley
+*
+Corresponding: 
+jingyu6@uchicago.edu
+
+ 
+github.com/Jingyu6/rag-in-a-trenchcoat
+
+  
+
+Tahseen Rabbani
+
+Affiliation: 
+University of Chicago
+
+  
+
+Dawn Song
+
+Affiliation: 
+University of California, Berkeley
+*
+Corresponding: 
+jingyu6@uchicago.edu
+
+ 
+github.com/Jingyu6/rag-in-a-trenchcoat
+
+  
+
+Ce Zhang
+
+Affiliation: 
+University of Chicago
+
+Abstract
+
+Agentic memory research has accumulated extraction, supersession, reflection, and graph synthesis on top of retrieval-augmented generation. 
+However, we found that almost none of those primitives earn their cost in our tested memory benchmarks
+: we show this with 
+Bridge
+, a deliberately minimal RAG memory with chained observation notes, hybrid BM25 with cosine retrieval, and chronological rendering, which reaches parity within bootstrap CI with the prior SOTA on LongMemEval-S and BEAM, and beats the best memory baseline on EverMemBench by 
+–
+ points at matched reader. It runs at 
+–
+K reader-prompt tokens per query, using a single LLM call for each ingestion or query. We argue that this parity is itself the result: standard benchmarks score what memory 
+retrieves
+, not what memory 
+enables when the agent acts
+. To test the latter, we introduce five adversarial probes (Rule Application 
+, Pattern Induction style / procedural, Dynamic Multi-turn) judged at generation time by a cross-vendor verification chain, where each query can only be solved by applying a remembered rule or pattern it never mentions. Across 5 probes 
+ 20 scenarios, no architecture wins universally: atomic-fact extractors (
+LangMem
+) win rule application, while 
+Bridge
+’s block-summary memory wins pattern induction. This result holds across four domains, three graders, and three reader families. Each design fails where the other wins, for reasons a recall benchmark cannot see: atomic-fact extractors discard the form a demonstrated pattern takes, while block-summary memory retrieves the rule but the reader does not act on it, a gap that presenting the rule more prominently largely closes. What separates memory designs is not what they retrieve but what they enable an agent to do, and that is what agentic memory should be evaluated on.
+
+1 
+Introduction
+
+Long-running agents are useful when they remember things the user does not re-state. A coding assistant should keep applying a banned-API rule weeks after the rule was set, for example when a user later asks “how do I evaluate this expression dynamically?” A backend assistant that has watched a team build six REST endpoints with a particular error-shape convention should follow that convention on the seventh without being asked. We call this kind of memory 
+always-on, applied memory
+: the user does not mention the rule, the convention, or the preference at the time of the request, and the assistant must surface it on its own. This is what makes a long-running agent useful in production, and we argue that current agentic-memory benchmarks do not measure it well.
+
+Agentic memory research has accumulated a great deal of complexity over the past two years 
+(
+Zhang et al., 2024
+)
+. Published architectures combine some subset of fact-level extraction 
+(
+Chhikara et al., 2025
+; 
+LangChain-AI, 2024
+)
+, supersession over temporal knowledge graphs 
+(
+Rasmussen et al., 2025
+)
+, reflection or rumination passes 
+(
+Xu et al., 2025
+; 
+Park et al., 2023
+; 
+Shinn et al., 2023
+)
+, working-memory caches 
+(
+Packer et al., 2024
+)
+, and cross-session synthesis 
+(
+Li et al., 2025
+; 
+Emergence AI, 2025
+)
+. Each primitive is motivated as a necessary departure from naive RAG 
+(
+Lewis et al., 2021
+)
+. We show that, judged by 
+benchmark scores
+ alone, almost none of them earn their cost. 
+Bridge
+ is 
+RAG in a trenchcoat
+: a thin layer of agentic-memory primitives (per-block observation notes chained for global context, hybrid BM25 + cosine retrieval, and a two-tier chronological render) over a naive RAG core, with no graph database, no supersession layer, and no agent-framework integration. Despite lacking all of these, 
+Bridge
+ reaches parity within bootstrap CI with the prior reported SOTA on LongMemEval-S 
+(
+Wu et al., 2025
+)
+ and BEAM 
+(
+Tavakoli et al., 2026
+)
+ at matched reader, and exceeds the prior best memory baseline on EverMemBench 
+(
+Hu et al., 2026a
+)
+ by 
+–
+ points. 
+Bridge
+ uses 
+–
+K reader-prompt tokens per query (
+–
+ fewer than full-context baselines), one extraction LLM call per ingested block, and one reader LLM call per query. We argue this parity 
+is
+ the finding: on these benchmarks, the supersession, reflection, and graph-synthesis primitives do not distinguish those systems from a basic RAG 
+(
+Karpukhin et al., 2020
+)
+.
+
+This parity does not mean 
+Bridge
+ is a better memory system: it means these benchmarks cannot tell memory designs apart.
+ Standard benchmarks score recall, but published agentic-memory architectures claim more capabilities that recall cannot test, such as 
+always-on rule application
+, 
+pattern induction
+, and 
+multi-turn consistency
+. A system can pass recall benchmarks by retrieving the right thing without ever applying it. We construct a five-probe 
+adversarial benchmark
+ that closes this gap: each probe is solvable only by generating a response that honors a memory the request never names, judged at generation time with a cross-vendor verification chain (the judge comes from a different vendor than the generator, Oracle, and reader; snapshots in Appendix 
+G
+). Across 
+ probes 
+ 
+ scenarios, we found that 
+no architecture wins universally
+: 
+Bridge
+’s block-summary memory wins pattern induction, while atomic-fact extractors (
+LangMem
+ 
+(
+LangChain-AI, 2024
+)
+) win rule application and multi-turn consistency (§
+4.2
+). This result holds across four domains, three graders, three reader families, and repeated runs (Appendices 
+E
+ and 
+J
+).
+
+Each design fails where the other wins, and for different reasons. Atomic-fact extractors discard the form a demonstrated pattern takes. Block-summary memory does retrieve the rule (in all 
+ scenarios we checked), but the reader does not act on it. Routing each request to the better design would recover much of the gap, yet the request carries no signal to route on; presenting the retrieved rule more prominently, by contrast, closes most of the rule-application gap without changing what is stored or retrieved (§
+4.3
+; Appendix 
+K
+). What separates memory designs is therefore not what they retrieve but what they enable an agent to do.
+
+Contributions
+
+(i)
+
+We build a deliberately simple but strong recall-focused memory baseline called 
+Bridge
+: we argue all complex memory systems should beat it as a bare minimum requirement.
+
+(ii)
+
+Yet we show that popular benchmarks focus mostly on recall tasks and hence do not distinguish memory designs
+: 
+Bridge
+ matches SOTA systems on them, while on applied-memory probes designs win in opposite directions (§
+4.1
+, §
+4.2
+).
+
+(iii)
+
+We construct five probes in which every design, including 
+Bridge
+, breaks somewhere
+: probes whose requests never name the memory they depend on, graded at generation time (§
+3
+). These are some examples of what current memory evaluations lack.
+
+(iv)
+
+Retrieving a memory is not using it
+: on rule application the right memory is retrieved but not acted on, and presenting it differently closes most of the gap (§
+4.3
+). Therefore future memory benchmarks should focus more on what behavior agentic memory systems should enable beyond simple retrieval.
+
+2 
+Bridge
+: a minimal RAG-shaped memory
+
+Bridge
+ is the baseline we measure published memory systems against, so we keep it deliberately simple: per-block observation notes, retrieved with hybrid BM25 + cosine search and shown to the reader in chronological order next to the raw source text. It has no supersession layer, reflection step, graph synthesis, or working-memory cache.
+
+A long-running conversation is a sequence of dated sessions 
+ where each 
+ pairs a session date 
+ with the sequence of user/assistant turns 
+. 
+Bridge
+ processes 
+ in two phases: an 
+ingestion
+ phase that distills each block into an observation note and writes a tuple of notes, raw text, and embedding to a per-block store; a 
+retrieval
+ phase where 
+Bridge
+ pulls top-
+ blocks for a query with hybrid retrieval, renders them in chronological order with 
+ raw slots (the remaining blocks shown only as their distilled notes), and hands the rendered context to a single reader call.
+
+Ingestion (natural-boundary chunking)
+
+Turns accumulate in a token-bounded buffer that flushes a block 
+ either at a 
+natural boundary
+ provided by the host application or when the buffer reaches the token cap 
+. “Natural boundary” is benchmark-defined: end-of-session on LongMemEval-S and EverMemBench, end-of-conversation on BEAM, and end-of-tool-call or end-of-topical-exchange in an agent deployment. Most blocks flush at a natural boundary before reaching the token cap. A session that does run past the cap is split into multiple blocks that all carry the same session date, so the chronological re-sort at retrieval time orders all blocks correctly. For each block, an extractor LLM produces an XML-tagged observation note 
+ summarizing priorities, preferences, state changes, and the user’s exact phrasings; the extractor sees the 
+ most-recent prior notes, so each block is written with global context. We persist 
+both
+ raw 
+ and distilled 
+, in contrast to most compression-shaped systems which persist only 
+ 
+(
+Mastra AI, 2025
+)
+. The note is embedded as 
+ with a frozen sentence encoder (Appendix 
+G
+). The prompt is adapted from the observer agent of 
+Mastra
+ 
+(
+Mastra AI, 2025
+)
+; the full prompt and our modifications are in Appendix 
+B
+.
+
+Retrieval
+
+For a query 
+, we compute two ranked lists:
+
+with standard parameters 
+. BM25 indexes the concatenation of the note and the source text, so exact phrasings that the note paraphrased away remain reachable. We retain top-
+ from each channel and fuse via Reciprocal Rank Fusion 
+(
+Cormack et al., 2009
+)
+ with 
+:
+
+Two-tier rendering with chronological re-order
+
+We select the top 
+ blocks by 
+. Within those, the top 
+ by 
+ fill the 
+raw slots
+ and are rendered as raw text 
+; the remaining 
+ are rendered as “
+Summary:
+ 
+” (controlling the reader context length 
+(
+Levy et al., 2024
+)
+). The 
+ selected blocks are then 
+re-sorted ascendingly by global position 
+ before concatenation.
+
+Naive RAG presents the top-
+ in relevance order and leaves the reader to work out the order of events; 
+Bridge
+ presents them in the order they happened 
+(
+Liu et al., 2023
+)
+. This matters where the answer depends on which event came last: removing the re-sort costs 
+ points on LongMemEval-S knowledge-update, while no other category is significantly hurt (Appendix 
+N
+).
+
+The reader is a single LLM call at 
+ on the rendered context (Appendix 
+M.5
+ repeats it at 
+); its wrapper prompt tells it to honor session dates and apply remembered conventions even when the request does not mention them (Appendix 
+C.1
+).
+
+Bridge
+ has three core primitives: (i) per-block extraction with cross-block context chaining, (ii) hybrid retrieval over both notes and source text, and (iii) a two-tier render in temporal order. A leave-one-out, per-category ablation across all three benchmarks (Appendix 
+N
+; paired bootstrap, 
+) shows that no single primitive matters on its own: each has at least one ability where removing it helps and at least one where it hurts. It is the 
+combination
+ that keeps 
+Bridge
+ competitive across the mix of abilities these benchmarks test. Raw slots cover exact recall (LongMemEval-S single-session-assistant drops 
+ points without them, 
+ CI 
+), chronological order covers temporal and state tracking, hybrid retrieval covers both lexical and semantic queries (EverMemBench memory-update swings by about 
+ points between BM25-only and cosine-only), and the prior-notes chain covers cross-block synthesis.
+
+Bridge
+ uses one configuration
+: the hyperparameters (Appendix 
+A
+) are fixed across every benchmark and every adversarial probe, with no per-task tuning. The configuration was set on the standard benchmarks, not on the probes: on the probes, showing all ten blocks as raw text instead of three improves rule application by 
+ points in both of two runs (Appendix 
+L
+).
+
+3 
+Adversarial probes for agentic memory
+
+Most memory benchmarks check memory with a question about the past. Suppose a user once mentioned that every public-facing endpoint must be rate-limited. A typical benchmark item would ask something like “what rate-limiting setup does the team use?” and score the answer. In practice the user rarely asks that. They ask for new work, such as a new password-reset endpoint, and expect the agent to remember the rule and apply it without being reminded. Our probes test this second case: the history contains a rule or a pattern, the final request is an ordinary task that never mentions it, and we grade the work the system produces. Like behavioral tests 
+(
+Ribeiro et al., 2020
+)
+, the probes cover three capabilities that the architectures we test claim to support: 
+always-on rule application
+, 
+pattern induction
+, and 
+multi-turn consistency
+.
+
+An example
+
+The case above is a real scenario from our first probe, RA
++
+ (Table 
+1
+). Each scenario is a dated history of sessions followed by one request. Here, the third of ten sessions is a post-incident review, and partway through it the user remarks that “every public-facing endpoint is supposed to have rate-limiting middleware (slowapi + redis)”. The other sessions cover other topics. The final request is “Add a new endpoint 
+POST /api/v1/forgot-password
+ that takes an email address, generates a reset token, and sends an email.” Nothing in it mentions rate limiting, and the response passes only if the new endpoint is rate-limited (Appendix 
+I
+ follows this scenario through each system).
+
+Probe taxonomy
+
+Table 
+1
+ lists the five probes. RA
++
+ and RA
+-
+ plant one rule as a brief aside inside one of 
+ sessions whose main topic is something else; in RA
+-
+ the rule bans an approach, and the request is one whose obvious solution is the banned approach. PI-S and PI-P never state the memory at all: a coding convention (PI-S) or a multi-step procedure (PI-P) is only demonstrated, across 
+–
+ sessions in which the user works through ordinary tasks. DM reuses the RA
++
+ corpus but replaces the single request with a 
+-turn dialogue driven by a simulated user (
+, fixed per-turn seed), and is scored on both the final turn and per-turn regressions.
+
+Table 1: 
+The five probes, each with an example from the benchmark. The request never mentions the memory it depends on; we grade the work the system produces, not an answer about the history.
+
+Probe
+
+In the history
+
+The request
+
+Passes if
+
+RA
++
+
+rule application
+
+A rule said once in passing, e.g., every public endpoint must be rate-limited
+
+A task the rule applies to, e.g., add a password-reset endpoint
+
+it applies the rule, e.g., rate-limits the endpoint
+
+RA
+-
+
+rule application (ban)
+
+A ban said once in passing, e.g., 
+eval()
+ is banned after an incident
+
+A task whose obvious solution is banned, e.g., evaluate math that users type in
+
+it avoids the banned approach, e.g., no 
+eval()
+
+PI-S
+
+pattern induction (style)
+
+Code that shares conventions, never stated, e.g., every error has a code and a message
+
+New code of the same kind, e.g., add an endpoint that cancels an order
+
+it follows the conventions
+
+PI-P
+
+pattern induction (procedure)
+
+The same steps in four past cases, never stated, e.g., five steps for each incident
+
+The steps for a new case, e.g., walk me through a new incident
+
+it follows the procedure
+
+DM
+
+dynamic multi-turn
+
+A rule said once in passing, e.g., remind me to check passport rules whenever travel comes up
+
+A task the rule applies to, e.g., plan a trip abroad, then four follow-ups from a simulated user
+
+it still applies the rule at the last turn
+
+The probes test what existing benchmarks miss
+
+LongMemEval-S and EverMemBench are question-answering benchmarks, as are most of BEAM’s abilities and the recent agent-trajectory benchmarks AMA-Bench 
+(
+Zhao et al., 2026
+)
+ and LongMemEval-V2 
+(
+Wu et al., 2026
+)
+: the system is asked about the history and its answer is scored. The closest existing tests are BEAM’s instruction- and preference-following abilities, which check whether an ordinary request is answered in line with an earlier instruction or preference 
+(
+Tavakoli et al., 2026
+)
+. Our probes differ in four ways. In RA
+±
+ the rule is an aside inside a session about something else, not a standing instruction. RA
+-
+ scores the 
+absence
+ of an approach, which a question about the history cannot test directly. In PI-S and PI-P the memory is never stated, so there is no sentence to retrieve and the system has to induce it from examples. And DM checks that a rule survives a multi-turn dialogue rather than a single response.
+
+Construction
+
+Each scenario is generated once from a spec by a strong frontier generator at 
+ and stored, so every system and every run sees the same data. The generation prompt requires that an RA rule appear as a brief aside in the flow of conversation rather than as a checklist item or formal statement, and that PI demonstrations show the pattern only by example. A strong-model validator checks every generated corpus, and sessions that violate these constraints are regenerated. The original set has 
+ scenarios per probe, all with software and infrastructure personas. We add 
+ scenarios in three other domains (clinical operations, legal compliance, finance operations) and 
+ in two harder difficulty levels for RA
++
+ and PI-P, and audit the rule-application corpora for filler sessions that leak the rule and requests that cue it (Appendix 
+E
+). The generator’s snapshot is in Appendix 
+G
+, and full generation prompts and the spec format are in Appendix 
+D
+.
+
+Judging at generation time
+
+The judge scores the generated answer against the scenario’s constraints, never against a gold answer: one rule for RA
+±
+ and DM, four conventions for PI-S, and four to five steps for PI-P, where paraphrased or merged steps count (Appendix 
+F
+). Each constraint is 
+applied
+, 
+violated
+, or 
+n/a
+, and the pass rate is 
+.
+
+The judge comes from a different vendor than the generator, Oracle, and reader, to avoid same-family judging bias 
+(
+Zheng et al., 2023
+)
+ and self-preference 
+(
+Panickssery et al., 2024
+)
+; §
+4.2
+ re-checks its verdicts with two other graders. The full grading prompt, constraint format, and judge JSON schema are in Appendix 
+F
+.
+
+Fair-comparison protocol
+
+We compare 
+Bridge
+ (§
+2
+) against 
+Mem0
+ 
+(
+Chhikara et al., 2025
+)
+, 
+LangMem
+ 
+(
+LangChain-AI, 2024
+)
+, and 
+Graphiti
+ 
+(
+Rasmussen et al., 2025
+)
+. Every system uses the same reader (
+), embedder, and judge (Appendix 
+G
+). Each baseline gets a 
+-word wrapper prompt that names its native primitive and instructs the reader to apply rules unprompted, and is tuned only through the user-facing levers its documentation recommends. 
+Bridge
+’s package internals are unmodified across probes. The strong-model oracle reads the full chronological corpus with no retrieval bottleneck and serves as a reference in §
+4.2
+. Per-system wrapper texts and tuning details are in Appendix 
+H
+. Tuning 
+LangMem
+’s schema specifically for pattern induction narrows its gap to 
+Bridge
+ but does not close it (Appendix 
+L
+).
+
+4 
+Main results
+
+Setup
+
+On the standard benchmarks, baseline numbers come from each system’s published report: we match the reader and use each benchmark’s canonical judge and harness, but prompt depth, retrieval budget, and chunking remain each system’s own, so where a gap is within CI we claim parity rather than superiority. The probe protocol is in §
+3
+, and all model snapshots, including per-benchmark judges and the simulated user that drives DM, are in Appendix 
+G
+.
+
+Reporting protocol
+
+We report 
+Bridge
+’s headline numbers in three ways: (i) 
+reproducibility
+, the mean over three independent runs at 
+ (seeds 
+), whose variance comes only from API non-determinism and which is what we compare with the baselines; (ii) 
+confidence intervals
+ 
+(
+Koehn, 2004
+)
+, 
+ bootstrap intervals from 
+ resamples of the questions in the seed-
+ run, drawn as error bars on the Avg column of each figure; and (iii) 
+sampling sensitivity
+, the mean 
+ SD over three sampling seeds at 
+, which is not comparable to the greedy baselines and is reported in Appendix 
+M.5
+.
+
+4.1 
+Bridge
+ on standard memory benchmarks
+
+Bridge
+ matches or beats published systems at the same reader
+
+On BEAM 100K with 
+gpt-4.1-nano
+ (Figure 
+1
+), 
+Bridge
+ scores 
+ on the canonical 10-ability mean against 
+LIGHT
+’s 
+, a gap at the edge of significance.
+1
+1
+
+1
+
+                
+                
+                
+              BEAM’s original paper scores Event Ordering with a different, less reliable metric (Kendall tau-b 
+ F1 over LLM-aligned event snippets), on which even gold answers score only 
+. Excluding it gives a 9-ability mean of 
+Bridge
+ 
+ vs 
+LIGHT
+ 
+, 
+ points lower but within bootstrap CI; the swing comes from Event Ordering itself (
+Bridge
+ 
+ vs 
+LIGHT
+ 
+).
+ On LongMemEval-S with a 
+gpt-4o
+ reader (Figure 
+3
+), it sits 
+ points behind 
+EmergenceMem
+ with overlapping 
+ CIs. On EverMemBench (Figure 
+2
+) it beats 
+MemOS
+, the benchmark’s best memory baseline, by 
+ points (
+gpt-4.1-mini
+) and 
+ points (
+gemini-3-flash
+), both outside the bootstrap CI, and with 
+gemini-3-flash
+ it trails full context by 
+ points, against 
+–
+ points for the published memory systems 
+(
+Hu et al., 2026a
+)
+. It does so with 
+–
+K reader-prompt tokens per query, 
+–
+ fewer than full context. Per-ability breakdowns, results with a stronger reader (which exceed every published number but are not like-for-like), the reader
+extractor decomposition, and token and latency tables are in Appendix 
+M
+.
+
+Figure 1: 
+BEAM 100K 
+(
+Tavakoli et al., 2026
+)
+. All systems use 
+gpt-4.1-nano
+; baselines are from the BEAM paper. Avg is the mean over the ten abilities, with a 
+ bootstrap CI for 
+Bridge
+. 
+Bridge
+ bars show one run; the text reports the mean of three runs (
+).
+
+Figure 2: 
+EverMemBench 
+(
+Hu et al., 2026a
+)
+ with two readers (top: 
+gemini-3-flash
+; bottom: 
+gpt-4.1-mini
+). Baselines are from the benchmark paper: 
+Full-Context
+ gives the reader the whole 
+M-token history, and 
+MemOS
+ is the paper’s best memory system. Avg is the mean over the nine dimensions, with a 
+ bootstrap CI for 
+Bridge
+.
+
+Figure 3: 
+LongMemEval-S 
+(
+Wu et al., 2025
+)
+ accuracy (%). All systems use a 
+gpt-4o
+ reader; baselines are from each system’s own report. 
+Oracle
+ gives the reader only the sessions with the evidence; 
+EmergenceMem
+ 
+(
+Emergence AI, 2025
+)
+ is the best previously reported system. Avg is over all 
+ questions, with a 
+ bootstrap CI for 
+Bridge
+.
+
+Takeaway
+
+On standard memory benchmarks, a minimal RAG memory does as well as complex memory systems: these benchmarks cannot tell the two apart.
+
+4.2 
+Results on adversarial probes
+
+Table 2: 
+Pass rate on the five probes (
+ scenarios each), with 
+ bootstrap CIs. Each cell is one run; repeated runs are in Appendix 
+J
+. Oracle, a strong model given the full history, is a reference rather than a memory system. Bold: best memory system.
+
+Probe
+
+Mem0
+
+LangMem
+
+Graphiti
+
+Bridge
+
+Oracle
+
+RA
++
+
+RA
+-
+
+PI-S
+
+PI-P
+
+DM
+
+We argue that complex agentic memory systems do not clearly outperform 
+Bridge
+ on the standard benchmarks because those benchmarks do not test what memory 
+enables
+ an agent to do. Table 
+2
+ compares four memory architectures on probes that test this.
+
+LangMem
+ wins the rule probes, 
+Bridge
+ the pattern probes
+
+Bridge
+ wins both pattern-induction probes (PI-S, PI-P); 
+LangMem
+ wins both rule-application probes plus the multi-turn consistency probe (RA
++
+, RA
+-
+, DM); 
+Graphiti
+ and 
+Mem0
+ win none. The margins between the two kinds of probe are wide: on PI-P, 
+Bridge
+ leads the strongest baseline, 
+LangMem
+, by 
+ points, and on RA
++
+, 
+LangMem
+ leads 
+Bridge
+ by 
+ points, both with non-overlapping CIs. Within each kind the ordering blurs: the CIs overlap for 
+Bridge
+ and 
+Graphiti
+ on PI-S and for 
+LangMem
+ and 
+Graphiti
+ on RA
++
+. These margins come from our primary grader; under weaker graders they narrow but keep their direction (see below). Which design wins depends on the kind of memory each task needs. Rule application is 
+retrieve-and-apply
+: one explicit rule must be noticed and applied, and atomic-fact extractors store it as a row of its own. Pattern induction is 
+induce-from-form
+: the target lives in the shape of code (PI-S) or dialogue (PI-P) demonstrated repeatedly, and atomic-fact extractors have no fact to extract from a pattern that is never asserted. 
+Bridge
+’s block-level notes describe each session’s work as a whole, so the demonstrated shape survives even without raw text: removing the raw slots leaves PI-P unchanged (Appendix 
+L
+).
+
+Bridge
+ drops fewer rules only because it applies fewer
+
+On DM, the per-turn judge also counts 
+regressions
+, rules applied and then dropped by the final turn: 
+Bridge
+ 
+, 
+Mem0
+ 
+, 
+Graphiti
+ 
+, 
+LangMem
+ 
+, Oracle 
+. 
+Bridge
+ has the fewest because it applies the rule less often to begin with (final-turn pass rate 
+). Table 
+2
+ reports the final-turn pass rate, on which 
+LangMem
+ leads.
+
+The results hold across domains, graders, readers, and runs
+
+Domains
+: on 
+ added scenarios in clinical operations, legal compliance, and finance operations, the 
+Bridge
+LangMem
+ gap has the same sign as in software in all 
+ new probe
+domain cells (Appendix 
+E
+). 
+Graders
+: two graders from another vendor agree with ours on 
+–
+ of verdicts and keep every direction; the margins narrow, to 
+–
+ points on RA
++
+ and 
+–
+ points on PI-P (Appendix 
+J
+). 
+Readers
+: replacing the reader with Llama-3.3-70B or Qwen2.5-7B, with the retrieved memory held fixed, keeps the sign in all 
+ probe
+reader cells with a new reader (Appendix 
+J
+). 
+Repeated runs
+: over 
+–
+ runs, 
+Bridge
+ trails 
+LangMem
+ by 
+ points on RA
++
+ and leads it by 
+ on PI-P, several times the run-to-run spread (Appendix 
+J
+). With 
+ scenarios per probe, one scenario moves a rule probe by 
+ points, so we do not interpret differences below about 
+ points.
+
+Harder probes erase 
+LangMem
+’s lead and narrow 
+Bridge
+’s
+
+We also make RA
++
+ and PI-P harder in two steps, reusing the original scenarios so that each comparison is paired (Table 
+3
+). Level 2 removes signal: more filler sessions for RA
++
+ (
+), fewer demonstrations for PI-P (
+). Level 3 adds competing signal: filler sessions on topics close to the rule, and a second procedure demonstrated next to the target one. 
+Bridge
+’s lead on procedure induction shrinks but holds at every level. 
+LangMem
+’s lead on rule application shrinks with more filler and disappears at Level 3, which suggests that a rule stored as its own row helps only while nothing similar competes with it.
+
+Table 3: 
+Pass rate (%) [
+ CI] as the probes get harder. Each level reuses the same scenarios; gap is 
+Bridge
+ minus 
+LangMem
+. RA
++
+ uses the 
+ scenarios that pass the leak audit at every level, so its Level 1 differs slightly from Table 
+2
+.
+
+RA
++
+ (rule application)
+
+PI-P (procedure induction)
+
+Level
+
+Bridge
+
+LangMem
+
+gap
+
+Bridge
+
+LangMem
+
+gap
+
+1 (original)
+
+ 
+[17, 61]
+
+ 
+[67, 100]
+
+ 
+[78, 96]
+
+ 
+[43, 66]
+
+2 (less signal)
+
+ 
+[12, 60]
+
+ 
+[33, 86]
+
+ 
+[69, 92]
+
+ 
+[40, 72]
+
+3 (+ competing)
+
+ 
+[20, 69]
+
+ 
+[15, 69]
+
+ 
+[58, 86]
+
+ 
+[36, 69]
+
+Takeaway
+
+On our probes, where the agent has to act on its memory, the designs clearly differ, and no single memory system wins everywhere: 
+LangMem
+ is best at applying rules the user stated, and 
+Bridge
+ at following patterns the user only showed by example.
+
+Each design pays for how it represents the past
+
+The results reflect two ways a memory can represent the past: as 
+facts
+ or as 
+form
+. Atomic-fact extractors surface a fact at write time but lose the form it took; block-summary memory keeps the form, but a rule ends up as one phrase among many in a note. Each design pays for its choice on the other task. The Oracle shows the remaining headroom: with full access to the history it outperforms every memory system by 
+–
+ points on RA
+±
+, PI-S, and DM, and is matched only on PI-P. 
+Bridge
+, however, already stores both the distilled notes and the raw text of each block, indexed jointly, so its loss on rule application is not a matter of what it stores (§
+4.3
+).
+
+4.3 
+Bridge
+’s rule-application gap comes from presentation, not retrieval
+
+Since each design wins different probes, an obvious remedy is to send each request to whichever design suits it. Doing this perfectly would be worth 
+ points over the best single system (
+ vs. 
+LangMem
+’s 
+, averaged over the five probes), but a system cannot make this choice from the request. A classifier that reads only the request and predicts whether it needs a stated rule or a demonstrated pattern is right 
+–
+ of the time across six prompt and model variants, no better than always guessing the majority class (
+). This follows from the design of the probes: the requests never mention the memory they depend on, so they carry nothing to route on (Appendix 
+K
+).
+
+We therefore looked at where 
+Bridge
+ fails on rule application, and it is not retrieval. The block holding the rule is retrieved in all 
+ RA
++
+ scenarios, and in 
+ of the 
+ failures the rule reaches the reader as raw text, not only as a summary. The reader sees the rule and does not apply it: it is one remark among many, in one of ten blocks.
+
+We add one call that reads the notes 
+Bridge
+ has already retrieved, pulls out any standing instructions, and places them in a labeled block at the top of the context; what is stored and retrieved does not change (Table 
+4
+). On the original probe this lifts 
+Bridge
+ past 
+LangMem
+ to the level of the Oracle, and on the hardest level it keeps most of the gain. A control that spends the same extra call on a generic summary does worse than no change on the original probe, so the gain there does not come from the extra call; on the hardest level the control recovers much of the gain by itself, so there we claim only that the targeted version is better. Pattern induction is unaffected (Appendix 
+K
+). We read this as a diagnostic rather than a method.
+
+Table 4: 
+Bridge
+ on RA
++
+, changing only how the retrieved memory is shown to the reader. In each column, all 
+Bridge
+ rows use the same retrieved memory, reader, and grader. This is a separate run, and RA
++
+ varies from run to run, so the unchanged row differs from Table 
+2
+ (
+ vs. 
+). Reference rows come from Tables 
+2
+ and 
+3
+.
+
+Original probe
+
+Hardest level
+
+Bridge
+, unchanged
+
+   + generic summary (same extra call)
+
+   + standing rules shown at the top
+
+Reference:
+ 
+LangMem
+
+Reference:
+ Oracle (strong model, full history)
+
+—
+
+Takeaway
+
+Memory is not only about retrieval, and other factors might be what make a specific design stand out. For example, changing only how retrieved memory is presented to the agent, with storage and retrieval unchanged, closes most of 
+Bridge
+’s gap on rule application.
+
+5 
+Related work
+
+Agentic memory systems
+
+Atomic-fact extractors
+ (
+Mem0
+ 
+(
+Chhikara et al., 2025
+)
+, 
+LangMem
+ 
+(
+LangChain-AI, 2024
+)
+, 
+A-Mem
+ 
+(
+Xu et al., 2025
+)
+, 
+MemoryBank
+ 
+(
+Zhong et al., 2023
+)
+) distill each interaction into key-value or schema-typed memories, with 
+ADD/UPDATE/DELETE
+-style refinement to handle contradictions. 
+Temporal knowledge graphs
+ (
+Zep
+/
+Graphiti
+ 
+(
+Rasmussen et al., 2025
+)
+ and descendants) model entities and relations with bi-temporal validity intervals; related graph-structured memories retrieve via personalized PageRank over an entity graph (
+HippoRAG
+ 
+(
+Gutiérrez et al., 2025
+)
+) or community-level summaries (
+GraphRAG
+ 
+(
+Edge et al., 2025
+)
+). 
+OS-style memory hierarchies
+ (
+MemGPT
+/
+Letta
+ 
+(
+Packer et al., 2024
+)
+, 
+MemOS
+ 
+(
+Li et al., 2025
+)
+) page between in-context and external memory. Recent hierarchical systems organize memory at several granularities; 
+xMemory
+ 
+(
+Hu et al., 2026c
+)
+ argues that standard RAG fits a conversation stream poorly because of its many near-duplicate spans, and retrieves top-down over a hierarchy of themes, episodes, and raw messages. Verbal self-reflection over past episodes 
+(
+Shinn et al., 2023
+)
+ and growing skill libraries 
+(
+Wang et al., 2023
+)
+ are complementary primitives for cross-episode learning, and 
+EmergenceMem
+ 
+(
+Emergence AI, 2025
+)
+ sets the prior reported SOTA on LongMemEval-S. Surveys organize this space by the form, function, and dynamics of memory 
+(
+Hu et al., 2026b
+)
+ or by memory structure 
+(
+Jiang et al., 2026
+)
+.
+
+Comparing memory designs
+
+Zeng et al. (2024)
+ compare chunks, knowledge triples, atomic facts, summaries, and their mixture inside one retrieval harness on question-answering datasets, and find that different structures suit different tasks and that mixed memory is robust to noise. Our results point the same way. We differ in what we measure: we compare shipped systems as deployed, and ask whether the standard evaluations can see the difference. On recall benchmarks a minimal memory matches complex ones (§
+4.1
+); on probes that require applying memory, the designs separate (§
+4.2
+).
+
+Long context, RAG, and progressive summarization
+
+A complementary line treats memory as long-context: incrementally summarize prior context so the working window stays bounded (
+Packer et al., 2024
+). Long-context readers, however, exhibit U-shaped positional recall (the 
+lost-in-the-middle
+ effect 
+(
+Liu et al., 2023
+)
+), which motivates systems that pre-select and order a small evidence set rather than feeding the entire window. 
+Bridge
+’s read-time pipeline is naive RAG 
+(
+Lewis et al., 2021
+)
+ with three additions over this baseline: hybrid lexical+semantic retrieval via reciprocal rank fusion 
+(
+Robertson and Zaragoza, 2009
+; 
+Cormack et al., 2009
+)
+, where the dense channel follows dual-encoder retrieval 
+(
+Karpukhin et al., 2020
+)
+ over a frozen sentence encoder 
+(
+Reimers and Gurevych, 2019
+)
+ and the lexical channel reflects BM25’s continued strength as an out-of-domain zero-shot retriever 
+(
+Thakur et al., 2021
+)
+; a two-tier render mixing raw evidence with distilled summaries; and a chronological re-sort of the selected blocks. Each is a small, well-studied IR primitive, and together they already match published memory systems on the standard benchmarks (§
+4.1
+).
+
+Memory benchmarks
+
+LongMemEval-S 
+(
+Wu et al., 2025
+)
+, EverMemBench 
+(
+Hu et al., 2026a
+)
+, and BEAM 
+(
+Tavakoli et al., 2026
+)
+ are the standard benchmarks for agentic memory, and LoCoMo 
+(
+Maharana et al., 2024
+)
+ is an earlier long-conversation benchmark with less headroom. Like the recent agent-setting benchmarks AMA-Bench 
+(
+Zhao et al., 2026
+)
+ and LongMemEval-V2 
+(
+Wu et al., 2026
+)
+, they mostly ask questions about the history; §
+3
+ compares them with our probes, including BEAM’s instruction- and preference-following abilities, which come closest. Beyond the Needle’s Illusion 
+(
+Lin et al., 2026
+)
+ shows that near-miss documents, more than context length, limit long-context memory; our hardest difficulty level borrows this idea (§
+4.2
+). Anatomy of Agentic Memory 
+(
+Jiang et al., 2026
+)
+ reaches a related diagnosis from a survey of systems: memory benchmarks are saturated, their metrics track usefulness poorly, and results swing with the backbone model. Our probes respond to that diagnosis by scoring whether memory is used rather than recalled, and they separate designs that the standard benchmarks do not.
+
+6 
+Discussion, broader impact, and limitations
+
+Memory design is more than storage and retrieval
+
+Much of the complexity added to agentic memory changes what is stored and how it is retrieved. On rule application, the gap we measure comes from neither: the rule is retrieved, and changing only how it is presented closes most of the gap (§
+4.3
+). Since 
+Bridge
+ already keeps a fact-shaped and a form-shaped view of each block, routing between the two on what has been retrieved, rather than on the request, is left to future work.
+
+Limitations
+
+(i) Scale.
+ The original set has 
+ scenarios per probe, so one scenario moves a rule probe by 
+ points, and we do not interpret differences below about 
+ points; the added domain cells hold 
+–
+ scenarios each. 
+(ii) Synthetic data.
+ Scenarios are written by a model. The audit catches scenarios that give the rule away, but it cannot guarantee the care that hand-written scenarios get, and human grading was limited to the authors’ spot check of a sample of graded responses. 
+(iii) What the grader scores.
+ The grader checks whether a remembered constraint was honored, not whether the answer is otherwise good. 
+(iv) Coverage.
+ DM was run once and is not part of the robustness checks, and the Oracle and the scenario generator come from the same model family. 
+(v) Static tests.
+ The probes are fixed input–output tests, not live agents with tools, long deployments, and shifting users.
+
+Broader impact
+
+The benchmark is open and inspectable, and 
+Bridge
+ uses far fewer reader tokens than full context (§
+4.1
+). Memory that applies remembered rules without being asked will also apply stale or mistaken ones, so systems built this way should let users see and remove what is remembered.
+
+7 
+Conclusion
+
+Agentic memory should be evaluated by what it lets an agent do, not by what it retrieves. On three standard benchmarks, 
+Bridge
+, a deliberately minimal RAG memory, matches published memory systems at matched reader. This does not make 
+Bridge
+ a better memory system; it shows that benchmarks built on recall cannot tell memory designs apart. Once the agent has to act on its memory, the designs clearly differ. Atomic-fact memory is best at applying stated rules, block-summary memory at following demonstrated patterns, and no design wins everywhere. Retrieval alone does not decide the outcome: 
+Bridge
+ retrieves the rules it fails to apply, and presenting them more clearly closes most of the gap. Better agentic memory therefore needs evaluations that test how memory is used and designs that look beyond storage and retrieval. We hope 
+Bridge
+ serves as the minimal baseline that such systems should clear.
+
+Acknowledgments and Disclosure of Funding
+
+This work was supported by research funding from Ce Zhang’s lab at the University of Chicago. The authors declare no competing interests.
+
+References
+
+Chhikara 
+et al.
+ (2025)
+
+P. Chhikara, D. Khant, S. Aryan, T. Singh, and D. Yadav
+
+Mem0: building production-ready ai agents with scalable long-term memory
+.
+
+External Links: 
+2504.19413
+,
+
+Link
+
+Cited by: 
+§1
+,
+
+§3
+,
+
+§5
+.
+
+Cormack 
+et al.
+ (2009)
+
+G. V. Cormack, C. L. A. Clarke, and S. Buettcher
+
+Reciprocal rank fusion outperforms condorcet and individual rank learning methods
+.
+
+In 
+Proceedings of the 32nd International ACM SIGIR Conference on Research and Development in Information Retrieval
+,
+
+SIGIR ’09
+, 
+New York, NY, USA
+, 
+pp. 758–759
+.
+
+External Links: 
+ISBN 9781605584836
+,
+
+Link
+,
+
+Document
+
+Cited by: 
+§2
+,
+
+§5
+.
+
+Edge 
+et al.
+ (2025)
+
+D. Edge, H. Trinh, N. Cheng, J. Bradley, A. Chao, A. Mody, S. Truitt, D. Metropolitansky, R. O. Ness, and J. Larson
+
+From local to global: a graph rag approach to query-focused summarization
+.
+
+External Links: 
+2404.16130
+,
+
+Link
+
+Cited by: 
+§5
+.
+
+Emergence AI (2025)
+
+Emergence AI
+
+SOTA on longmemeval with rag
+.
+
+External Links: 
+Link
+
+Cited by: 
+§1
+,
+
+Figure 3
+,
+
+§5
+.
+
+Gutiérrez 
+et al.
+ (2025)
+
+B. J. Gutiérrez, Y. Shu, Y. Gu, M. Yasunaga, and Y. Su
+
+HippoRAG: neurobiologically inspired long-term memory for large language models
+.
+
+External Links: 
+2405.14831
+,
+
+Link
+
+Cited by: 
+§5
+.
+
+Gwet (2008)
+
+K. L. Gwet
+
+Computing inter-rater reliability and its variance in the presence of high agreement
+.
+
+British Journal of Mathematical and Statistical Psychology
+ 
+61
+ (
+1
+), 
+pp. 29–48
+.
+
+Cited by: 
+§J.1
+.
+
+Hu 
+et al.
+ (2026a)
+
+C. Hu, T. Li, X. Gao, H. Chen, Y. Bai, D. Xu, T. Lin, X. Li, Y. Han, J. Pei, and Y. Deng
+
+Evaluating long-horizon memory for multi-party collaborative dialogues
+.
+
+External Links: 
+2602.01313
+,
+
+Link
+
+Cited by: 
+§1
+,
+
+Figure 2
+,
+
+§4.1
+,
+
+§5
+.
+
+Hu 
+et al.
+ (2026b)
+
+Y. Hu, S. Liu, Y. Yue, G. Zhang, B. Liu, F. Zhu, J. Lin, H. Guo, S. Dou, Z. Xi, S. Jin, J. Tan, Y. Yin, J. Liu, Z. Zhang, Z. Sun, Y. Zhu, H. Sun, B. Peng, Z. Cheng, X. Fan, J. Guo, X. Yu, Z. Zhou, Z. Hu, J. Huo, J. Wang, Y. Niu, Y. Wang, Z. Yin, X. Hu, Y. Liao, Q. Li, K. Wang, W. Zhou, Y. Liu, D. Cheng, Q. Zhang, T. Gui, S. Pan, Y. Zhang, P. Torr, Z. Dou, J. Wen, X. Huang, Y. Jiang, and S. Yan
+
+Memory in the age of ai agents
+.
+
+External Links: 
+2512.13564
+,
+
+Link
+
+Cited by: 
+§5
+.
+
+Hu 
+et al.
+ (2026c)
+
+Z. Hu, Q. Zhu, R. Zhao, D. Liang, H. Yan, Y. He, and L. Gui
+
+Beyond rag for agent memory: retrieval by decoupling and aggregation
+.
+
+External Links: 
+2602.02007
+,
+
+Link
+
+Cited by: 
+§5
+.
+
+Jiang 
+et al.
+ (2026)
+
+D. Jiang, Y. Li, S. Wei, J. Yang, A. Kishore, A. Zhao, D. Kang, X. Hu, F. Chen, Q. Li, and B. Li
+
+Anatomy of agentic memory: taxonomy and empirical analysis of evaluation and system limitations
+.
+
+External Links: 
+2602.19320
+,
+
+Link
+
+Cited by: 
+§5
+,
+
+§5
+.
+
+Karpukhin 
+et al.
+ (2020)
+
+V. Karpukhin, B. Oğuz, S. Min, P. Lewis, L. Wu, S. Edunov, D. Chen, and W. Yih
+
+Dense passage retrieval for open-domain question answering
+.
+
+External Links: 
+2004.04906
+,
+
+Link
+
+Cited by: 
+§1
+,
+
+§5
+.
+
+Koehn (2004)
+
+P. Koehn
+
+Statistical significance tests for machine translation evaluation
+.
+
+In 
+Proceedings of the 2004 Conference on Empirical Methods in Natural Language Processing
+,  
+D. Lin and D. Wu (Eds.)
+,
+
+Barcelona, Spain
+, 
+pp. 388–395
+.
+
+External Links: 
+Link
+
+Cited by: 
+§4
+.
+
+LangChain-AI (2024)
+
+LangChain-AI
+
+LangMem: a library for long-term memory in llm agents
+.
+
+External Links: 
+Link
+
+Cited by: 
+§1
+,
+
+§1
+,
+
+§3
+,
+
+§5
+.
+
+Levy 
+et al.
+ (2024)
+
+M. Levy, A. Jacoby, and Y. Goldberg
+
+Same task, more tokens: the impact of input length on the reasoning performance of large language models
+.
+
+External Links: 
+2402.14848
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Lewis 
+et al.
+ (2021)
+
+P. Lewis, E. Perez, A. Piktus, F. Petroni, V. Karpukhin, N. Goyal, H. Küttler, M. Lewis, W. Yih, T. Rocktäschel, S. Riedel, and D. Kiela
+
+Retrieval-augmented generation for knowledge-intensive nlp tasks
+.
+
+External Links: 
+2005.11401
+,
+
+Link
+
+Cited by: 
+§1
+,
+
+§5
+.
+
+Li 
+et al.
+ (2025)
+
+Z. Li, S. Song, H. Wang, S. Niu, D. Chen, J. Yang, C. Xi, H. Lai, J. Zhao, Y. Wang, J. Ren, Z. Lin, J. Huo, T. Chen, K. Chen, K. Li, Z. Yin, Q. Yu, B. Tang, H. Yang, Z. J. Xu, and F. Xiong
+
+MemOS: an operating system for memory-augmented generation (mag) in large language models
+.
+
+External Links: 
+2505.22101
+,
+
+Link
+
+Cited by: 
+§1
+,
+
+§5
+.
+
+Lin 
+et al.
+ (2026)
+
+T. Lin, Z. Zhou, X. Zhao, C. Wang, X. Li, Y. Chen, C. Hu, J. Pei, and Y. Deng
+
+Beyond the needle’s illusion: decoupled evaluation of evidence access and use under semantic interference at 326m-token scale
+.
+
+External Links: 
+2601.20276
+,
+
+Link
+
+Cited by: 
+§5
+.
+
+Liu 
+et al.
+ (2023)
+
+N. F. Liu, K. Lin, J. Hewitt, A. Paranjape, M. Bevilacqua, F. Petroni, and P. Liang
+
+Lost in the middle: how language models use long contexts
+.
+
+External Links: 
+2307.03172
+,
+
+Link
+
+Cited by: 
+§2
+,
+
+§5
+.
+
+Maharana 
+et al.
+ (2024)
+
+A. Maharana, D. Lee, S. Tulyakov, M. Bansal, F. Barbieri, and Y. Fang
+
+Evaluating very long-term conversational memory of llm agents
+.
+
+External Links: 
+2402.17753
+,
+
+Link
+
+Cited by: 
+§5
+.
+
+Mastra AI (2025)
+
+Mastra AI
+
+A human-inspired memory system that scores 
+95% on LongMemEval — with a completely stable context window
+.
+
+Note: 
+Mastra Research Blog
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+Packer 
+et al.
+ (2024)
+
+C. Packer, S. Wooders, K. Lin, V. Fang, S. G. Patil, I. Stoica, and J. E. Gonzalez
+
+MemGPT: towards llms as operating systems
+.
+
+External Links: 
+2310.08560
+,
+
+Link
+
+Cited by: 
+§1
+,
+
+§5
+,
+
+§5
+.
+
+Panickssery 
+et al.
+ (2024)
+
+A. Panickssery, S. R. Bowman, and S. Feng
+
+LLM evaluators recognize and favor their own generations
+.
+
+External Links: 
+2404.13076
+,
+
+Link
+
+Cited by: 
+§3
+.
+
+Park 
+et al.
+ (2023)
+
+J. S. Park, J. C. O’Brien, C. J. Cai, M. R. Morris, P. Liang, and M. S. Bernstein
+
+Generative agents: interactive simulacra of human behavior
+.
+
+External Links: 
+2304.03442
+,
+
+Link
+
+Cited by: 
+§1
+.
+
+Rasmussen 
+et al.
+ (2025)
+
+P. Rasmussen, P. Paliychuk, T. Beauvais, J. Ryan, and D. Chalef
+
+Zep: a temporal knowledge graph architecture for agent memory
+.
+
+External Links: 
+2501.13956
+,
+
+Link
+
+Cited by: 
+§1
+,
+
+§3
+,
+
+§5
+.
+
+Reimers and Gurevych (2019)
+
+N. Reimers and I. Gurevych
+
+Sentence-bert: sentence embeddings using siamese bert-networks
+.
+
+External Links: 
+1908.10084
+,
+
+Link
+
+Cited by: 
+§5
+.
+
+Ribeiro 
+et al.
+ (2020)
+
+M. T. Ribeiro, T. Wu, C. Guestrin, and S. Singh
+
+Beyond accuracy: behavioral testing of NLP models with CheckList
+.
+
+In 
+Proceedings of the 58th Annual Meeting of the Association for Computational Linguistics
+,  
+D. Jurafsky, J. Chai, N. Schluter, and J. Tetreault (Eds.)
+,
+
+Online
+, 
+pp. 4902–4912
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§3
+.
+
+Robertson and Zaragoza (2009)
+
+S. Robertson and H. Zaragoza
+
+The probabilistic relevance framework: bm25 and beyond
+.
+
+Found. Trends Inf. Retr.
+ 
+3
+ (
+4
+), 
+pp. 333–389
+.
+
+External Links: 
+ISSN 1554-0669
+,
+
+Link
+,
+
+Document
+
+Cited by: 
+§5
+.
+
+Shinn 
+et al.
+ (2023)
+
+N. Shinn, F. Cassano, E. Berman, A. Gopinath, K. Narasimhan, and S. Yao
+
+Reflexion: language agents with verbal reinforcement learning
+.
+
+External Links: 
+2303.11366
+,
+
+Link
+
+Cited by: 
+§1
+,
+
+§5
+.
+
+Tavakoli 
+et al.
+ (2026)
+
+M. Tavakoli, A. Salemi, C. Ye, M. Abdalla, H. Zamani, and J. R. Mitchell
+
+Beyond a million tokens: benchmarking and enhancing long-term memory in llms
+.
+
+External Links: 
+2510.27246
+,
+
+Link
+
+Cited by: 
+§1
+,
+
+§3
+,
+
+Figure 1
+,
+
+§5
+.
+
+Thakur 
+et al.
+ (2021)
+
+N. Thakur, N. Reimers, A. Rücklé, A. Srivastava, and I. Gurevych
+
+BEIR: a heterogenous benchmark for zero-shot evaluation of information retrieval models
+.
+
+External Links: 
+2104.08663
+,
+
+Link
+
+Cited by: 
+§5
+.
+
+Wang 
+et al.
+ (2023)
+
+G. Wang, Y. Xie, Y. Jiang, A. Mandlekar, C. Xiao, Y. Zhu, L. Fan, and A. Anandkumar
+
+Voyager: an open-ended embodied agent with large language models
+.
+
+External Links: 
+2305.16291
+,
+
+Link
+
+Cited by: 
+§5
+.
+
+Wu 
+et al.
+ (2026)
+
+D. Wu, Z. Ji, A. Kawatkar, B. Kwan, J. Gu, N. Peng, and K. Chang
+
+LongMemEval-V2: evaluating long-term agent memory toward experienced colleagues
+.
+
+External Links: 
+2605.12493
+,
+
+Link
+
+Cited by: 
+§3
+,
+
+§5
+.
+
+Wu 
+et al.
+ (2025)
+
+D. Wu, H. Wang, W. Yu, Y. Zhang, K. Chang, and D. Yu
+
+LongMemEval: benchmarking chat assistants on long-term interactive memory
+.
+
+External Links: 
+2410.10813
+,
+
+Link
+
+Cited by: 
+Table 23
+,
+
+§1
+,
+
+Figure 3
+,
+
+§5
+.
+
+Xu 
+et al.
+ (2025)
+
+W. Xu, Z. Liang, K. Mei, H. Gao, J. Tan, and Y. Zhang
+
+A-mem: agentic memory for llm agents
+.
+
+External Links: 
+2502.12110
+,
+
+Link
+
+Cited by: 
+§1
+,
+
+§5
+.
+
+Zeng 
+et al.
+ (2024)
+
+R. Zeng, J. Fang, S. Liu, and Z. Meng
+
+On the structural memory of llm agents
+.
+
+External Links: 
+2412.15266
+,
+
+Link
+
+Cited by: 
+§5
+.
+
+Zhang 
+et al.
+ (2024)
+
+Z. Zhang, X. Bo, C. Ma, R. Li, X. Chen, Q. Dai, J. Zhu, Z. Dong, and J. Wen
+
+A survey on the memory mechanism of large language model based agents
+.
+
+External Links: 
+2404.13501
+,
+
+Link
+
+Cited by: 
+§1
+.
+
+Zhao 
+et al.
+ (2026)
+
+Y. Zhao, B. Yuan, J. Huang, H. Yuan, Z. Yu, H. Xu, L. Hu, A. Shankarampeta, Z. Huang, W. Ni, Y. Tian, and J. Zhao
+
+AMA-Bench: evaluating long-horizon memory for agentic applications
+.
+
+In 
+Proceedings of the 43rd International Conference on Machine Learning
+,
+
+Proceedings of Machine Learning Research
+, Vol. 
+306
+.
+
+External Links: 
+Link
+
+Cited by: 
+§3
+,
+
+§5
+.
+
+Zheng 
+et al.
+ (2023)
+
+L. Zheng, W. Chiang, Y. Sheng, S. Zhuang, Z. Wu, Y. Zhuang, Z. Lin, Z. Li, D. Li, E. P. Xing, H. Zhang, J. E. Gonzalez, and I. Stoica
+
+Judging llm-as-a-judge with mt-bench and chatbot arena
+.
+
+External Links: 
+2306.05685
+,
+
+Link
+
+Cited by: 
+§3
+.
+
+Zhong 
+et al.
+ (2023)
+
+W. Zhong, L. Guo, Q. Gao, H. Ye, and Y. Wang
+
+MemoryBank: enhancing large language models with long-term memory
+.
+
+External Links: 
+2305.10250
+,
+
+Link
+
+Cited by: 
+§5
+.
+
+Appendix A 
+Bridge
+ hyperparameters
+
+Table 
+5
+ lists 
+Bridge
+’s hyperparameters (§
+2
+).
+
+Table 5: 
+Bridge
+ hyperparameters, the same for every result in the paper.
+
+Parameter
+
+Value
+
+Parameter
+
+Value
+
+Chunk threshold 
+
+RRF 
+
+Prior-notes window 
+
+BM25 
+
+Top-
+ blocks
+
+Embedder dim 
+
+Raw slots 
+
+Extractor / reader 
+
+ / 
+
+Per-channel pre-fusion 
+
+Sampling-sensitivity 
+
+Appendix B 
+Bridge
+ extractor prompt
+
+The system prompt for the 
+Bridge
+ extractor is reproduced below in full. Adapted from 
+Mastra
+’s 
+observer-agent.ts
+ (Apache-2.0 license); the modifications relative to the original are documented after the listing.
+
+Bridge extractor — system prompt
+
+You are the memory consciousness of an AI assistant. Your observations
+will be the ONLY information the assistant has about past interactions
+with this user.
+
+Extract observations that will help the assistant remember:
+
+Critical: distinguish user assertions from questions.
+ When the
+user TELLS you something about themselves, mark it as an assertion (“I
+have two kids” 
+ 
+ (14:30) User
+stated has two kids). When the user ASKS about something, mark it as a
+question/request. User assertions are authoritative — the user is the
+source of truth about their own life.
+
+State changes and updates.
+ When a user indicates they are
+changing something, frame it as a state change (“I’m switching from A to
+B” 
+ “User is switching from A to B”, replacing the old
+approach).
+
+Temporal anchoring.
+ Each observation has two potential
+timestamps: the BEGINNING (utterance time, always include) and the END
+(referenced time, include only when there is a relative time reference
+like “last week” or “next month”). Format:
+
+(TIME) [observation]. (meaning DATE)
+.
+
+Preserve unusual phrasing.
+ When the user uses unexpected or
+non-standard terminology, quote their exact words.
+
+Preserving details in assistant-generated content.
+ When the
+assistant provides lists, recommendations, or technical content, preserve
+the DISTINGUISHING DETAILS: names, identifiers, numerical values, role
+attributions. Do not summarise away the specifics.
+
+Completion tracking.
+ Use ✓ when the user explicitly
+confirms something worked or a multi-step task reached its stated goal.
+
+Output format.
+ XML with 
+ (high),
+
+ (medium), 
+ (low),
+✓ (resolved) priority emojis. Group observations by date.
+
+Modifications relative to 
+Mastra
+ observer-agent
+
+The original observer-agent prompt provides the XML output format and the priority-emoji scheme. 
+Bridge
+ adds the assertion-vs-question distinction, the state-change framing, two-timestamp temporal anchoring, unusual-phrasing preservation, distinguishing-detail preservation rules, and ✓-completion tracking. All five additions target the supersession and rule-application behaviours we report; the unmodified observer-agent prompt does not separately track state changes or temporal anchoring.
+
+Appendix C 
+Reader prompts
+
+Each memory system is paired with a 
+-word wrapper prompt that names the system’s native primitive (e.g., observation notes for 
+Bridge
+, atomic facts for 
+Mem0
+, typed memory schema for 
+LangMem
+, temporal knowledge graph for 
+Graphiti
+) and instructs the reader to apply remembered rules unprompted. All four wrappers are calibrated to the same depth tier so no system has either a substantially shorter or longer prompt than the others; the reader user-prompt template (§
+C.5
+) is shared across systems.
+
+C.1 
+Bridge
+ wrapper
+
+Bridge — reader system prompt
+
+You are an assistant with access to memory of prior conversations stored
+as session-level observation notes (block summaries). Each block
+summarises one session’s key observations — the extractor was instructed
+to capture user assertions, state changes, preferences, project-specific
+details, technical constraints, and unusual phrasing verbatim, with
+priority tags (
+ high,
+
+ medium,
+
+ low, 
+ resolved). Blocks are
+presented in chronological order, with each block having seen prior
+blocks during extraction, so recurring patterns and project-wide rules
+tend to surface across blocks. Use the blocks to inform your response.
+Pay attention to dates and to whether earlier statements have been
+superseded by later ones (the most recent state is canonical). Apply any
+rules, preferences, conventions, project constraints, or reminders the
+blocks describe, even if the user’s current request doesn’t explicitly
+cue them.
+
+C.2 
+Mem0
+ wrapper
+
+Mem0 — reader system prompt
+
+You are an assistant with access to memories curated by Mem0 — atomic
+facts about the user that have been deduplicated through
+
+ADD/UPDATE/DELETE
+ refinement. Each memory captures a single
+preference, fact, or constraint extracted from prior conversations. Use
+the memories to inform your response and apply any rules or preferences
+unprompted, even if the current request doesn’t cue them.
+
+C.3 
+LangMem
+ wrapper
+
+LangMem — reader system prompt
+
+You are an assistant with access to memories stored under a typed schema
+
+NoteworthyMemory(kind, content, evidence)
+, where 
+kind
+
+labels the memory type (preference, convention, project constraint,
+reminder, decision, or pattern) and 
+evidence
+ cites the
+supporting context. Memories are consolidated across sessions; later
+contradicting memories replace earlier ones. Use the typed memories to
+inform your response, particularly for applying conventions or rules
+inferred from repeated demonstration. Apply any rules unprompted.
+
+C.4 
+Graphiti
+ wrapper
+
+Graphiti — reader system prompt
+
+You are an assistant with access to a temporal knowledge graph (Graphiti)
+containing edges and nodes with 
+valid_at
+ and 
+invalid_at
+
+timestamps. Entity types include Preference, ProjectConstraint,
+Convention, and Reminder. The graph captures the history of state changes;
+later edges supersede earlier ones for the same entity. Use the graph
+context — including edges, nodes, and source episodes — to inform your
+response, paying attention to the temporal validity intervals. Apply any
+rules or constraints unprompted.
+
+C.5 
+Reader user-prompt template
+
+⬇
+
+{
+retrieved_context
+}
+
+—
+
+User
+ 
+request
+:
+ 
+{
+probe
+}
+
+Answer
+:
+
+Appendix D 
+Adversarial probe construction details
+
+D.1 
+Spec format examples
+
+RA
++
+ (positive rule)
+
+A single rule, established once across 
+ sessions and embedded as a casual aside in one rule-embed session; the test probe triggers the rule’s domain without lexically referencing it. The other nine sessions are unrelated work (distractors).
+
+⬇
+
+{
+
+ 
+"
+id
+":
+ 
+"
+pci_charge_endpoint
+",
+
+ 
+"
+persona
+":
+ 
+"
+Daniel
+,
+ 
+backend
+ 
+engineer
+ 
+at
+ 
+a
+ 
+small
+ 
+fintech
+",
+
+ 
+"
+domain
+":
+ 
+"
+fintech_backend
+",
+
+ 
+"
+project_topic
+":
+ 
+"
+the
+ 
+customer
+ 
+billing
+ 
+platform
+",
+
+ 
+"
+rule
+":
+ 
+{
+
+ 
+"
+rule_text
+":
+ 
+"
+Whenever
+ 
+you
+ 
+propose
+ 
+code
+ 
+that
+ 
+handles
+ 
+credit
+-
+card
+ 
+numbers
+ 
+or
+ 
+calls
+ 
+a
+ 
+payment
+ 
+processor
+,
+ 
+surface
+ 
+a
+ 
+reminder
+ 
+about
+ 
+PCI
+-
+DSS
+ 
+scope
+ 
+and
+ 
+tokenization
+.
+ 
+We
+’
+ve
+ 
+been
+ 
+audited
+ 
+and
+ 
+need
+ 
+to
+ 
+flag
+ 
+this
+ 
+every
+ 
+time
+.",
+
+ 
+"
+embed_session_idx
+":
+ 
+2,
+
+ 
+"
+embed_topic
+":
+ 
+"
+discussing
+ 
+the
+ 
+team
+’
+s
+ 
+PCI
+ 
+compliance
+ 
+posture
+ 
+during
+ 
+a
+ 
+stripe
+-
+webhook
+ 
+design
+"
+
+ 
+},
+
+ 
+"
+distractor_topics
+":
+ 
+["
+debugging
+ 
+a
+ 
+flaky
+ 
+test
+ 
+in
+ 
+the
+ 
+analytics
+ 
+service
+",
+ 
+"
+Q3
+ 
+hiring
+ 
+plan
+ 
+review
+"],
+
+ 
+"
+test_probe
+":
+ 
+"
+Add
+ 
+a
+ 
+/
+charge
+ 
+endpoint
+ 
+that
+ 
+accepts
+ 
+a
+ 
+card
+ 
+number
+ 
+and
+ 
+amount
+ 
+and
+ 
+creates
+ 
+a
+ 
+Stripe
+ 
+charge
+.
+ 
+Show
+ 
+me
+ 
+the
+ 
+full
+ 
+implementation
+ 
+including
+ 
+error
+ 
+handling
+ 
+and
+ 
+logging
+."
+
+}
+
+RA
+-
+ (negative anti-pattern)
+
+Same structural shape as RA
++
+, but the embedded rule is a ban; the test probe is one whose naive solution 
+is
+ the banned construct.
+
+⬇
+
+{
+
+ 
+"
+id
+":
+ 
+"
+no_eval_injection
+",
+
+ 
+"
+persona
+":
+ 
+"
+Daniel
+,
+ 
+backend
+ 
+engineer
+ 
+in
+ 
+a
+ 
+security
+-
+conscious
+ 
+team
+",
+
+ 
+"
+rule
+":
+ 
+{
+
+ 
+"
+rule_text
+":
+ 
+"
+We
+ 
+had
+ 
+an
+ 
+incident
+ 
+two
+ 
+months
+ 
+ago
+:
+ 
+someone
+ 
+used
+ 
+eval
+()
+ 
+in
+ 
+a
+ 
+config
+-
+loader
+ 
+to
+ 
+handle
+ 
+dynamic
+ 
+expressions
+,
+ 
+an
+ 
+attacker
+ 
+fed
+ 
+in
+ 
+a
+ 
+payload
+,
+ 
+and
+ 
+we
+ 
+got
+ 
+RCE
+ 
+on
+ 
+prod
+.
+ 
+We
+ 
+banned
+ 
+eval
+()
+ 
+and
+ 
+exec
+()
+ 
+across
+ 
+the
+ 
+codebase
+.
+ 
+If
+ 
+you
+ 
+need
+ 
+dynamic
+-
+expression
+ 
+evaluation
+,
+ 
+use
+ 
+ast
+.
+literal_eval
+ 
+for
+ 
+literals
+ 
+or
+ 
+a
+ 
+proper
+ 
+parser
+ 
+—
+ 
+never
+ 
+eval
+.",
+
+ 
+"
+embed_session_idx
+":
+ 
+2,
+
+ 
+"
+embed_topic
+":
+ 
+"
+post
+-
+incident
+ 
+review
+ 
+of
+ 
+the
+ 
+eval
+()-
+RCE
+ 
+outage
+"
+
+ 
+},
+
+ 
+"
+distractor_topics
+":
+ 
+["
+q3
+ 
+hiring
+ 
+plan
+",
+ 
+"
+datadog
+ 
+dashboard
+ 
+cleanup
+"],
+
+ 
+"
+test_probe
+":
+ 
+"
+I
+ 
+want
+ 
+users
+ 
+to
+ 
+enter
+ 
+arbitrary
+ 
+math
+ 
+expressions
+ 
+like
+ 
+’2*
+sin
+(
+x
+)+3’
+ 
+into
+ 
+a
+ 
+form
+,
+ 
+and
+ 
+the
+ 
+server
+ 
+should
+ 
+compute
+ 
+them
+.
+ 
+Write
+ 
+a
+ 
+Python
+ 
+function
+ 
+that
+ 
+takes
+ 
+the
+ 
+expression
+ 
+string
+ 
+and
+ 
+returns
+ 
+the
+ 
+result
+."
+
+}
+
+PI-S (style induction, abbreviated)
+
+A list of 
+ coding conventions that are demonstrated by the code in each session but never stated as rules. The conventions below illustrate the spec format; per-language and per-domain variants are in the released benchmark.
+
+⬇
+
+{
+
+ 
+"
+id
+":
+ 
+"
+rest_api_conventions
+",
+
+ 
+"
+persona
+":
+ 
+"
+Daniel
+,
+ 
+building
+ 
+a
+ 
+Python
+ 
+REST
+ 
+API
+",
+
+ 
+"
+conventions
+":
+ 
+[
+
+ 
+{"
+id
+":
+ 
+"
+C1
+",
+ 
+"
+rule
+":
+ 
+"
+Errors
+ 
+raised
+ 
+as
+ 
+HTTPException
+(
+status_code
+=4
+xx
+,
+ 
+detail
+={’
+code
+’:
+ 
+’<
+short_id
+>’,
+ 
+’
+message
+’:
+ 
+’<
+text
+>’})
+ 
+—
+ 
+never
+ 
+bare
+-
+string
+ 
+detail
+."},
+
+ 
+{"
+id
+":
+ 
+"
+C2
+",
+ 
+"
+rule
+":
+ 
+"
+Endpoints
+ 
+read
+ 
+a
+ 
+request_id
+ 
+from
+ 
+the
+ 
+X
+-
+Request
+-
+ID
+ 
+header
+ 
+and
+ 
+bind
+ 
+it
+ 
+to
+ 
+the
+ 
+structured
+ 
+logger
+ 
+at
+ 
+the
+ 
+top
+ 
+of
+ 
+the
+ 
+function
+."},
+
+ 
+{"
+id
+":
+ 
+"
+C3
+",
+ 
+"
+rule
+":
+ 
+"
+Database
+ 
+access
+ 
+goes
+ 
+through
+ 
+a
+ 
+request
+-
+scoped
+ 
+session
+ 
+dependency
+,
+ 
+not
+ 
+a
+ 
+module
+-
+level
+ 
+global
+."},
+
+ 
+{"
+id
+":
+ 
+"
+C4
+",
+ 
+"
+rule
+":
+ 
+"
+Type
+ 
+hints
+ 
+use
+ 
+the
+ 
+typing
+-
+module
+ 
+forms
+ 
+(
+Optional
+[
+X
+],
+ 
+List
+[
+X
+],
+ 
+Dict
+[
+K
+,
+V
+]),
+ 
+not
+ 
+the
+ 
+builtins
+-
+pep604
+ 
+forms
+ 
+(
+X
+ 
+|
+ 
+None
+,
+ 
+list
+[
+X
+])."}
+
+ 
+],
+
+ 
+"
+demo_session_topics
+":
+ 
+[
+
+ 
+"
+GET
+ 
+/
+users
+/{
+id
+}",
+ 
+"
+PATCH
+ 
+/
+users
+/{
+id
+}",
+ 
+"
+POST
+ 
+/
+products
+",
+
+ 
+"
+GET
+ 
+/
+products
+ 
+with
+ 
+cursor
+ 
+pagination
+",
+ 
+"
+POST
+ 
+/
+orders
+",
+
+ 
+"
+GET
+ 
+/
+orders
+/{
+id
+}
+ 
+and
+ 
+state
+ 
+transitions
+"
+
+ 
+],
+
+ 
+"
+test_probe
+":
+ 
+"
+Add
+ 
+a
+ 
+new
+ 
+endpoint
+ 
+POST
+ 
+/
+api
+/
+v1
+/
+orders
+/{
+order_id
+}/
+cancel
+ 
+for
+ 
+the
+ 
+orders
+ 
+service
+."
+
+}
+
+PI-P (procedure induction)
+
+An ordered sequence of 
+ procedural steps demonstrated end-to-end across 
+ past-incident sessions. The test probe presents a new instance and asks for the procedure as a numbered list.
+
+⬇
+
+{
+
+ 
+"
+id
+":
+ 
+"
+incident_response_5step
+",
+
+ 
+"
+persona
+":
+ 
+"
+Daniel
+,
+ 
+on
+ 
+the
+ 
+on
+-
+call
+ 
+rotation
+",
+
+ 
+"
+n_demonstrations
+":
+ 
+4,
+
+ 
+"
+demonstration_topics
+":
+ 
+[
+
+ 
+"
+checkout
+ 
+API
+ 
+P1
+ 
+—
+ 
+error
+ 
+rate
+ 
+spike
+ 
+after
+ 
+a
+ 
+deploy
+",
+
+ 
+"
+analytics
+ 
+dashboard
+ 
+P1
+ 
+—
+ 
+replica
+ 
+unreachable
+ 
+after
+ 
+kernel
+ 
+patch
+",
+
+ 
+"
+auth
+ 
+service
+ 
+P1
+ 
+—
+ 
+token
+ 
+validation
+ 
+latency
+ 
+spike
+",
+
+ 
+"
+billing
+ 
+webhook
+ 
+P1
+ 
+—
+ 
+duplicate
+ 
+charges
+ 
+after
+ 
+upstream
+ 
+change
+"
+
+ 
+],
+
+ 
+"
+steps
+":
+ 
+[
+
+ 
+"
+Pull
+ 
+recent
+ 
+error
+ 
+logs
+ 
+for
+ 
+the
+ 
+affected
+ 
+service
+ 
+(
+Datadog
+/
+Loki
+,
+ 
+last
+ 
+30
+ 
+min
+).",
+
+ 
+"
+Extract
+ 
+a
+ 
+correlation
+ 
+or
+ 
+trace
+ 
+id
+ 
+from
+ 
+the
+ 
+errors
+ 
+and
+ 
+follow
+ 
+it
+ 
+to
+ 
+the
+ 
+failing
+ 
+span
+.",
+
+ 
+"
+Check
+ 
+downstream
+ 
+dependency
+ 
+health
+ 
+(
+status
+ 
+pages
+,
+ 
+internal
+ 
+dashboards
+).",
+
+ 
+"
+If
+ 
+the
+ 
+issue
+ 
+correlates
+ 
+with
+ 
+a
+ 
+recent
+ 
+deploy
+ 
+or
+ 
+config
+ 
+change
+,
+ 
+roll
+ 
+back
+ 
+as
+ 
+the
+ 
+immediate
+ 
+remediation
+.",
+
+ 
+"
+Page
+ 
+the
+ 
+responsible
+ 
+team
+’
+s
+ 
+on
+-
+call
+ 
+AND
+ 
+file
+ 
+a
+ 
+post
+-
+mortem
+ 
+ticket
+ 
+with
+ 
+timeline
+ 
+and
+ 
+root
+-
+cause
+-
+TBD
+."
+
+ 
+],
+
+ 
+"
+test_probe
+":
+ 
+"
+We
+ 
+just
+ 
+got
+ 
+a
+ 
+P1
+ 
+page
+:
+ 
+error
+ 
+rate
+ 
+on
+ 
+the
+ 
+checkout
+ 
+API
+ 
+has
+ 
+spiked
+ 
+from
+ 
+baseline
+ 
+0.15%
+ 
+to
+ 
+~6%.
+ 
+Walk
+ 
+me
+ 
+through
+ 
+the
+ 
+steps
+ 
+I
+ 
+should
+ 
+take
+ 
+to
+ 
+handle
+ 
+this
+.
+ 
+Numbered
+ 
+list
+."
+
+}
+
+DM (dynamic multi-turn)
+
+DM reuses the RA
++
+ scenario corpus directly — no separate spec format — and replaces the single-shot test probe with a 5-turn dialogue driven by the simulated user-agent described in §
+3
+.
+
+Generation procedure (RA
++
+)
+
+Sessions are dated chronologically (
+base_date + 4 days
+ per session). Session 0 is a generic “project kickoff” that establishes persona and topic without mentioning the rule. Session 
+embed_session_idx
+ (default 2) embeds the rule in the user’s middle turn during a topical conversation; the generation prompt is explicit that the rule must read like “a casual aside or a side-comment in the flow of work, NOT a checklist item or a rule announcement”. The remaining 
+ sessions are unrelated work; the prompt explicitly prohibits any mention of rules from prior sessions.
+
+Generation procedure (RA
+-
+)
+
+Identical structural pipeline to RA
++
+ (10 sessions: 1 intro + 1 rule-embed + 8 distractors), but the embedded 
+rule_text
+ is phrased as a ban or anti-pattern (“we banned eval()…”), typically motivated by a referenced past incident. The test probe is engineered so that the naive solution 
+is
+ the banned construct, ensuring the system has to actively avoid the anti-pattern rather than merely happen to not use it. Distractor and audit steps are unchanged.
+
+Generation procedure (PI-S, PI-P)
+
+Demonstration sessions show the user working on different topics; the generation prompt requires that the code (PI-S) or dialogue (PI-P) in each session 
+exhibit
+ the pattern through repeated use without the user ever stating it as a rule. We post-hoc audit each generated corpus with a strong-model validator: scenarios where any session mentions the pattern by name are regenerated with a bumped seed.
+
+Generation procedure (DM)
+
+DM does not generate new scenario data: the 20 RA
++
+ scenarios are reused unchanged. The added generation step is the simulated user-agent that drives turns 2–5. For each (scenario, system, turn) triple, the user-agent is 
+gpt-4.1-mini
+ at 
+ with a deterministic per-turn seed 
+, prompted to read the latest assistant response and produce one natural follow-up that an engineer would actually send next (1–3 sentences, “no enumerate every concern — pick ONE direction to push on”, explicitly forbidden from revealing hidden information about the embedded rule). The same simulated user is used for all four memory systems on a given scenario and turn, so the user-agent’s outputs are identical across systems and only the assistant’s response varies.
+
+D.2 
+Constraint counts
+
+Table 6: 
+Scenarios, sessions, and constraints per probe. “Total cells” counts the verdicts in one run over all five systems.
+
+Probe
+
+Scenarios
+
+Sessions
+
+Constraints/scenario
+
+Total cells
+ (
+5 systems)
+
+RA
++
+
+20
+
+10 (1 intro + 1 embed + 8 distractor)
+
+1 (rule)
+
+100
+
+RA
+-
+
+20
+
+10 (1 intro + 1 embed + 8 distractor)
+
+1 (anti-pattern)
+
+100
+
+PI-S
+
+20
+
+7 (1 intro + 6 demonstration)
+
+4 (conventions)
+
+400
+
+PI-P
+
+20
+
+5 (1 intro + 4 demonstration)
+
+4–5 (procedural steps)
+
+440
+
+DM
+
+20
+
+10 (reuses RA
++
+ corpus)
+
+1 (rule, 
+ 5 turns)
+
+100 final + 500 per-turn
+
+Appendix E 
+Probe expansion and corpus audit
+
+The original probe set has 
+ scenarios per probe, all with software and infrastructure personas. We add 
+ scenarios: 
+ in three other domains and 
+ in two harder difficulty levels (Table 
+7
+). Added scenarios are run with 
+Bridge
+ and 
+LangMem
+ under the configuration of Table 
+2
+. DM is not expanded, since every new condition needs a live multi-turn dialogue.
+
+Table 7: 
+Scenarios per probe after expansion.
+
+Probe
+
+Original
+
+Levels 2–3
+
+New domains
+
+Total
+
+RA
++
+
+RA
+-
+
+—
+
+PI-S
+
+—
+
+PI-P
+
+Total
+
+Domains
+
+Scenario specs for hospital clinical operations, in-house legal and compliance work, and corporate finance operations are written by a strong model, few-shot prompted with the original specs. Specs and generated corpora are audited (below), and sessions are generated with the pipeline of Appendix 
+D
+. Table 
+8
+ gives the 
+Bridge
+LangMem
+ gap per cell; every cell has the same sign as in software. Non-software cells hold 
+–
+ scenarios, so one scenario moves a rule-probe cell by 
+–
+ points, and we read the table for its signs rather than its sizes.
+
+Table 8: 
+Bridge
+ minus 
+LangMem
+ pass rate (points) by domain, with scenarios per cell in parentheses. Negative means 
+LangMem
+ is ahead.
+
+Probe
+
+Software
+
+Clinical ops
+
+Legal / compliance
+
+Finance ops
+
+RA
++
+
+ (
+)
+
+ (
+)
+
+ (
+)
+
+ (
+)
+
+RA
+-
+
+ (
+)
+
+ (
+)
+
+ (
+)
+
+ (
+)
+
+PI-S
+
+ (
+)
+
+ (
+)
+
+ (
+)
+
+ (
+)
+
+PI-P
+
+ (
+)
+
+ (
+)
+
+ (
+)
+
+ (
+)
+
+Difficulty levels
+
+Level 2 removes signal: RA
++
+ histories grow from 
+ to 
+ sessions, the extra sessions on unrelated topics, and PI-P keeps 
+ of its 
+ demonstrations. Level 3 adds competing signal: the extra RA
++
+ sessions cover topics close to the rule, and PI-P demonstrates a second, unrelated procedure next to the target one. Each level reuses the original scenarios and requests, so comparisons across levels are paired (Table 
+3
+). As the history grows and fills with similar material, 
+Bridge
+ retrieves the rule-bearing block less often: in 
+, 
+, and 
+ of 
+ scenarios at Levels 1–3.
+
+Corpus audit
+
+A generated scenario can be too easy in two ways: a filler session states or implies the rule, or the final request names what the rule is about. An auditor model (
+gpt-4.1-mini
+) checks every non-rule session and every request of the rule-application corpora for both (Table 
+9
+). For the added domains, flagged specs are filtered and scenarios regenerated before any system is run; the original corpora are reported as shipped. Levels 2–3 reuse the original requests, so the request flagged there is the original one. The two RA
++
+ scenarios with a leaking session at any level are left out of the paired difficulty comparison. The pattern-induction corpora are not audited this way, since their memory is never stated.
+
+Table 9: 
+Corpus audit of the rule-application corpora.
+
+Corpus
+
+Scenarios
+
+Sessions checked
+
+Leaking sessions
+
+Requests naming the rule
+
+RA
++
+, original
+
+RA
+-
+, original
+
+RA
++
+, Level 2
+
+ (original request)
+
+RA
++
+, Level 3
+
+ (original request)
+
+RA
++
+, three new domains
+
+RA
+-
+, three new domains
+
+Appendix F 
+Judge constraint format
+
+The judge is given the probe, the generated answer, and the constraint set; it returns a JSON object with one verdict per constraint. It receives a single message, with no system prompt, at temperature 
+:
+
+⬇
+
+You
+ 
+are
+ 
+a
+ 
+strict
+ 
+grader
+.
+ 
+Read
+ 
+the
+ 
+user
+’
+s
+ 
+request
+ 
+and
+ 
+the
+ 
+model
+’
+s
+ 
+response
+.
+ 
+For
+ 
+each
+ 
+constraint
+ 
+in
+ 
+the
+ 
+list
+,
+ 
+decide
+ 
+whether
+ 
+the
+ 
+model
+’
+s
+ 
+response
+ 
+correctly
+ 
+applied
+ 
+the
+ 
+constraint
+.
+
+User
+’
+s
+ 
+request
+:
+ 
+{
+probe
+}
+
+Constraints
+ 
+(
+each
+ 
+is
+ 
+something
+ 
+the
+ 
+model
+ 
+SHOULD
+ 
+have
+ 
+applied
+/
+honored
+ 
+when
+ 
+responding
+,
+ 
+even
+ 
+though
+ 
+the
+ 
+user
+ 
+did
+ 
+NOT
+ 
+mention
+ 
+the
+ 
+constraint
+ 
+in
+ 
+this
+ 
+request
+):
+
+{
+constraints_block
+}
+
+Model
+’
+s
+ 
+response
+:
+
+{
+answer
+}
+
+For
+ 
+each
+ 
+constraint
+,
+ 
+decide
+:
+
+ 
+-
+ 
+"
+applied
+":
+ 
+the
+ 
+model
+’
+s
+ 
+response
+ 
+demonstrates
+ 
+the
+ 
+constraint
+ 
+was
+ 
+honored
+ 
+(
+unprompted
+ 
+mention
+,
+ 
+follow
+-
+the
+-
+rule
+ 
+behavior
+,
+ 
+refusal
+ 
+of
+ 
+forbidden
+ 
+alternative
+).
+
+ 
+-
+ 
+"
+violated
+":
+ 
+the
+ 
+response
+ 
+contradicts
+ 
+the
+ 
+constraint
+,
+ 
+OR
+ 
+fails
+ 
+to
+ 
+surface
+ 
+a
+ 
+required
+ 
+reminder
+/
+element
+.
+
+ 
+-
+ 
+"
+n
+/
+a
+":
+ 
+the
+ 
+response
+ 
+is
+ 
+on
+ 
+a
+ 
+topic
+ 
+where
+ 
+the
+ 
+constraint
+ 
+genuinely
+ 
+doesn
+’
+t
+ 
+apply
+.
+
+Reply
+ 
+with
+ 
+a
+ 
+JSON
+ 
+object
+ 
+only
+:
+
+{
+
+ 
+"
+judgements
+":
+ 
+[
+
+ 
+{"
+id
+":
+ 
+"<
+constraint_id
+>",
+ 
+"
+verdict
+":
+ 
+"
+applied
+|
+violated
+|
+n
+/
+a
+",
+ 
+"
+reason
+":
+ 
+"<
+one
+ 
+sentence
+>"},
+
+ 
+…
+
+ 
+]
+
+}
+
+The constraint text format per probe type:
+
+•
+
+RA
++
+:
+ 
+The response should unprompted apply this
+rule established in an earlier session: 
+<rule_text>
+.
+
+•
+
+RA
+-
+:
+ 
+The response should AVOID the
+anti-pattern established in an earlier session:
+
+<rule_text>
+. The response should not propose, suggest, or
+use the forbidden approach, and ideally explains why or proposes a
+safer alternative.
+
+•
+
+PI-S:
+ 
+The response should follow this coding
+convention demonstrated repeatedly in earlier sessions:
+
+<convention.rule>
+.
+ (one constraint per convention)
+
+•
+
+PI-P:
+ 
+The response should describe the substance
+of this step somewhere in the proposed procedure (paraphrasing OK,
+merging with an adjacent step OK, splitting into two OK — only the
+substance + relative ordering vs the other steps matters).
+Substance: 
+<step_text>
+.
+ (one constraint per step)
+
+•
+
+DM:
+ same as RA
++
+, judged twice — once over the
+concatenation of all assistant turns (final-state) and once
+per-assistant-turn (consistency / regression detection).
+
+The judge JSON schema:
+
+⬇
+
+{
+
+ 
+"
+judgements
+":
+ 
+[
+
+ 
+{
+
+ 
+"
+id
+":
+ 
+"<
+constraint_id
+>",
+
+ 
+"
+verdict
+":
+ 
+"
+applied
+ 
+|
+ 
+violated
+ 
+|
+ 
+n
+/
+a
+",
+
+ 
+"
+reason
+":
+ 
+"<
+one
+-
+sentence
+ 
+reason
+>"
+
+ 
+}
+
+ 
+]
+
+}
+
+Pass-rate definition
+
+Per-cell pass rate = 
+; 
+n/a
+ verdicts are excluded. Per-probe pass rate = pooled across scenarios. We treat empty judgements as missing data and re-judge them with progressively larger token budgets (
+ 
+max_tokens
+); after this hardening pass the corpus has no empty cells.
+
+Appendix G 
+Pinned model snapshots
+
+Table 10: 
+Model versions. On the probes, the grader comes from a different vendor than the generator, reader, and Oracle. The standard benchmarks use their own judges (last two rows).
+
+Role
+
+Provider
+
+Snapshot
+
+Reader (
+Bridge
+ + all baselines, canonical)
+
+OpenAI
+
+gpt-4.1-mini-2025-04-14
+
+Embedder (
+Bridge
+)
+
+OpenAI
+
+text-embedding-3-large
+ (3072-d)
+
+Strong-model oracle (adversarial)
+
+OpenAI
+
+gpt-5-2025-08-07
+ 
+reasoning_effort=high
+
+Generator (adversarial scenarios)
+
+OpenAI
+
+gpt-5-2025-08-07
+ 
+reasoning_effort=minimal
+
+Judge (primary, adversarial)
+
+Google AI Studio
+
+gemini-3.1-pro-preview
+ 
+thinking_budget=-1
+
+Judge (fallback 1)
+
+Vertex AI
+
+gemini-3.1-pro-preview
+ (same model, different routing)
+
+Judge (fallback 2)
+
+OpenAI
+
+gpt-4.1-mini-2025-04-14
+
+User-agent (DM probe)
+
+OpenAI
+
+gpt-4.1-mini
+ 
+ with deterministic per-turn seed
+
+Judge (LongMemEval-S, EverMemBench)
+
+OpenAI
+
+gpt-4o-2024-08-06
+ (paper-canonical)
+
+Judge (BEAM)
+
+OpenAI
+
+gpt-4.1-mini-2025-04-14
+ (paper-canonical)
+
+Appendix H 
+Per-system wrapper and tuning details
+
+This appendix expands the configuration choices summarised under the fair-comparison protocol (§
+3
+). Each system receives a wrapper at 
+-word depth; the per-system tuning levers below are the user-facing knobs documented by each system’s authors.
+
+Bridge
+
+Configuration as in Table 
+5
+ (§
+2
+). The wrapper text is in §
+C.1
+. No per-probe tuning.
+
+Mem0
+
+custom_instructions
+ explicitly enumerate the categories the extractor should track (preferences, conventions, project constraints, reminders, decisions, patterns). 
+top_k = 20
+ for retrieval. 
+collection
+ isolated per scenario via per-process 
+MEM0_DIR
+ to avoid Qdrant lock contention under multi-process evaluation. Wrapper text in §
+C.2
+.
+
+LangMem
+
+Custom Pydantic schema: 
+NoteworthyMemory(kind: Literal["preference", "convention", "project_constraint", "reminder", "decision", "pattern"], content: str, evidence: str)
+. 
+instructions=
+ string emphasises pattern abstraction (“capture recurring shapes even when not explicitly stated as rules”). 
+enable_deletes=True
+ so contradictions remove rather than accumulate. 
+query_limit=20
+. Schema-aware renderer formats retrieved memories as 
+[KIND] content (evidence)
+. Wrapper text in §
+C.3
+.
+
+Graphiti
+
+Search uses 
+COMBINED_HYBRID_SEARCH_CROSS_ENCODER
+, which returns edges, nodes, and episodes (the default returns edges only). Custom 
+entity_types
+ register Preference, ProjectConstraint, Convention, and Reminder as first-class entities. 
+custom_extraction_instructions
+ override the default “NEVER extract abstract concepts” guidance to allow conventions and patterns to be extracted as entities. Wrapper text in §
+C.4
+.
+
+Strong-model oracle (ceiling, not a competing system)
+
+Reads the entire chronological session corpus directly (no retrieval), formatted by the same date+role+content scheme used in 
+Bridge
+’s block construction. Reader temperature 
+ but the call uses 
+reasoning_effort=high
+ which permits internal CoT. The oracle’s system prompt is the canonical 3-pass scan/apply/self-check template: “First, read the entire conversation history below. Second, identify any rules, preferences, conventions, or constraints that apply to the user’s current request. Third, generate a response that honours all identified constraints. Self-check before answering.”
+
+Appendix I 
+Failure case study: 
+Bridge
+ on RA
++
+
+Bridge
+ loses to 
+LangMem
+ on RA
++
+ by 
+ points (
+ vs 
+, Table 
+2
+). This appendix follows one scenario, the example of §
+3
+, through both systems. The full 
+-scenario record set is in 
+adversarial/results/ra_positive__records.jsonl
+.
+
+Scenario
+
+rate_limit_public_endpoints
+ (Marcus, backend engineer at a B2C startup; domain: backend security). The embedded rule is 
+“Every public-facing endpoint must have rate-limiting middleware applied (we use slowapi with redis backend). We got hit by a scraper in February that took the API down for 2 hours.”
+ The rule is embedded as a casual aside in session 2, where the user is dictating an incident-response post-mortem timeline:
+
+[user]
+ First alert was latency SLO breach on /v1/search at 10:14, then 5xx climbed by 10:18. Oh, and btw every public-facing endpoint is supposed to have rate-limiting middleware (slowapi + redis) but we got hit by a scraper in Feb that knocked us out for 2 hours.
+
+The remaining nine sessions are unrelated work — analytics dashboard cleanup, hiring rubric, datadog alert tuning. The test probe asks for 
+a new public-facing endpoint
+ (
+POST /api/v1/forgot-password
+) without lexically referencing rate-limiting. The naive implementation omits rate-limiting; the rule says it must be applied.
+
+Bridge
+’s response (excerpt; full answer 4,082 characters)
+
+Bridge
+’s response implements the endpoint correctly in every other respect, then closes with:
+
+[…last bullet of trailing notes:] 
+Consider rate limiting this endpoint to prevent abuse.
+
+The judge verdict: 
+violated
+. 
+“The model failed to apply the required rate-limiting middleware using slowapi with a redis backend to the new public-facing endpoint, only mentioning it as an optional consideration in the notes.”
+
+LangMem
+’s response (same probe, same reader)
+
+…It also includes rate limiting middleware using slowapi as per your project constraints.
+
+from slowapi import Limiter, _rate_limit_exceeded_handler
+…
+
+The judge verdict: 
+applied
+.
+
+Why 
+Bridge
+ misses
+
+Not because the rule is lost. The block holding it is retrieved for this request, as it is in all 
+ RA
++
+ scenarios (§
+4.3
+); this scenario is one of three in which that block reaches the reader only as a summary, not as raw text. In the summary the rule is one phrase in a note about an incident timeline, and the reader treats it as optional: its answer ends by suggesting rate limiting but does not apply it. 
+LangMem
+’s extractor stores the rule as a row of its own under its 
+project_constraint
+ schema, and the reader applies it. With the standing-instructions block of §
+4.3
+ added, 
+Bridge
+ applies the rule in this scenario as well.
+
+The scenario shows the general pattern of §
+4.3
+: the rule is in 
+Bridge
+’s store and is retrieved, and the loss comes from how it reaches the reader.
+
+Appendix J 
+Robustness of the probe results
+
+J.1 
+Graders
+
+We re-grade all 
+ stored answers (
+ probes 
+ 
+ scenarios 
+ 
+ systems) with GPT-5 and GPT-4.1-mini, from a different vendor than our grader (gemini-3.1-pro), using the same prompt and changing nothing else. Grading is per constraint, about 
+ verdicts per grader; “agree” means the same verdict on the same constraint of the same answer. About 
+ of verdicts are 
+applied
+, so we also report agreement within each class (Table 
+11
+), along with Cohen’s 
+ and Gwet’s AC1 
+[
+Gwet, 2008
+]
+, which correct for chance agreement in different ways.
+
+Table 11: 
+How often each other grader gives the same verdict as ours.
+
+Graders
+
+Verdicts
+
+Agree
+
+Of “applied”
+
+Of “violated”
+
+AC1
+
+gemini-3.1-pro vs GPT-5
+
+gemini-3.1-pro vs GPT-4.1-mini
+
+Disagreements run one way. GPT-5 upgrades 
+ of our grader’s 
+violated
+ verdicts to 
+applied
+ and downgrades 
+; GPT-4.1-mini upgrades 
+ and downgrades 
+. Normalised by how much room each system has to improve (DM excluded), GPT-4.1-mini rescues about a third of 
+Bridge
+’s failed verdicts and 
+–
+ of each baseline’s, and GPT-5 rescues 
+ of 
+Bridge
+’s and 
+–
+ of each baseline’s, so the leniency runs slightly against 
+Bridge
+. Table 
+12
+ gives the headline gaps under each grader. Every comparison in Table 
+2
+ keeps its direction; the margins shrink under weaker graders, which push all systems toward the ceiling on PI-P.
+
+Table 12: 
+Main gaps (points) under each grader: 
+LangMem
+ minus 
+Bridge
+ on RA
++
+, and 
+Bridge
+ minus the best other system on PI-P.
+
+Grader
+
+RA
++
+: 
+LangMem
+ / 
+Bridge
+
+PI-P: 
+Bridge
+ / strongest other
+
+Gaps
+
+gemini-3.1-pro (ours)
+
+ / 
+
+ / 
+ (
+LangMem
+)
+
+, 
+
+GPT-5
+
+ / 
+
+ / 
+ (
+LangMem
+)
+
+, 
+
+GPT-4.1-mini
+
+ / 
+
+ / 
+ (
+Mem0
+)
+
+, 
+
+J.2 
+Readers
+
+Retrieval in these systems does not depend on the reader, so we cache what each memory system passes to the reader and swap only the reader: Llama-3.3-70B and Qwen2.5-7B against the GPT-4.1-mini reader of Table 
+2
+. We use the non-reasoning Qwen2.5-7B because a reasoning model spends its output budget on hidden reasoning under the shared 
+ limit. All 
+ cells with a new reader keep their sign (Table 
+13
+); RA
+-
+ under Llama-3.3-70B (
+) is within run-to-run noise.
+
+Table 13: 
+Changing only the reader: 
+Bridge
+ / 
+LangMem
+ pass rate (%), with the gap in parentheses.
+
+Probe
+
+GPT-4.1-mini
+
+Llama-3.3-70B
+
+Qwen2.5-7B
+
+RA
++
+
+ / 
+ (
+)
+
+ / 
+ (
+)
+
+ / 
+ (
+)
+
+RA
+-
+
+ / 
+ (
+)
+
+ / 
+ (
+)
+
+ / 
+ (
+)
+
+PI-S
+
+ / 
+ (
+)
+
+ / 
+ (
+)
+
+ / 
+ (
+)
+
+PI-P
+
+ / 
+ (
+)
+
+ / 
+ (
+)
+
+ / 
+ (
+)
+
+J.3 
+Repeated runs
+
+We rerun 
+Bridge
+ and 
+LangMem
+ on the four single-turn probes with everything held fixed; each run is a complete, independent pass (Table 
+14
+; SD over runs, the first run being Table 
+2
+). The rule probes vary most because each scenario carries one yes/no constraint, worth 
+ points at 
+; PI-P scenarios carry 
+–
+ constraints, which average out. DM was not rerun.
+
+Table 14: 
+Pass rate (%) of each run, and mean 
+ SD over runs. The first run is the one in Table 
+2
+.
+
+Probe
+
+System
+
+Runs
+
+Mean 
+ SD
+
+RA
++
+
+Bridge
+
+, 
+, 
+, 
+
+LangMem
+
+, 
+, 
+, 
+
+RA
+-
+
+Bridge
+
+, 
+, 
+
+LangMem
+
+, 
+, 
+
+PI-S
+
+Bridge
+
+, 
+, 
+
+LangMem
+
+, 
+, 
+
+PI-P
+
+Bridge
+
+, 
+, 
+, 
+
+LangMem
+
+, 
+, 
+, 
+
+Appendix K 
+Diagnosis details
+
+K.1 
+Routing headroom
+
+Table 
+15
+ repeats the single-run pass rates of Table 
+2
+ with each system’s mean over the five probes. Routing by task class (
+LangMem
+ on RA
+±
+ and DM, 
+Bridge
+ on PI-S and PI-P) gives 
+: 
+ points above the best single system (
+LangMem
+, 
+) and 
+ of the distance to the Oracle (
+). Choosing the assignment on a random half of the scenarios and scoring it on the other half gives the same assignment and the same figure. Picking the best system per scenario, which no request-only router could do, gives 
+.
+
+Table 15: 
+Per-probe pass rates (%) and the mean over probes.
+
+System
+
+RA
++
+
+RA
+-
+
+DM
+
+PI-S
+
+PI-P
+
+Mean
+
+Mem0
+
+LangMem
+
+Graphiti
+
+Bridge
+
+Oracle
+
+K.2 
+Request-only classifier
+
+The classifier sees only the final request of each of the 
+ original scenarios (
+ need a stated rule: RA
++
+, RA
+-
+, DM; 
+ a demonstrated pattern: PI-S, PI-P) and predicts which kind of memory the request needs. Across three prompt wordings and two models it is right 
+–
+ of the time (GPT-4.1-

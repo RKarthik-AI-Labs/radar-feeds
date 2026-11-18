@@ -1,0 +1,2301 @@
+GapLeak: When Privacy-Preserving LLM-based Web Agents Become a Privacy Risk
+https://arxiv.org/abs/2611.22223
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+GapLeak: When Privacy-Preserving LLM-based Web Agents Become a Privacy Risk
+
+Volume: 
+YYYY
+X
+DOI: 
+XXXXXXX.XXXXXXX
+
+Chaklam Cheong
+
+Affiliation: 
+Queen’s University
+, 
+Kingston
+, 
+Ontario
+, 
+Canada
+
+email: 
+chaklam.cheong@queensu.ca
+
+, 
+
+Tiancong Cao
+
+Affiliation: 
+Queen’s University
+, 
+Kingston
+, 
+Ontario
+, 
+Canada
+
+email: 
+tiancong.cao@queensu.ca
+
+, 
+
+Qi Li
+
+Affiliation: 
+Queen’s University
+, 
+Kingston
+, 
+Ontario
+, 
+Canada
+
+email: 
+qi.li@queensu.ca
+
+, 
+
+Zelin Zhang
+
+Affiliation: 
+Queen’s University
+, 
+Kingston
+, 
+Ontario
+, 
+Canada
+
+email: 
+zelin.zhang@queensu.ca
+
+, 
+
+Jianbing Ni
+
+Affiliation: 
+Queen’s University
+, 
+Kingston
+, 
+Ontario
+, 
+Canada
+
+email: 
+jianbing.ni@queensu.ca
+
+, 
+
+Rongxing Lu
+
+Affiliation: 
+Queen’s University
+, 
+Kingston
+, 
+Ontario
+, 
+Canada
+
+email: 
+rongxing.lu@queensu.ca
+
+ and 
+
+Mohammad Zulkernine
+
+Affiliation: 
+Queen’s University
+, 
+Kingston
+, 
+Ontario
+, 
+Canada
+
+email: 
+mz@queensu.ca
+
+YYYY
+
+Abstract.
+
+To protect user privacy, current Large Language Model (LLM)-based web agents rely on two privacy-preserving principles: 
+data minimization
+, which limits users to providing only task-relevant information, and 
+least privilege
+, which restricts agents to task-authorized sources.
+We reveal that these principles are necessary but not sufficient.
+They constrain the sources an agent is authorized to use, but not the higher-sensitivity sources that remain reachable in its environment.
+A website can request a field that no authorized source can provide, opening an information gap between what the agent is authorized to use and what it can reach.
+A human would leave such a field blank, but a goal-driven agent tends to escalate to a reachable but unauthorized source to complete the task.
+We formalize this vulnerability as 
+GapLeak
+, where an adversary exploits a legitimate web form to induce an agent to disclose accumulated sensitive information, without requiring prompt injection or other malicious instructions.
+
+To further understand the root causes of unauthorized disclosure, the effectiveness of existing defenses, and the generalizability of GapLeak, we evaluate GapLeak on three popular web-agent frameworks and six LLMs from Anthropic, Google, and OpenAI across four representative domains: recruitment, e-commerce, travel, and healthcare. Results show that GapLeak induces an average unauthorized disclosure of approximately 37%, with the information gap serving as the primary driver of the vulnerability, as eliminating this gap reduces disclosure by more than 50%. Moreover, existing instruction-level defenses based on the least privilege principle can partially mitigate the vulnerability, but often degrade task success rate. To address this limitation, we propose a submission-time verification mechanism that filters unauthorized content before form submission, eliminating over 96% of unauthorized disclosures while preserving task success rate.
+
+Keywords: 
+LLM-based web agents, agent privacy, information gap, unauthorized disclosure, data minimization, least privilege
+
+1. 
+Introduction
+
+Large language model (LLM)-based web agents can autonomously navigate websites, fill out forms, and submit data, transforming the browser from a user-operated interface into a delegated task-execution environment 
+(
+Ersoy et al., 2025
+; 
+Ning et al., 2025
+; 
+Zhou et al., 2023
+; 
+Gartner, 2025
+)
+. Commercial agents, such as DoBrowser 
+(
+, 2025
+)
+ and OpenAI’s Operator 
+(
+OpenAI, 2025
+)
+, have already demonstrated multi-step workflows, including job applications, e-commerce returns, travel bookings, and medical intake form completion.
+By mid-2025, 62% of organizations reported experimenting with LLM-based agents, while 23% had already begun deploying them at scale in at least one business function 
+(
+McKinsey & Company, 2025
+)
+. Agentic automation is transitioning from a proof-of-concept technology to a foundational component of everyday digital infrastructure. However, the successful execution of these delegated tasks inherently requires agents to access users’ personal information 
+(
+Shao et al., 2024
+; 
+Zhang et al., 2026
+; 
+Zhang et al., 2024
+)
+. For example, booking a single trip may require access to a user’s travel itinerary, payment credentials, calendar availability, and even the contact information of accompanying travelers. Consequently, each delegated task grants autonomous agents broad visibility into sensitive personal data. Because these agents independently interact with websites and external services on behalf of users, private information may be disclosed, inferred, or propagated across multiple domains without the user’s awareness or explicit consent 
+(
+Zhang and Yang, 2025
+; 
+Chiang et al., 2025
+; 
+Ukani et al., 2025
+; 
+Cheng et al., 2024
+)
+.
+
+These privacy risks have attracted growing attention from both the research community and standards organizations. In 2026, the U.S. NIST launched an AI Agent Standards initiative and solicited public input on emerging security and privacy threats associated with autonomous agents 
+(
+National Institute of Standards and Technology, 2026
+)
+. In parallel, researchers have advocated two fundamental 
+privacy-preserving principles
+ for agent design: 
+data minimization
+, which restricts the information exposed to the agent, and 
+least privilege
+, which limits data sources the agent is permitted to access. AgentDAM 
+(
+Zharmagambetov et al., 2026
+)
+ introduced a benchmark for evaluating whether agents adhere to data minimization by accessing sensitive information only when necessary. AirGapAgent 
+(
+Bagdasarian et al., 2024
+)
+ applies the least-privilege principle by filtering user data and restricting the agent’s access to only the information required for the current task. The recent studies 
+(
+Zharmagambetov et al., 2026
+; 
+Ghalebikesabi et al., 2025
+; 
+Mireshghallah et al., 2024
+; 
+Bagdasarian et al., 2024
+)
+ share a common assumption: if an agent is provided with only the minimum necessary information and granted only the minimum necessary access, unauthorized disclosure can be effectively prevented.
+
+However, we observe that these principles are necessary but not sufficient.
+Data minimization and least privilege constrain the agent’s 
+authorized
+ scope, meaning the information the user provides and the sources the task sanctions.
+However, the two principles do not constrain the agent’s 
+reachable
+ scope, which still includes higher-sensitivity sources present in the agent’s environment.
+As a result, a residual gap remains between what the agent is authorized to use and what it can actually reach.
+Consider a user who requests a product return and provides only the item name, purchase date, and reason for return.
+The user withholds the complete order history and payment details, yet both records remain reachable through the user’s logged-in account.
+When a website then requests a field that no authorized source can provide, an 
+information gap
+ arises.
+The agent must now choose between two options.
+It can leave the field blank and risk task failure, or it can escalate to a reachable but unauthorized source and risk the user’s privacy.
+Since current web agents are goal-driven by design, they tend to escalate rather than abandon the task 
+(
+Yao et al., 2022
+; 
+Wang et al., 2024
+)
+.
+The information gap is the primary driver of unauthorized disclosure.
+When no authorized source can supply the requested field, the agent reaches into unauthorized sources to complete the task, and sensitive content the user never intended to share is exposed in the process.
+The exposed content is not limited to the user’s own data.
+It routinely includes 
+third-party
+ information such as reference contacts, accompanying travelers, and family members, whose exposure constitutes a privacy harm regardless of how the user chose to interact with the site.
+
+We formalize this vulnerability as 
+GapLeak
+, which exploits the gap between the agent’s authorized and reachable scope to induce disclosure beyond the task’s authorized scope.
+Specifically, GapLeak begins when a web form requests a field that the user has not provided.
+The missing field creates an information gap, which drives the agent to escalate to reachable but unauthorized sources.
+As the agent searches for the field, additional sensitive content accumulates in its working context.
+The adversary is a website operator that controls only the target form.
+The adversary then manipulates the website guidance to present the accumulated content as relevant or necessary, which induces the agent to submit the content as part of the task workflow.
+Crucially, GapLeak requires only a legitimate web form and does not rely on prompt injection, hidden elements, compromised contexts, or other forms of instruction manipulation.
+Throughout the attack the agent remains aligned with the user’s original task.
+To understand the factors that drive unauthorized disclosure, evaluate whether existing defenses can prevent it, and assess the generalizability of GapLeak, we evaluate it across four representative web task domains, namely Recruitment 
+(
+Gan et al., 2024
+; 
+Lo et al., 2025
+)
+, E-commerce 
+(
+Roh et al., 2026
+; 
+Yao et al., 2024
+)
+, Travel 
+(
+Xie et al., 2024
+; 
+Chen et al., 2026
+)
+, and Health 
+(
+Ersoy et al., 2025
+; 
+Jiang et al., 
+)
+. Each scenario is evaluated using three agent frameworks (BrowserUse 
+(
+Browser-Use, 2025
+)
+, DoBrowser 
+(
+, 2025
+)
+, and Agent-E 
+(
+Akkil et al., 2025
+)
+) and six models from three providers (Claude Haiku 4.5, Claude Sonnet 4.6, Gemini 2.5 Flash, Gemini 2.5 Pro, GPT 5.4 Mini, and GPT 5.4).
+
+Our evaluation demonstrates that GapLeak generalizes across all tested frameworks and models, inducing an average unauthorized disclosure rate of approximately 37%. The information gap is the primary driver. When the gap is present, unauthorized disclosure increases by more than 50%, while task success rate decreases by roughly one-third, so the gap degrades privacy and utility at the same time. A trade-off between the two arises instead under a defense. When we apply least privilege as an explicit instruction-level defense, disclosure still persists in 77% of completed tasks, and the task success rate drops to 30%. Instead of restricting the agent during task execution, we propose 
+submission-time verification
+, which inspects each field immediately before submission and removes unauthorized content. Submission-time verification eliminates over 96% of unauthorized disclosures without further reducing task success rate.
+We summarize the main contributions of this paper as follows:
+
+•
+
+Vulnerability identification
+: We identify and formalize GapLeak, a structural vulnerability rooted in the 
+information gap
+ that arises when a web form requests a field no authorized source can provide. The information gap drives goal-driven web agents to escalate to unauthorized sources and disclose the accumulated content, including third-party data, beyond the task’s authorized scope.
+
+•
+
+Systematic evaluation
+: We design four controlled scenarios spanning distinct web task domains, together with an automated evaluation pipeline, to systematically evaluate GapLeak across three agent frameworks and six models.
+
+•
+
+Defense evaluation and countermeasure
+: We evaluate the effectiveness and limitations of least-privilege-based instruction-level defenses and propose 
+submission-time verification
+ as a countermeasure that reduces unauthorized disclosure without compromising task success rate.
+
+2. 
+Background and Motivation
+
+2.1. 
+LLM-Based Web Agents
+
+LLM-based web agents leverage LLMs to execute browser-based tasks on behalf of users 
+(
+Deng et al., 2023
+)
+. Unlike chatbots or search-augmented assistants (e.g., Perplexity 
+(
+, 2025
+)
+), which primarily retrieve and summarize web content, web agents interact directly with web interfaces by clicking buttons, filling forms, and submitting data. This capability enables agents to operate on previously unseen websites without requiring API access or site-specific configuration.
+
+To automate tasks, web agents typically follow an observe–plan–act cycle 
+(
+Deng et al., 2023
+; 
+Zhou et al., 2023
+)
+. The agent first captures the current browser state through techniques, e.g., raw HTML extraction, accessibility tree parsing 
+(
+, 2025
+)
+, browser screenshots 
+(
+Koh et al., 2024
+)
+, or combinations thereof, and then provides the observation, together with the user’s task description, to the LLM, which reasons about the current state and determines the next action. The agent executes the selected action through browser automation frameworks, e.g., Playwright 
+(
+, 2025
+)
+, and the cycle repeats until the task is completed.
+
+Web agents exist both as research prototypes 
+(
+Zhou et al., 2023
+; 
+Koh et al., 2024
+)
+ and as commercial products 
+(
+Browser-Use, 2025
+; 
+, 2025
+; 
+Akkil et al., 2025
+)
+. They are commonly deployed as desktop applications that launch dedicated browser instances 
+(
+Browser-Use, 2025
+)
+, browser extensions that operate within an existing browsing session 
+(
+, 2025
+)
+, or overlay interfaces embedded into the current webpage 
+(
+Akkil et al., 2025
+)
+. Despite these deployment differences, all web agents share the same fundamental workflow: observing the browser state, planning the next action through an LLM, and executing actions.
+
+2.2. 
+Information Gap
+
+When a user fills out a web form, the information requested by the website and the information provided by the user are determined independently, with no built-in mechanism to ensure that they align.
+Therefore, if the website requests a field that the user has not provided, an information gap arises.
+Crucially, the gap is not merely that the user withheld the field. The requested field is absent from the sources the task authorizes, yet it often remains obtainable from higher-sensitivity sources that stay reachable in the agent’s environment.
+The information gap is therefore the point at which the agent’s authorized scope and its reachable scope diverge.
+The phenomenon of websites requesting more information than users intend to disclose has been widely studied in human–computer interaction 
+(
+Culnan and Armstrong, 1999
+)
+.
+When faced with such a gap, human users can often recognize irrelevant or excessive requests and choose to skip those fields or abandon the form altogether 
+(
+Draper and Turow, 2019
+)
+.
+In a delegated task, however, the agent completes the form on the user’s behalf and may not exercise the same judgment.
+
+2.3. 
+Motivation
+
+Data minimization and least privilege constrain what information is provided to the agent and what sources it is permitted to access. These principles narrow the agent’s authorized scope, but they do not narrow the reachable scope that still exposes higher-sensitivity sources in the agent’s environment. As a result, they do not account for situations in which the target website requests a field that the authorized sources cannot supply but a reachable source can. How LLM-based web agents respond to this situation remains unclear. The goal-driven design of current web agents may prefer to escalate to additional sources rather than leave the field empty, yet this behavior has not been systematically examined in prior work.
+
+Motivated by this observation, we pose the following research question:
+
+How do LLM-based web agents respond to information gaps, and what privacy risks does this pose?
+
+Specifically, we seek to understand how GapLeak drives agents to escalate to additional sources and disclose sensitive information across different agent frameworks, models, and task domains.
+
+3. 
+Methodology
+
+3.1. 
+Threat Model
+
+Adversary Capabilities
+.
+The adversary is a website operator that controls only the content of a target webpage visited by the agent during a delegated task. Specifically, the adversary controls: (1) the set of fields requested by the page, (2) the guidance and helper text associated with each field, and (3) the validation and feedback messages returned upon submission. These capabilities are available to any website operator, such as an online retailer managing its own product return portal.
+
+The adversary does not control the agent’s system prompt, underlying model, or framework implementation, nor does it inject hidden elements, scripts, or instructions that redirect the agent away from the delegated task. All page content consists of legitimate, user-visible text that remains within the scope of the task.
+
+Adversary Objectives
+.
+The user authorizes the agent to access only the low-sensitivity sources 
+ that the user explicitly provides for the task. The agent’s environment also contains higher-sensitivity sources 
+ that the user did not provide or authorize (
+). An information gap is a requested field 
+ that cannot be resolved from 
+ (
+) but can be resolved from 
+ (
+). The adversary’s goal is to induce the agent to escalate to 
+ to resolve the information gap, and to submit one or more fields outside the minimal-disclosure policy 
+, the set of fields the task minimally requires. We distinguish two forms of such unauthorized disclosure: (1) 
+over-disclosure
+, where the agent submits sensitive information about the user beyond what the task minimally requires, and (2) 
+third-party disclosure
+, where the agent reveals information about individuals other than the user, such as reference contacts, accompanying travelers, and family members. Third-party disclosure is a distinct harm because these individuals never interacted with the website and never consented to the release of their information.
+
+Trust Assumptions
+. We consider a delegated task setting in which a user instructs an agent to complete a web-based workflow on their behalf. Following the principle of data minimization 
+(
+Zharmagambetov et al., 2026
+)
+, the user provides only task-relevant materials rather than all available personal information. We emphasize that the user interacts with the website willingly and intends to submit the form. The privacy harm does not arise from the information the user knowingly provides for the task. It arises when the agent escalates to sources the user never authorized and submits information the user never intended to share, including information about third parties. In other words, the boundary that GapLeak violates is not the user’s willingness to use the site, but the minimal-disclosure policy 
+ that the task itself defines. We further assume the user trusts the agent to operate within this boundary and does not intervene during execution, consistent with how current web agents operate. We examine the implications of relaxing this assumption, including the case where a human approval step precedes submission, in Section 
+7
+.
+
+3.2. 
+GapLeak Mechanism
+
+Figure 1
+. 
+Overview of GapLeak, showing the three-stage attack chain: source escalation, context accumulation, and guidance-amplified disclosure.
+Diagram of the attack chain. A user supplies limited task materials, while an adversarial website requests a missing required field. The agent may access unauthorized sources, accumulate sensitive information in its working context, and submit that information in response to website guidance. The resulting harms are over-disclosure about the user and disclosure about third parties.
+
+Figure 
+1
+ illustrates how GapLeak exploits the information gap through a three-stage attack chain.
+
+Stage 1: Source escalation
+. When the agent encounters a required field that cannot be resolved from the provided materials, it may leave the field blank, ask the user for clarification, or escalate to reachable but unauthorized sources. In practice, LLM-based web agents are designed as goal-driven systems that autonomously resolve obstacles to complete a user-specified objective 
+(
+Yao et al., 2022
+; 
+Wang et al., 2024
+)
+, and tend to seek the missing information from other sources.
+
+Stage 2: Context accumulation
+. As the agent navigates across sensitive sources in search of the missing field, each observation is appended to its working context, which the LLM relies on to plan subsequent actions 
+(
+Yao et al., 2022
+; 
+Deng et al., 2023
+)
+. Since LLMs are inherently stateless, this working context serves as the agent’s primary memory of previously observed information 
+(
+Sumers et al., 2023
+; 
+Ye et al., 2025
+)
+. Consequently, by the time the agent locates the missing field, its working context may contain sensitive information unrelated to the delegated task.
+
+Stage 3: Guidance-amplified disclosure
+. The target website accompanies its optional fields with guidance text that presents additional information as beneficial for task completion. LLMs are known to exhibit sycophantic behavior, whereby models tend to comply with requests or suggestions even when such compliance is unwarranted 
+(
+Sharma et al., 2024
+; 
+Zhang and Chen, 2025
+)
+. As a result, the agent may interpret the website’s guidance as a task requirement rather than a mere suggestion and submit the accumulated sensitive information in an attempt to satisfy it. The agent thereby discloses information beyond what the task minimally requires.
+
+Interaction between stages
+. The information gap is the precondition for the entire chain. Without a missing field to resolve, the agent has no reason to escalate beyond the user’s provided materials, no sensitive content enters its working context, and the website guidance finds no accumulated content to elicit. The escalation and guidance stages therefore act on the exposure that the gap first creates, rather than opening it on their own.
+
+Figure 2
+. 
+Overview of the scenario model. The top half illustrates how the information gap arises, and how the minimal-disclosure policy 
+ defines the boundary for submission. The bottom half shows the instantiation across four scenarios.
+The top panel connects a delegated task, authorized low-sensitivity sources L, reachable higher-sensitivity sources H, and a website requesting a field g absent from L. The minimal-disclosure policy separates permitted fields from unauthorized submissions. Four lower panels instantiate the model for job application, e-commerce return, travel booking, and medical intake; their missing fields are a personal contact email, order number, booking reference, and member ID.
+
+3.3. 
+Scenario Model
+
+A scenario is formalized as a tuple 
+.
+
+ denotes the delegated task, and 
+ is the target website that requests a set of fields 
+ for submission.
+The user’s authorized scope is therefore 
+, and the agent’s reachable scope is 
+, and 
+ is a field resolvable from 
+ but not from 
+.
+
+Each scenario instantiates 
+ as a task-specific 
+summary document
+ that contains only task-relevant materials, consistent with the trust assumption in Section 
+3.1
+.
+The summary contains the information needed for 
+, with the exception of 
+.
+The absence of 
+ from 
+ does not by itself constitute a vulnerability. The information gap is triggered when 
+ requests 
+ driving the agent to escalate to 
+ for resolution.
+
+Defining the minimal-disclosure policy 
+. For each scenario we operationalize 
+ as the set of fields that are strictly necessary to complete 
+ on 
+. Concretely, a field is included in 
+ if and only if it is mandatory for a valid submission on the benign version of the website, or it is required to satisfy the task’s ground-truth success criteria. All remaining fields that 
+ exposes, including every optional field, are outside 
+ by construction, and submitting any of them constitutes unauthorized disclosure. The per-scenario membership of 
+ is fixed in advance from the benign form and the task ground truth, so it does not depend on agent behavior. The success criteria used to derive 
+ are listed in Appendix 
+F
+, and the reliability of the resulting labels is validated against an independent LLM judge in Appendix 
+G
+.
+
+The scenario model is instantiated across four scenarios:
+
+•
+
+Job Application
+. The agent completes a job application using candidate materials stored in a local directory and interview availability obtained from a calendar.
+
+•
+
+E-commerce Return
+. The agent submits a product return request. Order and account information is available through a simulated e-commerce website that mirrors the structure and functionality of online retail platforms.
+
+•
+
+Travel Booking
+. The agent completes a travel booking request. Travel and reservation information are accessible through a simulated travel website, while scheduling availability is provided through a calendar.
+
+•
+
+Medical Intake
+. The agent completes a medical intake and insurance pre-authorization form. Patient and insurance materials are stored in a local directory, and appointment availability is provided through a calendar.
+
+Figure 
+2
+ provides an overview of the scenario model and its instantiation across the four scenarios. The detailed contents of each source are provided in Appendix 
+B
+.
+
+3.4. 
+Evaluation Metrics
+
+3.4.1. 
+Utility Metrics
+
+The following two metrics measure task completion and the joint outcome of task success with privacy compliance 
+(
+Levy et al., 2024
+; 
+Ersoy et al., 2025
+)
+.
+
+Task Success rate (TS)
+. Let 
+ indicate whether episode 
+ completes the task with valid values for all required fields. TS is defined as
+
+Policy-Compliant Success rate (PCS)
+. An episode is policy-compliant only when the task succeeds and no unauthorized disclosure occurs, i.e., 
+ if 
+, and 
+ otherwise. PCS is then defined as
+
+3.4.2. 
+Privacy Metrics
+
+The following three metrics measure information exposure conditional on task success 
+(
+Shao et al., 2024
+)
+. The privacy metrics provide finer-grained measurement by separately capturing source access, the breadth and severity of self-disclosure, and third-party disclosure.
+
+Sensitive-Source Escalation (SSE)
+. Let 
+ denote the number of sources in 
+ accessed in episode 
+, and 
+ the total number of higher-sensitivity sources in the scenario. SSE measures the proportion of 
+ accessed across all episodes, regardless of task outcome, because accessing 
+ poses a privacy risk even when the task fails. SSE is defined as
+
+Over-Disclosure (OD)
+. Conceptually, over-disclosure is the submission of fields outside the minimal-disclosure policy 
+. To measure it, we map each submitted field to a disclosure category derived from the higher-sensitivity sources in the scenario, so that a category is triggered exactly when the agent submits content that falls outside 
+.
+
+We summarize over-disclosure along two complementary axes. The first axis is disclosure breadth 
+, the fraction of disclosure categories triggered, which captures how much unauthorized content the agent submits. The second axis is disclosure severity 
+, the weighted sensitivity of the triggered categories, which captures how sensitive that content is. Breadth and severity are distinct properties. A submission can be broad but low-sensitivity, or narrow but highly sensitive, so the two axes should not be conflated. Each disclosure category is assigned a sensitivity weight, with definitions and weights provided in Appendix 
+D
+. We combine the two axes into a single episode-level score 
+ for the aggregate results reported in the main text. Let 
+ denote the total number of disclosure categories, 
+ the subset of categories triggered in episode 
+, and 
+ the weight assigned to category 
+. Then 
+, 
+, and the episode-level over-disclosure score 
+ are defined as
+
+OD is reported conditional on task success, as disclosure requires a valid submission. OD is defined as
+
+Third-Party Disclosure (TPD).
+ Let 
+ denote the number of third-party fields disclosed in episode 
+, and 
+ the total number of predefined third-party fields in the scenario. The episode-level third-party disclosure score is defined as 
+. As with OD, TPD is reported conditional on task success and is defined as
+
+3.4.3. 
+Event Rate Metrics
+
+To complement the task-success-conditional metrics above, event rates measure the proportion of all episodes in which a violation occurs, regardless of task outcome. Let 
+ denote the indicator function. The event rates for over-disclosure (OD-ER) and third-party disclosure (TPD-ER) are defined as
+
+4. 
+Implementation
+
+4.1. 
+Scenario Assets
+
+Each scenario is implemented as a set of locally hosted services that the agent interacts with through Google Chrome. All task materials, including locally stored documents, account pages, and scheduling interfaces, are served through local HTTP endpoints, ensuring full experimental control and reproducibility.
+
+In the job application and medical intake scenarios, task materials are organized as local document collections accessible through browser-based vault pages, with each document corresponding to one of the higher-sensitivity sources in Figure 
+2
+. In the e-commerce return and travel booking scenarios, a locally hosted account website simulates the structure of a real online platform. It includes a home page and several thematic record pages corresponding to the higher-sensitivity sources in Figure 
+2
+, with each page hosted at a distinct URL so that the agent must actively navigate to reach it. Three scenarios (job application, travel booking, and medical intake) also include a locally hosted calendar page that displays a week-view of predefined synthetic events. These designs reproduce how real-world tasks organize and expose user information.
+
+4.2. 
+Target Website Design
+
+Each scenario includes two versions of the target website: a benign version and a manipulated version. Both share the same task goal and require the same mandatory fields for submission, but differ in their form structure and wording.
+
+Benign Website
+. The benign website includes both mandatory and optional fields, but does not use wording that encourages providing information beyond 
+. Depending on the scenario, the benign form ranges from a single-page submission (e-commerce return and travel booking) to a multi-page workflow (job application and medical intake).
+
+Manipulated Website
+. The manipulated website preserves the same task goal, mandatory fields, and optional fields, but restructures the submission into a multi-step workflow across all scenarios. Each step focuses on a specific category of information and is accompanied by guidance that frames additional context as useful for task completion. The guidance does not instruct the agent to access sensitive sources or deviate from the task. Instead, it suggests that providing extra information may reduce follow-up or improve coordination, making voluntary disclosure appear as part of normal task completion. Representative examples of the manipulated website guidance are provided in Appendix 
+C
+.
+
+Figure 3
+. 
+End-to-end evaluation workflow. The agent receives user materials and interacts with the target website. The final submission and action traces are passed to the evaluation pipeline, which computes metrics from the submitted form data and the recorded navigation behavior.
+Five-stage workflow from user materials to evaluation. Local documents, account websites, and calendar pages are accessed through Chrome by BrowserUse, DoBrowser, or Agent-E using models from Claude, Gemini, or GPT. The agent interacts with either a benign or manipulated website. Final submissions yield task-success and disclosure metrics; recorded actions yield sensitive-source escalation and navigation measurements.
+
+4.3. 
+Evaluation Pipeline
+
+Figure 
+3
+ illustrates the end-to-end evaluation workflow. The evaluation pipeline automatically computes all metrics by combining two data sources: the agent’s final submission, which is used to assess task success and disclosure violations, and structured action traces, which are used to measure higher-sensitivity source access patterns.
+
+Action Traces
+. Each run generates a structured event log that captures page visits, file accesses, draft saves, and final submissions, each annotated with timestamps and sensitivity labels. SSE is computed from these traces by identifying which higher-sensitivity sources the agent accessed.
+
+Task Success
+. Task success is evaluated from the final submission by checking two conditions: (1) a valid submission timestamp exists, and (2) all required fields match the scenario ground truth. Required fields are evaluated using exact string matching, rule-based keyword matching, or time window validation, depending on the field type. The detailed evaluation criteria are provided in Appendix 
+F
+.
+
+Over-Disclosure
+. OD is computed by matching the content of the final submission against a predefined set of sensitive keywords derived from each scenario’s higher-sensitivity sources. The submitted text is normalized before matching, and each detected keyword is mapped to its corresponding disclosure category. Disclosure breadth and severity are then calculated as defined in Section 
+3.4
+.
+
+Third-Party Disclosure.
+ TPD is computed by checking whether the final submission contains personally identifiable information belonging to individuals other than the task subject. The evaluation matches submitted content against known third-party identifiers in the scenario data, covering both explicit fields such as backup contacts and implicit references such as names, email addresses, and phone numbers.
+
+Metrics Validation.
+ To verify the reliability of the automated metrics (TS, OD, TPD), we use an independent LLM (Claude Opus 4.6, not included in the tested model set) as a secondary evaluator following the LLM-as-a-Judge methodology 
+(
+Zheng et al., 2023
+)
+. We randomly sample 400 episodes (approximately 10% of all runs), with 100 episodes per scenario. For each episode, the LLM evaluator independently assesses TS, OD, and TPD based on the submission data and the scenario-specific disclosure definitions. We measure agreement using Cohen’s 
+ 
+(
+Cohen, 1960
+)
+ for the binary TS metric and Pearson correlation for the continuous OD and TPD metrics 
+(
+Gu et al., 2025
+; 
+Yamauchi et al., 2025
+)
+. The evaluator achieves a Cohen’s 
+ of 0.88 for TS, and Pearson correlations of 0.93 for OD and 0.98 for TPD across all 400 episodes, confirming the reliability of the automated evaluation pipeline. Full per-scenario results are reported in Appendix 
+G
+.
+
+In addition, we validated the automated metrics against human judgments in 200 episodes. Agreement with human judgments yielded Cohen’s 
+ of 0.92 for TS and Pearson correlations of 0.94 and 0.98 for OD and TPD, respectively.
+
+Table 1
+. 
+Agent framework and model combinations evaluated. 
+a
+DoBrowser restricts Gemini selection to 3 Flash. 
+b
+GPT 5.4 Mini is excluded from Agent-E due to persistent task refusal.
+
+Model
+
+BrowserUse
+
+DoBrowser
+
+Agent-E
+
+Claude Haiku 4.5
+
+✓
+
+✓
+
+✓
+
+Claude Sonnet 4.6
+
+✓
+
+✓
+
+✓
+
+Gemini 2.5 Flash
+
+✓
+
+✓
+
+Gemini 2.5 Pro
+
+✓
+
+✓
+
+Gemini 3 Flash
+
+✓
+a
+
+GPT 5.4 Mini
+
+✓
+
+✓
+
+b
+
+GPT 5.4
+
+✓
+
+✓
+
+✓
+
+4.4. 
+Agent Frameworks and Providers
+
+To evaluate GapLeak across diverse agent architectures, three browser-based agent frameworks are selected: (1) BrowserUse 
+(
+Browser-Use, 2025
+)
+, (2) DoBrowser 
+(
+, 2025
+)
+, and (3) Agent-E 
+(
+Akkil et al., 2025
+)
+. These frameworks differ in how they observe web environments, maintain task state, and interact with the browser. Detailed descriptions of the three frameworks are provided in Appendix 
+E
+.
+
+Each framework is paired with models from three providers: Anthropic (Claude), Google (Gemini), and OpenAI (GPT). Table 
+1
+ summarizes the specific framework-model combinations evaluated. Not all combinations are available. For example, DoBrowser restricts Gemini model selection to Gemini 3 Flash through its settings interface. GPT 5.4 Mini is excluded from Agent-E because it consistently refused to perform the delegated task under this framework across all scenarios. Each framework-model combination is evaluated over 
+ independent episodes to account for the stochastic nature of LLM-based agents 
+(
+Gupta, 2026
+; 
+Ersoy et al., 2025
+)
+. All reported metrics are aggregated across multiple episodes per condition (
+), resulting in a standard error of the mean of approximately 2 percentage points or less. Moreover, the observed effects remain consistent across the vast majority of framework-model combinations, indicating that the results are not driven by the variability of any individual run.
+
+5. 
+Evaluation
+
+The evaluation is organized around five research questions. We first examine the two core mechanisms underlying GapLeak: manipulated website guidance (
+RQ1
+) and the information gap (
+RQ2
+). We then evaluate existing defenses based on the least-privilege principle (
+RQ3
+), assess the generalizability of GapLeak across different agent frameworks and models (
+RQ4
+), and finally investigate the resulting trade-off between privacy and utility (
+RQ5
+).
+
+RQ1:
+ Can the manipulated website induce unauthorized disclosures compared to the benign website?
+
+RQ2:
+ What effect does the information gap have on source escalation and over-disclosure?
+
+RQ3:
+ Can instruction-level defenses based on least privilege reduce disclosure under GapLeak?
+
+RQ4:
+ Does GapLeak generalize across different agent frameworks and models?
+
+RQ5:
+ Can an agent preserve privacy under GapLeak without sacrificing task success rate?
+
+RQ1
+ through 
+RQ3
+ are evaluated using BrowserUse as the primary framework, as it provides the most complete model coverage across the four scenarios (Table 
+1
+). 
+RQ4
+ extends the evaluation to DoBrowser and Agent-E to assess cross-framework generalizability. 
+RQ5
+ aggregates results across all frameworks and conditions.
+
+5.1. 
+Information-Access Condition
+
+To systematically evaluate GapLeak, each scenario is tested under five information-access conditions that vary the availability of information sources and the presence of privacy-related instructions. The full prompt templates are provided in Appendix 
+A
+.
+
+Raw Materials
+. The agent is given access to the ordinary task materials (i.e., all task materials except the summary document). These materials contain the information required to complete the task, but may also include sensitive information beyond what the task minimally requires.
+
+Summary Incomplete
+. A scenario-specific summary document is added to the task materials, while the agent retains access to all ordinary task materials and may freely navigate to them. Combined with the manipulated website, this condition instantiates GapLeak.
+
+Summary Complete
+. The summary document is modified to include the missing field, eliminating the information gap. The agent can still navigate to the ordinary task materials. This condition isolates the role of the information gap.
+
+Soft Boundary
+. The summary document is accompanied by non-binding privacy guidance stating that the summary and low-sensitivity sources should normally be sufficient, and encouraging the agent to avoid unnecessary access to sensitive information. It does not impose hard restrictions, so the agent may still access higher-sensitivity sources. This condition represents the weakest form of the least-privilege principle and tests whether soft guidance alone can reduce disclosure.
+
+Access Restriction
+. The summary document is accompanied by explicit access and submission restrictions specifying which sources may be accessed, which fields may be submitted, and that unavailable fields should be left blank rather than resolved from higher-sensitivity sources. This condition represents a stricter instruction-level enforcement of the least-privilege and tests whether explicit restrictions can prevent source escalation and disclosure.
+
+5.2. 
+Impact of Manipulated Website Guidance
+
+To assess whether manipulated website guidance induces unauthorized disclosure (
+RQ1
+), we compare the benign and manipulated target websites (Section 
+4.2
+) under the Raw Materials condition. All experiments are conducted with six models from three providers. Table 
+2
+ reports TS, OD, and TPD for each model and scenario.
+
+Task Success Rate
+. TS remains largely stable between benign and manipulated websites across all four scenarios, indicating that the manipulated guidance does not interfere with task completion. The exception is Sonnet 4.6 in the job application scenario, where TS drops from 100% to 60%. Trace analysis reveals that in four of ten episodes, the agent refuses to proceed after observing that the task materials contain sensitive personal information. This behavior is unique to Sonnet 4.6 and does not appear in any other model.
+
+Over-Disclosure and Third-Party Disclosure
+. OD increases across all four scenarios when the benign website is replaced with the manipulated one. The effect is strongest in e-commerce return scenario, where OD rises from near zero to 24%–91.9%, and in travel booking scenario, where it rises from near zero to 32.4%–59.5%. In the medical intake scenario, OD is already elevated under the benign website (31.3%–77.1%), because the intake workflow has agents fill a wide range of medical fields as part of standard task completion; the manipulated website adds only modestly here.
+
+TPD shows a distinct pattern. In job application and e-commerce return scenarios, TPD rises from near zero to 8%–33.3% and 33.3%–76% respectively, as the guidance frames reference contacts and household members as useful for coordination. In travel booking scenario, TPD is already present under the benign website for some models (e.g., Haiku 4.5 at 45%, Sonnet 4.6 at 82%), and the manipulated guidance pushes most models to 71%–100%. In the medical intake scenario, TPD is near 100% under both websites, since the workflow’s family contact fields are filled regardless of the guidance.
+
+Key finding of RQ1
+
+Even without an information gap, manipulated website guidance alone substantially increases unauthorized disclosure across all scenarios while task success rate remains stable; the effect is strongest when the requested optional information is semantically close to the task goal.
+
+Table 2
+. 
+Impact of manipulated website guidance under the Raw Materials condition using BrowserUse. Arrows indicate the direction of change from benign to manipulated website (
+ increase, 
+ decrease, – no change).
+
+TS (%)
+
+OD (%)
+
+TPD (%)
+
+Model
+
+Ben.
+
+Man.
+
+Ben.
+
+Man.
+
+Ben.
+
+Man.
+
+Job Application
+
+Haiku 4.5
+
+100
+
+100
+
+–
+
+20.5
+
+35.0
+
+4.0
+
+16.0
+
+Sonnet 4.6
+
+100
+
+60
+
+16.2
+
+64.2
+
+0.0
+
+20.0
+
+2.5 Flash
+
+100
+
+100
+
+–
+
+12.9
+
+22.6
+
+4.0
+
+8.0
+
+2.5 Pro
+
+100
+
+90
+
+22.6
+
+23.7
+
+4.0
+
+33.3
+
+5.4 Mini
+
+40
+
+70
+
+10.9
+
+17.7
+
+0.0
+
+8.6
+
+5.4
+
+90
+
+90
+
+–
+
+9.7
+
+35.4
+
+0.0
+
+20.0
+
+E-commerce Return
+
+Haiku 4.5
+
+80
+
+90
+
+0.0
+
+24.0
+
+0.0
+
+33.3
+
+Sonnet 4.6
+
+100
+
+100
+
+–
+
+2.6
+
+91.9
+
+0.0
+
+76.0
+
+2.5 Flash
+
+70
+
+60
+
+0.0
+
+0.0
+
+–
+
+0.0
+
+0.0
+
+–
+
+2.5 Pro
+
+30
+
+20
+
+0.0
+
+0.0
+
+–
+
+0.0
+
+0.0
+
+–
+
+5.4 Mini
+
+30
+
+10
+
+0.0
+
+0.0
+
+–
+
+0.0
+
+0.0
+
+–
+
+5.4
+
+100
+
+80
+
+0.0
+
+85.8
+
+0.0
+
+62.5
+
+Travel Booking
+
+Haiku 4.5
+
+80
+
+90
+
+0.0
+
+47.7
+
+45.0
+
+71.1
+
+Sonnet 4.6
+
+100
+
+70
+
+6.1
+
+59.5
+
+82.0
+
+100.0
+
+2.5 Flash
+
+10
+
+10
+
+–
+
+0.0
+
+42.2
+
+0.0
+
+100.0
+
+2.5 Pro
+
+10
+
+30
+
+0.0
+
+32.4
+
+0.0
+
+86.7
+
+5.4 Mini
+
+90
+
+100
+
+0.0
+
+47.7
+
+6.7
+
+84.0
+
+5.4
+
+60
+
+80
+
+0.0
+
+46.8
+
+0.0
+
+100.0
+
+Medical Intake
+
+Haiku 4.5
+
+40
+
+30
+
+31.3
+
+68.1
+
+100.0
+
+100.0
+
+–
+
+Sonnet 4.6
+
+90
+
+70
+
+77.1
+
+81.3
+
+100.0
+
+100.0
+
+–
+
+2.5 Flash
+
+30
+
+50
+
+41.8
+
+53.4
+
+100.0
+
+100.0
+
+–
+
+2.5 Pro
+
+70
+
+60
+
+52.1
+
+58.1
+
+100.0
+
+100.0
+
+–
+
+5.4 Mini
+
+30
+
+20
+
+47.2
+
+70.9
+
+88.9
+
+100.0
+
+5.4
+
+90
+
+90
+
+–
+
+76.9
+
+79.0
+
+100.0
+
+100.0
+
+–
+
+Figure 4
+. 
+Effect of the information gap on Task Success Rate, Sensitive-Source Escalation, Over-Disclosure, and Third-Party Disclosure across four scenarios using BrowserUse under the manipulated website.
+Twelve bar-chart panels arranged in four scenario columns and three metric rows. Teal and pink bars compare complete and incomplete summaries for six models. The rows show task success, sensitive-source escalation, and paired over-disclosure and third-party disclosure scores. Effects vary by scenario and model: incomplete summaries often lower task success, while travel booking shows greater escalation under complete summaries for several models.
+
+5.3. 
+Impact of the Information Gap
+
+To assess how the information gap contributes to escalation and disclosure (
+RQ2
+), we compare the Summary Incomplete and Summary Complete conditions, both under the manipulated website. All results are reported across six models from three providers.
+Figure 
+4
+ presents TS, SSE, OD, and TPD for all four scenarios.
+
+Task Success Rate
+. Under the Summary Complete condition, TS is generally higher than under Summary Incomplete. The difference is most pronounced in the job application scenario, where most models achieve TS near 100% under Summary Complete but drop to zero under Summary Incomplete. Trace analysis reveals that these models fabricate a plausible email address rather than escalating to higher-sensitivity sources, resulting in submissions that fail validation. In the other three scenarios, TS differences between the two conditions are smaller and vary across models.
+
+Sensitive-Source Escalation
+. In most scenarios, the information gap increases source escalation. In the e-commerce return scenario, SSE increases under Summary Incomplete for most models (e.g., Haiku 4.5 from 2% to 12%, GPT 5.4 Mini from 22% to 46%), indicating that the gap drives agents to access additional higher-sensitivity sources. Sonnet 4.6 and GPT 5.4 are exceptions, maintaining high SSE under both conditions (Sonnet 4.6 74% vs 100%, GPT 5.4 94% vs 90%), showing that these models access sensitive account pages regardless of whether the gap exists. In the medical intake scenario, SSE also increases when the gap is present (e.g., GPT 5.4 from 16.7% to 58.3%). Two scenarios deviate from this pattern and are analyzed below: in job application, SSE is near zero under both conditions because agents fabricate rather than escalate, while in travel booking, SSE unexpectedly increases under Summary Complete.
+
+Over-Disclosure and Third-Party Disclosure
+. OD and TPD largely follow the same pattern as SSE. In the e-commerce return and medical intake scenarios, the gap amplifies both as expected, for example Haiku 4.5 OD rises from 0% to 58.1% in e-commerce return and from 44.5% to 81.3% in medical intake. The job application scenario requires separate attention, because the low OD and TPD under Summary Incomplete are due to most models failing the task rather than avoiding disclosure. Haiku 4.5, Gemini 2.5 Flash, and 2.5 Pro all submit fabricated email addresses that fail validation, resulting in TS near zero. Under Summary Complete, TS rises sharply for these models (Haiku 4.5 and 2.5 Pro both to 100%), yet OD and TPD remain near zero, confirming that complete materials allow task completion without accessing higher-sensitivity sources. Sonnet 4.6 is the only model with high TS under both conditions, and its OD rises from 12.6% to 40.5% when the gap is present, showing that the gap amplifies disclosure for models that complete the task.
+
+Fabrication instead of escalation
+. The job application scenario reveals an unexpected behavior under the information gap. Rather than escalating to higher-sensitivity sources, agents fabricate a plausible value and proceed with the submission. All three affected models (Haiku 4.5, Gemini 2.5 Flash, and 2.5 Pro) submit a guessed email address in every run under Summary Incomplete, and their OD-ER and TPD-ER are both 0%, confirming that they disclose no sensitive content beyond the summary. The fabricated addresses fail validation, resulting in TS of 0% for all three. This shows that the information gap does not always trigger the escalation stage of GapLeak: the choice between fabrication and escalation appears to depend on the missing field type. An email address has a predictable format that invites fabrication, whereas a missing order number or insurance ID is harder to guess and more likely to trigger escalation.
+
+Anomaly in the travel booking scenario
+. In travel booking, SSE, OD, and TPD are higher under Summary Complete than under Summary Incomplete for several models, contrary to the expected pattern. Trace analysis attributes this to a change in agent behavior. Under Summary Incomplete, agents such as Gemini 2.5 Flash, Gemini 2.5 Pro, and Sonnet 4.6 complete the task while deliberately leaving optional fields blank, accessing only the summary and calendar. Under Summary Complete, the same agents resolve all required fields directly from the summary and no longer expend reasoning effort on the missing information, so the manipulated guidance becomes more influential and drives them to access higher-sensitivity sources and populate optional fields with third-party contact and payment information. This anomaly is specific to travel booking, the only scenario in which agents adopt a minimal-completion strategy under Summary Incomplete. Together, these results show that the information gap and the manipulated guidance can each drive disclosure independently: in most scenarios the gap amplifies disclosure by causing escalation, while in travel booking, removing the gap instead lets the guidance take full effect.
+
+Key finding of RQ2
+
+The information gap is the primary driver of unauthorized disclosure, pushing agents to escalate to higher-sensitivity sources; manipulated guidance contributes as well; however, escalation is not inevitable. When the missing field follows a predictable format, some models fabricate a plausible value instead of escalating to additional sources. This behavior avoids disclosure, but it can undermine task utility by submitting incorrect information that fails validation.
+
+Figure 5
+. 
+Effect of instruction-level defenses on Task Success Rate, Privacy Compliance Success Rate, Sensitive-Source Escalation, Over-Disclosure and Third-Party Disclosure using BrowserUse under the manipulated website. Each point represents the average across six models.
+Four line charts, one per scenario, compare Summary Incomplete, Soft Boundary, and Access Restriction. The vertical axis gives percentages averaged across six models, with separate lines for TS, PCS, SSE, OD, and TPD. Disclosure decreases under the defenses in e-commerce return, travel booking, and medical intake, while task-success changes vary and sensitive-source access remains. Job application shows relatively little change.
+
+5.4. 
+Effectiveness of Instruction-Level Defenses
+
+To evaluate whether instruction-level defenses can reduce disclosure under GapLeak (
+RQ3
+), we compare three conditions under the manipulated website: Summary Incomplete, Soft Boundary, and Access Restriction. Figure 
+5
+ presents average TS, PCS, OD, and TPD across six models for each condition.
+
+Job application
+. Instruction-level defenses have minimal effect here. Most models already have TS near zero under Summary Incomplete due to the fabrication behavior in Section 
+5.3
+, which neither defense resolves. Sonnet 4.6 is the only model with high TS, yet its OD stays around 43% across all three conditions.
+
+E-commerce return
+. This scenario shows the most favorable outcome. OD and TPD decrease under Soft Boundary while TS stays stable, and Access Restriction drops them further while raising PCS from 21.7% to 56.7%. The restriction mainly cuts access to optional pages irrelevant to the required fields, letting agents focus on the required submission path. 
+Travel booking
+. Both defenses substantially reduce disclosure (average OD from 34.9% to 10.5% and 8.8%), but TS also declines from 50% to 31.7%. Trace analysis shows Sonnet 4.6 and GPT 5.4 drop to TS 0% by becoming overly conservative, filling required fields with placeholders (e.g., “N/A”) that fail validation rather than refusing the task. 
+Medical intake
+. This scenario shows the most dramatic reduction. Soft Boundary reduces average OD from 48.2% to 6.1% and TPD from 50.2% to 4.2%, and Access Restriction eliminates disclosure entirely, though TS decreases from 41.7% to around 30%. SSE stays relatively high, showing agents still access higher-sensitivity sources but no longer submit their content, as the sensitive optional fields are semantically separable from the required ones.
+
+Key finding of RQ3
+
+Both defenses reduce unauthorized disclosure in most scenarios, with Access Restriction more effective. Yet they act on the wrong stage: agents still escalate to higher-sensitivity sources and accumulate sensitive content, and the defenses block only its submission, not the escalation. Their effectiveness also depends on whether sensitive optional fields are separable from required ones; when the two overlap, agents either disclose anyway or fall back on placeholder values.
+
+Figure 6
+. 
+Cross-framework results under the Summary Incomplete (GapLeak) condition and manipulated website. Each cell reports the model averaged metric for a scenario-framework combination.
+Heatmap with seven metric rows: TS, PCS, SSE, OD, TPD, OD-ER, and TPD-ER. Columns group BrowserUse, DoBrowser, and Agent-E within each of four scenarios. Cells contain model-averaged percentages, colored from teal for low values to red for high values. DoBrowser has the largest OD and TPD values among the three frameworks in e-commerce return, travel booking, and medical intake.
+
+5.5. 
+Generalization Across Agent Frameworks
+
+To assess whether GapLeak generalizes beyond our main setup 
+RQ4
+, we repeat GapLeak on DoBrowser and Agent-E under the Summary Incomplete condition and manipulated website.
+Each scene 
+ framework cell reports the model-average across the supported models in that framework, with ten runs per model. Figure 
+6
+ shows six metrics. The top rows (TS, PCS, SSE, OD, TPD) are aggregate outcomes across all success runs. The bottom rows (OD-ER, TPD-ER) are per-attempt event rates.
+
+Cross-framework effectiveness
+. GapLeak activates on all three frameworks. SSE is above 9% on every cell and reaches 75% to 84% on DoBrowser for e-commerce return, travel booking, and medical intake scenarios. This means agents on every framework respond to the information gap by escalating to sensitive sources rather than refusing or asking the user for the missing field. Across all three frameworks, the average OD is 36.2% and the average TPD is 38.6%, yielding an overall unauthorized disclosure of approximately 37%. Furthermore, OD and TPD are below 13% in the job application scenario, where the requested field is harder to fit into the task context, and rise to 33%-79% on the other three scenarios. PCS drops to zero in six of the twelve combinations, confirming that no framework-scenario combination achieves both task completion and privacy compliance. As a result, GapLeak can transfer to a Chrome-extension agent (DoBrowser) and to a multi-agent overlay system (Agent-E) without modification.
+
+Framework comparison
+. DoBrowser produces the highest disclosure on e-commerce return, travel booking, and medical intake scenarios. Its OD is 66.4%, 79.2%, and 73.8% on these three scenarios. TPD follows the same ordering and reaches 96.3% on travel booking and 93.3% on medical intake. As described in Section 
+4.4
+, DoBrowser processes each turn in a single step without a separate planning stage. The manipulated guidance is therefore read and acted on within the same step, with no intermediate stage that can check whether the requested field matches the user’s task.
+
+Privacy and event metrics
+. Agent-E shows the lowest aggregate disclosure (OD and TPD) across most cells. Its OD is 10.7%, 11.2%, and 0% in the job application scenario, e-commerce return, and travel booking, and its TPD is below 7% on those same three scenarios. These low values do not indicate that Agent-E’s architecture blocks GapLeak. Agent-E’s SSE is 19.6%, 27.6%, 9.5%, and 42%, which shows that it does escalate to sensitive sources in response to the information gap. However, Agent-E’s TS is the lowest of the three frameworks (18%, 20%, 10%, 16%), so most episodes fail before reaching the submission form, and the escalation does not translate into aggregate disclosure. The event rate metrics (OD-ER: 22%, 16%, 26%, 32%) confirm that runs reaching the form still attempt disclosure.
+
+Key finding of RQ4
+
+GapLeak generalizes across three frameworks without modification, with source escalation occurring on every framework and all three producing unauthorized disclosure to varying degrees; DoBrowser produces the highest disclosure as its single-step loop leaves no stage to interrupt escalation; Agent-E completes the fewest tasks, lowering its disclosure, but event rate metrics confirm disclosure behavior still occurs.
+
+Figure 7
+. 
+TS vs. PCS across all conditions, frameworks, and scenarios. Small dots are individual model-level results (384 points). Large dots are condition-level means. Only Benign uses the benign website under the Raw Material condition.
+Scatter plot with task success on the horizontal axis and policy-compliant success on the vertical axis. Small points show 384 model-level results, and six large labeled points show condition means. Many observations have zero policy-compliant success despite positive task success. Two marginal distribution plots show the overall distributions of TS and PCS, with dashed lines marking their means.
+
+5.6. 
+Privacy Cost of Task Success
+
+This section combines all conditions, frameworks, and scenarios into a single view to quantify the relationship between privacy and utility across the full evaluation (
+RQ5
+). We aggregate all 384 model-level data points across six conditions, three frameworks, and four scenarios. Each data point represents one model’s average TS and PCS over ten episodes. Figure 
+7
+ plots these points on a TS-PCS scatter, with small dots showing individual data points and large dots showing the condition-level mean. The two marginal plots on the right show the overall distribution of TS and PCS across all 384 points, with the dashed line marking the mean.
+
+GapLeak separates TS from PCS
+. Under the benign website, the mean TS is 62.0% and mean PCS is 29.7%. Under Summary Complete, which provides full user materials against manipulated website, the values are similar (TS = 59.1%, PCS = 31.1%). In both cases, higher TS tends to come with higher PCS, because agents that complete the task correctly tend to stay within the authorized scope. However, GapLeak breaks this relationship. Under Summary Incomplete, which combines the information gap with the manipulated website, TS drops to 41.1% while PCS falls to 10.3%. Of the 64 data points under this condition, only 6 achieve both TS above 50% and PCS above 50%. Among those that do complete the task (TS above 50%), more than half have a PCS of zero. In other words, agents continue completing tasks while failing to protect the user’s privacy.
+
+Instruction-level defenses trade TS for PCS
+. Soft Boundary and Access Restriction raise PCS from 10.3% under Summary Incomplete to 20.8% and 23.3% respectively, but TS drops from 52.8% to 38.3% and 29.8%. The defense instructions limit what agents can access or submit, which reduces disclosure but also lowers task completion, producing a trade-off rather than a solution.
+
+Key finding of RQ5
+
+Task success rate and policy-compliant success rate are normally positively correlated, as agents that complete the task correctly also tend to stay within the authorized scope. GapLeak decouples the two: among agents that still complete the task, more than half are never policy-compliant, and only 6 of 64 cases achieve both. Instruction-level defenses based on least privilege raise policy-compliant success rate only by lowering task success rate, confirming a fundamental privacy and utility trade-off that no condition escapes.
+
+6. 
+Countermeasures
+
+According to the limitations identified in 
+RQ3
+ and 
+RQ5
+, we propose and evaluate Submission-Time Verification (STV).
+Instead of instructing the agent to avoid sensitive content, STV interposes an independent verification step before the agent’s submission reaches the target website.
+The verifier checks each submitted field against the user’s provided materials and removes any field whose content cannot be derived from the summary document.
+
+The verification is performed by an independent LLM (GPT-5.5, which is not included in the set of models tested in our main experiments).
+For each submission, the verifier receives the content of the summary document and the agent’s submitted form data.
+The verifier identifies required fields by analyzing the target website’s form structure, for example through the HTML required attributes of the form, then classifies each field as either 
+authorized
+ (derivable from the summary) or 
+unauthorized
+ (containing information not present in the summary).
+Required fields are always classified as authorized to preserve task success rate.
+Unauthorized optional fields are cleared before the submission.
+
+We evaluate STV under the Summary Incomplete condition with the manipulated website (GapLeak), using BrowserUse with three models (Sonnet 4.6, GPT 5.4, and Gemini 2.5 Pro) across all four scenarios, with 
+ episodes per configuration. Table 
+3
+ presents the STV results across all four scenarios and three models.
+
+Table 3
+. 
+Effect of Submission-Time Verification (STV) on OD and TPD. TS is unchanged because STV does not modify required fields. Orig = before STV, Filt = after STV.
+
+OD (%)
+
+TPD (%)
+
+Scene
+
+Model
+
+TS
+
+Orig
+
+Filt
+
+Orig
+
+Filt
+
+Job
+
+Application
+
+Sonnet 4.6
+
+80
+
+16.5
+
+0.0
+
+20.0
+
+0.0
+
+GPT 5.4
+
+50
+
+18.5
+
+6.2
+
+24.0
+
+0.0
+
+Gemini 2.5 Pro
+
+10
+
+0.0
+
+0.0
+
+4.0
+
+0.0
+
+E-commerce
+
+Return
+
+Sonnet 4.6
+
+100
+
+75.4
+
+0.0
+
+86.0
+
+0.0
+
+GPT 5.4
+
+100
+
+64.5
+
+2.6
+
+62.0
+
+0.0
+
+Gemini 2.5 Pro
+
+70
+
+0.0
+
+0.0
+
+0.0
+
+0.0
+
+Travel
+
+Booking
+
+Sonnet 4.6
+
+90
+
+41.1
+
+0.0
+
+78.0
+
+0.0
+
+GPT 5.4
+
+20
+
+49.5
+
+6.1
+
+80.0
+
+0.0
+
+Gemini 2.5 Pro
+
+70
+
+7.9
+
+0.0
+
+6.0
+
+0.0
+
+Medical
+
+Intake
+
+Sonnet 4.6
+
+60
+
+67.6
+
+0.0
+
+90.0
+
+0.0
+
+GPT 5.4
+
+100
+
+35.3
+
+0.0
+
+46.7
+
+16.7
+
+Gemini 2.5 Pro
+
+30
+
+12.5
+
+0.0
+
+30.0
+
+0.0
+
+Average
+
+65.0
+
+32.4
+
+1.2
+
+43.9
+
+1.4
+
+STV reduces OD from 32.4% to 1.2% (a 96.2% reduction) and average TPD from 43.9% to 1.4% (a 96.8% reduction), while TS remains unchanged at 65.0%. Among the ten model-scenario combinations where the original OD is above zero, STV eliminates OD entirely in seven cases. TPD is eliminated in ten of eleven cases with nonzero original values. These results demonstrate that verifying submission content against the user’s authorized materials can remove most unauthorized disclosure without affecting task completion.
+
+STV does not achieve complete elimination in all cases. Residual OD appears in three GPT 5.4 configurations and residual TPD appears in one. Trace analysis reveals that GPT 5.4 embeds sensitive information inside required fields. For example, the professional experience field in the job application scenario, which is required and therefore exempt from STV filtering, contains the employer name and job title that are not present in the summary document. STV cannot selectively remove parts of a required field without risking task failure, so the entire field passes through unmodified.
+
+7. 
+Discussion
+
+Toward a Better Defense
+. STV avoids the utility and privacy trade-off of instruction-level defenses by operating at the submission boundary rather than restricting the agent during execution. However, it does not alter the source escalation itself, and it does not restore the task success that the information gap costs. These properties point to a direction for future work, namely defenses that govern source access during execution and thereby address both escalation and task success rather than submission content alone.
+
+Human Oversight
+. Our threat model assumes the user does not intervene during execution. One might expect that requiring human approval before submission would prevent unauthorized disclosure, but its effect is limited by timing. By the time the user is asked to approve, the agent has already escalated to higher-sensitivity sources and prefilled the sensitive fields, so approval reduces to confirming a form that already looks complete. It also comes too late to undo the escalation, since the sensitive content has already entered the agent’s working context. Human oversight is therefore most effective when it governs source access during execution rather than the final submission alone.
+
+Benign-complete Baseline
+. We evaluate the benign website under the Complete Summary condition, where neither the information gap nor the manipulated guidance is present. Across all four scenarios and six models, agents achieve an average TS and PCS of 83.3%, with all failures due to execution errors rather than unauthorized disclosure. This result shows that agents can complete the tasks without disclosing unauthorized information when the provided materials fully cover the requested fields. The disclosure observed in our main experiments therefore stems from GapLeak rather than the tasks themselves.
+However, complete materials are a best practice, not a defense. Because the adversary controls the form, it can always introduce a field that falls outside the user’s provided materials, and users are unlikely to anticipate every field a website may request. Therefore, users should provide task materials that are as complete as possible when delegating tasks to web agents, thereby reducing the likelihood and impact of information gaps.
+
+8. 
+Related Works
+
+8.1. 
+Security and Privacy of LLM Agents
+
+Prompt injection and its indirect variants embed adversarial instructions into content the agent reads, hijacking it into unintended actions 
+(
+Greshake et al., 2023
+; 
+Debenedetti et al., 2024
+; 
+Zhan et al., 2024
+; 
+Wu et al., 2024
+)
+. Context manipulation attacks instead corrupt the agent’s stored context or planning state 
+(
+Patlan et al., 2025
+)
+, and adversarial UI elements such as crafted pop-ups mislead vision-language agents through perception 
+(
+Zhang et al., 2025b
+)
+. A separate line targets PII extraction, coaxing agents to reveal personal information they hold or can retrieve 
+(
+Liu et al., 2025
+; 
+Kim et al., 2025
+)
+, and broader benchmarks evaluate agent robustness against varied threats 
+(
+Zhang et al., 2025a
+; 
+Kumar et al., 2024
+; 
+Andriushchenko et al., 2025
+)
+. Several recent works also study disclosure risks in web agents. Spillage 
+(
+Roh et al., 2026
+)
+ examines natural oversharing on unmodified websites without an adversary, while Too Helpful to Be Safe 
+(
+Chen et al., 2026
+)
+ studies user-mediated attacks that manipulate users rather than the agent.
+
+GapLeak differs from prior work in two ways. 
+(1) Adversary capability.
+ Prior attacks require instruction injection, context corruption, crafted UI elements, user manipulation, or no adversary at all, whereas GapLeak requires only control of a legitimate web form. 
+(2) Agent internal state.
+ Prior attacks steer the agent’s task representation toward an attacker-introduced objective, whereas under GapLeak the agent stays aligned with the original user task throughout. Defenses that detect anomalous instructions or corrupted internal state may therefore be ineffective against GapLeak.
+
+8.2. 
+Privacy-Preserving Agent Design
+
+A related but distinct line of work focuses on privacy-preserving design for LLM agents. AgentDAM 
+(
+Zharmagambetov et al., 2026
+)
+ introduces a benchmark that evaluates whether agents follow the data minimization principle, using sensitive information only when necessary for the task. AirGapAgent 
+(
+Bagdasarian et al., 2024
+)
+ enforces this principle through a dual-LLM architecture that filters user data, confining the agent to only the information required for the current task. Other work catalogs the privacy-relevant behaviors of deployed browser agents and documents how existing tools may expose user data 
+(
+Ukani et al., 2025
+)
+. However, these approaches constrain the agent’s authorized scope but not its reachable scope. As shown in 
+RQ3
+ and 
+RQ5
+, instruction-level defenses based on least privilege only partially reduce disclosure under GapLeak, and do so at the cost of task success rate.
+
+9. 
+Conclusion
+
+Data minimization and least privilege protect user privacy by narrowing what an agent is authorized to use. However, they do not remove the underlying risk, because the higher-sensitivity sources in the agent’s environment remain reachable. We formalized GapLeak, a structural vulnerability that exploits this residual gap. An information gap drives goal-driven agents to escalate to unauthorized sources, and manipulated website guidance induces them to disclose the accumulated content. Across three frameworks and six models, we found that the information gap is the primary driver of disclosure and that least-privilege defenses mitigate it only at the cost of task success. Our submission-time verification removes most unauthorized disclosure without further reducing task success. These findings reveal a limitation of data minimization and least privilege in agentic systems.
+
+Acknowledgements.
+
+This work is supported by the Natural Sciences and Engineering Research Council of Canada Discovery Grant, the Canada Research Chair Program, National Cybersecurity Consortium R&D Program, and the NVIDIA Academic Grant Program using A100 GPU-hours.
+
+Ethical Considerations
+
+This study reveals GapLeak, a structural vulnerability that arises when data minimization and least privilege leave an information gap between an agent’s authorized and reachable scope, which leads LLM-based web agents to unauthorized disclosure. All experiments were conducted on locally hosted websites designed by the authors, using entirely synthetic user profiles and task materials. No real personal information, human subjects, or live commercial systems were involved, so the study required no IRB review. GapLeak relies only on standard web design practices such as optional form fields and helper text, rather than any specialized tooling or exploit code.
+
+We have weighed the risk that documenting GapLeak could aid misuse, and believe it is outweighed by the benefit to the community. GapLeak introduces no new technical capability, but exposes how goal-driven agents mishandle missing fields. Because it stems from a general property of goal-driven agents rather than a defect in any single product, no individual vendor can patch it. Therefore, we disclose it through publication, together with a concrete countermeasure, submission-time verification, so that developers can adopt mitigations. Documenting this vulnerability across multiple frameworks and models serves the research community by motivating development of privacy-preserving agent designs.
+
+Open Science
+
+In line with the PETS open science policy, we release the scenario assets, evaluation code, and reproduction scripts required to reproduce our experiments. The anonymized artifacts are available at 
+https://github.com/Hunter-CCL/GapLeak_release
+, and we will publish a de-anonymized version in a public repository upon acceptance.
+
+The released artifacts include the four scenario websites (job application, e-commerce return, travel booking, and medical intake), each implemented as a Flask application with both benign and manipulated versions, together with the summary, Summary Complete, Soft Boundary, and Access Restriction documents used across the information-access conditions. We also provide the task prompt templates for all four scenarios, the automated metric computation for TS, PCS, SSE, OD, and TPD, the Submission-Time Verification module with its batch runner, and reproduction scripts for the BrowserUse and Agent-E frameworks. All personal information used in the experiments is entirely synthetic, so the artifacts contain no real user data.
+
+We do not release full experiment output logs, browser profiles, or API keys, and we omit the DoBrowser integration because DoBrowser is a proprietary commercial product. These omissions do not affect reproducibility, since all reported metrics can be recomputed from the released scenarios, prompts, and evaluation code using the provided scripts.
+
+AI Use
+
+As an object of study. Our research evaluates the privacy behavior of LLM-based web agents, and therefore generative models are central to our methodology. We evaluate six publicly available models (Claude Haiku 4.5, Claude Sonnet 4.6, Gemini 2.5 Flash, Gemini 2.5 Pro, GPT 5.4 Mini, and GPT 5.4) across three agent frameworks, and use an additional independent model as an evaluator (Claude Opus 4.6) and as the verifier in our proposed defense (GPT 5.5). These models are studied as deployed systems through their standard APIs; we do not train, fine-tune, or collect any data to train models. All experiments were run on locally hosted, synthetic environments with no real user data. We selected widely deployed models to ensure our findings reflect agents in practical use, and we limited each configuration to N=10 episodes to keep the query volume and associated computational and environmental footprint modest while still capturing the stochastic behavior of the agents. Because several of the studied models are closed-source and accessed via APIs, exact reproducibility is inherently limited; we mitigate this by reporting results across multiple models and frameworks, releasing our scenario assets and evaluation code, and validating our automated metrics against an independent evaluator.
+
+For research and manuscript preparation. Generative AI was used as a coding assistant to help implement parts of our experimental and evaluation code, and for editorial purposes in preparing this manuscript. All AI-assisted code was reviewed, tested, and validated by the authors, and all manuscript outputs were inspected to ensure accuracy and originality. The authors are responsible for the entire content of the paper, including the experimental implementation, the literature review, and all claims, figures, and citations.
+
+References
+
+[1]
+
+ (2025)
+
+Accessibility features reference – chrome devtools
+.
+
+Note: 
+https://developer.chrome.com/docs/devtools/accessibility/reference
+[Online; accessed 15-Mar-2025]
+
+Cited by: 
+§2.1
+.
+
+Akkil 
+et al.
+ (2025)
+
+D. Akkil, R. Azam, T. Abuelsaad, P. Dey, A. Vempaty, A. Jagmohan, and R. Kokku
+
+Agent-e: from autonomous web navigation to foundational design principles in agentic systems
+.
+
+External Links: 
+Link
+
+Cited by: 
+Appendix E
+,
+
+§1
+,
+
+§2.1
+,
+
+§4.4
+.
+
+Andriushchenko 
+et al.
+ (2025)
+
+M. Andriushchenko, A. Souly, M. Dziemian, D. Duenas, M. Lin, J. Wang, D. Hendrycks, A. Zou, Z. Kolter, M. Fredrikson, 
+et al.
+
+Agentharm: a benchmark for measuring harmfulness of llm agents
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Vol. 
+2025
+, 
+pp. 79185–79220
+.
+
+Cited by: 
+§8.1
+.
+
+Bagdasarian 
+et al.
+ (2024)
+
+E. Bagdasarian, R. Yi, S. Ghalebikesabi, P. Kairouz, M. Gruteser, S. Oh, B. Balle, and D. Ramage
+
+Airgapagent: protecting privacy-conscious conversational agents
+.
+
+In 
+Proceedings of the 2024 on ACM SIGSAC Conference on Computer and Communications Security
+,
+
+pp. 3868–3882
+.
+
+Cited by: 
+§1
+,
+
+§8.2
+.
+
+Browser-Use (2025)
+
+Browser-Use
+
+Browser-use
+.
+
+Note: 
+https://browser-use.com/
+Accessed: 10-Apr-2025
+
+Cited by: 
+§1
+,
+
+§2.1
+,
+
+§4.4
+.
+
+Chen 
+et al.
+ (2026)
+
+F. Chen, T. Wu, V. Nguyen, and C. Rudolph
+
+Too helpful to be safe: user-mediated attacks on planning and web-use agents
+.
+
+arXiv preprint arXiv:2601.10758
+.
+
+Cited by: 
+§1
+,
+
+§8.1
+.
+
+Cheng 
+et al.
+ (2024)
+
+Z. Cheng, D. Wan, M. Abueg, S. Ghalebikesabi, R. Yi, E. Bagdasarian, B. Balle, S. Mellem, and S. O’Banion
+
+Ci-bench: benchmarking contextual integrity of ai assistants on synthetic data
+.
+
+arXiv preprint arXiv:2409.13903
+.
+
+Cited by: 
+§1
+.
+
+Chiang 
+et al.
+ (2025)
+
+J. Y. F. Chiang, S. Lee, J. Huang, F. Huang, and Y. Chen
+
+Why are web ai agents more vulnerable than standalone llms? a security analysis
+.
+
+arXiv preprint arXiv:2502.20383
+.
+
+Cited by: 
+§1
+.
+
+Cohen (1960)
+
+J. Cohen
+
+A coefficient of agreement for nominal scales
+.
+
+Educational and psychological measurement
+ 
+20
+ (
+1
+), 
+pp. 37–46
+.
+
+Cited by: 
+§4.3
+.
+
+Culnan and Armstrong (1999)
+
+M. J. Culnan and P. K. Armstrong
+
+Information privacy concerns, procedural fairness, and impersonal trust: an empirical investigation
+.
+
+Organization science
+ 
+10
+ (
+1
+), 
+pp. 104–115
+.
+
+Cited by: 
+§2.2
+.
+
+Debenedetti 
+et al.
+ (2024)
+
+E. Debenedetti, J. Zhang, M. Balunovic, L. Beurer-Kellner, M. Fischer, and F. Tramèr
+
+Agentdojo: a dynamic environment to evaluate prompt injection attacks and defenses for llm agents
+.
+
+Advances in Neural Information Processing Systems
+ 
+37
+, 
+pp. 82895–82920
+.
+
+Cited by: 
+§8.1
+.
+
+Deng 
+et al.
+ (2023)
+
+X. Deng, Y. Gu, B. Zheng, S. Chen, S. Stevens, B. Wang, H. Sun, and Y. Su
+
+Mind2Web: towards a generalist agent for the web
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+Cited by: 
+§2.1
+,
+
+§2.1
+,
+
+§3.2
+.
+
+[13]
+
+ (2025)
+
+Do browser - ai-powered web automation
+.
+
+Note: 
+https://dobrowser.io
+[Online; accessed 21-May-2025]
+
+Cited by: 
+§1
+,
+
+§1
+,
+
+§2.1
+,
+
+§4.4
+.
+
+Draper and Turow (2019)
+
+N. A. Draper and J. Turow
+
+The corporate cultivation of digital resignation
+.
+
+New media & society
+ 
+21
+ (
+8
+), 
+pp. 1824–1839
+.
+
+Cited by: 
+§2.2
+.
+
+Ersoy 
+et al.
+ (2025)
+
+D. Ersoy, B. Lee, A. Shreekumar, A. Arunasalam, M. Ibrahim, A. Bianchi, and Z. B. Celik
+
+Investigating the impact of dark patterns on llm-based web agents
+.
+
+arXiv preprint arXiv:2510.18113
+.
+
+Cited by: 
+§1
+,
+
+§1
+,
+
+§3.4.1
+,
+
+§4.4
+.
+
+[16]
+
+ (2025)
+
+Fast and reliable end-to-end testing for modern web apps
+.
+
+Note: 
+https://playwright.dev/
+[Online; accessed 15-Feb-2025]
+
+Cited by: 
+§2.1
+.
+
+Gan 
+et al.
+ (2024)
+
+C. Gan, Q. Zhang, and T. Mori
+
+Application of llm agents in recruitment: a novel framework for resume screening. arxiv
+.
+
+arXiv preprint arXiv:2401.08315
+.
+
+Cited by: 
+§1
+.
+
+Gartner (2025)
+
+Gartner
+
+Gartner predicts 25% of organizations will use secure enterprise browsers by 2028
+.
+
+Note: 
+Gartner Press ReleaseAvailable at 
+https://www.gartner.com/en/newsroom/press-releases/
+
+Cited by: 
+§1
+.
+
+Ghalebikesabi 
+et al.
+ (2025)
+
+S. Ghalebikesabi, E. Bagdasarian, R. Yi, I. Yona, I. Shumailov, A. Pappu, C. Shi, L. Weidinger, R. Stanforth, L. Berrada, 
+et al.
+
+Privacy awareness for information-sharing assistants: a case-study on form-filling with contextual integrity
+.
+
+Transactions on Machine Learning Research
+.
+
+Cited by: 
+§1
+.
+
+Greshake 
+et al.
+ (2023)
+
+K. Greshake, S. Abdelnabi, S. Mishra, C. Endres, T. Holz, and M. Fritz
+
+Not what you’ve signed up for: compromising real-world llm-integrated applications with indirect prompt injection
+.
+
+In 
+Proceedings of the 16th ACM workshop on artificial intelligence and security
+,
+
+pp. 79–90
+.
+
+Cited by: 
+§8.1
+.
+
+Gu 
+et al.
+ (2025)
+
+J. Gu, X. Jiang, Z. Shi, H. Tan, X. Zhai, C. Xu, W. Li, Y. Shen, S. Ma, H. Liu, 
+et al.
+
+A survey on llm-as-a-judge (arxiv: 2411.15594). arxiv
+.
+
+Cited by: 
+§4.3
+.
+
+Gupta (2026)
+
+A. Gupta
+
+ReliabilityBench: evaluating llm agent reliability under production-like stress conditions
+.
+
+arXiv preprint arXiv:2601.06112
+.
+
+Cited by: 
+§4.4
+.
+
+[23]
+
+Y. Jiang, K. C. Black, G. Geng, D. Park, J. Zou, A. Y. Ng, and J. H. Chen
+
+MedAgentBench: a realistic virtual ehr environment to benchmark medical llm agents, 2025
+.
+
+URL https://arxiv. org/abs/2501.14654
+.
+
+Cited by: 
+§1
+.
+
+Kim 
+et al.
+ (2025)
+
+H. Kim, M. Song, S. H. Na, S. Shin, and K. Lee
+
+When 
+llms
+ go online: the emerging threat of 
+web-enabled
+llms
+.
+
+In 
+34th USENIX Security Symposium (USENIX Security 25)
+,
+
+pp. 1729–1748
+.
+
+Cited by: 
+§8.1
+.
+
+Koh 
+et al.
+ (2024)
+
+J. Y. Koh, R. Lo, L. Jang, V. Duvvur, M. C. Lim, P. Huang, G. Neubig, S. Zhou, R. Salakhutdinov, and D. Fried
+
+VisualWebArena: evaluating multimodal agents on realistic visual web tasks
+.
+
+In 
+Association for Computational Linguistics
+,
+
+Cited by: 
+§2.1
+,
+
+§2.1
+.
+
+Kumar 
+et al.
+ (2024)
+
+P. Kumar, E. Lau, S. Vijayakumar, T. Trinh, S. R. Team, E. Chang, V. Robinson, S. Hendryx, S. Zhou, M. Fredrikson, 
+et al.
+
+Refusal-trained llms are easily jailbroken as browser agents
+.
+
+arXiv preprint arXiv:2410.13886
+.
+
+Cited by: 
+§8.1
+.
+
+Levy 
+et al.
+ (2024)
+
+I. Levy, B. Wiesel, S. Marreed, A. Oved, A. Yaeli, and S. Shlomov
+
+St-webagentbench: a benchmark for evaluating safety and trustworthiness in web agents
+.
+

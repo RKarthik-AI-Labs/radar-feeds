@@ -1,0 +1,5544 @@
+A Full-Ledger Counterfactual Audit of Adaptive Reasoning
+https://arxiv.org/abs/2611.22778
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+A Full-Ledger Counterfactual Audit of Adaptive Reasoning
+
+Xiaopeng Chu
+
+  
+
+Wenzheng Kong
+
+  
+
+Wei Liu
+
+  
+
+Wenyi Zhang
+
+†
+†
+thanks: 
+Corresponding author.
+
+Affiliation: 
+University of Science and Technology of China
+
+Affiliation: 
+Hefei 230027, China
+
+Email: 
+{cxphhh,wenzhengk,weiliu9416}@mail.ustc.edu.cn
+
+Email: 
+wenyizha@ustc.edu.cn
+
+Abstract
+
+Adaptive reasoning must decide whether to answer now or spend more compute.
+Predicting that the current answer is wrong does not establish whether
+further reasoning will improve it. We introduce the Full-Ledger
+Counterfactual Value Audit (
+FLCVA
+), which compares an immediate answer
+with four fixed-length continuations from the same frozen prefix under one
+answer procedure and accounts for the cost of every signal used by a policy.
+On GSM8K and MATH-500, a random 256-token continuation recovers a wrong answer
+in 26.6% of Qwen3-8B cases and 18.9% of DeepSeek-R1-Distill-Qwen-7B cases,
+while damaging a correct answer in 1.4% and 1.9%. Correctness labels from independently sampled
+continuations predict a separate continuation’s outcome in both primary
+models. In offline replay, using these labels to allocate compute improves
+performance on DeepSeek; the Qwen3 gain remains inconclusive. Under full
+cost accounting, the tested lightweight, myopic controllers mainly recognize
+current errors and add little continuation-specific value beyond that
+shortcut. A Llama-8B replication and action/cost ablations examine the
+robustness of these findings. 
+FLCVA
+ separates
+measuring local continuation value, predicting it from observable signals,
+and using those predictions to allocate computation.
+
+1 
+Introduction
+
+Longer reasoning can improve language-model accuracy, but it is not
+automatically the best use of a limited inference budget. Chain-of-thought
+and zero-shot reasoning prompts elicit explicit reasoning, while
+self-consistency, repeated sampling, verifier reranking, and search offer
+several ways to spend additional compute
+ 
+(
+Wei et al., 2022
+; 
+Kojima et al., 2022
+; 
+Wang et al., 2023b
+; 
+Brown et al., 2024
+; 
+Cobbe et al., 2021
+; 
+Yao et al., 2023
+)
+.
+Revision can improve an answer 
+(
+Madaan et al., 2023
+)
+, but without
+reliable feedback it can also reduce accuracy 
+(
+Huang et al., 2024
+)
+.
+Test-time scaling must therefore decide not only whether more computation can
+help, but 
+where
+ and 
+when
+ to spend it
+ 
+(
+Snell et al., 2024
+; 
+Muennighoff et al., 2025
+)
+.
+
+Adaptive methods use learned halting policies or signals such as confidence,
+agreement, entropy, and predicted difficulty to halt, sample, branch, or route
+computation
+ 
+(
+Graves, 2016
+; 
+Banino et al., 2021
+; 
+Schuster et al., 2022
+; 
+Aggarwal et al., 2023
+; 
+Damani et al., 2025
+; 
+Pan et al., 2025
+; 
+Scalena et al., 2025
+; 
+Yang et al., 2025b
+)
+.
+These signals can identify an answer that is likely wrong
+ 
+(
+Kadavath et al., 2022
+; 
+Kuhn et al., 2023
+; 
+Xiong et al., 2024
+; 
+Lightman et al., 2024
+)
+,
+but that is not the same as identifying whether further reasoning will repair
+it. Likewise, a stable answer may be correct and finished, wrong but
+recoverable, or correct and vulnerable to revision. The decision-relevant
+object is a checkpoint-level counterfactual: from an identical frozen prefix,
+what changes if the model answers now rather than receiving one more
+predeclared block of reasoning?
+
+FLCVA
+1
+1
+
+1
+
+Code and evaluation scripts are available at
+
+https://github.com/cxp-ustc/flcva
+.
+
+compares answering now with continuing from the same 
+frozen prefix
+:
+the prompt and all reasoning tokens generated so far. The audit grades each
+outcome offline; a deployed policy must act without those future correctness
+labels. 
+Figure
+ 
+1
+ shows the protocol, and
+
+Figure
+ 
+2
+ illustrates why current error probability alone
+cannot determine continuation value.
+
+We separate three questions. 
+Measurement:
+ how much does a specified
+continuation change correctness per unit cost? 
+Prediction:
+ do
+observable signals distinguish recoverable errors and vulnerable correct
+answers? 
+Allocation:
+ do these predictions improve accuracy under a
+shared compute budget after paying for the signals? For allocation,
+comparison with a current-wrongness baseline tests the additional value of
+predicting which errors can be repaired.
+
+Figure 1: 
+FLCVA
+ separates measurement from control. From one frozen
+prefix, the same answer procedure evaluates answering now, continuing along
+the stored trajectory for another 256 tokens, and taking three separately
+sampled continuations of the same length. Correctness change divided by
+charged cost defines signed local value. Continuation correctness labels
+are available only offline; replay policies use inference-time signals and
+pay for every observation they require.
+
+Our contributions are:
+
+•
+
+A paired audit of continuation value.
+ We compare answering
+now with fixed-length continuations from the same prefix under a fixed
+answer procedure, measuring signed correctness change per expected logical
+token.
+
+•
+
+A full-ledger proxy audit.
+ We evaluate observable signals
+against this target and charge every observation required by a policy,
+including the cost of obtaining its signals.
+
+•
+
+A measurement-to-control decomposition.
+ We distinguish
+offline diagnostics using future correctness labels from deployable
+policies. Scoring with independently sampled branches avoids leakage from
+the evaluated continuation. Comparison with a current-wrongness baseline
+tests allocation gains beyond error recognition.
+
+•
+
+Cross-model evidence and intervention robustness.
+ Across
+two primary models and a Llama-8B replication, continuation can repair errors
+and damage correct answers. Persistence provides information beyond
+current correctness, but the tested lightweight, myopic controllers add
+little beyond error recognition. We examine sensitivity to continuation
+length, answer cues, parsers, and logical and physical cost accounting.
+
+Figure 2: 
+Two prefixes can have the same current-error probability but
+different recovery probabilities. With equal continuation costs and equal
+damage risk for correct answers, their expected continuation values differ.
+Probabilities are illustrative, not experimental estimates.
+
+2 
+Related Work
+
+Adaptive inference and value of computation.
+
+Metareasoning and anytime algorithms frame computation as an action whose
+value depends on the current decision state
+ 
+(
+Horvitz et al., 1989
+; 
+Zilberstein, 1996
+; 
+Hay et al., 2012
+)
+.
+Modern test-time reasoning instantiates this idea through adaptive sampling,
+learned routing, branch allocation, confidence-based stopping, and budget
+forcing
+ 
+(
+Aggarwal et al., 2023
+; 
+Damani et al., 2025
+; 
+Pan et al., 2025
+; 
+Scalena et al., 2025
+; 
+Muennighoff et al., 2025
+)
+.
+
+Wu et al. (2025)
+ compare model sizes and inference strategies
+under compute budgets, showing how the inference procedure shapes the
+accuracy–cost trade-off.
+
+FLCVA
+ instantiates value of computation as paired measurement of local
+stop–continue value for a realized language-model prefix, complementing work
+whose primary contribution is a controller.
+
+Confidence and process verification.
+
+Self-evaluation, semantic uncertainty, outcome verifiers, PRMs, and
+process-advantage verifiers estimate answer reliability or intermediate
+progress
+ 
+(
+Kadavath et al., 2022
+; 
+Kuhn et al., 2023
+; 
+Xiong et al., 2024
+; 
+Uesato et al., 2022
+; 
+Lightman et al., 2024
+; 
+Wang et al., 2023a
+; 
+Zhang et al., 2025
+; 
+Setlur et al., 2024
+)
+.
+SCoRe uses multi-turn reinforcement learning to improve a model’s ability to
+correct its own errors 
+(
+Kumar et al., 2025
+)
+.
+We test how well these allocation signals predict the correctness change
+from a specified continuation. The public PRM serves as an observable
+proxy, and external endpoint grading defines the audit target.
+
+Closest adaptive-reasoning systems.
+
+Studies of overthinking identify redundant reasoning that adds cost with
+little accuracy benefit 
+(
+Chen et al., 2025
+)
+.
+TRACE combines temporal consistency and confidence; UAB allocates sampling
+from question uncertainty; PoLR and Prefix Consistency use truncated prefixes
+or regenerated continuations; ThinkBooster unifies scaling strategies and
+cost views; and PUMA combines semantic redundancy with answer verification
+ 
+(
+Li et al., 2026
+; 
+Nguyen et al., 2026
+; 
+Jindal et al., 2026
+; 
+Iwase et al., 2026
+; 
+Smirnov et al., 2026
+; 
+Min et al., 2026
+)
+.
+These works primarily propose controllers, reliability signals, or evaluation
+frameworks. 
+FLCVA
+ instead makes the paired stop–continue contrast the
+estimand and jointly audits proxy information and charged cost.
+
+Table
+ 
+1
+ makes this difference explicit.
+
+Work
+
+Primary decision object
+
+Signal or intervention
+
+Paired same-prefix signed target
+
+Cost role
+
+APR
+
+Serial/parallel scheduling
+
+Learned spawn-and-join policy
+
+No
+
+Compute and latency
+
+EAGer
+
+Branch/sample allocation
+
+Token-entropy branching
+
+No
+
+Token efficiency
+
+TRACE
+
+Early exit
+
+Temporal consistency and confidence
+
+No
+
+Accuracy–token tradeoff
+
+UAB
+
+Per-question sample count
+
+Initial-sample vote entropy
+
+No
+
+Fixed sampling budget
+
+PoLR
+
+Prefix-cluster expansion
+
+Consensus among short prefixes
+
+No
+
+Tokens and latency
+
+Prefix Consistency
+
+Candidate weighting
+
+Regeneration from truncated prefixes
+
+Partial
+
+Voting cost
+
+ThinkBooster
+
+Test-time scaling strategy
+
+Modular scorers and strategies
+
+Varies
+
+Quality–cost evaluation
+
+PUMA
+
+Early exit
+
+Redundancy plus answer verification
+
+No
+
+Token reduction
+
+FLCVA
+
+Measurement and allocation audit
+
+Answer-now versus four fixed continuations
+
+Yes
+
+Full charged ledger
+
+Table 1: 
+Closest-system comparison. A paired target contrasts answer-now and
+continuation from the same frozen prefix; “Partial” denotes related
+truncated-prefix signals without this signed contrast.
+
+3 
+The 
+FLCVA
+ Measurement
+
+3.1 
+Signed continuation value
+
+At each checkpoint, we keep the prompt and existing reasoning tokens fixed.
+We obtain an answer immediately and another answer after each of four
+continuations. All answers use the same generation, parsing, and grading
+procedure, called the 
+answer operator
+. We subtract immediate-answer
+correctness from average continuation correctness and divide by average
+continuation cost, including the answer tokens. The resulting value is
+positive for observed repair, negative for observed damage, and zero when
+none of the sampled continuations changes correctness.
+
+Let 
+ be a frozen reasoning prefix and let 
+ denote the fixed
+answer suffix, greedy decoding rule, parser, normalizer, and exact-match
+grader. Answering immediately gives correctness 
+.
+Continuation branch 
+ gives correctness 
+ after a fixed
+reasoning action and incurs logical cost 
+, including its answer
+probe. For 
+, we define
+
+(1)
+
+The denominator normalizes by logical token cost. Multiplication by 1,000
+expresses the result as expected correctness change 
+per 1,000 logical
+tokens
+, making small per-token values easier to read. This common positive
+scaling leaves the signs and rankings in Eqs. (1)–(3) unchanged.
+
+Equation 
+1
+ is a ratio of average correctness change to average
+cost, rather than an average of branch-specific ratios. Its target is
+conditional on the answer operator, sampling scheme, and continuation length.
+Recovery is possible only when 
+, and damage only when 
+.
+
+Let 
+. We report two distinct estimands. For a
+currently wrong answer, 
+ estimates single-draw recovery probability,
+and 
+ detects recovery in any of four sampled branches.
+For a currently correct answer, 
+ estimates single-draw damage
+probability, and 
+ detects any observed damage. Four-draw
+detection measures whether the sampled branches contain at least one
+recovery or damage event.
+
+3.2 
+Protocol and evaluation split
+
+We evaluate Qwen3-8B and DeepSeek-R1-Distill-Qwen-7B
+ 
+(
+Yang et al., 2025a
+; 
+DeepSeek-AI, 2025
+)
+ on all 1,319 GSM8K test problems and
+all 500 MATH-500 problems 
+(
+Cobbe et al., 2021
+; 
+Hendrycks et al., 2021
+)
+. Each
+model–problem pair has four independently sampled reasoning trajectories,
+called 
+spines
+, capped at 4,096 tokens and frozen every 256 tokens.
+At every nonterminal checkpoint we apply answer-now and four 256-token
+continuations. Branch 1 reuses the next stored trajectory segment (the
+
+on-spine
+ branch); branches 2–4 are sampled separately from the same
+prefix (
+off-spine
+ branches). The same greedy answer operator grades
+all endpoints.
+
+We deterministically partition problem IDs, assigning 80% of problems to
+analysis and 20% to confirmation. We use analysis problems to choose each
+proxy’s scoring direction, calibrate predictions, and fit controller
+parameters. Confirmation continuation outcomes are used only for held-out evaluation.
+Unless stated otherwise, intervals use 2,000 bootstrap draws of complete
+problems, retaining their models, spines, checkpoints, and branches. The
+primary study contains 14,552 spines and 218,280 eligible checkpoints.
+Details of sampling, parsing, missing data, and bootstrapping are in
+
+Appendices
+ 
+A
+ and 
+C
+.
+
+3.3 
+Identification and uncertainty
+
+The paired comparison holds the prompt and frozen reasoning tokens
+identical across the answer-now arm and all continuations. The arms differ
+in the action taken after checkpoint 
+. Branch 1 reuses the stored spine
+segment while retaining its full reasoning-plus-probe cost in 
+.
+This saves physical generation while preserving the specified intervention
+and its logical cost. Later checkpoints follow the original spine,
+independently of the outcomes of off-spine samples.
+
+We estimate uncertainty by resampling benchmark problems. Each problem
+contributes multiple models, spines, depths, and correlated outcomes, so each
+bootstrap draw retains all records nested within the selected problem IDs.
+Point estimates weight eligible checkpoints in the reported population;
+intervals preserve within-problem dependence and quantify uncertainty across
+problems conditional on the stored trajectories.
+
+3.4 
+Proxies and cost
+
+We audit recent-answer persistence, answer confidence and its negative-log
+form (ANLL), four-spine modal agreement, minimum step-level process reward
+model (PRM) score, and top-20 approximate entropy. Persistence is the fraction
+of up to four recent stop answers matching the current answer. Confidence
+and ANLL satisfy 
+, so they encode
+the same signal with reversed order; we summarize them as one signal family.
+The controllers use both input features.
+
+The primary prediction metric is AUROC for detecting any recovery among
+currently wrong checkpoints and any damage among currently correct ones.
+These labels indicate whether at least one of four branches changes
+correctness; they differ from the single-draw probabilities above. Average
+precision with prevalence baselines and calibration assess rare events and
+probability quality. Matched and conditional diagnostics test information
+beyond model, dataset, depth, difficulty, and current correctness; they are
+grouped in 
+Appendix
+ 
+C
+. Difficulty is a label-aware diagnostic
+stratifier and is never exposed to a deployable policy.
+
+The primary ledger counts all logical tokens needed to expose a prefix,
+obtain an answer, advance a spine, or score a policy-specific proxy,
+including the observations required by PRM and parallel-agreement policies.
+Logical tokens quantify intervention cost. To examine hardware-related
+costs, we also replay policy orderings under estimated FLOPs and calibrated
+H20 seconds and report measured GPU time (
+Section
+ 
+E.2
+).
+
+4 
+From Measurement to Allocation
+
+A 
+frontier
+ is a problem’s current checkpoint during compute
+allocation. Replay begins with one frontier per confirmation problem and a
+shared budget. Each action advances one problem by the next stored 256-token
+segment and reveals its next answer. The four spine seeds define four
+repetitions, with one spine per problem in each repetition and accuracy
+measured over problems. All policies are compared up to the same reachable
+budget endpoint. We measure budget-averaged accuracy using normalized area
+under the accuracy–ledger curve (AULC). For each full-system bootstrap
+replicate, we resample problems, rerun allocation, and recompute the budget
+endpoints.
+
+For repetition 
+, the reported score is
+
+where 
+ includes every observation required to expose the initial
+frontier and 
+ is the common endpoint. Final accuracy is the same when
+all stored transitions are exhausted; AULC measures how efficiently a policy
+improves accuracy along the way.
+
+We compare three levels of allocation. 
+Round-robin
+ provides a
+reference for measuring adaptive allocation gains. A 
+correctness shortcut
+ predicts only
+whether the current answer is wrong and combines that probability with
+analysis-set dataset–depth mean recovery, damage, and cost. Finally,
+continuation-specific policies either factor expected value into conditional
+recovery and damage probabilities (two-stage EV) or directly regress signed
+
+ (Ridge-
+). Their inputs are single-spine proxies, depth, and
+dataset. Comparing with round-robin measures overall allocation gains;
+comparing with the correctness shortcut measures gains beyond error
+recognition.
+
+Concretely, let 
+ predict that the current answer is wrong, and let
+
+ predict recovery and damage conditional on current correctness.
+With analysis-set dataset–depth means 
+ and mean
+branch cost 
+, the priorities are
+
+(2)
+
+(3)
+
+The second uses conditional recovery and damage predictions to distinguish
+repairable errors and vulnerable correct answers beyond current error probability.
+Both priorities are 
+myopic
+: they score the next action without valuing
+the later checkpoints it makes available. Our primary allocation endpoint
+is the percentage change in normalized AULC relative to the correctness
+shortcut, with paired 95% full-system bootstrap intervals.
+
+Offline diagnostics use continuation correctness labels to assess allocation
+opportunity. The mixed four-branch value includes the realized replay
+successor, branch 1, and therefore incorporates hindsight. The off-spine
+score ranks the on-spine action using branches 2–4, separating the scoring
+labels from the realized successor. These labels are used only for offline
+evaluation. Exact dynamic programming provides a multi-step upper bound
+using known future outcomes on deterministically selected four-problem
+subsets. Details of policy inputs, alternative replay units,
+leave-one-branch-out validation, and the DP setup are in
+
+Appendix
+ 
+B
+.
+
+Policy
+
+Required observation
+
+Extra generation
+
+Extra scoring
+
+Replay charge
+
+Round-robin / fixed
+
+One current spine
+
+None
+
+None
+
+Prompt, reasoning, answer probe
+
+TRACE / ANLL / entropy
+
+Current/prior single-spine probes
+
+None
+
+None
+
+Single-spine ledger
+
+PRM
+
+Current single-spine prefix
+
+None
+
+PRM prefill
+
+Ledger plus every PRM call
+
+Cross-spine agreement
+
+Four equal-depth answers
+
+Three synchronized spines
+
+None
+
+Four reasoning/probe paths
+
+Ridge / two-stage
+
+Single-spine proxies and context
+
+None
+
+Optional PRM
+
+All observed inputs
+
+Mixed/off-spine/DP
+
+Continuation correctness labels
+
+Stored branches/futures
+
+Gold grading
+
+Diagnostic only
+
+Table 2: 
+Policy observability and accounting. Cross-spine agreement charges
+all parallel trajectories used to obtain the signal. Label-aware rows
+provide offline allocation diagnostics.
+
+The observability and charging boundary for every replay policy is summarized
+in 
+Table
+ 
+2
+.
+
+5 
+Results
+
+Evaluation scope and primary endpoints.
+
+The primary confirmation split contains 372 problems evaluated by each
+primary model. Every observable controller is fitted only on the disjoint
+analysis split. The evidence follows three stages:
+
+measurement
+ characterizes signed continuation value and its recovery
+and damage components (§5.1);
+
+prediction
+ tests conditional recovery/damage AUROC (§5.2);
+and 
+allocation
+ tests relative normalized-AULC gain over the
+correctness shortcut (§5.3). Opportunity diagnostics (§5.4) and
+robustness analyses (§5.5) explain the scope of these results.
+
+5.1 
+Continuation frequently repairs errors, and sometimes damages answers
+
+Model
+
+Event
+
+Single draw
+
+Any of four
+
+Qwen3
+
+Recovery
+
+26.6% [22.5, 31.6]
+
+35.7% [30.3, 42.3]
+
+Qwen3
+
+Damage
+
+1.4% [1.0, 1.8]
+
+2.9% [2.3, 3.6]
+
+DeepSeek
+
+Recovery
+
+18.9% [16.2, 22.2]
+
+26.0% [22.2, 30.2]
+
+DeepSeek
+
+Damage
+
+1.9% [1.5, 2.3]
+
+3.6% [3.0, 4.2]
+
+Table 3: 
+Single-draw transition rates and four-draw opportunity detection on
+confirmation problems. Brackets are 95% problem-bootstrap intervals.
+
+For a uniformly selected continuation, recovery occurs in 26.6% of Qwen3
+wrong checkpoints and 18.9% of DeepSeek wrong checkpoints
+(
+Table
+ 
+3
+). Damage is rarer but nonzero: 1.4% and 1.9%
+among currently correct checkpoints. With four sampled branches, at least
+one recovery appears at 35.7% and 26.0% of wrong checkpoints, while at least
+one damaging branch appears at 2.9% and 3.6% of correct checkpoints. These
+rates vary with dataset and depth (
+Figure
+ 
+3
+); complete denominators
+are in 
+Appendix
+ 
+D
+.
+Conditional on detecting an event, mean benefit magnitude is 2.865 and 2.794
+value units, versus harm magnitudes of 1.817 and 2.000. Four-draw harm is also
+more frequent on MATH-500 (6.7% and 6.0%) than on GSM8K (1.8% and 2.9%).
+
+Among currently correct checkpoints, greater persistence is associated with
+less damage. The high-minus-low persistence contrast in signed value is
+
+ for Qwen3 (95% CI 
+) and 
+ for
+DeepSeek (
+). Since value is nonpositive in this population,
+positive contrasts mean that highly persistent answers are less vulnerable
+to harmful revision.
+
+Figure 3: 
+Recovery and damage prevalence by prefix depth and dataset on
+confirmation problems. Recovery conditions on the current answer being
+wrong; damage conditions on it being correct.
+
+5.2 
+Proxies contain information without determining local value
+
+Model
+
+Target
+
+Best proxy
+
+(available 
+)
+
+AUROC
+
+(95% CI)
+
+Qwen3
+
+Recovery
+
+Persistence
+
+(2,702)
+
+0.658
+
+[0.610, 0.706]
+
+Qwen3
+
+Damage
+
+Agreement
+
+(18,634)
+
+0.742
+
+[0.699, 0.782]
+
+DeepSeek
+
+Recovery
+
+Persistence
+
+(3,665)
+
+0.673
+
+[0.632, 0.715]
+
+DeepSeek
+
+Damage
+
+Persistence
+
+(17,139)
+
+0.716
+
+[0.681, 0.747]
+
+Table 4: 
+Best confirmation proxy by AUROC for detecting any recovery among
+wrong checkpoints or any damage among correct checkpoints over four
+continuations. Counts reflect proxy availability; intervals resample whole
+problems. Rare-event baselines and calibration appear in
+
+Appendix
+ 
+C
+.
+
+Persistence is the strongest recovery proxy in both models, with AUROC 0.658
+and 0.673. Modal agreement is strongest for Qwen3 damage (0.742), while
+persistence is strongest for DeepSeek damage (0.716)
+(
+Table
+ 
+4
+). These AUROCs evaluate detection of recovery or
+damage among four sampled continuations.
+
+Persistence also retains information after accounting for current
+correctness, dataset, depth, and difficulty: conditional AUROC is
+0.632–0.692 and held-out log-loss reduction is 0.021–0.053 bits. Thus it
+provides information about recovery and damage beyond identifying current
+errors. Matched checkpoints with the same signal value can have different
+outcomes. Calibration, rare-event baselines, and matched-group diagnostics
+in 
+Appendix
+ 
+C
+ further characterize this variation.
+
+5.3 
+Observable adaptation mostly learns current wrongness
+
+Model
+
+Policy
+
+Norm. AULC
+
+Gain vs. RR
+
+Increment vs. shortcut
+
+Qwen3
+
+Round-robin
+
+0.851
+
++0.00% [+0.00, +0.00]
+
+-1.75% [-2.72, -0.72]
+
+Qwen3
+
+Correctness shortcut
+
+0.866
+
++1.78% [+0.73, +2.80]
+
++0.00% [+0.00, +0.00]
+
+Qwen3
+
+Two-stage conditional EV
+
+0.860
+
++1.08% [+0.28, +1.91]
+
+-0.69% [-1.51, +0.10]
+
+Qwen3
+
+Direct Ridge-
+
+0.864
+
++1.57% [+0.65, +2.51]
+
+-0.21% [-0.52, +0.12]
+
+DeepSeek
+
+Round-robin
+
+0.813
+
++0.00% [+0.00, +0.00]
+
+-1.53% [-2.60, -0.44]
+
+DeepSeek
+
+Correctness shortcut
+
+0.825
+
++1.55% [+0.44, +2.67]
+
++0.00% [+0.00, +0.00]
+
+DeepSeek
+
+Two-stage conditional EV
+
+0.826
+
++1.60% [+0.44, +2.77]
+
++0.05% [-0.96, +1.00]
+
+DeepSeek
+
+Direct Ridge-
+
+0.831
+
++2.26% [+1.40, +3.17]
+
++0.70% [+0.07, +1.35]
+
+Table 5: 
+Observable-controller hierarchy under the problem-level single-spine
+logical ledger. The final column measures allocation gains beyond the
+correctness shortcut. Brackets are paired 95% full-system problem-bootstrap
+intervals.
+
+The correctness shortcut already improves relative normalized AULC over
+round-robin by 
+ on Qwen3 and 
+ on DeepSeek
+(
+Tables
+ 
+5
+ and 
+4
+). Relative to this stronger
+baseline, two-stage EV changes AULC by 
+
+(
+) and 
+ (
+); direct Ridge-
+
+changes it by 
+ (
+) and 
+
+(
+). Thus Qwen3 shows no reliable continuation-specific
+increment, while DeepSeek shows a modest one. TRACE, PRM, ANLL, and entropy
+also have point estimates at or below the shortcut. Conditional recovery and
+damage AUROCs are 0.767–0.799, with limited allocation gains over the
+shortcut. AUROC evaluates ranking within each outcome population, whereas
+replay combines recovery and damage predictions with costs to repeatedly
+rank 372 changing frontiers. The following controls examine how signal
+costs and one-step scheduling affect allocation.
+
+Figure 4: 
+Held-out controller accuracy under a shared logical-token budget, using one spine
+per problem. Curves average four spine-seed repetitions; annotations give
+Ridge-
+’s relative gain in normalized AULC over the correctness shortcut,
+with full-system 95% intervals.
+
+Model
+
+Current
+
+wrong
+
+Recovery
+
+Damage
+
+Qwen3
+
+0.882
+
+0.774
+
+0.799
+
+DeepSeek
+
+0.843
+
+0.767
+
+0.772
+
+Table 6: 
+Held-out prediction by the two-stage model. All components are fitted
+on analysis problems, and replay uses observable features from confirmation
+problems.
+
+Table
+ 
+6
+ separates current-wrongness
+prediction from conditional recovery and damage prediction, clarifying what
+each controller can learn from observable features.
+
+5.4 
+Independent branches reveal allocation opportunity
+
+Model
+
+Off-spine
+
+gain vs. RR
+
+Exact-DP
+
+gain vs. RR
+
+Qwen3
+
+DeepSeek
+
+Table 7: 
+Offline allocation opportunity under the logical-token ledger.
+Off-spine ordering uses labels from branches sampled separately from the
+realized successor; exact DP gives a hindsight bound on four-problem subsets.
+
+In the offline diagnostic, correctness labels from three off-spine branches
+predict the outcome of the held-out on-spine continuation in both primary
+models. Using this estimate to order replay yields 
+ relative
+normalized AULC for Qwen3, with an interval crossing zero, and 
+
+for DeepSeek, with a positive interval (
+Table
+ 
+7
+).
+Direct cross-branch prediction of the realized successor reaches
+0.859–0.948 AUROC across events and models
+(
+Table
+ 
+13
+).
+
+Effects of signal cost and scheduling.
+
+Two controlled comparisons examine signal costs and scheduling. First, we
+fix the action order based on agreement and charge the extra trajectories
+needed to obtain that signal. DeepSeek normalized AULC falls from 0.819 to
+0.672 (
+Table
+ 
+15
+), isolating the effect of including
+signal costs.
+
+Second, we compare greedy allocation by true next-step correctness change
+per token with exact multi-step allocation on the same 64 non-overlapping
+four-problem subsets per model. Both schedules use future outcomes.
+Normalized AULC is 0.820 versus 0.902 for Qwen3 and 0.791 versus 0.854 for
+DeepSeek (
+Table
+ 
+16
+). This hindsight comparison shows the
+benefit of planning beyond immediate value within these subsets.
+
+Together, these controls motivate charging every signal and considering the
+value of subsequent states. The relative contributions of signal quality,
+calibration, and planning horizon to the observed controller gap remain an
+open question.
+
+Model
+
+Length
+
+Rec.%
+
+Dmg.%
+
+Qwen3
+
+128
+
+19.0
+
+1.6
+
++0.016
+
+Qwen3
+
+256
+
+26.6
+
+1.5
+
+0.000
+
+Qwen3
+
+512
+
+36.0
+
+1.6
+
+-0.031
+
+Qwen3
+
+Adaptive
+
+26.8
+
+1.6
+
+0.000
+
+DeepSeek
+
+128
+
+14.3
+
+1.7
+
++0.021
+
+DeepSeek
+
+256
+
+19.6
+
+1.9
+
+0.000
+
+DeepSeek
+
+512
+
+25.5
+
+2.0
+
+-0.023
+
+DeepSeek
+
+Adaptive
+
+14.9
+
+1.9
+
++0.023
+
+Table 8: 
+Continuation-length sensitivity on the 200-problem confirmation
+ablation. Recovery and damage are single-draw rates; 
+ is the change
+in value per 1,000 logical tokens relative to fixed 256. Full intervals
+appear in 
+Table
+ 
+29
+.
+
+5.5 
+Robustness and external replication
+
+Continuation length.
+
+In a paired 200-problem confirmation ablation, recovery rises with
+128/256/512-token continuations: 19.0/26.6/36.0% for Qwen3 and
+14.3/19.6/25.5% for DeepSeek. Paired differences in damage rates are not
+distinguishable from zero. For each candidate length 
+, a ridge model
+fitted on analysis problems predicts signed change per 1,000 logical tokens
+from dataset and checkpoint depth. On confirmation problems, the frozen
+selector chooses 
+, breaking ties toward the
+shorter action. Within each model, the selector is a local rule based only on dataset
+and depth. 
+Table
+ 
+8
+ reports event rates and
+full-sample proxy rankings. On DeepSeek, the selector improves local value
+by 
+ (
+) correctness-change units per 1,000 logical
+tokens, largely by selecting the cheaper 128-token action.
+Mean signed value per 1,000 logical tokens falls with length, from
+0.137/0.113 at 128 tokens to 0.090/0.068 at 512 for Qwen3/DeepSeek.
+The fixed 256-token action lies between shorter, cheaper continuations and
+longer ones that repair more errors at lower value per token. Persistence remains the leading recovery proxy at all three
+lengths in the full sample, although its ranking is less stable in the
+512-token half-sample analysis.
+
+Answer procedure and grading.
+
+A similar, concise answer cue produces parseable answers in 99.8–99.9% of
+cases and preserves 89.8–91.0% of recovery labels and 96.5–97.0% of damage
+labels. A more directive cue substantially changes the audit target.
+Across sampled groups, independent rational/symbolic regrading agrees with
+95.5–100% of primary transition labels among cases it can resolve.
+
+Cost accounting.
+
+After charging their costs, PRM and parallel-agreement policies remain below
+single-spine baselines under logical tokens, estimated FLOPs, and calibrated
+H20 seconds. Across these ledgers, PRM trails round-robin by 33.5–48.4% on
+Qwen3 and 25.2–33.9% on DeepSeek, showing a consistent cost disadvantage
+across all three measures.
+
+Replication on Llama.
+
+The full protocol on DeepSeek-R1-Distill-Llama-8B yields 10.2% single-draw
+recovery and 0.9% damage. Greater persistence is again associated with less
+damage (
+Table
+ 
+9
+). Using predictors fitted on the two
+primary models without refitting, the correctness shortcut gains
+
+ over round-robin, while two-stage EV and Ridge-
+ trail the
+shortcut by 0.81% and 0.61% (
+Table
+ 
+10
+). The replication thus preserves both the measured continuation effects
+and the measurement-to-control gap.
+
+Event
+
+Draw
+
+Any of four
+
+Persistence AUROC
+
+Recovery
+
+10.2%
+
+14.5%
+
+0.729
+
+Damage
+
+0.9%
+
+2.0%
+
+0.730
+
+Table 9: 
+Full-protocol Llama-8B replication. “Any of four” denotes
+opportunity detection.
+
+Policy
+
+Gain vs. RR
+
+ vs. shortcut
+
+Round-robin
+
++0.00%
+
+-2.85%
+
+Correctness shortcut
+
++2.93%
+
++0.00%
+
+Two-stage EV
+
++2.10%
+
+-0.81%
+
+Direct Ridge-
+
++2.30%
+
+-0.61%
+
+Table 10: 
+Zero-refit transfer to Llama-8B using controllers fitted on the two
+primary models. Brackets are paired 95% full-system bootstrap intervals.
+
+6 
+Discussion
+
+A signal can predict current answer quality, predict continuation effects,
+or improve a sequence of compute-allocation decisions. Our results show
+why each claim needs its own evaluation.
+
+Test continuation value beyond error recognition.
+
+The correctness shortcut captures much of the observable allocation gain,
+making it an informative baseline alongside round-robin. Persistence
+retains conditional information about recovery and damage, and highly
+persistent correct answers are less vulnerable to harmful revision. These
+findings support using stability as a predictive feature and evaluating its
+allocation value through gains over the correctness shortcut.
+
+Charge signals and value later states.
+
+The fixed-order agreement comparison shows that observation costs can erase
+a signal’s apparent allocation benefit. The hindsight comparison on matched
+subsets shows that greedy scheduling can still underperform multi-step
+optimization even with exact knowledge of immediate value. The same full
+ledger provides a basis for testing stronger sequential controllers using
+inference-time features.
+
+Model and dataset differences.
+
+Ridge-
+ gains 
+ over the shortcut on DeepSeek; the Qwen3
+increment is inconclusive, and transfer to Llama without refitting gives a
+negative gain. Exploratory replay by dataset shows a DeepSeek gain on
+MATH-500 and a loss on GSM8K (
+Appendix
+ 
+F
+). On the paired
+200-problem subset, changing cost weights while fixing action order barely
+changes the gain difference between models. The effects of calibrating
+predictions separately for each dataset remain uncertain
+(
+Section
+ 
+F.2
+). The Llama result concerns transfer
+of predictors fitted on the two primary models. Explaining these
+differences calls for targeted analysis of recoverable error types, reasoning
+changes associated with repair, and predictor transfer. The audit provides
+a common protocol for testing these explanations and comparing stronger
+controllers.
+
+7 
+Conclusion
+
+FLCVA
+ measures the externally graded value of one more reasoning block
+from the same prefix, while accounting for its cost. Across the evaluated
+models, continuation can repair incorrect answers and damage correct ones.
+The tested lightweight, myopic controllers add little beyond identifying
+likely errors. This measurement-to-control gap motivates policies that use
+inference-time signals to value both immediate outcomes and future reasoning
+states. Their benefit can be tested through accuracy–cost gains over the
+correctness shortcut.
+
+8 
+Limitations
+
+The study evaluates three open-weight models on mathematics tasks, with
+continuations of 128, 256, and 512 tokens. Generalization to other tasks,
+models, and reasoning actions requires further evaluation. Continuation
+value depends on sampling and on how answers are generated, parsed, and
+graded. Exact-match grading may miss equivalent answers. Bootstrap
+intervals quantify variation across problems while keeping the generated
+trajectories fixed.
+
+The controller results cover lightweight policies that score only the next
+reasoning step. In the Llama replication, these policies are transferred
+without refitting. Correctness labels from separately sampled branches
+support offline diagnostics. Stored multi-step transitions are available
+only along the main trajectories. Exact dynamic programming uses these
+transitions and known future outcomes to provide an upper bound on sampled
+groups of four problems. The same protocol supports evaluating richer
+controllers.
+
+9 
+Ethical considerations
+
+The study uses established mathematics benchmarks and open-weight models,
+performs no human-subject intervention, and trains lightweight diagnostic
+predictors. Better allocation could reduce the computation needed for a
+given answer quality. The audit itself requires generation of multiple
+spines and continuations, answer probes, and auxiliary scoring. We report
+measured GPU time and alternative cost ledgers in
+
+Section
+ 
+E.2
+. Energy consumption, emissions, and net
+environmental savings fall outside these measurements.
+
+Premature stopping can preserve consequential errors in applications such as
+medicine and law, while continuing can damage an initially correct answer.
+Applying adaptive stopping in these domains requires task-specific
+validation of both recovery and damage, together with safeguards
+appropriate to the consequences of errors.
+
+Acknowledgments
+
+This work was supported by the National Key Research and Development
+Program of China (2025YFF0514401) and the National Natural Science
+Foundation of China (62231022).
+
+References
+
+Aggarwal et al. (2023)
+
+Pranjal Aggarwal, Aman Madaan, Yiming Yang, and Mausam. 2023.
+
+Let’s sample step by step:
+Adaptive-consistency for efficient reasoning and coding with LLMs
+.
+
+arXiv preprint arXiv:2305.11860
+.
+
+Banino et al. (2021)
+
+Andrea Banino, Jan Balaguer, and Charles Blundell. 2021.
+
+PonderNet: Learning to
+ponder
+.
+
+arXiv preprint arXiv:2107.05407
+.
+
+Brown et al. (2024)
+
+Bradley Brown, Jordan Juravsky, Ryan Ehrlich, Ronald Clark, Quoc V. Le,
+Christopher Ré, and Azalia Mirhoseini. 2024.
+
+Large language monkeys:
+Scaling inference compute with repeated sampling
+.
+
+arXiv preprint arXiv:2407.21787
+.
+
+Chen et al. (2025)
+
+Xingyu Chen, Jiahao Xu, Tian Liang, Zhiwei He, Jianhui Pang, Dian Yu, Linfeng
+Song, Qiuzhi Liu, Mengfei Zhou, Zhuosheng Zhang, Rui Wang, Zhaopeng Tu,
+Haitao Mi, and Dong Yu. 2025.
+
+Do NOT
+think that much for 2+3=? On the overthinking of long reasoning models
+.
+
+In 
+Proceedings of the 42nd International Conference on Machine
+Learning
+, volume 267 of 
+Proceedings of Machine Learning Research
+,
+pages 9487–9499. PMLR.
+
+Cobbe et al. (2021)
+
+Karl Cobbe, Vineet Kosaraju, Mohammad Bavarian, Mark Chen, Heewoo Jun, Lukasz
+Kaiser, Matthias Plappert, Jerry Tworek, Jacob Hilton, Reiichiro Nakano,
+Christopher Hesse, and John Schulman. 2021.
+
+Training verifiers to solve
+math word problems
+.
+
+arXiv preprint arXiv:2110.14168
+.
+
+Damani et al. (2025)
+
+Mehul Damani, Idan Shenfeld, Andi Peng, Andreea Bobu, and Jacob Andreas. 2025.
+
+Learning how hard
+to think: Input-adaptive allocation of LM computation
+.
+
+In 
+International Conference on Learning Representations
+.
+
+DeepSeek-AI (2025)
+
+DeepSeek-AI. 2025.
+
+DeepSeek-R1:
+Incentivizing reasoning capability in LLMs via reinforcement learning
+.
+
+arXiv preprint arXiv:2501.12948
+.
+
+Grattafiori et al. (2024)
+
+Aaron Grattafiori, Abhimanyu Dubey, Abhinav Jauhri, Abhinav Pandey, Abhishek
+Kadian, Ahmad Al-Dahle, Aiesha Letman, Akhil Mathur, Alan Schelten, Alex
+Vaughan, et al. 2024.
+
+The Llama 3 herd of
+models
+.
+
+arXiv preprint arXiv:2407.21783
+.
+
+Graves (2016)
+
+Alex Graves. 2016.
+
+Adaptive computation time
+for recurrent neural networks
+.
+
+arXiv preprint arXiv:1603.08983
+.
+
+Hay et al. (2012)
+
+Nicholas Hay, Stuart Russell, David Tolpin, and Solomon Eyal Shimony. 2012.
+
+Selecting computations:
+Theory and applications
+.
+
+arXiv preprint arXiv:1207.5879
+.
+
+Hendrycks et al. (2021)
+
+Dan Hendrycks, Collin Burns, Saurav Kadavath, Akul Arora, Steven Basart, Eric
+Tang, Dawn Song, and Jacob Steinhardt. 2021.
+
+Measuring mathematical problem solving with the MATH dataset
+.
+
+In 
+Proceedings of the Neural Information Processing Systems
+Track on Datasets and Benchmarks
+, volume 1.
+
+Horvitz et al. (1989)
+
+Eric J. Horvitz, Gregory F. Cooper, and David E. Heckerman. 1989.
+
+Reflection and
+action under scarce resources: Theoretical principles and empirical study
+.
+
+In 
+International Joint Conference on Artificial Intelligence
+,
+pages 1121–1127.
+
+Huang et al. (2024)
+
+Jie Huang, Xinyun Chen, Swaroop Mishra, Huaixiu Steven Zheng, Adams Wei Yu,
+Xinying Song, and Denny Zhou. 2024.
+
+Large language
+models cannot self-correct reasoning yet
+.
+
+In 
+International Conference on Learning Representations
+.
+
+Iwase et al. (2026)
+
+Naoto Iwase, Yuki Ichihara, Mohammad Atif Quamar, and Junpei Komiyama. 2026.
+
+Reliable chain-of-thought
+via prefix consistency
+.
+
+arXiv preprint arXiv:2605.07654
+.
+
+Jindal et al. (2026)
+
+Ishan Jindal, Sai Prashanth Akuthota, Jayant Taneja, and Sachin Dev Sharma.
+2026.
+
+The path of least
+resistance: Guiding LLM reasoning trajectories with prefix consensus
+.
+
+arXiv preprint arXiv:2601.21494
+.
+
+Kadavath et al. (2022)
+
+Saurav Kadavath, Tom Conerly, Amanda Askell, Tom Henighan, Dawn Drain, Ethan
+Perez, Nicholas Schiefer, Zac Hatfield-Dodds, Nova DasSarma, Eli
+Tran-Johnson, et al. 2022.
+
+Language models (mostly)
+know what they know
+.
+
+arXiv preprint arXiv:2207.05221
+.
+
+Kojima et al. (2022)
+
+Takeshi Kojima, Shixiang Shane Gu, Machel Reid, Yutaka Matsuo, and Yusuke
+Iwasawa. 2022.
+
+Large language models are zero-shot reasoners
+.
+
+In 
+Advances in Neural Information Processing Systems
+.
+
+Kuhn et al. (2023)
+
+Lorenz Kuhn, Yarin Gal, and Sebastian Farquhar. 2023.
+
+Semantic uncertainty:
+Linguistic invariances for uncertainty estimation in natural language
+generation
+.
+
+arXiv preprint arXiv:2302.09664
+.
+
+Kumar et al. (2025)
+
+Aviral Kumar, Vincent Zhuang, Rishabh Agarwal, Yi Su, JD Co-Reyes, Avi Singh,
+Kate Baumli, Shariq Iqbal, Colton Bishop, Rebecca Roelofs, Lei M. Zhang, Kay
+McKinney, Disha Shrivastava, Cosmin Paduraru, George Tucker, Doina Precup,
+Feryal Behbahani, and Aleksandra Faust. 2025.
+
+Training language models to self-correct via reinforcement learning
+.
+
+In 
+International Conference on Learning Representations
+.
+
+Li et al. (2026)
+
+Jiakun Li, Xingwei He, Kefan Li, Hongzheng Chai, Hongyue Yu, and Yuan Yuan.
+2026.
+
+Efficient test-time scaling
+via temporal reasoning aggregation
+.
+
+arXiv preprint arXiv:2604.17304
+.
+
+Lightman et al. (2024)
+
+Hunter Lightman, Vineet Kosaraju, Yura Burda, Harri Edwards, Bowen Baker, Teddy
+Lee, Jan Leike, John Schulman, Ilya Sutskever, and Karl Cobbe. 2024.
+
+Let’s verify step
+by step
+.
+
+In 
+International Conference on Learning Representations
+.
+
+Madaan et al. (2023)
+
+Aman Madaan, Niket Tandon, Prakhar Gupta, Skyler Hallinan, Luyu Gao, Sarah
+Wiegreffe, Uri Alon, Nouha Dziri, Shrimai Prabhumoye, Yiming Yang, Shashank
+Gupta, Bodhisattwa Prasad Majumder, Katherine Hermann, Sean Welleck, Amir
+Yazdanbakhsh, and Peter Clark. 2023.
+
+Self-Refine: Iterative refinement with self-feedback
+.
+
+In 
+Advances in Neural Information Processing Systems
+.
+
+Min et al. (2026)
+
+Dehai Min, Giovanni Vaccarino, Huiyi Chen, Yongliang Wu, Gal Yona, and
+Lu Cheng. 2026.
+
+Stop when reasoning
+converges: Semantic-preserving early exit for reasoning models
+.
+
+arXiv preprint arXiv:2605.17672
+.
+
+Muennighoff et al. (2025)
+
+Niklas Muennighoff, Zitong Yang, Weijia Shi, Xiang Lisa Li, Li Fei-Fei,
+Hannaneh Hajishirzi, Luke Zettlemoyer, Percy Liang, Emmanuel Candès, and
+Tatsunori Hashimoto. 2025.
+
+s1: Simple test-time
+scaling
+.
+
+arXiv preprint arXiv:2501.19393
+.
+
+Nguyen et al. (2026)
+
+Manh Nguyen, Sunil Gupta, and Hung Le. 2026.
+
+Uncertainty-aware budget
+allocation for adaptive test-time reasoning
+.
+
+arXiv preprint arXiv:2605.26849
+.
+
+Pan et al. (2025)
+
+Jiayi Pan, Xiuyu Li, Long Lian, Charlie Snell, Yifei Zhou, Adam Yala, Trevor
+Darrell, Kurt Keutzer, and Alane Suhr. 2025.
+
+Learning adaptive parallel reasoning with language models
+.
+
+In 
+Conference on Language Modeling
+.
+
+Scalena et al. (2025)
+
+Daniel Scalena, Leonidas Zotos, Elisabetta Fersini, Malvina Nissim, and Ahmet
+Üstün. 2025.
+
+EAGer: Entropy-aware
+GEneRation for adaptive inference-time scaling
+.
+
+arXiv preprint arXiv:2510.11170
+.
+
+Schuster et al. (2022)
+
+Tal Schuster, Adam Fisch, Jai Gupta, Mostafa Dehghani, Dara Bahri, Vinh Q.
+Tran, Yi Tay, and Donald Metzler. 2022.
+
+Confident adaptive language modeling
+.
+
+In 
+Advances in Neural Information Processing Systems
+.
+
+Setlur et al. (2024)
+
+Amrith Setlur, Chirag Nagpal, Adam Fisch, Xinyang Geng, Jacob Eisenstein,
+Rishabh Agarwal, Alekh Agarwal, Jonathan Berant, and Aviral Kumar. 2024.
+
+Rewarding progress: Scaling
+automated process verifiers for LLM reasoning
+.
+
+arXiv preprint arXiv:2410.08146
+.
+
+Smirnov et al. (2026)
+
+Vladislav Smirnov, Chieu Nguyen, Sergey Senichev, Minh Ngoc Ta, et al. 2026.
+
+ThinkBooster: A unified
+framework for seamless test-time scaling of LLM reasoning
+.
+
+arXiv preprint arXiv:2606.06915
+.
+
+Snell et al. (2024)
+
+Charlie Snell, Jaehoon Lee, Kelvin Xu, and Aviral Kumar. 2024.
+
+Scaling LLM test-time
+compute optimally can be more effective than scaling model parameters
+.
+
+arXiv preprint arXiv:2408.03314
+.
+
+Uesato et al. (2022)
+
+Jonathan Uesato, Nate Kushman, Ramana Kumar, Francis Song, Noah Siegel, Lisa
+Wang, Antonia Creswell, Geoffrey Irving, and Irina Higgins. 2022.
+
+Solving math word problems
+with process- and outcome-based feedback
+.
+
+arXiv preprint arXiv:2211.14275
+.
+
+Wang et al. (2023a)
+
+Peiyi Wang, Lei Li, Zhihong Shao, R. X. Xu, Damai Dai, Yifei Li, Deli Chen,
+Y. Wu, and Zhifang Sui. 2023a.
+
+Math-Shepherd: Verify and
+reinforce LLMs step-by-step without human annotations
+.
+
+arXiv preprint arXiv:2312.08935
+.
+
+Wang et al. (2023b)
+
+Xuezhi Wang, Jason Wei, Dale Schuurmans, Quoc Le, Ed H. Chi, Sharan Narang,
+Aakanksha Chowdhery, and Denny Zhou. 2023b.
+
+Self-consistency improves
+chain of thought reasoning in language models
+.
+
+In 
+International Conference on Learning Representations
+.
+
+Wei et al. (2022)
+
+Jason Wei, Xuezhi Wang, Dale Schuurmans, Maarten Bosma, Brian Ichter, Fei Xia,
+Ed H. Chi, Quoc V. Le, and Denny Zhou. 2022.
+
+Chain-of-thought prompting elicits reasoning in large language models
+.
+
+In 
+Advances in Neural Information Processing Systems
+.
+
+Wu et al. (2025)
+
+Yangzhen Wu, Zhiqing Sun, Shanda Li, Sean Welleck, and Yiming Yang. 2025.
+
+Inference scaling laws: An empirical analysis of compute-optimal inference
+for LLM problem-solving
+.
+
+In 
+International Conference on Learning Representations
+.
+
+Xiong et al. (2024)
+
+Miao Xiong, Zhiyuan Hu, Xinyang Lu, Yifei Li, Jie Fu, Junxian He, and Bryan
+Hooi. 2024.
+
+Can LLMs express
+their uncertainty? an empirical evaluation of confidence elicitation in
+LLMs
+.
+
+In 
+International Conference on Learning Representations
+.
+
+Yang et al. (2025a)
+
+An Yang, Anfeng Li, Baosong Yang, Beichen Zhang, Binyuan Hui, Bo Zheng, Bowen
+Yu, Chang Gao, Chengen Huang, Chenxu Lv, et al. 2025a.
+
+Qwen3 technical report
+.
+
+arXiv preprint arXiv:2505.09388
+.
+
+Yang et al. (2025b)
+
+Chenxu Yang, Qingyi Si, Yongjie Duan, Zheliang Zhu, Chenyu Zhu, Qiaowei Li,
+Minghui Chen, Zheng Lin, and Weiping Wang. 2025b.
+
+Dynamic early exit in
+reasoning models
+.
+
+arXiv preprint arXiv:2504.15895
+.
+
+Yao et al. (2023)
+
+Shunyu Yao, Dian Yu, Jeffrey Zhao, Izhak Shafran, Thomas L. Griffiths, Yuan
+Cao, and Karthik Narasimhan. 2023.
+
+Tree of thoughts: Deliberate problem solving with large language models
+.
+
+In 
+Advances in Neural Information Processing Systems
+.
+
+Zhang et al. (2025)
+
+Zhenru Zhang, Chujie Zheng, Yangzhen Wu, Beichen Zhang, Runji Lin, Bowen Yu,
+Dayiheng Liu, Jingren Zhou, and Junyang Lin. 2025.
+
+The lessons of developing
+process reward models in mathematical reasoning
+.
+
+arXiv preprint arXiv:2501.07301
+.
+
+Zilberstein (1996)
+
+Shlomo Zilberstein. 1996.
+
+Using
+anytime algorithms in intelligent systems
+.
+
+AI Magazine
+, 17(3):73–83.
+
+Appendix roadmap.
+ 
+Appendix
+ 
+A
+ gives the complete intervention, labels,
+proxies, and statistical protocol.
+
+Appendix
+ 
+B
+ details replay units, observability, leakage
+controls, and non-myopic optimization.
+
+Appendix
+ 
+C
+ reports the complete proxy and controller diagnostics.
+
+Appendix
+ 
+D
+ contains depth, branch-count, length,
+answer-cue, and parser analyses.
+
+Appendix
+ 
+E
+ gives the Llama replication and physical-cost
+sensitivity.
+
+Appendix
+ 
+F
+ reports exploratory analyses of dataset composition,
+score calibration, cost weighting, recovery, and automatic readout.
+
+Appendix A 
+Experimental Details
+
+A.1 
+Fixed protocol
+
+The primary campaign evaluates Qwen3-8B and
+DeepSeek-R1-Distill-Qwen-7B on the 1,319-problem GSM8K test set and all
+500 MATH-500 problems. Reasoning uses temperature 
+ and
+top-
+. A deterministic problem-ID partition assigns 80% of
+problems to analysis and 20% to confirmation; no problem crosses the split.
+Unless specified otherwise, uncertainty intervals use 2,000 problem-level
+bootstrap replicates. The off-spine correspondence control uses 1,000
+within-stratum permutations.
+
+For each model–problem pair, four independent spines are sampled to a
+4,096-token cap. Prefixes are frozen at depths
+
+. Each nonterminal prefix receives an answer-now probe,
+one continuation reusing the next stored on-spine segment, and three
+independently seeded off-spine continuations. Every branch contains exactly
+256 reasoning tokens unless the model has already emitted its terminal answer,
+and every endpoint receives the same greedy suffix
+
+Therefore, the final answer is
+ 
+\boxed{
+. Decoding stops at the
+closing brace or after 32 answer tokens. The on-spine branch must reproduce
+the stored successor token segment exactly; off-spine branches never re-enter
+the spine.
+
+This design yields 232,832 stored checkpoints, 218,280 eligible nonterminal
+checkpoints, and 873,120 branch references. Reusing the on-spine segment
+avoids redundant physical generation while retaining its full reasoning and
+answer-probe cost in 
+.
+
+A.2 
+Answer extraction and target construction
+
+GSM8K evaluation extracts the final numeric answer and canonicalizes signs,
+commas, decimals, and fractions. MATH-500 evaluation extracts the final boxed
+expression, applies deterministic symbolic normalization, and falls back to
+normalized string equality. Unparseable answers remain in the denominator
+and are incorrect. Raw output, extracted span, canonical form, parser status,
+and exact-match bit are retained for every endpoint.
+
+A checkpoint enters Eq. 
+1
+ only when all four continuation labels
+and positive logical costs exist. We define
+
+The numerator of Eq. 
+1
+ is mean branch correctness minus stop
+correctness, and the denominator is mean branch cost. The factor 1,000
+expresses expected correctness change per 1,000 logical tokens. The ratio
+of means differs from the mean of branch-specific ratios;
+
+Table
+ 
+28
+ shows that the two are empirically nearly
+identical here because reasoning length is fixed and only the short answer
+length varies.
+
+A.3 
+Observable proxies
+
+Persistence.
+
+Fraction of up to four most recent stop answers equal to
+the current canonical answer. It is structurally missing at the first
+checkpoint.
+
+Answer confidence and ANLL.
+
+Exponential mean selected-token log
+probability over the answer span, and its negative-log counterpart.
+
+Modal agreement.
+
+Fraction of four equal-depth spines supporting the
+lexicographically tie-broken modal answer. It is an offline cross-seed
+diagnostic unless all four trajectories are explicitly charged.
+
+Process reward.
+
+Minimum positive-class probability across
+double-newline-delimited steps from Qwen2.5-Math-PRM-7B
+ 
+(
+Zhang et al., 2025
+)
+.
+
+Entropy.
+
+Mean entropy of the top-20 answer-token probabilities plus a
+residual-mass bucket.
+
+Missing proxy values are not imputed from correctness or continuation labels.
+Available-case denominators are reported for every proxy. PRM scores can be
+missing when no valid step separator remains; confidence and entropy can be
+missing when log probabilities are unavailable; agreement can be missing when
+no spine answer parses.
+
+A.4 
+Statistical protocol
+
+Analysis problems choose proxy orientation, tie-preserving bins,
+Jeffreys-smoothed calibration probabilities, persistence thresholds, feature
+scaling, imputation, regularization, and controller coefficients.
+Confirmation problems provide every reported held-out target and replay
+result. No problem crosses the split.
+
+Recovery metrics condition on 
+; damage metrics condition on 
+.
+Average precision updates precision and recall only after adding a complete
+equal-score block, preventing record order from breaking ties. AP is reported
+with confirmation prevalence and AP lift. Brier skill compares with an
+analysis-prevalence constant predictor:
+
+Problem-bootstrap intervals resample problem IDs together with all nested
+models, spines, checkpoints, and branches. They quantify between-problem
+uncertainty conditional on the stored trajectories. Replay intervals use
+full-system resampling or fixed-order per-problem area contributions, as
+specified in each table (
+Appendix
+ 
+B
+). The DP analysis
+resamples four-problem subsets, as described with its results.
+
+Difficulty is 
+mean 
+ stop accuracy pooled over the two primary
+models and four spines. It is used only for diagnostic stratification, never
+as a controller feature. Proxy bins are fitted on analysis problems without
+splitting ties. Collision cells hold model, dataset, depth, difficulty,
+current correctness, proxy, and proxy bin fixed, and are retained only when
+both the feasible nonzero event and a zero-value control occur. Because this
+coverage depends on bin resolution, we also report exact matching for discrete
+proxies, 5/10/20/50-bin sensitivity, conditional AUROC, nearest-neighbor
+disagreement, and out-of-sample covariate-only log-loss reduction. Difficulty
+deletion reruns all grouping and fitted diagnostic baselines without that
+label-aware stratifier.
+
+A.5 
+Cost coordinates
+
+The logical ledger charges prompt tokens, generated reasoning, answer probes,
+and any proxy-specific scoring needed before a policy can act. Prompt tokens
+are deduplicated when a shared KV state can be reused; all generated reasoning
+and answer tokens are charged. A physical sidecar records role-specific
+input/output tokens, GPU seconds, peak memory, and throughput. Estimated FLOPs
+account for causal sequence length, grouped-query attention, SwiGLU
+projections, vocabulary heads, and reusable prefix KV states. Calibrated H20
+seconds apply separate observed rates to reasoning generation, answer probes,
+and PRM prefill. We report these resource measures separately.
+
+Appendix B 
+Replay and Identification Controls
+
+B.1 
+Problem-level replay
+
+The primary replay runs four campaigns, one per spine seed. Each campaign has
+one frontier for each of 372 confirmation problems, so its accuracy is
+problem-level exact match. At each ledger boundary, a policy selects one
+frontier, pays the stored transition cost, and reveals its successor answer.
+The common endpoint for a policy comparison is the largest budget reachable
+by every policy. For repetition 
+, normalized AULC is
+
+using the right-continuous accuracy curve. The main controller hierarchy uses
+full-system bootstrap: each replicate reconstructs the resampled problem pool,
+creates independent copies for duplicate draws, reruns all four global
+orderings, and recomputes the common endpoint.
+
+Model
+
+Policy
+
+Mean normalized AULC
+
+Rel. normalized-AULC gain vs. RR (95% CI)
+
+Final problem accuracy
+
+Qwen3
+
+Fixed 1,024
+
+0.820
+
+-3.66% [-4.34, -3.01]
+
+0.909
+
+Qwen3
+
+Round-robin
+
+0.851
+
++0.00% [+0.00, +0.00]
+
+0.909
+
+Qwen3
+
+TRACE-style
+
+0.814
+
+-4.29% [-5.96, -2.54]
+
+0.909
+
+Qwen3
+
+PRM
+
+0.439
+
+-48.41% [-52.94, -43.76]
+
+0.476
+
+Qwen3
+
+ANLL
+
+0.834
+
+-2.00% [-3.52, -0.44]
+
+0.909
+
+Qwen3
+
+Entropy
+
+0.832
+
+-2.27% [-3.78, -0.70]
+
+0.909
+
+DeepSeek
+
+Fixed 1,024
+
+0.792
+
+-2.58% [-3.21, -2.00]
+
+0.847
+
+DeepSeek
+
+Round-robin
+
+0.813
+
++0.00% [+0.00, +0.00]
+
+0.847
+
+DeepSeek
+
+TRACE-style
+
+0.813
+
++0.04% [-1.06, +1.21]
+
+0.847
+
+DeepSeek
+
+PRM
+
+0.537
+
+-33.88% [-37.99, -29.68]
+
+0.554
+
+DeepSeek
+
+ANLL
+
+0.823
+
++1.33% [+0.35, +2.38]
+
+0.847
+
+DeepSeek
+
+Entropy
+
+0.823
+
++1.30% [+0.27, +2.44]
+
+0.847
+
+Table 11: 
+Problem-level equal-ledger replay over 372 confirmation problems,
+with one spine per problem in each of four repetitions. Mean normalized AULC
+averages the normalized areas over repetitions. Paired intervals use 2,000
+problem-cluster bootstrap draws of per-problem area contributions, retaining
+all four seeds and the fixed full-universe replay order. Label-aware
+opportunity diagnostics appear in Table 
+12
+; charged
+cross-spine agreement appears in Table 
+15
+.
+
+Table
+ 
+11
+ reports the resulting problem-level replay
+for the predefined non-label-aware baselines.
+
+B.2 
+Successor leakage and independent branches
+
+Branch 1 is the next stored spine segment, so its correctness label equals
+the successor checkpoint’s answer label. The mixed four-branch score includes
+this realized outcome. The off-spine score uses branches 2–4 to rank the
+branch-1 transition without observing its realized outcome. This offline diagnostic tests
+whether independent continuations predict the successor; its continuation
+correctness labels require grading and are unavailable to an online policy.
+
+Model
+
+Label-aware ordering
+
+Mean normalized AULC
+
+Gain vs. RR (95% CI)
+
+Final problem accuracy
+
+Qwen3
+
+Round-robin
+
+0.851
+
++0.00% [+0.00, +0.00]
+
+0.909
+
+Qwen3
+
+On-spine hindsight
+
+0.842
+
+-1.10% [-3.32, +1.33]
+
+0.909
+
+Qwen3
+
+Mixed myopic
+
+0.869
+
++2.07% [+0.19, +4.02]
+
+0.909
+
+Qwen3
+
+Off-spine myopic
+
+0.863
+
++1.44% [-0.48, +3.37]
+
+0.909
+
+DeepSeek
+
+Round-robin
+
+0.813
+
++0.00% [+0.00, +0.00]
+
+0.847
+
+DeepSeek
+
+On-spine hindsight
+
+0.844
+
++3.88% [+1.96, +5.90]
+
+0.847
+
+DeepSeek
+
+Mixed myopic
+
+0.864
+
++6.35% [+4.52, +8.38]
+
+0.847
+
+DeepSeek
+
+Off-spine myopic
+
+0.856
+
++5.41% [+3.61, +7.29]
+
+0.847
+
+Table 12: 
+Offline opportunity diagnostics under the single-spine logical
+ledger. On-spine ordering uses the realized successor label; mixed ordering
+includes it among four labels; off-spine ordering uses three independent
+continuation labels. Green highlights the off-spine diagnostic. These scores
+require future correctness labels for offline evaluation. Paired intervals
+use 2,000 problem-cluster bootstrap draws, retaining all four spine
+repetitions and conditioning on the fixed full-universe replay order.
+
+Table
+ 
+12
+ contrasts that independent ordering with the
+mixed and on-spine hindsight orderings under the same ledger.
+
+Leave-one-branch-out evaluation predicts each branch from the other three.
+Holding out branch 1 is the direct test of whether independent off-spine
+outcomes predict the actual replay successor; holding out branches 2–4 checks
+that predictability is not peculiar to the distinguished on-spine branch.
+
+Model
+
+Target
+
+Held-out branch
+
+Event rate
+
+AUROC (95% CI)
+
+AUPRC (95% CI)
+
+Brier (95% CI)
+
+Qwen3
+
+Beneficial
+
+Pooled 1–4
+
+14,744
+
+26.6%
+
+0.943 [0.929, 0.954]
+
+0.865 [0.838, 0.890]
+
+0.061 [0.049, 0.074]
+
+Qwen3
+
+Beneficial
+
+1 (on-spine)
+
+3,686
+
+26.9%
+
+0.941 [0.926, 0.954]
+
+0.867 [0.838, 0.894]
+
+0.062 [0.049, 0.075]
+
+Qwen3
+
+Beneficial
+
+2 (off-spine)
+
+3,686
+
+26.2%
+
+0.945 [0.930, 0.958]
+
+0.863 [0.834, 0.891]
+
+0.061 [0.049, 0.075]
+
+Qwen3
+
+Beneficial
+
+3 (off-spine)
+
+3,686
+
+26.0%
+
+0.945 [0.930, 0.959]
+
+0.859 [0.826, 0.889]
+
+0.061 [0.049, 0.076]
+
+Qwen3
+
+Beneficial
+
+4 (off-spine)
+
+3,686
+
+27.2%
+
+0.940 [0.923, 0.954]
+
+0.872 [0.841, 0.900]
+
+0.061 [0.049, 0.076]
+
+Qwen3
+
+Harmful
+
+Pooled 1–4
+
+74,536
+
+1.4%
+
+0.849 [0.810, 0.880]
+
+0.490 [0.381, 0.580]
+
+0.009 [0.007, 0.011]
+
+Qwen3
+
+Harmful
+
+1 (on-spine)
+
+18,634
+
+1.4%
+
+0.859 [0.822, 0.889]
+
+0.486 [0.381, 0.579]
+
+0.009 [0.007, 0.011]
+
+Qwen3
+
+Harmful
+
+2 (off-spine)
+
+18,634
+
+1.3%
+
+0.848 [0.800, 0.885]
+
+0.478 [0.359, 0.580]
+
+0.009 [0.007, 0.011]
+
+Qwen3
+
+Harmful
+
+3 (off-spine)
+
+18,634
+
+1.4%
+
+0.845 [0.796, 0.882]
+
+0.473 [0.353, 0.579]
+
+0.009 [0.007, 0.011]
+
+Qwen3
+
+Harmful
+
+4 (off-spine)
+
+18,634
+
+1.5%
+
+0.846 [0.804, 0.883]
+
+0.526 [0.415, 0.624]
+
+0.009 [0.007, 0.011]
+
+DeepSeek
+
+Beneficial
+
+Pooled 1–4
+
+17,604
+
+18.9%
+
+0.944 [0.934, 0.954]
+
+0.839 [0.812, 0.864]
+
+0.048 [0.040, 0.057]
+
+DeepSeek
+
+Beneficial
+
+1 (on-spine)
+
+4,401
+
+18.8%
+
+0.948 [0.935, 0.960]
+
+0.857 [0.826, 0.886]
+
+0.045 [0.037, 0.054]
+
+DeepSeek
+
+Beneficial
+
+2 (off-spine)
+
+4,401
+
+18.8%
+
+0.941 [0.928, 0.954]
+
+0.824 [0.790, 0.857]
+
+0.051 [0.042, 0.061]
+
+DeepSeek
+
+Beneficial
+
+3 (off-spine)
+
+4,401
+
+18.9%
+
+0.947 [0.935, 0.960]
+
+0.841 [0.810, 0.872]
+
+0.048 [0.039, 0.057]
+
+DeepSeek
+
+Beneficial
+
+4 (off-spine)
+
+4,401
+
+19.0%
+
+0.942 [0.929, 0.954]
+
+0.833 [0.800, 0.864]
+
+0.050 [0.041, 0.060]
+
+DeepSeek
+
+Harmful
+
+Pooled 1–4
+
+71,676
+
+1.9%
+
+0.879 [0.858, 0.898]
+
+0.579 [0.510, 0.643]
+
+0.010 [0.008, 0.012]
+
+DeepSeek
+
+Harmful
+
+1 (on-spine)
+
+17,919
+
+1.9%
+
+0.880 [0.851, 0.904]
+
+0.586 [0.503, 0.656]
+
+0.010 [0.008, 0.012]
+
+DeepSeek
+
+Harmful
+
+2 (off-spine)
+
+17,919
+
+1.9%
+
+0.884 [0.857, 0.907]
+
+0.605 [0.535, 0.669]
+
+0.010 [0.008, 0.011]
+
+DeepSeek
+
+Harmful
+
+3 (off-spine)
+
+17,919
+
+1.9%
+
+0.880 [0.853, 0.903]
+
+0.593 [0.513, 0.665]
+
+0.010 [0.008, 0.012]
+
+DeepSeek
+
+Harmful
+
+4 (off-spine)
+
+17,919
+
+1.8%
+
+0.874 [0.843, 0.903]
+
+0.534 [0.450, 0.616]
+
+0.011 [0.009, 0.013]
+
+Table 13: 
+Leave-one-branch-out prediction on confirmation checkpoints. The mean event frequency of the other three branches predicts the held-out branch event. Beneficial is conditioned on 
+ and harmful on 
+. Branch 1 is the realized replay successor. Intervals resample complete problems 2,000 times.
+
+Table
+ 
+13
+ reports the pooled predictor and each of the
+four leave-one-branch-out evaluations.
+
+A complementary pooled-spine diagnostic places all four spines of each
+problem in the same budget pool. It measures accuracy over problem–spine
+pairs; primary replay measures accuracy over problems. We report the two
+analyses separately because they use different allocation and evaluation
+units.
+
+Model
+
+Ordering score
+
+Sees successor?
+
+Mean normalized AULC
+
+AULC gain vs. RR
+
+Off-spine permutation 
+ (
+)
+
+Qwen3
+
+Round-robin
+
+no
+
+0.851
+
++0.00%
+
+–
+
+Qwen3
+
+Mixed 4-branch
+
+yes
+
+0.856
+
++0.57%
+
+–
+
+Qwen3
+
+On-spine one-step hindsight
+
+yes
+
+0.827
+
+-2.82%
+
+–
+
+Qwen3
+
+Off-spine independent
+
+no
+
+0.849
+
+-0.19%
+
+0.001/0.001
+
+DeepSeek
+
+Round-robin
+
+no
+
+0.813
+
++0.00%
+
+–
+
+DeepSeek
+
+Mixed 4-branch
+
+yes
+
+0.848
+
++4.37%
+
+–
+
+DeepSeek
+
+On-spine one-step hindsight
+
+yes
+
+0.825
+
++1.57%
+
+–
+
+DeepSeek
+
+Off-spine independent
+
+no
+
+0.840
+
++3.39%
+
+0.001/0.001
+
+Table 14: 
+Spine-level myopic score decomposition with all four spines of each
+problem in one budget pool. Mixed ordering uses all four branch labels;
+one-step hindsight uses the realized on-spine successor; off-spine ordering
+uses branches 2–4 to rank actions evaluated on branch 1. Each score is used
+for greedy next-step allocation. The off-spine permutation test measures
+checkpoint correspondence within matching strata; 
+ includes pooled
+difficulty and 
+ removes it.
+
+Table
+ 
+14
+ reports this pooled-spine decomposition; it is
+visualized in 
+Figure
+ 
+5
+.
+
+Figure 5: 
+Pooled-spine diagnostic separating mixed value into realized
+on-spine hindsight and independent off-spine information. All methods share
+the same stored transitions and logical-ledger endpoint. Accuracy is averaged
+over problem–spine pairs.
+
+B.3 
+Cross-spine agreement accounting
+
+Modal agreement requires four answer probes at the same depth. We compare
+an uncharged diagnostic, which omits the cost of the auxiliary trajectories,
+with a charged policy that initializes and advances four synchronized spines.
+The charged policy pays for every reasoning path and answer probe; accuracy
+is evaluated on the designated spine.
+
+Model
+
+Ledger
+
+Agreement treatment
+
+Mean normalized AULC
+
+Gain vs. single-spine RR (95% CI)
+
+Qwen3
+
+Logical tokens
+
+Single-spine round-robin
+
+0.851
+
++0.00% [+0.00, +0.00]
+
+Qwen3
+
+Logical tokens
+
+Free cross-spine diagnostic
+
+0.830
+
+-2.47% [-4.71, -0.19]
+
+Qwen3
+
+Logical tokens
+
+Charged four-spine policy
+
+0.627
+
+-26.29% [-29.79, -22.92]
+
+Qwen3
+
+Estimated FLOPs
+
+Single-spine round-robin
+
+0.854
+
++0.00% [+0.00, +0.00]
+
+Qwen3
+
+Estimated FLOPs
+
+Free cross-spine diagnostic
+
+0.831
+
+-2.66% [-4.78, -0.54]
+
+Qwen3
+
+Estimated FLOPs
+
+Charged four-spine policy
+
+0.504
+
+-40.99% [-45.31, -36.65]
+
+Qwen3
+
+Calibrated H20 seconds
+
+Single-spine round-robin
+
+0.854
+
++0.00% [+0.00, +0.00]
+
+Qwen3
+
+Calibrated H20 seconds
+
+Free cross-spine diagnostic
+
+0.831
+
+-2.65% [-4.93, -0.45]
+
+Qwen3
+
+Calibrated H20 seconds
+
+Charged four-spine policy
+
+0.600
+
+-29.69% [-33.40, -25.92]
+
+DeepSeek
+
+Logical tokens
+
+Single-spine round-robin
+
+0.813
+
++0.00% [+0.00, +0.00]
+
+DeepSeek
+
+Logical tokens
+
+Free cross-spine diagnostic
+
+0.819
+
++0.78% [-0.55, +2.15]
+
+DeepSeek
+
+Logical tokens
+
+Charged four-spine policy
+
+0.672
+
+-17.28% [-19.84, -14.67]
+
+DeepSeek
+
+Estimated FLOPs
+
+Single-spine round-robin
+
+0.814
+
++0.00% [+0.00, +0.00]
+
+DeepSeek
+
+Estimated FLOPs
+
+Free cross-spine diagnostic
+
+0.819
+
++0.67% [-0.63, +2.05]
+
+DeepSeek
+
+Estimated FLOPs
+
+Charged four-spine policy
+
+0.580
+
+-28.72% [-32.34, -25.05]
+
+DeepSeek
+
+Calibrated H20 seconds
+
+Single-spine round-robin
+
+0.814
+
++0.00% [+0.00, +0.00]
+
+DeepSeek
+
+Calibrated H20 seconds
+
+Free cross-spine diagnostic
+
+0.819
+
++0.68% [-0.59, +1.98]
+
+DeepSeek
+
+Calibrated H20 seconds
+
+Charged four-spine policy
+
+0.635
+
+-22.02% [-25.02, -18.86]
+
+Table 15: 
+Cross-spine agreement under different cost ledgers. The free row evaluates agreement without charging its auxiliary trajectories. The charged policy pays the other three reasoning trajectories and answer probes initially and whenever agreement is updated; the problem’s designated spine alone defines accuracy. Prompts are deduplicated and their KV state is cloned. Each ledger uses a common endpoint across the three rows.
+
+Table
+ 
+15
+ shows both the free diagnostic and the fully
+charged four-spine policy under all three cost coordinates.
+
+B.4 
+Exact non-myopic hindsight
+
+A deterministic problem-ID rule selects 256 distinct confirmation problems per model, partitioned
+into 64 non-overlapping groups of four. Each group contains one 16-state
+on-spine chain per problem. Dynamic programming enumerates all
+
+ precedence-feasible joint states, charges stored transition
+cost, and maximizes the same right-continuous AULC objective. With all transition outcomes known, the optimum gives an exact hindsight
+upper bound within each sampled four-problem system.
+
+Model
+
+Policy
+
+Mean normalized AULC
+
+Gain vs. RR (95% CI)
+
+Gap to exact DP (95% CI)
+
+Qwen3
+
+Round-robin
+
+0.843
+
++0.00% [+0.00, +0.00]
+
+6.61% [5.06, 8.31]
+
+Qwen3
+
+Mixed myopic
+
+0.841
+
+-0.25% [-2.41, +1.88]
+
+6.84% [4.78, 9.00]
+
+Qwen3
+
+On-spine one-step hindsight
+
+0.820
+
+-2.74% [-5.35, -0.15]
+
+9.16% [6.74, 11.67]
+
+Qwen3
+
+Off-spine myopic
+
+0.832
+
+-1.22% [-3.42, +0.81]
+
+7.75% [5.65, 10.16]
+
+Qwen3
+
+Exact non-myopic hindsight
+
+0.902
+
++7.08% [+5.31, +9.03]
+
+0.00% [0.00, 0.00]
+
+DeepSeek
+
+Round-robin
+
+0.766
+
++0.00% [+0.00, +0.00]
+
+10.36% [7.86, 13.46]
+
+DeepSeek
+
+Mixed myopic
+
+0.809
+
++5.68% [+2.71, +8.89]
+
+5.27% [3.47, 7.23]
+
+DeepSeek
+
+On-spine one-step hindsight
+
+0.791
+
++3.31% [+0.15, +6.58]
+
+7.39% [5.08, 9.98]
+
+DeepSeek
+
+Off-spine myopic
+
+0.808
+
++5.48% [+2.77, +8.65]
+
+5.44% [3.57, 7.39]
+
+DeepSeek
+
+Exact non-myopic hindsight
+
+0.854
+
++11.55% [+8.19, +15.11]
+
+0.00% [0.00, 0.00]
+
+Table 16: 
+Exact non-myopic hindsight scheduling on 64 deterministic,
+non-overlapping subsets per model. Each subset contains one complete
+16-state frontier from each of four distinct confirmation problems. Dynamic
+programming enumerates all 
+ precedence-feasible frontier states and
+maximizes full-ledger AULC within each subset. Intervals bootstrap the 64
+four-problem subsets 2,000 times.
+
+Table
+ 
+16
+ quantifies the gap between one-step orderings and this
+subset-specific exact hindsight optimum.
+
+Appendix C 
+Complete Proxy and Controller Results
+
+C.1 
+Discrimination, rare-event baselines, and calibration
+
+The main text uses conditional event-detection AUROC as its primary
+prediction endpoint. 
+Table
+ 
+17
+ supplies supporting
+discrimination and calibration estimates with problem-bootstrap intervals.
+Confidence and ANLL are monotone transformations of the same signal;
+confidence represents this pair in the table. The controllers use both
+confidence and ANLL as inputs.
+
+Because damage is rare, 
+Table
+ 
+18
+ pairs average
+precision and Brier score with their prevalence baselines. For the best
+damage proxies, average precision is 4.34–5.16 times prevalence, while Brier
+skill is 0.078–0.099. This distinguishes useful event ranking from accurate
+probability estimation. 
+Figure
+ 
+6
+ shows held-out calibration
+curves.
+
+Model
+
+Target
+
+Proxy
+
+AUROC (95% CI)
+
+AUPRC (95% CI)
+
+Brier (95% CI)
+
+Qwen3
+
+Beneficial
+
+Confidence
+
+3,686
+
+0.501 [0.428, 0.572]
+
+0.338 [0.281, 0.415]
+
+0.227 [0.206, 0.252]
+
+Qwen3
+
+Beneficial
+
+Agreement
+
+3,678
+
+0.625 [0.573, 0.675]
+
+0.428 [0.366, 0.497]
+
+0.218 [0.196, 0.242]
+
+Qwen3
+
+Beneficial
+
+Persistence
+
+2,702
+
+0.658 [0.610, 0.706]
+
+0.363 [0.295, 0.444]
+
+0.183 [0.155, 0.217]
+
+Qwen3
+
+Beneficial
+
+PRM
+
+3,686
+
+0.604 [0.562, 0.649]
+
+0.494 [0.432, 0.566]
+
+0.221 [0.198, 0.246]
+
+Qwen3
+
+Beneficial
+
+Entropy
+
+3,686
+
+0.510 [0.434, 0.584]
+
+0.334 [0.271, 0.427]
+
+0.226 [0.204, 0.252]
+
+Qwen3
+
+Harmful
+
+Confidence
+
+18,634
+
+0.598 [0.549, 0.648]
+
+0.067 [0.042, 0.105]
+
+0.028 [0.022, 0.034]
+
+Qwen3
+
+Harmful
+
+Agreement
+
+18,634
+
+0.742 [0.699, 0.782]
+
+0.150 [0.102, 0.207]
+
+0.025 [0.020, 0.031]
+
+Qwen3
+
+Harmful
+
+Persistence
+
+18,022
+
+0.730 [0.688, 0.772]
+
+0.111 [0.072, 0.159]
+
+0.025 [0.020, 0.031]
+
+Qwen3
+
+Harmful
+
+PRM
+
+18,634
+
+0.660 [0.607, 0.707]
+
+0.056 [0.041, 0.073]
+
+0.028 [0.022, 0.034]
+
+Qwen3
+
+Harmful
+
+Entropy
+
+18,634
+
+0.623 [0.566, 0.677]
+
+0.128 [0.071, 0.198]
+
+0.028 [0.022, 0.034]
+
+DeepSeek
+
+Beneficial
+
+Confidence
+
+4,401
+
+0.611 [0.559, 0.659]
+
+0.307 [0.260, 0.367]
+
+0.185 [0.166, 0.207]
+
+DeepSeek
+
+Beneficial
+
+Agreement
+
+4,393
+
+0.545 [0.493, 0.599]
+
+0.277 [0.238, 0.328]
+
+0.188 [0.169, 0.209]
+
+DeepSeek
+
+Beneficial
+
+Persistence
+
+3,665
+
+0.673 [0.632, 0.715]
+
+0.299 [0.247, 0.360]
+
+0.154 [0.135, 0.178]
+
+DeepSeek
+
+Beneficial
+
+PRM
+
+4,401
+
+0.662 [0.620, 0.704]
+
+0.433 [0.375, 0.504]
+
+0.178 [0.160, 0.200]
+
+DeepSeek
+
+Beneficial
+
+Entropy
+
+4,401
+
+0.611 [0.557, 0.664]
+
+0.302 [0.258, 0.364]
+
+0.184 [0.165, 0.205]
+
+DeepSeek
+
+Harmful
+
+Confidence
+
+17,919
+
+0.668 [0.630, 0.708]
+
+0.177 [0.129, 0.233]
+
+0.034 [0.029, 0.039]
+
+DeepSeek
+
+Harmful
+
+Agreement
+
+17,919
+
+0.702 [0.665, 0.737]
+
+0.112 [0.082, 0.150]
+
+0.033 [0.028, 0.038]
+
+DeepSeek
+
+Harmful
+
+Persistence
+
+17,139
+
+0.716 [0.681, 0.747]
+
+0.141 [0.106, 0.185]
+
+0.029 [0.025, 0.034]
+
+DeepSeek
+
+Harmful
+
+PRM
+
+17,919
+
+0.584 [0.543, 0.621]
+
+0.065 [0.051, 0.087]
+
+0.034 [0.029, 0.040]
+
+DeepSeek
+
+Harmful
+
+Entropy
+
+17,919
+
+0.681 [0.636, 0.720]
+
+0.215 [0.155, 0.277]
+
+0.034 [0.028, 0.039]
+
+Table 17: 
+Supporting confirmation discrimination and calibration results with problem-bootstrap intervals. Confidence represents the monotone-equivalent confidence/ANLL pair; separate ANLL results are available in the accompanying results archive.
+
+Model
+
+Target
+
+Proxy
+
+Analysis prev.
+
+Conf. prev.
+
+AP
+
+AP/prev.
+
+Brier ref.
+
+BSS
+
+Qwen3
+
+Beneficial
+
+Confidence
+
+0.307
+
+0.357
+
+0.338
+
+0.95
+
+0.232
+
++0.022
+
+Qwen3
+
+Beneficial
+
+Agreement
+
+0.306
+
+0.356
+
+0.428
+
+1.20
+
+0.232
+
++0.058
+
+Qwen3
+
+Beneficial
+
+Persistence
+
+0.224
+
+0.264
+
+0.363
+
+1.37
+
+0.196
+
++0.064
+
+Qwen3
+
+Beneficial
+
+PRM
+
+0.307
+
+0.357
+
+0.494
+
+1.38
+
+0.232
+
++0.050
+
+Qwen3
+
+Beneficial
+
+Entropy
+
+0.307
+
+0.357
+
+0.334
+
+0.94
+
+0.232
+
++0.025
+
+Qwen3
+
+Harmful
+
+Confidence
+
+0.028
+
+0.029
+
+0.067
+
+2.30
+
+0.028
+
++0.005
+
+Qwen3
+
+Harmful
+
+Agreement
+
+0.028
+
+0.029
+
+0.150
+
+5.16
+
+0.028
+
++0.099
+
+Qwen3
+
+Harmful
+
+Persistence
+
+0.026
+
+0.027
+
+0.111
+
+4.05
+
+0.027
+
++0.064
+
+Qwen3
+
+Harmful
+
+PRM
+
+0.028
+
+0.029
+
+0.056
+
+1.91
+
+0.028
+
++0.011
+
+Qwen3
+
+Harmful
+
+Entropy
+
+0.028
+
+0.029
+
+0.128
+
+4.40
+
+0.028
+
++0.009
+
+DeepSeek
+
+Beneficial
+
+Confidence
+
+0.235
+
+0.260
+
+0.307
+
+1.18
+
+0.193
+
++0.040
+
+DeepSeek
+
+Beneficial
+
+Agreement
+
+0.235
+
+0.260
+
+0.277
+
+1.07
+
+0.193
+
++0.026
+
+DeepSeek
+
+Beneficial
+
+Persistence
+
+0.182
+
+0.209
+
+0.299
+
+1.43
+
+0.166
+
++0.070
+
+DeepSeek
+
+Beneficial
+
+PRM
+
+0.235
+
+0.260
+
+0.433
+
+1.67
+
+0.193
+
++0.077
+
+DeepSeek
+
+Beneficial
+
+Entropy
+
+0.235
+
+0.260
+
+0.302
+
+1.16
+
+0.193
+
++0.047
+
+DeepSeek
+
+Harmful
+
+Confidence
+
+0.036
+
+0.036
+
+0.177
+
+4.93
+
+0.035
+
++0.022
+
+DeepSeek
+
+Harmful
+
+Agreement
+
+0.036
+
+0.036
+
+0.112
+
+3.12
+
+0.035
+
++0.057
+
+DeepSeek
+
+Harmful
+
+Persistence
+
+0.033
+
+0.033
+
+0.141
+
+4.34
+
+0.031
+
++0.078
+
+DeepSeek
+
+Harmful
+
+PRM
+
+0.036
+
+0.036
+
+0.065
+
+1.81
+
+0.035
+
++0.008
+
+DeepSeek
+
+Harmful
+
+Entropy
+
+0.036
+
+0.036
+
+0.215
+
+5.99
+
+0.035
+
++0.031
+
+Table 18: 
+Rare-event baselines on each proxy’s available-case population. Confidence represents the confidence/ANLL pair. Confirmation prevalence is the no-skill AP baseline. The Brier reference predicts the analysis-set prevalence for every confirmation row; 
+.
+
+C.2 
+Matched and conditional information
+
+These diagnostics examine variation in continuation outcomes among
+checkpoints with similar observed signals. Collision coverage is the
+fraction of checkpoints in matched cells containing both a feasible nonzero
+event and a zero-value control. Bin sensitivity, exact matching, and
+nearest-neighbor comparisons assess this outcome heterogeneity at different
+matching resolutions. Conditional AUROC and held-out log-loss reduction
+measure predictive information beyond the matching covariates.
+
+At ten-bin resolution, 81.9% and 94.5% of Qwen3 and DeepSeek checkpoints
+lie in at least one ambiguous matched cell; exact persistence matching gives
+77.3% and 87.7%. Conditional AUROC is 0.632–0.692, and held-out log-loss
+reduction is 0.021–0.053 bits. Thus persistence provides predictive
+information even though checkpoints with matching signals can have different
+continuation outcomes.
+
+Figure 6: 
+Confirmation calibration for all audited proxies. Orientations and
+tie-preserving bins are fixed using analysis problems; the diagonal denotes
+perfect calibration.
+
+Model
+
+Proxy
+
+Collision
+
+Cells
+
+Recovery gap
+
+Damage gap
+
+Qwen3
+
+ANLL
+
+48.0%
+
+606
+
++2.703
+
+-1.813
+
+Qwen3
+
+Confidence
+
+48.0%
+
+606
+
++2.703
+
+-1.813
+
+Qwen3
+
+Agreement
+
+73.7%
+
+323
+
++2.687
+
+-1.769
+
+Qwen3
+
+Persistence
+
+77.3%
+
+327
+
++2.616
+
+-1.777
+
+Qwen3
+
+PRM
+
+45.3%
+
+591
+
++2.677
+
+-1.806
+
+Qwen3
+
+Entropy
+
+47.6%
+
+585
+
++2.693
+
+-1.805
+
+DeepSeek
+
+ANLL
+
+55.8%
+
+654
+
++2.657
+
+-1.976
+
+DeepSeek
+
+Confidence
+
+55.8%
+
+654
+
++2.657
+
+-1.976
+
+DeepSeek
+
+Agreement
+
+87.5%
+
+366
+
++2.665
+
+-1.974
+
+DeepSeek
+
+Persistence
+
+87.7%
+
+329
+
++2.575
+
+-1.961
+
+DeepSeek
+
+PRM
+
+58.2%
+
+642
+
++2.565
+
+-2.000
+
+DeepSeek
+
+Entropy
+
+54.5%
+
+619
+
++2.662
+
+-1.949
+
+Table 19: 
+Matched-cell collision diagnostics. Gaps compare feasible
+nonzero checkpoints with zero-value controls after matching model, dataset,
+difficulty, depth, current correctness, and proxy bin.
+
+Model
+
+Proxy
+
+5 bins
+
+10 bins
+
+20 bins
+
+50 bins
+
+Qwen3
+
+ANLL
+
+63.1%
+
+48.0%
+
+33.6%
+
+20.4%
+
+Qwen3
+
+Confidence
+
+63.1%
+
+48.0%
+
+33.6%
+
+20.4%
+
+Qwen3
+
+Agreement
+
+73.7%
+
+73.7%
+
+73.7%
+
+73.7%
+
+Qwen3
+
+Persistence
+
+77.3%
+
+77.3%
+
+77.3%
+
+77.3%
+
+Qwen3
+
+PRM
+
+56.9%
+
+45.3%
+
+33.1%
+
+20.5%
+
+Qwen3
+
+Entropy
+
+63.2%
+
+47.6%
+
+33.2%
+
+20.6%
+
+DeepSeek
+
+ANLL
+
+74.1%
+
+55.8%
+
+39.8%
+
+23.2%
+
+DeepSeek
+
+Confidence
+
+74.1%
+
+55.8%
+
+39.8%
+
+23.2%
+
+DeepSeek
+
+Agreement
+
+87.5%
+
+87.5%
+
+87.5%
+
+87.5%
+
+DeepSeek
+
+Persistence
+
+87.7%
+
+87.7%
+
+87.7%
+
+87.7%
+
+DeepSeek
+
+PRM
+
+73.7%
+
+58.2%
+
+41.9%
+
+25.2%
+
+DeepSeek
+
+Entropy
+
+72.2%
+
+54.5%
+
+38.1%
+
+23.0%
+
+Table 20: 
+Collision sensitivity to proxy resolution. Persistence and
+agreement use exact values; continuous-proxy bins are fitted on analysis
+data.
+
+Model
+
+Target
+
+Proxy
+
+Conditional AUROC
+
+NN disagreement
+
+ test log-loss, bits
+
+Qwen3
+
+Beneficial
+
+ANLL
+
+0.524
+
+34.3% [30.8, 37.9]
+
+-0.0166 [-0.0344, -0.0006]
+
+Qwen3
+
+Beneficial
+
+Confidence
+
+0.476
+
+34.3% [30.9, 37.7]
+
+-0.0166 [-0.0331, -0.0008]
+
+Qwen3
+
+Beneficial
+
+Agreement
+
+0.581
+
+35.1% [31.8, 38.7]
+
++0.0144 [-0.0112, +0.0416]
+
+Qwen3
+
+Beneficial
+
+Persistence
+
+0.644
+
+32.3% [28.7, 36.5]
+
++0.0468 [+0.0193, +0.0760]
+
+Qwen3
+
+Beneficial
+
+PRM
+
+0.597
+
+35.6% [32.9, 38.4]
+
+-0.0085 [-0.0233, +0.0067]
+
+Qwen3
+
+Beneficial
+
+Entropy
+
+0.534
+
+36.7% [33.4, 40.1]
+
+-0.0239 [-0.0406, -0.0088]
+
+Qwen3
+
+Harmful
+
+ANLL
+
+0.562
+
+5.5% [4.7, 6.3]
+
+-0.0046 [-0.0074, -0.0015]
+
+Qwen3
+
+Harmful
+
+Confidence
+
+0.562
+
+5.5% [4.7, 6.3]
+
+-0.0046 [-0.0074, -0.0016]
+
+Qwen3
+
+Harmful
+
+Agreement
+
+0.697
+
+4.9% [4.2, 5.7]
+
++0.0199 [+0.0111, +0.0307]
+
+Qwen3
+
+Harmful
+
+Persistence
+
+0.691
+
+4.7% [4.1, 5.5]
+
++0.0215 [+0.0129, +0.0308]
+
+Qwen3
+
+Harmful
+
+PRM
+
+0.680
+
+5.4% [4.6, 6.2]
+
++0.0016 [-0.0027, +0.0065]
+
+Qwen3
+
+Harmful
+
+Entropy
+
+0.587
+
+5.1% [4.4, 5.8]
+
+-0.0039 [-0.0078, +0.0002]
+
+DeepSeek
+
+Beneficial
+
+ANLL
+
+0.563
+
+31.3% [28.2, 34.6]
+
+-0.0039 [-0.0242, +0.0174]
+
+DeepSeek
+
+Beneficial
+
+Confidence
+
+0.563
+
+31.3% [28.2, 34.6]
+
+-0.0038 [-0.0241, +0.0179]
+
+DeepSeek
+
+Beneficial
+
+Agreement
+
+0.547
+
+31.5% [28.8, 34.3]
+
++0.0088 [-0.0077, +0.0244]
+
+DeepSeek
+
+Beneficial
+
+Persistence
+
+0.632
+
+27.2% [24.7, 29.8]
+
++0.0528 [+0.0275, +0.0820]
+
+DeepSeek
+
+Beneficial
+
+PRM
+
+0.621
+
+30.3% [27.9, 33.0]
+
++0.0188 [-0.0006, +0.0384]
+
+DeepSeek
+
+Beneficial
+
+Entropy
+
+0.573
+
+30.7% [27.9, 33.7]
+
+-0.0000 [-0.0234, +0.0233]
+
+DeepSeek
+
+Harmful
+
+ANLL
+
+0.629
+
+6.2% [5.6, 6.9]
+
++0.0058 [-0.0001, +0.0120]
+
+DeepSeek
+
+Harmful
+
+Confidence
+
+0.629
+
+6.2% [5.6, 6.9]
+
++0.0058 [-0.0000, +0.0121]
+
+DeepSeek
+
+Harmful
+
+Agreement
+
+0.621
+
+6.2% [5.6, 6.9]
+
++0.0149 [+0.0063, +0.0241]
+
+DeepSeek
+
+Harmful
+
+Persistence
+
+0.634
+
+5.5% [5.0, 6.1]
+
++0.0242 [+0.0161, +0.0330]
+
+DeepSeek
+
+Harmful
+
+PRM
+
+0.610
+
+6.6% [5.9, 7.3]
+
+-0.0029 [-0.0068, +0.0016]
+
+DeepSeek
+
+Harmful
+
+Entropy
+
+0.635
+
+6.1% [5.5, 6.7]
+
++0.0065 [+0.0001, +0.0136]
+
+Table 21: 
+Conditional and incremental proxy diagnostics on confirmation
+problems. Positive 
+ test log-loss favors the proxy-augmented model;
+intervals use problem-level bootstrap.
+
+Tables
+ 
+19
+, 
+20
+ and 
+21
+
+respectively report matched-cell ambiguity, bin-resolution sensitivity, and
+conditional or incremental information.
+
+Removing pooled difficulty yields coarser matching cells and diagnostic
+covariates constructed without confirmation stop labels. Persistence retains
+above-chance conditional AUROC and positive held-out log-loss reduction for
+both targets and both models; signed matched gaps retain their feasible
+direction. The relative rankings of individual proxies vary across these
+specifications.
+
+Model
+
+Proxy
+
+Collision rate
+
+Beneficial 
+
+Harmful 
+
+Qwen3
+
+ANLL
+
+48.0%
+
+81.1%
+
++2.703
+
++2.735
+
+-1.813
+
+-1.815
+
+Qwen3
+
+Confidence
+
+48.0%
+
+81.1%
+
++2.703
+
++2.735
+
+-1.813
+
+-1.815
+
+Qwen3
+
+Agreement
+
+73.7%
+
+98.1%
+
++2.687
+
++2.726
+
+-1.769
+
+-1.788
+
+Qwen3
+
+Persistence
+
+77.3%
+
+99.1%
+
++2.616
+
++2.627
+
+-1.777
+
+-1.795
+
+Qwen3
+
+PRM
+
+45.3%
+
+67.3%
+
++2.677
+
++2.699
+
+-1.806
+
+-1.814
+
+Qwen3
+
+Entropy
+
+47.6%
+
+79.1%
+
++2.693
+
++2.734
+
+-1.805
+
+-1.811
+
+DeepSeek
+
+ANLL
+
+55.8%
+
+82.9%
+
++2.657
+
++2.717
+
+-1.976
+
+-1.989
+
+DeepSeek
+
+Confidence
+
+55.8%
+
+82.9%
+
++2.657
+
++2.717
+
+-1.976
+
+-1.989
+
+DeepSeek
+
+Agreement
+
+87.5%
+
+97.9%
+
++2.665
+
++2.721
+
+-1.974
+
+-1.984
+
+DeepSeek
+
+Persistence
+
+87.7%
+
+99.2%
+
++2.575
+
++2.596
+
+-1.961
+
+-1.982
+
+DeepSeek
+
+PRM
+
+58.2%
+
+82.3%
+
++2.565
+
++2.602
+
+-2.000
+
+-2.000
+
+DeepSeek
+
+Entropy
+
+54.5%
+
+80.6%
+
++2.662
+
++2.714
+
+-1.949
+
+-1.964
+
+Table 22: 
+Matched-collision sensitivity after deleting pooled difficulty.
+
+ includes difficulty; 
+ removes it while retaining the other matching
+covariates and analysis-fitted proxy bins.
+
+Model
+
+Target
+
+Proxy
+
+Conditional AUROC
+
+NN disagreement
+
+ test log-loss, bits
+
+Qwen3
+
+Beneficial
+
+ANLL
+
+0.524
+
+0.543
+
+34.3%
+
+36.4%
+
+-0.0166
+
++0.0069
+
+Qwen3
+
+Beneficial
+
+Confidence
+
+0.476
+
+0.457
+
+34.3%
+
+36.4%
+
+-0.0166
+
++0.0068
+
+Qwen3
+
+Beneficial
+
+Agreement
+
+0.581
+
+0.577
+
+35.1%
+
+36.6%
+
++0.0144
+
++0.0358
+
+Qwen3
+
+Beneficial
+
+Persistence
+
+0.644
+
+0.633
+
+32.3%
+
+33.2%
+
++0.0468
+
++0.0520
+
+Qwen3
+
+Beneficial
+
+PRM
+
+0.597
+
+0.609
+
+35.6%
+
+36.7%
+
+-0.0085
+
++0.0045
+
+Qwen3
+
+Beneficial
+
+Entropy
+
+0.534
+
+0.552
+
+36.7%
+
+38.7%
+
+-0.0239
+
++0.0003
+
+Qwen3
+
+Harmful
+
+ANLL
+
+0.562
+
+0.542
+
+5.5%
+
+5.5%
+
+-0.0046
+
+-0.0003
+
+Qwen3
+
+Harmful
+
+Confidence
+
+0.562
+
+0.542
+
+5.5%
+
+5.5%
+
+-0.0046
+
+-0.0003
+
+Qwen3
+
+Harmful
+
+Agreement
+
+0.697
+
+0.710
+
+4.9%
+
+5.0%
+
++0.0199
+
++0.0273
+
+Qwen3
+
+Harmful
+
+Persistence
+
+0.691
+
+0.718
+
+4.7%
+
+4.7%
+
++0.0215
+
++0.0279
+
+Qwen3
+
+Harmful
+
+PRM
+
+0.680
+
+0.733
+
+5.4%
+
+5.6%
+
++0.0016
+
++0.0087
+
+Qwen3
+
+Harmful
+
+Entropy
+
+0.587
+
+0.562
+
+5.1%
+
+5.2%
+
+-0.0039
+
++0.0010
+
+DeepSeek
+
+Beneficial
+
+ANLL
+
+0.563
+
+0.561
+
+31.3%
+
+31.8%
+
+-0.0039
+
++0.0094
+
+DeepSeek
+
+Beneficial
+
+Confidence
+
+0.563
+
+0.561
+
+31.3%
+
+31.8%
+
+-0.0038
+
++0.0094
+
+DeepSeek
+
+Beneficial
+
+Agreement
+
+0.547
+
+0.510
+
+31.5%
+
+32.0%
+
++0.0088
+
++0.0239
+
+DeepSeek
+
+Beneficial
+
+Persistence
+
+0.632
+
+0.645
+
+27.2%
+
+28.0%
+
++0.0528
+
++0.0618
+
+DeepSeek
+
+Beneficial
+
+PRM
+
+0.621
+
+0.640
+
+30.3%
+
+31.1%
+
++0.0188
+
++0.0376
+
+DeepSeek
+
+Beneficial
+
+Entropy
+
+0.573
+
+0.566
+
+30.7%
+
+32.0%
+
+-0.0000
+
++0.0109
+
+DeepSeek
+
+Harmful
+
+ANLL
+
+0.629
+
+0.631
+
+6.2%
+
+6.2%
+
++0.0058
+
++0.0098
+
+DeepSeek
+
+Harmful
+
+Confidence
+
+0.629
+
+0.631
+
+6.2%
+
+6.2%
+
++0.0058
+
++0.0098
+
+DeepSeek
+
+Harmful
+
+Agreement
+
+0.621
+
+0.649
+
+6.2%
+
+6.3%
+
++0.0149
+
++0.0216
+
+DeepSeek
+
+Harmful
+
+Persistence
+
+0.634
+
+0.654
+
+5.5%
+
+5.6%
+
++0.0242
+
++0.0287
+
+DeepSeek
+
+Harmful
+
+PRM
+
+0.610
+
+0.643
+
+6.6%
+
+6.7%
+
+-0.0029
+
++0.0033
+
+DeepSeek
+
+Harmful
+
+Entropy
+
+0.635
+
+0.639
+
+6.1%
+
+6.2%
+
++0.0065
+
++0.0107
+
+Table 23: 
+Local-information sensitivity after deleting pooled difficulty.
+
+ includes and 
+ excludes difficulty from conditional AUROC,
+nearest-neighbor matching, and held-out log-loss models.
+
+Tables
+ 
+22
+ and 
+23
+
+show that the main qualitative conclusions survive deletion of the
+label-aware difficulty covariate.
+
+C.3 
+Predictor decomposition
+
+Model
+
+Controller
+
+Pearson 
+
+Beneficial AUROC
+
+Harmful AUROC
+
+(
+ score)
+
+Qwen3
+
+Ridge-
+ (single-spine)
+
+0.373
+
+0.715
+
+0.291
+
+Qwen3
+
+Ridge-
+ (+ charged PRM)
+
+0.374
+
+0.715
+
+0.310
+
+DeepSeek
+
+Ridge-
+ (single-spine)
+
+0.282
+
+0.726
+
+0.226
+
+DeepSeek
+
+Ridge-
+ (+ charged PRM)
+
+0.284
+
+0.730
+
+0.235
+
+Table 24: 
+Held-out Ridge-
+ diagnostics. Predictors exclude correctness,
+difficulty, agreement, and continuation outcomes; harmful AUROC uses
+
+. PRM scoring is charged.
+
+Direct Ridge-
+ predicts signed value from persistence, confidence, ANLL,
+entropy, depth, and dataset; it excludes current correctness, difficulty,

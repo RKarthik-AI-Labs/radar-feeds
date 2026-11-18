@@ -1,0 +1,1358 @@
+The Fragility of Reasoning-Importance Attribution for Pruning Language Models
+https://arxiv.org/abs/2611.22234
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+The Fragility of Reasoning-Importance Attribution
+
+for Pruning Language Models
+
+Himanshu Mishra
+
+Affiliation: 
+University of British Columbia
+
+Email: 
+himmishra@student.ubc.ca
+
+Abstract
+
+Attribution-guided pruning scores components by their causal contribution and protects the
+important ones, and it is increasingly applied to compress reasoning language models without
+destroying their chain of thought. Its reliability rests on an unexamined assumption: that
+reasoning-importance can be faithfully measured. Across four small reasoning models we show this
+measurement is fragile in three ways, each of which changes pruning decisions.
+First, scoring final-answer tokens, the natural choice, saturates in 
+every
+
+chain-of-thought model we test (answer-token negative log-likelihood, NLL, of 
+–
+) because the model states
+its answer inside its own reasoning; guiding head pruning with this target costs 
+ and
+
+ accuracy points relative to scoring reasoning tokens on the two models we power with five
+seeds, while perplexity barely moves and even reverses sign at 7B. Second, causal importance is
+not localizable to single units: single-neuron effects sit at the measurement floor, their
+cross-split ranking is noise, and they cancel: a group’s ablation effect disagrees in sign with
+the summed effects of its members in 90% of groups. Reproducible importance emerges only at
+groups of 
+ neurons. Third, contrastively isolated “reasoning-specific” importance is
+not separable from generic importance, and protecting it is worse than protecting raw importance.
+We additionally pre-registered the hypothesis that distillation-induced concentration of
+importance predicts the pruning cost; it is not supported, and since our grid confounds
+concentration with scale we report it as unresolved rather than reversed. The result is a short
+set of measurement rules: score reasoning tokens, attribute at coarse granularity, and evaluate
+with accuracy rather than perplexity.
+
+1 
+Introduction
+
+Small language models with chain-of-thought (CoT) reasoning 
+(
+Wei et al., 2022
+)
+ are attractive
+targets for on-device deployment, and pruning is the standard route to shrink them. Classical
+pruning scores parameters by their contribution to language-modeling loss
+
+(
+Han et al., 2015
+; 
+Frantar and Alistarh, 2023
+; 
+Sun et al., 2024
+)
+, and a recent line of work makes
+pruning 
+reasoning-aware
+: calibrating on self-generated CoT activations
+
+(
+Lucas et al., 2025
+)
+ or attributing importance causally and protecting high-scoring components
+
+(
+Sheth et al., 2026
+)
+, echoing interpretability findings that specific heads carry outsized
+functional load 
+(
+Michel et al., 2019
+; 
+Voita et al., 2019
+)
+.
+
+All such methods share an unexamined dependency: they assume the reasoning-importance signal is
+faithful. Attribution requires three implicit choices: 
+what
+ to score against (the target
+token set), 
+at what granularity
+ to score, and 
+whether
+ reasoning-specific components
+are separable from generically important ones. We show each choice is fragile in reasoning
+models, and that the first has large, measurable consequences for pruning.
+
+Our thesis is restatable in one sentence: 
+to guide pruning without silently degrading
+reasoning, importance must be scored on reasoning tokens rather than answer tokens, measured over
+groups of at least 
+ units rather than single components, and taken as raw importance
+rather than a reasoning-specific contrast.
+ We frame this
+as a methodological complement to reasoning-aware pruning, not a critique of any method. We
+verified from source that the two closest methods do not use the saturating target: the
+reconstruction-based pruner of 
+Lucas et al. (2025)
+ reconstructs weights over prompt and decode
+tokens, which include the chain of thought, and the causal-attribution pruner of
+
+Sheth et al. (2026)
+ scores a span that is not the model’s own CoT followed by its answer, and is
+evaluated on non-distilled instruct models. The saturating target is a 
+naive-but-plausible
+ choice
+that we characterize, not a flaw we attribute to prior work.
+
+Contributions.
+
+•
+
+Target fragility.
+ Final-answer-token attribution saturates in all four models
+(Section 
+4
+) and, used for head pruning, costs 
+ (D1) and 
+ (N1)
+accuracy points versus scoring CoT tokens, with tight hierarchical-bootstrap intervals over five
+seeds (Section 
+5
+).
+
+•
+
+Granularity fragility.
+ Single-neuron causal importance is ill-posed: effects are
+irreproducible and cancel (sign disagreement 
+); reproducible importance emerges only at
+
+ (Section 
+7
+).
+
+•
+
+Specificity fragility.
+ Reasoning-specific importance collapses to its own noise
+floor, and protecting the specific set is worse than protecting the generic set at every budget
+(Section 
+8
+).
+
+•
+
+A pre-registered negative.
+ The hypothesis that concentration explains the pruning
+cost is tested and unsupported; we report it as unresolved, not reversed
+(Section 
+6
+).
+
+•
+
+Accuracy–perplexity decoupling.
+ The damage is visible in accuracy but not
+perplexity; at 7B the two endpoints disagree in sign (Section 
+5
+).
+
+2 
+Related Work
+
+Reasoning-aware pruning.
+
+Reconstruction-based 
+(
+Frantar and Alistarh, 2023
+)
+ and
+activation-magnitude 
+(
+Sun et al., 2024
+)
+ pruning are reasoning-blind. Recent methods inject
+self-generated CoT into calibration 
+(
+Lucas et al., 2025
+)
+ or score components by causal
+contribution and protect the important ones 
+(
+Sheth et al., 2026
+)
+. Structured pruning of whole
+units, including attention heads, has a long history 
+(
+Michel et al., 2019
+; 
+Voita et al., 2019
+; 
+Ma et al., 2023
+)
+.
+We do not propose a new mask; we audit the reliability of the importance signal these methods
+consume, which is complementary and, we argue, prior.
+
+Causal attribution and circuit localization.
+
+Our estimators follow the
+activation-patching tradition 
+(
+Conmy et al., 2023
+)
+ and its gradient approximation, attribution
+patching 
+(
+Syed et al., 2023
+)
+, whose known failure modes at fine granularity our
+granularity result quantifies in the reasoning setting. Interpretability work reports that
+specific heads carry disproportionate functional load 
+(
+Michel et al., 2019
+; 
+Voita et al., 2019
+)
+;
+we ask whether such localization transfers into a reliable pruning prior, and find specific
+limits.
+
+3 
+Setup
+
+Models.
+
+We use a 
+ grid over distillation and scale: two reasoning-distilled
+models, DeepSeek-R1-Distill-Qwen-1.5B (D1) and -7B (D2) 
+(
+DeepSeek-AI et al., 2025
+)
+, and two
+size/family-matched non-distilled instruct models, Qwen2.5-1.5B-Instruct (N1) and
+Qwen2.5-7B-Instruct (N2) 
+(
+Qwen Team, 2024
+)
+. D1/D2 are distilled from the Qwen2.5 family,
+making N1/N2 near-matched controls.
+
+Scoring targets.
+
+We measure the importance of a component by how much removing it
+raises the model’s loss on a chosen set of tokens. Concretely, head importance is the increase in
+negative log-likelihood (NLL) on that token set when a query head’s output is mean-ablated, that
+is, replaced by its average over the calibration set (a standard way to delete a component’s
+contribution while keeping activation statistics in range). The 
+scoring target
+ is precisely
+this set of tokens: the choice of which tokens to score is the free decision that attribution
+methods must make, and it is our object of study. We compare three targets: 
+ = final-answer tokens with the CoT present (the naive
+choice); 
+ = the CoT reasoning tokens (the corrected choice); and 
+ = answer tokens with
+the CoT removed, a control isolating whether the pathology is answer tokens 
+per se
+ or
+answer-after-CoT.
+
+Pruning and evaluation.
+
+We prune at the granularity of whole query heads for three
+reasons. First, the attribution-guided methods we audit operate on heads and comparable coarse
+units, so this is where a reasoning-importance ranking actually drives a pruning mask. Second, a
+head is structured hardware-friendly compute (an entire attention sub-computation), unlike an
+individual weight. Third, our own granularity result (Section 
+7
+) shows that
+importance is not reliably measurable at the level of single neurons, so the head is close to the
+finest unit at which the ranking is trustworthy. Concretely, we prune a query head by zeroing the
+corresponding rows of the query projection 
+ and columns of the output projection 
+; under
+grouped-query attention the key and value projections are shared across heads and we leave them
+untouched (we assert a maximum 
+ norm change of exactly 
+ for every model). We report
+accuracy (exact match, permissive extractor accepting 
+\boxed{}
+, “the answer is 
+”, or
+the final number), CoT-token NLL, and format-success rate on 
+ held-out problems from
+GSM8K, a grade-school math word-problem benchmark 
+(
+Cobbe et al., 2021
+)
+; calibration is drawn from the training split, so held-out evaluation is
+disjoint by construction. To compare models at matched operating points we sweep the pruned-head
+fraction and use each model’s 
+, the fraction at which accuracy reaches half of dense,
+requiring that the swept curve contains a point in the 
+–
+-of-dense band (all
+four models pass; no gap is computed on a floored curve). Calibration uses 128 correctly-answered
+CoT trajectories per seed; each seed resamples calibration, recomputes importance, re-prunes, and
+re-evaluates. We run 
+five seeds at 1.5B and three at 7B
+; all intervals are hierarchical
+bootstraps resampling both seeds and test items, and we report seed standard deviations rather
+than item-only 
+-values on seed-averaged accuracy.
+
+Compute and implementation.
+
+Every experiment runs on a single NVIDIA H100 (80GB); no result requires multi-GPU execution,
+and the full set of jobs totals roughly 
+ GPU-hours. Models are loaded in bfloat16 and decoded
+greedily with a 
+-token budget, so the only stochasticity in our pipeline is the calibration
+draw. We use PyTorch 
+ and Transformers 
+; exact versions ship with the code release.
+
+Operating points and the accuracy cliff.
+
+Reasoning accuracy under head pruning
+does not decay smoothly: it holds near dense and then falls sharply, which makes any single
+sparsity level a poor basis for comparison and can floor a measurement entirely. We therefore
+locate each model’s operating point empirically (Table 
+1
+) and require, as a
+pre-registered gate, that the swept curve contain a point between 
+ and 
+ of dense
+accuracy; only then is a gap computed on that curve. For the 1.5B models the cliff is steep
+enough that a coarse sweep skipped the band and the gate correctly rejected it; refining to
+single-head steps recovered a genuine slope. All four models pass with accuracy as the primary
+endpoint, so no result in this paper is read off a floored curve. Reported variance is over
+calibration resampling, which we find dominates: it is the seed standard deviation, not test-item
+noise, that sets the width of our intervals.
+
+Table 1: 
+Per-model operating points from the locating sweep (150 held-out items, one seed).
+
+ is the pruned-head count at which accuracy reaches half of dense. All four pass the
+range-check gate, so accuracy is the primary endpoint throughout.
+
+Model
+
+Total heads
+
+Dense acc.
+
+ (heads)
+
+ (%)
+
+Range-check
+
+D1
+
+336
+
+62.7%
+
+40
+
+11.9%
+
+pass
+
+N1
+
+336
+
+70.7%
+
+44
+
+13.1%
+
+pass
+
+D2
+
+784
+
+65.3%
+
+118
+
+15.1%
+
+pass
+
+N2
+
+784
+
+93.3%
+
+118
+
+15.1%
+
+pass
+
+4 
+Answer-Token Attribution Saturates Universally
+
+The default scoring target is degenerate in every model we test. With the CoT in context, the
+answer-token NLL is 
+ to 
+ (Table 
+2
+): a CoT ends by
+stating its answer, so re-predicting that answer is near-trivial and the target carries almost no
+signal. What little signal remains is highly concentrated: in the distilled models one head out of
+hundreds holds 
+ of the total importance mass.
+
+What causes this saturation is 
+answer-in-CoT leakage
+: a chain of thought typically states
+the final answer within the reasoning text before the designated answer span, so once the CoT is in
+context the answer tokens are nearly deterministic and carry little residual loss. We can measure
+the strength of this leakage as the rise in answer-token NLL when the CoT is removed from context
+(
+): a large rise means the answer was hard to predict without the CoT and easy with it.
+This leakage is universal rather than distillation-specific. The rise is large in all four models
+(
+–
+) and is in fact 
+larger
+ in the non-distilled model N1 (
+) than in the
+distilled model D2 (
+), so it is a property of step-by-step-then-answer generation itself, not
+of distillation.
+What does track distillation is how concentrated the resulting saturated signal becomes
+(Table 
+2
+, last column), which we examine in Section 
+6
+. Across
+all models 
+ ranks heads nearly orthogonally to 
+ (Spearman 
+ to 
+) and only
+weakly agrees with 
+ (
+–
+), so 
+ is anomalous relative to 
+both
+ other
+targets. The pathology is the answer-after-CoT copy effect, not answer tokens broadly.
+
+Table 2: 
+Answer-token attribution (
+) saturates in all four models. Leakage (
+) is
+universal and is not larger in the distilled models; concentration of the saturated signal is.
+
+Model
+
+Distilled
+
+ NLL
+
+Leakage (
+)
+
+ Gini
+
+ top-1 mass
+
+D1 (R1-Distill-Qwen-1.5B)
+
+Y
+
+0.00065
+
+1.651
+
+0.987
+
+0.969
+
+N1 (Qwen2.5-1.5B-Instruct)
+
+N
+
+0.00020
+
+1.540
+
+0.916
+
+0.260
+
+D2 (R1-Distill-Qwen-7B)
+
+Y
+
+0.00009
+
+1.456
+
+0.997
+
+0.996
+
+N2 (Qwen2.5-7B-Instruct)
+
+N
+
+0.00362
+
+1.244
+
+0.843
+
+0.598
+
+5 
+The Saturating Target Misguides Pruning
+
+Saturation would be harmless if it did not change decisions; it does. Pruning by 
+ rather than
+
+ importance at each model’s 
+ costs 
+ accuracy points on D1 (95% CI
+
+, 
+) and 
+ on N1 (CI 
+, 
+), positive in all five
+seeds of both models (Figure 
+1
+, Table 
+3
+). The mechanism is visible in
+the masks: because the saturated ranking assigns almost all mass to one head, it protects that head
+and orders the rest near-arbitrarily, so accuracy collapses to near-chance and format-success falls
+to 
+–
+. The corrected target holds format-success above 
+ at the same sparsity. The
+
+ control reproduces the effect (
+ on D1, 
+ on N1), so the benefit
+comes from scoring reasoning tokens rather than from any peculiarity of the answer span.
+
+The 7B results point the same way but are underpowered at three seeds: N2 shows 
+ (CI
+
+, 
+) and D2 shows 
+ (CI 
+, 
+) with per-seed values
+that flip sign (
+, 
+, 
+). We therefore treat D2 as 
+unresolved
+, not as a
+null: three seeds cannot resolve an effect of this variance. The robust, well-powered conclusion
+is at 1.5B: the naive answer-token target imposes a large reasoning-accuracy cost, and importance
+should be scored on reasoning tokens.
+
+Accuracy–perplexity decoupling.
+
+The damage is not faithfully reflected in perplexity.
+On D1, 
+-guided pruning inflates CoT-NLL by 
+ alongside the accuracy collapse; but on D2
+and N2 the NLL gap is 
+negative
+ (
+, 
+) even where the accuracy gap is positive.
+The two endpoints disagree in sign at 7B. Perplexity-only evaluation of pruned reasoners can
+therefore understate or misrank the damage, a caution that applies to any compression work
+reporting perplexity alone.
+
+The gain is not recoverable from a reasoning-blind score.
+
+A natural objection is that the
+corrected target merely recovers what a standard magnitude criterion would give. It does not. We
+include a target-agnostic weight-magnitude baseline (the sum of 
+-row and 
+-column norms
+per head) at every operating point (Figure 
+2
+, 
+): at 
+ it sits at or
+near the floor in all four models, for example 
+ and 
+ accuracy on D1 at 
+ and
+
+ heads. The signal that 
+ supplies is therefore not a proxy for weight magnitude. We also emphasise that we do not propose a mask: our object of study is the importance
+signal that a mask consumes, and our recommendations apply to any method that consumes one.
+
+Figure 1: 
+The saturating target’s pruning cost. Bars are
+
+ at each model’s 
+, with hierarchical-bootstrap
+95% intervals and per-seed values overlaid. The two five-seed 1.5B models (blue) show a large
+cost that is positive in every seed; the three-seed 7B models (grey) are underpowered and we do
+not draw conclusions from them.
+
+Table 3: 
+Pruning by the saturating target (
+) versus the corrected target (
+) at each model’s
+own 
+ (in heads). 
+ means the saturating target costs accuracy. The seed standard
+deviation makes the power difference explicit: it is 
+–
+ points on the five-seed 1.5B
+models but 
+–
+ on the three-seed 7B models, which is why we label D2 unresolved rather
+than null. Intervals are hierarchical bootstraps over seeds and test items.
+
+Model
+
+Seeds
+
+Dense
+
+ (points)
+
+seed s.d.
+
+95% CI
+
+D1
+
+5
+
+63.0%
+
+40
+
+N1
+
+5
+
+74.0%
+
+44
+
+D2
+
+3
+
+71.2%
+
+118
+
+ 
+(unres.)
+
+N2
+
+3
+
+91.2%
+
+118
+
+Figure 2: 
+Accuracy versus pruned heads under the corrected target 
+ (green), with 
+
+(
+), the 
+ control (
+) and a target-agnostic weight-magnitude
+baseline (
+) evaluated at each model’s 
+ (orange dashed line); markers are offset
+horizontally so they remain distinguishable where they coincide near the floor. The grey line and
+right-hand axis give format-success rate, which stays high along the 
+ sweep, so the decline
+is loss of reasoning rather than loss of output structure. The magnitude baseline sits at or near the
+floor at 
+ in all four models, so the 
+ advantage is not recoverable from a
+reasoning-blind score.
+
+6 
+Concentration Does Not Explain the Pruning Cost
+
+Sections 
+4
+ and 
+5
+ established two facts about the saturating
+target: its importance mass concentrates onto a single head, and pruning with it is costly. Before
+the pre-registration we conjectured that the first explains the second, and we report the test of
+that conjecture here.
+
+Concentration tracks distillation sharply (Table 
+2
+): the 
+ top-1 head holds
+
+/
+ of the mass in D1/D2 versus 
+/
+ in N1/N2. A robustness diagnostic
+indicates this is structural rather than an artifact of near-zero scores: in the distilled models
+the dominant head is identical across all five calibration resamples and decisive over the
+runner-up (
+ for D1, 
+ for D2), and it coincides with the top head under the
+corrected target 
+; in non-distilled models it is unstable across resamples (N1, two distinct
+winners) or far less decisive (N2, 
+). D1 and D2 concentrate onto the same head position
+across a 
+ scale gap.
+
+We pre-registered the prediction that this concentration explains the pruning cost: if 
+
+collapses onto one head, 
+-guided pruning protects one head and prunes the rest near-randomly,
+so more concentrated models should show larger gaps. 
+The prediction is not supported.
+
+Across the four models the rank correlation between concentration and 
+ is 
+, if
+anything inverse: the most concentrated model (D2, 
+) shows the smallest, non-significant
+gap and the least concentrated (N1, 
+) the largest. Two facts prevent us from claiming a
+genuine inverse effect. The correlation rests on four points, two of which (D2, N2) are
+noise-dominated at three seeds; and concentration is confounded with scale in this grid, since both
+high-concentration models are the 7B ones, so the trend may reflect “7B is more robust to head
+pruning” rather than anything about concentration. We therefore report the concentration
+mechanism as 
+tested and unresolved
+, and defer a de-confounded test (concentration varied
+within a fixed scale, with a powered 7B arm) to future work.
+
+Figure 3: 
+The pre-registered concentration mechanism, shown for completeness and 
+not
+ as a
+result. Each point is one model (
+); grey squares are the underpowered three-seed 7B models.
+With four points, two of them noise-dominated, and concentration confounded with scale, this
+panel cannot support either a positive or an inverse mechanism claim.
+
+We report this negative in full
+because it is the honest outcome of a pre-registered prediction; we draw no mechanism claim from
+it, and none of our recommendations depend on it.
+
+7 
+Reasoning Importance Is Not Finely Localizable
+
+The target choice was the first of the three attribution decisions from Section 
+1
+;
+we now turn to the second, the granularity at which importance is scored. Here the fragility is not
+that a plausible choice misfires but that the finest choice is ill-posed: causal reasoning-importance
+is not measurable at single-unit granularity. Ablating groups of 
+
+MLP neurons (individual feed-forward hidden units, the post-SwiGLU activations feeding
+
+down_proj
+; 
+ per layer and 
+ in total for D1) and measuring the
+effect on CoT-token NLL, single-neuron effects sit at the measurement floor
+(
+ median, against a floor of 
+ estimated from a
+rounding-scale sham perturbation) and their cross-split ranking is noise. Here 
+split-half
+Spearman
+ denotes the rank agreement between importance scores computed on two disjoint halves of
+the calibration set, where 
+ is perfect agreement and 
+ is chance; for single neurons it is
+
+ at 
+ and 
+ at 
+. Reproducible importance emerges only near
+
+: split-half Spearman rises from 
+ at 
+ to 
+ at 
+ and
+stabilises above 
+ thereafter (Figure 
+4
+b). Two independent criteria, the
+reproducibility onset and the numerical-floor crossing, both place 
+ at 
+.
+
+The mechanism is cancellation, not mere redundancy. Across 
+ groups of 
+ neurons, the
+group’s ablation effect is positive in 
+ of cases while the signed sum of its members’
+individual effects is negative in 
+all
+ 
+, a sign disagreement of 
+
+(Figure 
+4
+c), with the group effect a median 
+ the magnitude of the
+summed singletons. Individual neuron effects do not compose; they cancel. Single-neuron causal
+attribution, sometimes proposed as a finer-grained refinement of head-level methods, is therefore
+numerically ill-posed at this scale, independent of estimator: the quantity being estimated is
+itself below the floor.
+
+Reconciling with head-level sensitivity.
+
+This may appear to contradict the finding
+that individual 
+heads
+ matter a great deal (Section 
+5
+, and the appendix
+probe). It does not. A head is a large routing object, 
+ dimensions writing to the residual
+stream through 
+, whereas an MLP neuron is one of 
+ per layer. Redundancy and
+cancellation operate at the sub-unit scale; heads are already coarse enough to be individually
+measurable. Our result is a statement about 
+where the measurement floor sits
+, and it places
+that floor between the neuron and the head.
+
+Figure 4: 
+Reasoning importance is not localizable below 
+ neurons. (a) Median
+
+NLL
+ from ablating 
+ neurons grows with 
+; single neurons sit at the measurement
+floor (dashed line, estimated from a rounding-scale sham perturbation). (b) Split-half Spearman
+between independent calibration halves crosses the 
+ bar only at 
+ (green dotted
+line in both panels). (c) Cancellation: each point is one 100-neuron group, plotting the group’s
+measured 
+NLL against the signed sum of its members’ individual effects (both axes in units
+of 
+). The summed singletons are negative for all 50 groups while the group effect is
+positive for 45 of them, so single-unit effects do not compose.
+
+8 
+Reasoning-Specific Importance Is Not Separable
+
+The third attribution decision is whether reasoning-specific components can be isolated from
+generically important ones, as circuit-localization work suggests and as a protection scheme might
+exploit. Contrastively isolated “reasoning-specific” importance, defined as reasoning contribution
+minus a matched non-reasoning baseline, is not separable from raw importance for masking. At head level the reasoning-specific contrast collapses to its own
+split-half noise floor: the divergence between the specific ranking and raw importance is
+
+, 
+ and 
+ times that floor at 
+, 
+ and 
+. That is, the specific
+ranking disagrees with raw importance no more than it disagrees with itself across data splits.
+Introducing a length- and token-type-matched control (shuffled-CoT, itself highly reproducible at
+split-half Spearman 
+) shrinks the apparent divergence further: the rank correlation with
+raw importance rises to 
+ and the top-
+ overlap ratio (
+–
+) fails a pre-set
+separation bar of 
+.
+
+At neuron level the decision-relevant test is direct: ablating the top reasoning-specific
+group is 
+less
+ damaging to reasoning than ablating the top raw-importance group at every
+budget (
+NLL 
+ vs 
+ at 
+, 
+ vs 
+ at 
+, 
+ vs 
+ at
+
+; random groups 
+–
+). Protecting the “specific” set is thus worse than
+protecting the generically important set. Reasoning-specific components, insofar as they can be
+measured at all, are largely the generically important components.
+
+9 
+Discussion and Recommendations
+
+The three fragilities yield concrete guidance for attributing reasoning-importance in CoT
+models, for pruning and equally for analysis or data selection.
+
+•
+
+Score reasoning tokens, not answer tokens.
+ Answer-token targets saturate in every
+CoT model tested and, for pruning, cost 
+–
+ accuracy points at 1.5B. Score the CoT span.
+
+•
+
+Do not attribute at single-unit granularity.
+ Neuron-level causal importance cancels
+and is irreproducible; use groups of 
+ units, or coarser objects such as heads.
+
+•
+
+Do not rely on reasoning-specific localization.
+ Specific and generic importance are
+not separable for masking; contrastive protection does not beat raw importance.
+
+•
+
+Evaluate with accuracy, not perplexity.
+ The two decouple under reasoning pruning
+and disagree in sign at 7B.
+
+Each is inexpensive to apply, and they complement rather than replace existing reasoning-aware
+pruning methods.
+
+Scope of the claims.
+
+We are explicit about what each finding is powered to support.
+The universal saturation of 
+ (Section 
+4
+) is measured in 
+all four
+
+models and is the broadest claim. The pruning cost (Section 
+5
+) is established at
+1.5B with five seeds on GSM8K, and we deliberately do not generalise it to 7B or to other tasks;
+the 7B arm is reported so that a reader can see its variance rather than omitted because it is
+inconvenient. The granularity and specificity results (Sections 
+7
+
+and 
+8
+) are measured on one model family and we present them as such. The
+concentration mechanism is unresolved. We would rather state a narrow claim that holds than a
+broad one that does not.
+
+10 
+Limitations
+
+Our well-powered evidence is at 1.5B on GSM8K with five seeds; the 7B arm has three seeds, does
+not resolve the concentration hypothesis, and leaves D2’s gap indeterminate rather than null.
+Concentration is confounded with scale in our 
+ grid, so Section 
+6
+
+cannot separate the two. We study attention-head pruning; head-level protection is in tension with
+the 2:4 semi-structured sparsity formats (two nonzero weights per group of four, which GPUs accelerate) that deliver kernel speedups, and we do not report end-to-end
+latency, so our claims are about the 
+signal
+, not about achieved compression. Our estimators
+are mean-ablation for heads and attribution patching for neurons; the latter did not pass a
+per-neuron validation gate (rank-stratified Spearman 
+ against true ablation), which is why we
+report neuron results only at the collective, group level, and which is itself consistent with the
+granularity finding. Task coverage is math reasoning; extending to non-math CoT is future work.
+The single-head probe in Appendix 
+A
+ is preliminary and uncontrolled, and we draw no
+claim from it.
+
+11 
+Conclusion
+
+Attribution-guided pruning of reasoning models rests on an importance signal that is fragile to
+measure. The natural answer-token target saturates in every CoT model and, used for pruning,
+collapses reasoning accuracy while barely moving perplexity; causal importance is not localizable
+below 
+ neurons because single-unit effects cancel; and reasoning-specific importance is
+not separable from generic importance. A pre-registered concentration mechanism is tested and
+unresolved. The practical consequence is a set of measurement rules that make reasoning-importance attribution
+reliable, offered as a complement to the reasoning-aware pruning literature.
+
+References
+
+Cobbe 
+et al.
+ (2021)
+
+K. Cobbe, V. Kosaraju, M. Bavarian, M. Chen, H. Jun, L. Kaiser, M. Plappert, J. Tworek, J. Hilton, R. Nakano, C. Hesse, and J. Schulman
+
+Training verifiers to solve math word problems
+.
+
+arXiv preprint arXiv:2110.14168
+.
+
+Cited by: 
+§3
+.
+
+Conmy 
+et al.
+ (2023)
+
+A. Conmy, A. N. Mavor-Parker, A. Lynch, S. Heimersheim, and A. Garriga-Alonso
+
+Towards automated circuit discovery for mechanistic interpretability
+.
+
+In 
+Advances in Neural Information Processing Systems (NeurIPS)
+,
+
+Note: 
+arXiv:2304.14997
+
+Cited by: 
+§2
+.
+
+DeepSeek-AI 
+et al.
+ (2025)
+
+DeepSeek-AI, D. Guo, D. Yang, H. Zhang, 
+et al.
+
+DeepSeek-R1: incentivizing reasoning capability in llms via reinforcement learning
+.
+
+arXiv preprint arXiv:2501.12948
+.
+
+Cited by: 
+§3
+.
+
+Frantar and Alistarh (2023)
+
+E. Frantar and D. Alistarh
+
+SparseGPT: massive language models can be accurately pruned in one-shot
+.
+
+In 
+International Conference on Machine Learning (ICML)
+,
+
+Note: 
+arXiv:2301.00774
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+Han 
+et al.
+ (2015)
+
+S. Han, J. Pool, J. Tran, and W. J. Dally
+
+Learning both weights and connections for efficient neural networks
+.
+
+In 
+Advances in Neural Information Processing Systems (NeurIPS)
+,
+
+Note: 
+arXiv:1506.02626
+
+Cited by: 
+§1
+.
+
+Lucas 
+et al.
+ (2025)
+
+R. Lucas, K. Behdin, Z. Wang, Q. Song, S. Tang, and R. Mazumder
+
+Reasoning models can be accurately pruned via chain-of-thought reconstruction
+.
+
+arXiv preprint arXiv:2509.12464
+.
+
+Cited by: 
+§1
+,
+
+§1
+,
+
+§2
+.
+
+Ma 
+et al.
+ (2023)
+
+X. Ma, G. Fang, and X. Wang
+
+LLM-Pruner: on the structural pruning of large language models
+.
+
+In 
+Advances in Neural Information Processing Systems (NeurIPS)
+,
+
+Note: 
+arXiv:2305.11627
+
+Cited by: 
+§2
+.
+
+Michel 
+et al.
+ (2019)
+
+P. Michel, O. Levy, and G. Neubig
+
+Are sixteen heads really better than one?
+.
+
+In 
+Advances in Neural Information Processing Systems (NeurIPS)
+,
+
+Note: 
+arXiv:1905.10650
+
+Cited by: 
+§1
+,
+
+§2
+,
+
+§2
+.
+
+Qwen Team (2024)
+
+Qwen Team
+
+Qwen2.5 technical report
+.
+
+arXiv preprint arXiv:2412.15115
+.
+
+Cited by: 
+§3
+.
+
+Sheth 
+et al.
+ (2026)
+
+A. Sheth, B. Assefa, Y. W. Huang, A. Lin, and Y. Ge
+
+Pruning via causal attribution preserves reasoning performance in large language models
+.
+
+arXiv preprint arXiv:2606.19350
+.
+
+Cited by: 
+§1
+,
+
+§1
+,
+
+§2
+.
+
+Sun 
+et al.
+ (2024)
+
+M. Sun, Z. Liu, A. Bair, and J. Z. Kolter
+
+A simple and effective pruning approach for large language models
+.
+
+In 
+International Conference on Learning Representations (ICLR)
+,
+
+Note: 
+arXiv:2306.11695
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+Syed 
+et al.
+ (2023)
+
+A. Syed, C. Rager, and A. Conmy
+
+Attribution patching outperforms automated circuit discovery
+.
+
+arXiv preprint arXiv:2310.10348
+.
+
+Cited by: 
+§2
+.
+
+Voita 
+et al.
+ (2019)
+
+E. Voita, D. Talbot, F. Moiseev, R. Sennrich, and I. Titov
+
+Analyzing multi-head self-attention: specialized heads do the heavy lifting, the rest can be pruned
+.
+
+In 
+Annual Meeting of the Association for Computational Linguistics (ACL)
+,
+
+Note: 
+arXiv:1905.09418
+
+Cited by: 
+§1
+,
+
+§2
+,
+
+§2
+.
+
+Wei 
+et al.
+ (2022)
+
+J. Wei, X. Wang, D. Schuurmans, M. Bosma, B. Ichter, F. Xia, E. H. Chi, Q. V. Le, and D. Zhou
+
+Chain-of-thought prompting elicits reasoning in large language models
+.
+
+In 
+Advances in Neural Information Processing Systems (NeurIPS)
+,
+
+Note: 
+arXiv:2201.11903
+
+Cited by: 
+§1
+.
+
+Appendix A 
+Preliminary single-head ablation (not controlled; no claim drawn)
+
+As a preliminary probe of the concentrated head’s causal role, ablating that single head alone
+reduced GSM8K accuracy from 
+ to 
+ on D1 and from 
+ to 
+ on D2 (its own
+dense decode; 
+ held-out items). Ablating a random early-layer head instead cost 
+ points
+on average on D1 (three draws: 
+, 
+, 
+).
+
+We draw no conclusion from this.
+ The random baseline is three draws, not a distribution;
+on D2 the three random early-layer draws were 
+, 
+ and 
+ points of damage (mean
+
+), i.e. one randomly chosen early-layer head was itself worth 
+ points, so at 7B the
+target head is not cleanly separable from other early-layer heads. We have also not disentangled
+reasoning degradation from generation/format collapse. A controlled version, ablating the target
+head against a distribution of 10 to 20 random heads per layer band, with format-success reported
+and a matched-capacity control, is required before any single-head causal claim, and is left to
+future work.
+
+Appendix B 
+Reproducibility
+
+We report all seeds, calibration draws, held-out test identifiers and per-job artifact hashes with
+the code release.
+The code, data-processing scripts, and figure-generation scripts are available at
+
+https://github.com/himans-iitk/Reasoning_in_Pruning
+.
+Pruning is deterministic given an importance vector; reported variance is over
+calibration resampling (five seeds at 1.5B, three at 7B). Intervals are hierarchical bootstraps
+over seeds and test items. Key-value projections are verified unchanged under head pruning
+(maximum norm delta 
+ in all four models).
+
