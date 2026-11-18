@@ -1,6 +1,6 @@
 # News candidates — 2026-11-18 (IST)
 
-Generated 2026-11-18 07:52 UTC. Showing 256 items first seen in the last 18 h or published in the last 30 h; 180 older items from the 3-day window are only in news.json.
+Generated 2026-11-18 07:59 UTC. Showing 256 items first seen in the last 18 h or published in the last 30 h; 178 older items from the 3-day window are only in news.json.
 Each item appears once, in the first section it matches. Dates are as reported by the source ("date unknown" = page with no date).
 
 ## By priority topic
@@ -26,6 +26,7 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-16 01:23 UTC] citewin on X: "what about llms.txt? often sold as the magic fix. ahrefs studied 137,210 sites: 97% of these files got zero AI visits. better to have it. but its not an entire ... — x — https://x.com/getcitewin/status/2122259149207793747 · Crawl
 
 ### Ads (19)
+- [2026-11-18 07:50 UTC] Suss Ads opens ChatGPT ads to seven African markets, adds M-PESA pay — Dealroom — (Google News link; search the headline) · Ads
 - [2026-11-18 07:31 UTC] Only 2 of Amazon's 42 engagement metrics cover Sponsored Products — PPC Land — https://ppc.land/only-2-of-amazons-42-engagement-metrics-cover-sponsored-products/ · Brand/product recommendation, Ads
 - [2026-11-18 07:29 UTC] Amazon limits daily unified reports to 120 days of its 24-month history — PPC Land — https://ppc.land/amazon-limits-daily-unified-reports-to-120-days-of-its-24-month-history/ · Ads
 - [2026-11-18 07:26 UTC] Amazon's Fire tablet ad impressions can arrive after a campaign ends — PPC Land — https://ppc.land/amazons-fire-tablet-ad-impressions-can-arrive-after-a-campaign-ends/ · Ads
@@ -44,9 +45,8 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-17 10:59 UTC] Google AI Mode Ads Reach 10 More Countries: What Businesses Should Know — TechRepublic — https://www.techrepublic.com/article/news-google-ai-mode-ads-apac/ · Ads, GEO/AEO · +3 other hits
 - [2026-11-17 04:20 UTC] Sri Lanka among 44 markets to gain local access to ChatGPT ads through Aleph — Hiru News — (Google News link; search the headline) · (already listed on an earlier day) · Ads
 - [2026-11-17 03:46 UTC] OpenAI increases its ChatGPT Ads presence in 44 countries through an exclusive reseller partnership with Aleph — Cyprus Shipping News — (Google News link; search the headline) · (already listed on an earlier day) · Ads · +1 other hits
-- [2026-11-16 08:00 UTC] ChatGPT ads show early promise but lead quality remains a concern — Indian Television Dot Com — (Google News link; search the headline) · Ads
 
-### Search / AEO / GEO (35)
+### Search / AEO / GEO (36)
 - [2026-11-18 06:36 UTC] California sues OpenAI over escaped agents as Google's AI Mode cuts clicks — PPC Land — https://ppc.land/california-sues-openai-over-escaped-agents-as-googles-ai-mode-cuts-clicks/ · GEO/AEO · +1 other hits
 - [2026-11-18 06:01 UTC] IGNITE Study: In Japanese-Language Searches, Google AI Overviews Rarely Cite Overseas Brands' Own Websites — The Des Moines Register — (Google News link; search the headline) · Brand/product recommendation, Citation & source selection, GEO/AEO
 - [2026-11-18 04:35 UTC] ControlUp Launches AI Visibility & Usage Insights to Give IT a Unified View of Copilot, ChatGPT, Gemini, and Other AI Tools — businessnewsthisweek.com — https://markets.businessinsider.com/news/stocks/controlup-launches-ai-visibility-usage-insights-to-give-it-a-unified-view-of-copilot-chatgpt-gemini-and-other-ai-tools-1036774734 · +1 other hits
@@ -71,6 +71,7 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-17 12:57 UTC] Sentic Study Finds Two Brands Hold Half of AI Search Visibility in Most Industries — FinancialContent — (Google News link; search the headline) · Brand/product recommendation, GEO/AEO
 - [2026-11-17 12:35 UTC] Perplexity Tops $1 Billion in Annualized Revenue, Says It Got There at One-Fifth of Anthropic's Cost — BigGo Finance — (Google News link; search the headline) · GEO/AEO
 - [2026-11-17 12:08 UTC] Developing Political Views with AI: What Election-Related Information Do Google’s AI Overviews Provide? — AlgorithmWatch — (Google News link; search the headline) · GEO/AEO
+- [2026-11-17 11:30 UTC] How to Audit and Optimize Existing Content for AI Overviews and Answer Engines — Editorialge — (Google News link; search the headline) · GEO/AEO
 - [2026-11-17 09:54 UTC] Bloomreach buys AthenaHQ to turn AI visibility into sales — Dealroom — (Google News link; search the headline)
 - [2026-11-17 09:43 UTC] Google now offers AI Mode searches that don’t show up in your history. — The Verge — https://www.theverge.com/tech/1035658/google-now-offers-ai-mode-searches-that-dont-show-up-in-your-history · GEO/AEO
 - [2026-11-17 08:00 UTC] Branded Query Data Is Now In The Google Search Console API — Search Engine Journal — (Google News link; search the headline)
@@ -83,7 +84,7 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-16 21:00 UTC] What Marketers Should Learn From Reddit's AI Citation Collapse — Forbes — https://www.forbes.com/councils/forbesagencycouncil/2026/11/17/what-marketers-should-learn-from-reddits-ai-citation-collapse/ · Citation & source selection, GEO/AEO
 - [2026-11-16 20:38 UTC] The Impact of Google AI Overviews on Publisher Traffic and User Experience: Evidence from a Field Experiment - Media Plurality Webinar Series — CEPR — (Google News link; search the headline) · GEO/AEO
 
-### Model & lab launches (news search) (58)
+### Model & lab launches (news search) (57)
 - [2026-11-18 06:33 UTC] CoreWeave Reports 2.7x Speedup with Vera Rubin Over GB200 on MLPerf DeepSeek-V3 Benchmark — HPCwire — (Google News link; search the headline)
 - [2026-11-18 06:08 UTC] OpenAI Releases GPT‑6.2 Astra and Sol With a Lower Price for Its Flagship — Kingy AI — (Google News link; search the headline)
 - [2026-11-18 05:34 UTC] Kimi vs DeepSeek vs Qwen vs GLM: 4 Ranked, 1 Wins [2026] — shattered.io — (Google News link; search the headline) · +1 other hits
@@ -141,7 +142,6 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-17 02:15 UTC] Alibaba Launches Qwen 4 Max with 1 Million Token Context Window — Geeky Gadgets — https://www.geeky-gadgets.com/qwen-max/
 - [2026-11-17 02:06 UTC] Alibaba's QwenWork Adds Third-Party Models From Kimi, GLM and DeepSeek — Pandaily — (Google News link; search the headline) · (already listed on an earlier day) · +1 other hits
 - [2026-11-16 15:10 UTC] Anthropic launches Smart Reports to track Claude usage and AI costs in companies — jawlah.co — (Google News link; search the headline)
-- [2026-11-16 08:00 UTC] Grok Voice Mode: How to Enable It and Change Grok’s Voice — Fello AI — (Google News link; search the headline)
 
 ### B2B buyer AI / adoption (18)
 - [2026-11-18 04:09 UTC] Gartner warns AI is eroding Australian workers' skills — IT Brief Australia — (Google News link; search the headline)
@@ -167,11 +167,11 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-18 07:53 UTC] Gartner IT Symposium/Xpo 2026 Kochi: Day 3 Highlights — Gartner — (Google News link; search the headline)
 - [2026-11-18 04:28 UTC] Gartner Identifies the Top Strategic Technology Trends in Software Engineering for 2026 and Beyond — Gartner — (Google News link; search the headline)
 - [2026-11-18 04:19 UTC] Teammates work for you — Perplexity — (Google News link; search the headline) · (already listed on an earlier day) · GEO/AEO
-- [2026-11-18 00:12 UTC] News — Perplexity — (Google News link; search the headline) · (already listed on an earlier day) · GEO/AEO
 - [2026-11-17 17:13 UTC] Introducing Orchestrator: One API for frontier and open-weight models — Perplexity — (Google News link; search the headline) · GEO/AEO
 - [2026-11-17 16:57 UTC] Gartner IT Infrastructure, Operations & Cloud Strategies Conference 2026 London: Day 2 Highlights — Gartner — (Google News link; search the headline)
 - [2026-11-17 16:11 UTC] Changelog — DataDome — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-11-17 15:58 UTC] Apple Inc. Stock Price: Quote, Forecast, Splits & News (AAPL) — Perplexity — (Google News link; search the headline) · (already listed on an earlier day) · GEO/AEO
+- [2026-11-17 14:15 UTC] XPeng Inc. Stock Price: Quote, Forecast, Splits & News (XPEV) — Perplexity — (Google News link; search the headline) · GEO/AEO
 - [2026-11-17 14:00 UTC] How to prioritize SEO and GEO work when everything feels urgent — Search Engine Land — (Google News link; search the headline) · GEO/AEO
 - [2026-11-17 13:00 UTC] When everyone can do SEO, what makes an expert? — Search Engine Land — (Google News link; search the headline) · GEO/AEO
 - [2026-11-17 07:13 UTC] Gartner Forecasts India IT Spending to Grow 10.6% in 2027 — Gartner — (Google News link; search the headline) · (already listed on an earlier day)
