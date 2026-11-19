@@ -1,0 +1,4865 @@
+Entropy-Regularized Integrated Gradients for Stable Feature Attribution
+https://arxiv.org/abs/2611.23600
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+Entropy-Regularized Integrated Gradients for Stable Feature Attribution
+
+Rukmangadh Sai Myana
+
+Affiliation: 
+Florida International University
+
+Email: 
+rmyan001@fiu.edu
+
+  
+
+Sumit Kumar Jha
+
+Affiliation: 
+University of Florida
+
+Email: 
+sumit.jha@ufl.edu
+
+  
+
+Yanzhao Wu
+
+Affiliation: 
+Florida International University
+
+Email: 
+yawu@fiu.edu
+
+Abstract
+
+Path-based attribution methods like Integrated Gradients (IG) are widely used to interpret neural networks, yet imperceptible input perturbations can drastically alter their attribution maps while leaving model predictions unchanged. We introduce Entropy-Regularized Integrated Gradients (ERIG), a path-based attribution method that intrinsically attenuates gradient irregularities along the integration path using maximum-entropy softmax weighting with temperature parameter 
+. We quantify the effect of the entropy-regularized weighting on attribution stability by using the Lipschitz properties of the model and its gradients. We decompose the attribution change under an input perturbation into a model-response term, whose bound is 
+-independent, and a weight-variation term, whose bound decreases at rate 
+. Their ratio 
+ characterizes the trade-off between gradient information and attribution stability. We further add a new dimension to attribution evaluation by adapting classical noise estimators into two metrics, LINV-C and LINV-P, that quantify attribution noise. Across eleven CNN and Transformer backbones on ImageNet and Oxford-IIIT Pet datasets, our experiments show that, relative to the next-best method, ERIG remains comparable on ranking-based fidelity metrics while improving localization by 
+ and attribution stability by 
+ on average, reaching up to four orders of magnitude improvement over IG — all at negligible additional computational cost. 
+https://github.com/braceletboy/ERIG
+.
+
+1 
+Introduction
+
+Input space
+ (baseline)
+ (input)
+Raw Gradients
+evaluate 
+Entropy-Regularized Weights
+indirect
+weighting
+Weighted
+Contribution
+Feature Attribution
+aggregate
+over 
+indirect weighting scheme — attenuates gradient irregularities before attribution
+
+Figure 1
+: 
+Entropy-Regularized Integrated Gradients (ERIG).
+ An integration path 
+ connects the baseline 
+ to the input 
+. At each path point 
+, the indirect weighting scheme maps the raw gradient 
+ to importance weights 
+ through a softmax over the squared gradients 
+ with temperature 
+. Intuitively, the weights stay close to uniform unless the local sensitivity warrants concentration, and 
+ controls how readily they concentrate. Summing the weighted contributions 
+ over the path yields the final attribution 
+.
+
+Deep learning has advanced a myriad of fields such as vision 
+[
+80
+, 
+86
+]
+, language 
+[
+34
+]
+, science 
+[
+63
+, 
+45
+, 
+64
+]
+, and archaeology 
+[
+60
+]
+. Yet these models remain 
+black boxes
+, offering little insight into their predictions. High-stakes applications demand transparent explanations and raise concerns about model biases 
+[
+15
+, 
+54
+]
+ and fairness 
+[
+83
+]
+.
+
+Explainable Artificial Intelligence (XAI) has emerged to address this lack of transparency 
+[
+2
+, 
+30
+]
+, yet existing methods carry critical weaknesses 
+[
+50
+]
+; Ghorbani et al. 
+[
+28
+]
+ demonstrate that imperceptible input perturbations can drastically alter gradient-based explanations while leaving predictions unchanged. The root cause is the irregular input-space gradient field 
+ of neural networks. Standard deep networks exhibit excess input-space curvature 
+[
+71
+, 
+20
+, 
+49
+]
+, so minuscule perturbations produce large gradient shifts 
+[
+73
+, 
+29
+]
+, and the gradient field carries high-frequency components misaligned with semantic structure 
+[
+77
+, 
+95
+, 
+24
+]
+. This irregularity is baked in by training. Standard objectives do not regularize input gradients; gradients 
+shatter
+ toward white noise as depth grows 
+[
+7
+]
+, sparse activation patterns concentrate gradient information in a few noise-sensitive directions 
+[
+32
+]
+, and while batch normalization smooths the optimization landscape 
+[
+61
+]
+, it does not constrain input gradients explicitly. In this context, path integration averages out some of these fluctuations, but the effect is incomplete, and attribution maps still inherit substantial noise 
+[
+28
+, 
+44
+, 
+3
+, 
+5
+, 
+94
+, 
+8
+]
+.
+
+For model predictions, diverse ensembles can improve accuracy 
+[
+90
+]
+ and robustness 
+[
+91
+, 
+84
+]
+. At the explanation level, SmoothGrad 
+[
+68
+]
+ addresses these issues post hoc by averaging gradients over local input perturbations to improve stability and reduce noise. This motivates explicitly regularizing gradient noise for reliable explanations.
+
+We design 
+Entropy-Regularized Integrated Gradients (ERIG)
+, a path-based feature attribution method that addresses the question: 
+How can we weight gradient contributions along the integration path so that attribution noise is suppressed while genuine model sensitivity is preserved?
+ Intuitively, ERIG answers this by not passing raw gradients directly into the attribution. Instead, it converts them into weights that stay close to uniform unless the local sensitivity warrants concentration. Here, a single temperature 
+ controls how readily the weights concentrate. We provide a summary of ERIG in 
+Figure
+ 
+1
+. Unlike IG 
+[
+72
+]
+ and IDGI 
+[
+93
+]
+, which couple weights directly to raw gradients, ERIG uses a maximum-entropy softmax over squared gradients as an indirect sensitivity weighting. A formal Lipschitz analysis then reveals that 
+ selectively controls how gradient perturbations propagate through to the weights. The associated ratio 
+, defined in 
+Section
+ 
+4.2
+, quantifies this selectiveness. Our contributions are threefold:
+
+•
+
+We define an indirect weighting scheme and leverage a maximum-entropy principle to derive a closed-form softmax expression with a temperature parameter 
+ that controls the method’s sensitivity to gradient irregularities.
+
+•
+
+We prove a decomposition theorem establishing that 
+ attenuates the weight-variation component of attribution perturbation at rate 
+, while the model-response component admits a 
+-independent upper bound.
+
+•
+
+We adapt established noise estimators 
+[
+39
+, 
+16
+]
+ to the attribution setting, yielding two attribution noise metrics, LINV-C and LINV-P. This adds a new noise dimension to traditional quantitative attribution evaluations.
+
+2 
+Related Work
+
+Since its introduction, Integrated Gradients (IG) 
+[
+72
+]
+ has inspired a broad family of extensions. Some improve its numerical approximation 
+[
+66
+]
+, while others adapt it to temporal data 
+[
+40
+]
+, NLP 
+[
+22
+]
+, and learned manifolds 
+[
+96
+]
+. Further works decompose it at the neuron or layer level 
+[
+19
+]
+, combine it with segmentation 
+[
+42
+]
+, or connect it to game theory 
+[
+79
+, 
+17
+]
+. Another line of work modifies the baseline or the path. For example, Blur-IG 
+[
+92
+]
+ blurs the input progressively, Guided IG 
+[
+43
+]
+ selects low-gradient path points, and Expected Gradients 
+[
+23
+]
+ averages over data-sampled baselines. Iterative counterfactual updates 
+[
+97
+]
+ and geometric optimization 
+[
+65
+]
+ optimize the baseline, while Shapley-inspired sampling 
+[
+74
+, 
+47
+]
+ eliminates baseline dependence. Closest to our work, IDGI 
+[
+93
+]
+ weights gradient contributions by 
+, demonstrating that squared-gradient weighting suppresses attribution noise relative to IG.
+
+A complementary line of work tailors attribution to specific architectures. AttnLRP 
+[
+1
+]
+ derives relevance propagation rules for Transformer attention, OMENN 
+[
+87
+]
+ represents piecewise-linear networks as a single input-dependent matrix, DAVE 
+[
+88
+]
+ scores ViT attributions through a distribution-aware gradient decomposition, and LibraGrad 
+[
+48
+]
+ balances Transformer gradient flow to improve all gradient-based attributions. Such modified backward computations are known to require careful interpretation 
+[
+67
+]
+. ERIG is instead architecture-agnostic; it uses the exact autograd gradients of any differentiable model, so its theoretical guarantees hold for the deployed model as is. LibraGrad in particular composes with ERIG, correcting how gradients are computed while ERIG weights these corrected gradients. We leave this combination to future work.
+
+3 
+Background
+
+3.1 
+A General Framework
+
+Let 
+ be a neural network, and let 
+ be an integration path from baseline 
+ to input 
+. At each path point 
+, the gradient vector is 
+, with components 
+. For a weighting function 
+ mapping the gradient vector to the 
+-dimensional probability simplex, the attribution for feature 
+, inspired by path-based methods is,
+
+(1)
+
+where 
+ discretizes 
+ and 
+. Different choices of 
+ yield different methods; Integrated Gradients (IG) 
+[
+72
+]
+ approximately corresponds to 
+ and Important Direction Gradient Integration (IDGI) 
+[
+93
+]
+ to 
+. Here one can ask: 
+what is the optimal choice of 
+?
+
+3.2 
+Indirect Gradient Weighting
+
+Both IG and IDGI couple attribution weights directly to the gradient, leaving no controllable mechanism to attenuate irregularities or noise in the gradient field. Guided IG 
+[
+43
+]
+ takes the opposite approach, reducing attribution noise by adaptively steering the integration path away from high-gradient regions; however, this discards potentially informative gradient signal along with the noise. A key observation is that introducing a 
+weighting function
+ 
+ that maps the gradient vector to the simplex adds a layer of indirectness between the raw gradient field and the final attribution. This creates a design space that controls how much gradient sensitivity propagates into the attributions. In our specific design, a single temperature 
+ governs this trade-off.
+
+4 
+Entropy-Regularized Integrated Gradients
+
+4.1 
+Maximum-Entropy Sensitivity Weighting
+
+Given the indirect weighting framework established in 
+Sec.
+ 
+3
+, we seek a weighting scheme 
+ that, for every point on the integration path, is maximally unbiased (maximizes entropy 
+[
+41
+]
+) while still concentrating weight on locally sensitive features. Formally, we impose the constraint 
+, keeping the expected local sensitivity under 
+ above a threshold. The choice of 
+ follows derivative-based global sensitivity measures 
+[
+70
+]
+. Locally, a first-order Taylor expansion shows that a small unbiased perturbation of feature 
+ induces output variance proportional to 
+ (Appendix 
+A.1
+), making 
+ a natural local sensitivity measure. We then have,
+
+Proposition 1
+ 
+(Maximum-entropy Weights)
+.
+
+For the point-wise entropy-maximization problem at any point on 
+,
+
+(2)
+
+The unique optimum solution is
+
+(3)
+
+where 
+ satisfies
+
+.
+
+Proof.
+
+See Appendix 
+A.2
+.
+∎
+
+In 
+Eq.
+ 
+3
+, 
+ denotes the elementwise (Hadamard) product, and the subscript in 
+ selects the 
+-th component of the softmax output. Then ERIG attribution for feature 
+ is,
+
+(4)
+
+In practice, 
+ controls the concentration of the weights. Smaller 
+ focuses attribution on the few features with the largest gradients; larger 
+ spreads the attribution more uniformly losing discriminability.
+1
+1
+
+1
+
+              
+              
+              
+              
+              
+              
+              
+            On the non-negativity of the weights, see Appendix 
+A.16
+.
+ While Proposition 
+1
+ is a per-path-point optimization, making 
+ in principle a per-point parameter 
+, we make the simplifying choice of a constant 
+; Appendix 
+A.12
+ ablates a path-dependent schedule for comparison. See Appendix 
+A.9
+ for ERIG algorithm.
+
+Intrinsic Properties.
+
+The max-entropy formulation endows ERIG with attribution stability and improved localization, and 
+Figure
+ 
+2
+ makes its two mechanisms directly observable by tracking each method’s weight concentration along the integration path. The movement of the model output splits the path into an initial flat segment, a region of rapid output change, and a saturation plateau, and ERIG is the only method whose concentration follows this structure. Over the flat and saturated segments, where gradient spikes are noisier, entropy regularization 
+[
+56
+, 
+14
+]
+ keeps its weights closest to uniform, suppressing the noise (NS) that purely gradient-proportional schemes propagate unchecked. Where the output changes rapidly and the class evidence lies, the sensitivity constraint 
+ concentrates them to IDGI’s level, enhancing the signal (SE). The resulting attributions (
+Fig.
+ 
+3
+) confirm this qualitatively, with noise visibly suppressed and discriminative features highlighted. Further, 
+Sec.
+ 
+5.7
+ validates them quantitatively via ablations. These properties are intrinsic to the method and add no model evaluations beyond the 
+ path points; ensemble methods like SmoothGrad 
+[
+68
+]
+ are instead extrinsic, needing 
+ evaluations, where 
+ is the number of noise samples.
+
+Figure 2
+: 
+Weight concentration along the integration path (100 ImageNet validation images, 
+ steps). Top, mean output 
+ and increment magnitude 
+; bottom, mean Gini coefficient of the per-step weight 
+ maps. Only ERIG (
+) suppresses noise over flat and saturated segments (NS) and enhances signal over the informative segment (SE).
+
+4.2 
+Decomposition of Attribution Perturbation
+
+We now formalize how gradient perturbations propagate into the ERIG attribution. The key insight is that the attribution change under an input perturbation decomposes into two components, only one of whose bounds depends on 
+. We adopt two standard assumptions,
+
+Assumption 1
+ 
+(Lipschitz model)
+.
+
+ is 
+-Lipschitz: 
+ for all 
+.
+
+Assumption 2
+ 
+(Lipschitz gradients)
+.
+
+ is 
+-Lipschitz: 
+ for all 
+.
+2
+2
+
+2
+
+For a discussion on ReLU-based networks, see Appendix 
+A.7.3
+.
+
+Consider a straight-line path 
+ for 
+. Under perturbation 
+, the perturbed path is 
+, and the attribution change, setting aside 
+ terms for a small enough 
+, decomposes via the product rule as
+
+(5)
+
+where 
+, and 
+ is the function increment rate along the path, with 
+ as its change under the perturbation. Please note that 
+ in 
+Eq.
+ 
+4
+.
+
+The 
+model-response
+ term captures the change in function increment rate along the perturbed path. The 
+weight-variation
+ term captures how gradient changes induced by the input perturbation propagate through the weighting scheme, redistributing the original function increments across features. Let 
+ denote the model-response and weight-variation vectors with components 
+ and 
+, so that 
+. 
+Theorem
+ 
+2
+ bounds these components:
+
+Theorem 2
+ 
+(Selective Attenuation)
+.
+
+Let 
+ denote the path length. Under Assumptions 
+1
+ and 
+2
+,
+
+(6)
+
+where
+
+(7)
+
+Here 
+ is the bound on the weight-variation term 
+.
+
+Proof.
+
+See Appendix 
+A.7
+.
+∎
+
+The model-response bound represents the attribution change a faithful method should reflect, and 
+ quantifies the additional perturbation the gradient-dependent weighting introduces relative to it. Both components are informative; the model response tracks the network’s sensitivity to the perturbation, while the weight variation carries the gradient information that enables feature-level discrimination. The goal is therefore to choose 
+ so that the gradient signal is preserved without overwhelming the model response with gradient irregularities.
+
+The theorem therefore establishes the mechanism by which 
+ controls weight-variation relative to the model response and the direction of this control. However, it cannot prescribe an optimal 
+ value, because 
+ and 
+ are generally intractable for deep networks 
+[
+78
+, 
+26
+]
+ and the optimal balance between gradient information and stability is context-dependent (
+Fig.
+ 
+2
+). We therefore determine 
+ empirically — see ablations in 
+Section
+ 
+5.7
+. An exception to this are 1-Lipschitz networks 
+[
+62
+]
+, whose architecturally controlled constants would make 
+ computable and 
+ analytically settable, a direction we leave to future work.
+
+By contrast, for methods such as IG where 
+, gradient perturbations pass directly into the weights with an 
+ Lipschitz constant and the corresponding ratio is fixed with no mechanism to control it. Moreover, integrating the weighted contributions over the full path further averages out residual gradient fluctuations, yielding even greater stability in practice than the 
+ attenuation alone suggests. 
+Section
+ 
+5.4
+ experimentally verifies this behaviour.
+
+5 
+Experimental Evaluation
+
+5.1 
+Experimental Setup
+
+Figure 3
+: 
+MobileNetV4 Visualizations — More examples in 
+A.3
+
+We evaluate the explanation performance of our approach across diverse architectures, namely, EfficientNet 
+[
+75
+]
+, MobileNetV4 
+[
+57
+]
+, ResNet101 
+[
+33
+, 
+35
+]
+, EVA-02 
+[
+25
+]
+, DeiT3 
+[
+76
+]
+, and ViT-Base 
+[
+89
+]
+. Following 
+[
+93
+, 
+42
+, 
+43
+, 
+53
+, 
+72
+]
+, all experiments are performed on randomly sampled subsets of the ImageNet 
+[
+59
+]
+ and ImageNet-S 
+[
+27
+]
+ validation datasets using the 
+timm
+ 
+[
+85
+]
+ Python library.
+
+We compare ERIG against four established path-based attribution techniques: Integrated Gradients (IG) 
+[
+72
+]
+, Important Direction Gradient Integration (IDGI) 
+[
+93
+]
+, Blur Integrated Gradients (BIG) 
+[
+92
+]
+, Guided Integrated Gradients (GIG) 
+[
+43
+]
+, and additionally SmoothGrad 
+[
+68
+]
+. For all path-based methods, we use 200 integration steps with a black image baseline following standard practice. For ERIG, we sweep the temperature from 
+ to 
+, with full ablations in 
+Sec.
+ 
+5.7
+; while the optimum temperature can vary across architectures, in practice we find that 
+ is effective across multiple tested models. For SmoothGrad, we use a 10% noise level and 50 noise samples, as prescribed.
+
+Computationally, all the above path-based methods scale linearly with integration steps, but ERIG, IG, and IDGI have the same order of per-step runtime, whereas BIG and GIG incur substantially higher per-step overhead due to expensive gaussian blurring and sequential path construction, respectively. Comprehensive statistics in Appendix 
+A.8
+.
+
+Our evaluation employs a comprehensive suite of metrics assessing four key properties of attribution maps: (1) 
+fidelity
+; (2) 
+localization
+; (3) 
+attribution stability
+; and (4) 
+noise characteristics
+. Throughout our results, we use arrows to indicate whether higher (
+) or lower (
+) values are preferable. In all tables, the best-performing method is 
+bold & underlined
+, while the second-best is 
+bolded
+.
+
+5.2 
+Faithfulness and Fidelity
+
+Table 1
+: 
+ImageNet Fidelity:
+ ERIG places first or second on every metric and backbone, with a 
+ average lead.
+
+Model
+
+Method
+
+ISC 
+
+AIC 
+
+DEL 
+
+ResNet101
+
+BIG
+
+GIG
+
+IDGI
+
+IG
+
+ERIG (ours)
+
+SmoothGrad
+
+EfficientNet
+
+BIG
+
+GIG
+
+IDGI
+
+IG
+
+ERIG (ours)
+
+SmoothGrad
+
+MobileNetV4
+
+BIG
+
+GIG
+
+IDGI
+
+IG
+
+ERIG (ours)
+
+SmoothGrad
+
+ViT-Base
+
+BIG
+
+GIG
+
+IDGI
+
+IG
+
+ERIG (ours)
+
+SmoothGrad
+
+EVA-02
+
+BIG
+
+GIG
+
+IDGI
+
+IG
+
+ERIG (ours)
+
+SmoothGrad
+
+DeiT3
+
+BIG
+
+GIG
+
+IDGI
+
+IG
+
+ERIG (ours)
+
+SmoothGrad
+
+We follow prior work 
+[
+93
+]
+ and adopt three metrics: Area Under the Insertion Score Curve (ISC) 
+[
+53
+]
+, the Accuracy Information Curve (AIC) 
+[
+42
+, 
+93
+]
+, and Iterative Removal of Features (DEL) 
+[
+58
+]
+. ISC reveals pixels in descending attribution order and records the rise in model confidence. AIC restores pixels from a blurred baseline and tracks accuracy against image information content (MS-SSIM 
+[
+81
+]
+). DEL removes pixels in descending attribution order and tracks the decline in confidence. Higher AUC is better for ISC and AIC, lower for DEL. All three depend on the relative ranking of attribution values, so they are insensitive to attribution magnitude and to noise that does not alter the ranking. As shown in 
+Tab.
+ 
+1
+, ERIG stays comparable to the strongest baselines, with an average lead of only 
+ across all models and metrics. The larger gains on localization, stability, and noise are consistent with this 
+rank-only limitation
+, since those metrics measure properties that ranking cannot capture. Metric distributions in Appendix 
+A.4
+ further show substantially overlapping inter-quartile ranges between ERIG and the strongest baseline, confirming this behavior.
+
+5.3 
+Weakly Supervised Segmentation
+
+To evaluate the spatial correspondence between attributions and object regions, we follow previous literature 
+[
+93
+, 
+36
+, 
+13
+]
+ and design a weakly supervised segmentation task with ImageNet-S 
+[
+27
+]
+ annotations as reference. We normalize attributions to 
+, binarize them at thresholds 
+, and compare each binary mask against the reference mask pixel-wise. We report Intersection over Union (IoU), Pixel Accuracy (PA), and Pixel F1 Score (PF1), averaged across all thresholds. As shown in 
+Table
+ 
+2
+, ERIG outperforms the second-best method by 
+ on average across model-metric combinations, showcasing its effective localization capability. Unlike the fidelity metrics, the localization distributions in Appendix 
+A.5
+ differentiate the methods clearly, displaying a visible separation between ERIG and its baselines.
+
+Table 2
+: 
+ImageNet-S Localization:
+ ERIG improves localization by 
+ on average over the next-best method.
+
+Model
+
+Method
+
+IoU 
+
+PA 
+
+PF1 
+
+ResNet101
+
+BIG
+
+GIG
+
+IDGI
+
+IG
+
+ERIG (ours)
+
+SmoothGrad
+
+EfficientNet
+
+BIG
+
+GIG
+
+IDGI
+
+IG
+
+ERIG (ours)
+
+SmoothGrad
+
+MobileNetV4
+
+BIG
+
+GIG
+
+IDGI
+
+IG
+
+ERIG (ours)
+
+SmoothGrad
+
+ViT-Base
+
+BIG
+
+GIG
+
+IDGI
+
+IG
+
+ERIG (ours)
+
+SmoothGrad
+
+EVA-02
+
+BIG
+
+GIG
+
+IDGI
+
+IG
+
+ERIG (ours)
+
+SmoothGrad
+
+DeiT3
+
+BIG
+
+GIG
+
+IDGI
+
+IG
+
+ERIG (ours)
+
+SmoothGrad
+
+5.4 
+Attribution Stability
+
+In deployment, attribution maps should remain stable under small input perturbations. We evaluate this with three established metrics, Max Sensitivity (MS) 
+[
+94
+]
+, Local Lipschitz Constant (LLC) 
+[
+5
+]
+, and Relative Input Stability (RIS) 
+[
+4
+]
+. These quantify the worst-case attribution shift within an 
+ ball of radius 
+; lower is more stable.
+
+(8)
+
+(9)
+
+(10)
+
+Following their protocols 
+[
+94
+, 
+5
+, 
+4
+]
+, we approximate each supremum via Monte Carlo sampling of 50 isotropic uniform perturbations per image at 
+ over 100 ImageNet validation samples; isotropic perturbations introduce no directional bias and assess local smoothness uniformly across all input directions. Appendix 
+A.15
+ complements this protocol with adversarially selected perturbation directions, under which ERIG’s stability advantage carries over unchanged. As reported in 
+Tab.
+ 
+3
+, ERIG outperforms the best baseline method by 
+up to two orders of magnitude
+, confirming its superior attribution map stability. Log-scale plots with inter-quartile ranges in the Appendix 
+A.6
+ further confirm their significance.
+
+Table 3
+: 
+ImageNet Stability:
+ ERIG improves stability by 
+ on average over the next-best method.
+
+Model
+
+Method
+
+MS 
+
+LLC 
+
+RIS 
+
+ResNet101
+
+BIG
+
+GIG
+
+IDGI
+
+IG
+
+ERIG (ours)
+
+SmoothGrad
+
+EfficientNet
+
+BIG
+
+GIG
+
+IDGI
+
+IG
+
+ERIG (ours)
+
+SmoothGrad
+
+MobileNetV4
+
+BIG
+
+GIG
+
+IDGI
+
+IG
+
+ERIG (ours)
+
+SmoothGrad
+
+ViT-Base
+
+BIG
+
+GIG
+
+IDGI
+
+IG
+
+ERIG (ours)
+
+SmoothGrad
+
+EVA-02
+
+BIG
+
+GIG
+
+IDGI
+
+IG
+
+ERIG (ours)
+
+SmoothGrad
+
+DeiT3
+
+BIG
+
+GIG
+
+IDGI
+
+IG
+
+ERIG (ours)
+
+SmoothGrad
+
+5.5 
+Quantitative Estimation of Attribution Noise
+
+Table 4
+: 
+ImageNet Noise:
+ ERIG attains the highest LINV on every backbone, 
+–
+ LINV above the next best.
+
+Model
+
+Method
+
+LINV-C 
+
+LINV-P 
+
+ResNet101
+
+BIG
+
+GIG
+
+IDGI
+
+IG
+
+ERIG (ours)
+
+SmoothGrad
+
+EfficientNet
+
+BIG
+
+GIG
+
+IDGI
+
+IG
+
+ERIG (ours)
+
+SmoothGrad
+
+MobileNetV4
+
+BIG
+
+GIG
+
+IDGI
+
+IG
+
+ERIG (ours)
+
+SmoothGrad
+
+ViT-Base
+
+BIG
+
+GIG
+
+IDGI
+
+IG
+
+ERIG (ours)
+
+SmoothGrad
+
+EVA-02
+
+BIG
+
+GIG
+
+IDGI
+
+IG
+
+ERIG (ours)
+
+SmoothGrad
+
+DeiT3
+
+BIG
+
+GIG
+
+IDGI
+
+IG
+
+ERIG (ours)
+
+SmoothGrad
+
+A critical limitation of stability metrics such as MS, LLC, and RIS is their high computational cost, as they require multiple perturbed inputs and the corresponding attribution maps. For path-based methods with 
+ integration steps, evaluating 100 images with 50 perturbations each requires 
+ forward and backward passes, reaching a 
+million
+ evaluations for 
+. Since attribution noise and instability both arise from irregularities in the gradient field and sampling noise from the input image, attribution noise level serves as an efficient proxy for stability. We hence adapt two established image-noise estimators that directly quantify attribution noise through principled statistical estimation. These metrics also address a limitation of prior work, which largely assessed noise reduction qualitatively through visual inspection or anecdotal examples rather than direct quantitative measurement 
+[
+93
+, 
+43
+]
+. These estimators enable objective and reproducible comparisons across attribution methods. However, we would like to categorically mention that they should be 
+used along with
+ fidelity and localization metrics, as reduced noise and improved stability alone do not guarantee explanation faithfulness or accurate localization. In ERIG, we balance these multiple competing factors using an optimum temperature (
+) value. For a comparison between LINV and other complexity, compressibility, and sparsity measures, see Appendix 
+A.14
+.
+
+Convolution-Based Noise Estimation (LINV-C) 
+[
+39
+]
+
+(11)
+
+LINV-C detects unstructured variations characteristic of random perturbations. In 
+Eq.
+ 
+11
+, 
+ is the attribution map, 
+ denotes convolution, and 
+ is the 
+ noise-isolating filter with rows 
+, 
+, 
+; the resulting variance 
+ estimates how unpredictably attribution values fluctuate across the map.
+
+PCA-Based Noise Estimation (LINV-P) 
+[
+16
+]
+
+LINV-P exploits the separation between low-rank structure and Gaussian noise in local attribution patches. Each map is partitioned into non-overlapping patches 
+, modeled as 
+ with 
+, where 
+ spans the principal subspace capturing coherent structure. The eigenvalues 
+ of the empirical patch covariance 
+ separate into structure and noise components, with the noise eigenvalues asymptotically following 
+ for 
+. We iteratively remove dominant eigenvalues until the mean of the remaining ones equals their median, yielding a robust estimate of the noise variance.
+
+Both estimators convert attribution noise into a quantitative, reproducible estimate. For interpretability, we report the 
+Log-Inverse Noise Variance
+ (LINV-X), defined as 
+. Here higher values indicate cleaner, more stable attribution maps.
+
+Figure 4
+: 
+MobileNetV4 Noise Histograms
+
+(a)
+ 
+Fidelity (AIC) vs. 
+
+(b)
+ 
+Localization (IoU) vs. 
+
+(c)
+ 
+Stability (MS) vs. 
+
+(d)
+ 
+Noise (LINV-P) vs. 
+
+Figure 5
+: 
+Ablation of softmax temperature 
+ in ERIG across ResNet101, ViT-Base, and EVA02 models. All plots use a log-scale x-axis and a linear-scale y-axis, except stability, which also uses a log-scale y-axis.
+
+Under these metrics, ERIG achieves attribution noise levels several orders lower than competing methods (
+Tab.
+ 
+4
+), and the MobileNetV4 distributions in 
+Fig.
+ 
+4
+ show a clear ordering. GIG 
+[
+43
+]
+, which steers the path away from high-gradient regions, outperforms vanilla IG but trails SmoothGrad’s 
+[
+68
+]
+ explicit perturbation averaging. IDGI 
+[
+93
+]
+ in turn surpasses SmoothGrad by weighting contributions with squared gradients. ERIG outperforms all three, so its entropy-regularized weighting attenuates noise more effectively than path-steering, external smoothing, and direct gradient weighting. The same ordering appears in the stability results (
+Tab.
+ 
+3
+), supporting LINV as a meaningful proxy for stability. LINV thus adds a noise dimension absent from previous evaluation protocols; together with the fidelity, localization, and stability metrics, it enables a more complete evaluation of attribution quality.
+
+5.6 
+Generalization Beyond ImageNet
+
+To verify that our findings are not specific to the ImageNet family, we
+evaluate the full protocol on Oxford-IIIT Pet 
+[
+55
+]
+, a
+fine-grained dataset with segmentation trimaps, using fine-tuned ResNet-50,
+MobileNetV2, ConvNeXt-B, ViT-B, and DINOv2-S checkpoints. We also evaluate on the FunnyBirds
+benchmark 
+[
+37
+]
+ with ResNet-50, VGG16, and ViT-B
+backbones. The ImageNet conclusions carry over to both settings. On Oxford Pet, ERIG
+remains competitive with the strongest baseline on ranking-based fidelity
+(mean gap of 
+), leads localization by 
+ on average,
+improves stability by 
+ on average over the next-best method,
+and achieves attribution noise levels several orders lower than competing
+methods. On FunnyBirds, ERIG leads completeness by 
+ and contrastivity
+by 
+ on average while staying within 
+ of the strongest baseline
+on correctness. Full analysis in Appendix 
+A.11
+.
+
+5.7 
+Ablation Studies
+
+Effect of Temperature on Fidelity and Localization.
+
+As shown in 
+Figs.
+ 
+5(a)
+ and 
+5(b)
+, fidelity and localization peak at an intermediate 
+. At low temperatures, the distribution is over-concentrated on a few dominant and possibly noisy gradient components, causing attributions to miss broader informative structure. At high temperatures, the distribution approaches uniformity and loses discriminability between informative and uninformative features. The optimal temperature 
+ balances attribution sharpness against over-concentration, consistent with the balance characterized by 
+ in 
+Theorem
+ 
+2
+.
+
+Effect of Temperature on Stability and Noise Reduction.
+
+Figure
+ 
+5(c)
+ shows that for 
+, attributions exhibit substantially higher
+distortion under input perturbations, as the concentrated softmax amplifies spurious
+gradient spikes that destabilize attribution maps. Beyond this region, distortion drops
+sharply and plateaus as the entropy objective redistributes attribution mass over a broader,
+more stable feature set. Concurrently, 
+Figure
+ 
+5(d)
+ shows the inverse noise metric increasing
+monotonically with 
+, where a more uniform softmax prevents any single high-gradient
+component from dominating and dilutes the influence of noise spikes. Together, these observations mark 
+ as a sweet spot, where stability and noise suppression are sufficient while fidelity and localization remain near their peak.
+
+Complementarity with SmoothGrad
+
+Additionally, we validate our findings by ensembling all methods with SmoothGrad in Appendix 
+A.10
+. There, stability and noise metrics follow the same patterns, confirming that ERIG’s intrinsic noise attenuation properties are complementary to external smoothing provided by ensemble methods.
+
+Baseline Sensitivity.
+
+Finally, we also ablate the baseline choice, evaluating ERIG across twelve alternatives on EVA-02 and ResNet101 in Appendix 
+A.13
+. Constant references track the zero default closely, other families less so; since all methods share one baseline, the relative claims hold.
+
+6 
+Conclusion
+
+We present Entropy-Regularized Integrated Gradients (ERIG), a path-based attribution method that converts squared-gradient sensitivities into attribution weights using an entropy-regularized softmax. A temperature parameter 
+ balances sensitivity preservation against attenuation of local gradient irregularities. Our Lipschitz analysis decomposes attribution perturbations into a model-response term with a 
+-independent bound and a weight-variation term whose bound decays as 
+. Their ratio, 
+, characterizes the trade-off between gradient information and attribution stability. We also adapt established noise estimators into LINV-C and LINV-P. Across eleven models on ImageNet and Oxford-IIIT Pet, ERIG achieves fidelity comparable to the strongest baselines while substantially improving localization, stability, and noise suppression, all at a per-step cost within 
+ of IDGI and 
+ of IG. On FunnyBirds, it places first or second in all metrics. Future work will explore further adaptive temperature schedules 
+, analytic 
+ selection on 1-Lipschitz networks, and composition with gradient-flow corrections such as LibraGrad.
+
+Acknowledgements
+
+The authors acknowledge NSF (IIS-2331908 and OAC-2530965), DOE (DE-SC0024576), DARPA (HR00112420004 and HR00112490420), NAIRR Pilot (NAIRR250261), Indiana Jetstream2 GPU (CIS240951 via ACCESS 
+[
+31
+, 
+10
+]
+), OpenAI, Google Cloud, and NCSA Delta GPU for partially contributing to this research. Any opinions, findings, and conclusions or recommendations expressed in this material are those of the author(s) and do not necessarily reflect the views of funding agencies and companies mentioned above.
+
+References
+
+[1]
+
+Reduan Achtibat, Sayed Mohammad Vakilzadeh Hatefi, Maximilian Dreyer, Aakriti
+Jain, Thomas Wiegand, Sebastian Lapuschkin, and Wojciech Samek.
+
+Attnlrp: Attention-aware layer-wise relevance propagation for
+transformers.
+
+arXiv preprint arXiv:2402.05602
+, 2024.
+
+[2]
+
+Amina Adadi and Mohammed Berrada.
+
+Peeking inside the black-box: a survey on explainable artificial
+intelligence (xai).
+
+IEEE access
+, 6:52138–52160, 2018.
+
+[3]
+
+Julius Adebayo, Justin Gilmer, Michael Muelly, Ian Goodfellow, Moritz Hardt,
+and Been Kim.
+
+Sanity checks for saliency maps.
+
+Advances in neural information processing systems
+, 31, 2018.
+
+[4]
+
+Chirag Agarwal, Nari Johnson, Martin Pawelczyk, Satyapriya Krishna, Eshika
+Saxena, Marinka Zitnik, and Himabindu Lakkaraju.
+
+Rethinking stability for attribution based explanations.
+
+arXiv preprint arXiv:2203.06877
+, 2022.
+
+[5]
+
+David Alvarez-Melis and Tommi S Jaakkola.
+
+On the robustness of interpretability methods.
+
+arXiv preprint arXiv:1806.08049
+, 2018.
+
+[6]
+
+Saltelli Andrea, Ratto Marco, Andres Terry, Campolongo Francesca, Cariboni
+Jessica, Gatelli Debora, Saisana Michaela, and T Stefano.
+
+Global sensitivity analysis: the primer.
+
+Ist John Wiley & Sons, The Atrium, Southern Gate, Chichester,
+England
+, 2008.
+
+[7]
+
+David Balduzzi, Marcus Frean, Lennox Leary, JP Lewis, Kurt Wan-Duo Ma, and
+Brian McWilliams.
+
+The shattered gradients problem: If resnets are the answer, then what
+is the question?
+
+In 
+Proceedings of the International Conference on Machine
+Learning
+, pages 342–350, 2017.
+
+[8]
+
+Naman Bansal, Chirag Agarwal, and Anh Nguyen.
+
+Sam: The sensitivity of attribution methods to hyperparameters.
+
+In 
+Proceedings of the ieee/cvf conference on computer vision
+and pattern recognition
+, pages 8673–8683, 2020.
+
+[9]
+
+Umang Bhatt, Adrian Weller, and José MF Moura.
+
+Evaluating and aggregating feature-based model explanations.
+
+arXiv preprint arXiv:2005.00631
+, 2020.
+
+[10]
+
+Timothy J. Boerner, Stephen Deems, Thomas R. Furlani, Shelley L. Knuth, and
+John Towns.
+
+Access: Advancing innovation: Nsf’s advanced cyberinfrastructure
+coordination ecosystem: Services & support.
+
+In 
+Practice and Experience in Advanced Research Computing 2023:
+Computing for the Common Good
+, page 173–176, New York, NY, USA, 2023.
+Association for Computing Machinery.
+
+[11]
+
+Dan G Cacuci.
+
+Sensitivity and Uncertainty Analysis, Volume I: Theory
+.
+
+Chapman & Hall/CRC, 2003.
+
+[12]
+
+Prasad Chalasani, Jiefeng Chen, Amrita Roy Chowdhury, Xi Wu, and Somesh Jha.
+
+Concise explanations of neural networks using adversarial training.
+
+In 
+International conference on machine learning
+, pages
+1383–1391. PMLR, 2020.
+
+[13]
+
+Aditya Chattopadhay, Anirban Sarkar, Prantik Howlader, and Vineeth N
+Balasubramanian.
+
+Grad-cam++: Generalized gradient-based visual explanations for deep
+convolutional networks.
+
+In 
+2018 IEEE winter conference on applications of computer
+vision (WACV)
+, pages 839–847. IEEE, 2018.
+
+[14]
+
+Pratik Chaudhari, Anna Choromanska, Stefano Soatto, Yann LeCun, Carlo Baldassi,
+Christian Borgs, Jennifer Chayes, Levent Sagun, and Riccardo Zecchina.
+
+Entropy-sgd: Biasing gradient descent into wide valleys.
+
+Journal of Statistical Mechanics: Theory and Experiment
+,
+2019(12):124018, 2019.
+
+[15]
+
+Preeti S Chauhan and Nir Kshetri.
+
+The role of data and artificial intelligence in driving diversity,
+equity, and inclusion.
+
+Computer
+, 55(4):88–93, 2022.
+
+[16]
+
+Guangyong Chen, Fengyuan Zhu, and Pheng Ann Heng.
+
+An efficient statistical method for image noise level estimation.
+
+In 
+Proceedings of the IEEE international conference on computer
+vision
+, pages 477–485, 2015.
+
+[17]
+
+Hugh Chen, Scott M Lundberg, and Su-In Lee.
+
+Explaining a series of models by propagating shapley values.
+
+Nature communications
+, 13(1):4512, 2022.
+
+[18]
+
+Gabriela Csurka, Diane Larlus, Florent Perronnin, and France Meylan.
+
+What is a good evaluation measure for semantic segmentation?.
+
+In 
+Bmvc
+, pages 10–5244. Bristol, 2013.
+
+[19]
+
+Kedar Dhamdhere, Mukund Sundararajan, and Qiqi Yan.
+
+How important is a neuron.
+
+In 
+International Conference on Learning Representations
+, 2018.
+
+[20]
+
+Ann-Kathrin Dombrowski, Maximillian Alber, Christopher Anders, Marcel
+Ackermann, Klaus-Robert Müller, and Pan Kessel.
+
+Explanations can be manipulated and geometry is to blame.
+
+Advances in neural information processing systems
+, 32, 2019.
+
+[21]
+
+John C Duchi, Peter L Bartlett, and Martin J Wainwright.
+
+Randomized smoothing for stochastic optimization.
+
+SIAM Journal on Optimization
+, 22(2):674–701, 2012.
+
+[22]
+
+Joseph Enguehard.
+
+Sequential integrated gradients: a simple but effective method for
+explaining language models.
+
+In 
+Findings of the Association for Computational Linguistics:
+ACL 2023
+, pages 7555–7565, 2023.
+
+[23]
+
+Gabriel Erion, Joseph D Janizek, Pascal Sturmfels, Scott M Lundberg, and Su-In
+Lee.
+
+Improving performance of deep learning models with axiomatic
+attribution priors and expected gradients.
+
+Nature machine intelligence
+, 3(7):620–631, 2021.
+
+[24]
+
+Christian Etmann, Sebastian Lunz, Peter Maass, and Carola-Bibiane
+Schönlieb.
+
+On the connection between adversarial robustness and saliency map
+interpretability.
+
+In 
+International Conference on Machine Learning
+, pages
+1823–1832. PMLR, 2019.
+
+[25]
+
+Yuxin Fang, Quan Sun, Xinggang Wang, Tiejun Huang, Xinlong Wang, and Yue Cao.
+
+Eva-02: A visual representation for neon genesis.
+
+Image and Vision Computing
+, 149:105171, 2024.
+
+[26]
+
+Mahyar Fazlyab, Alexander Robey, Hamed Hassani, Manfred Morari, and George
+Pappas.
+
+Efficient and accurate estimation of lipschitz constants for deep
+neural networks.
+
+Advances in neural information processing systems
+, 32, 2019.
+
+[27]
+
+Shanghua Gao, Zhong-Yu Li, Ming-Hsuan Yang, Ming-Ming Cheng, Junwei Han, and
+Philip Torr.
+
+Large-scale unsupervised semantic segmentation.
+
+IEEE Transactions on Pattern Analysis and Machine
+Intelligence
+, 2022.
+
+[28]
+
+Amirata Ghorbani, Abubakar Abid, and James Zou.
+
+Interpretation of neural networks is fragile.
+
+In 
+Proceedings of the AAAI conference on artificial
+intelligence
+, pages 3681–3688, 2019.
+
+[29]
+
+Ian J Goodfellow, Jonathon Shlens, and Christian Szegedy.
+
+Explaining and harnessing adversarial examples.
+
+In 
+International Conference on Learning Representations
+, 2015.
+
+[30]
+
+David Gunning and David Aha.
+
+Darpa’s explainable artificial intelligence (xai) program.
+
+AI magazine
+, 40(2):44–58, 2019.
+
+[31]
+
+David Y. Hancock, Jeremy Fischer, John Michael Lowe, Winona Snapp-Childs,
+Marlon Pierce, Suresh Marru, J. Eric Coulter, Matthew Vaughn, Brian Beck,
+Nirav Merchant, Edwin Skidmore, and Gwen Jacobs.
+
+Jetstream2: Accelerating cloud computing via jetstream.
+
+In 
+Practice and Experience in Advanced Research Computing 2021:
+Evolution Across All Dimensions
+, New York, NY, USA, 2021. Association for
+Computing Machinery.
+
+[32]
+
+Boris Hanin and David Rolnick.
+
+Deep relu networks have surprisingly few activation patterns.
+
+Advances in neural information processing systems
+, 32, 2019.
+
+[33]
+
+Kaiming He, Xiangyu Zhang, Shaoqing Ren, and Jian Sun.
+
+Deep residual learning for image recognition.
+
+In 
+Proceedings of the IEEE conference on computer vision and
+pattern recognition
+, pages 770–778, 2016.
+
+[34]
+
+Pengcheng He, Jianfeng Gao, and Weizhu Chen.
+
+Debertav3: Improving deberta using electra-style pre-training with
+gradient-disentangled embedding sharing, 2021.
+
+[35]
+
+Tong He, Zhi Zhang, Hang Zhang, Zhongyue Zhang, Junyuan Xie, and Mu Li.
+
+Bag of tricks for image classification with convolutional neural
+networks.
+
+2019 IEEE/CVF Conference on Computer Vision and Pattern
+Recognition (CVPR)
+, pages 558–567, 2018.
+
+[36]
+
+Anna Hedström, Leander Weber, Daniel Krakowczyk, Dilyara Bareeva, Franz
+Motzkus, Wojciech Samek, Sebastian Lapuschkin, and Marina Marina M.-C.
+Höhne.
+
+Quantus: An explainable ai toolkit for responsible evaluation of
+neural network explanations and beyond.
+
+Journal of Machine Learning Research
+, 24(34):1–11, 2023.
+
+[37]
+
+Robin Hesse, Simone Schaub-Meyer, and Stefan Roth.
+
+FunnyBirds: A synthetic vision dataset for a part-based analysis
+of explainable AI methods.
+
+In 
+2023 IEEE/CVF International Conference on Computer Vision
+(ICCV), Paris, France, October 2-6, 2023
+, pages 3981–3991. IEEE, 2023.
+
+[38]
+
+Robin Hesse, Simone Schaub-Meyer, Janina Hesse, Bernt Schiele, and Stefan Roth.
+
+What is missing? explaining neurons activated by absent concepts.
+
+arXiv preprint arXiv:2603.09787
+, 2026.
+
+[39]
+
+John Immerkaer.
+
+Fast noise variance estimation.
+
+Computer vision and image understanding
+, 64(2):300–302, 1996.
+
+[40]
+
+Hyeongwon Jang, Changhun Kim, and Eunho Yang.
+
+TIMING: Temporality-Aware Integrated Gradients for Time Series
+Explanation.
+
+In 
+International Conference on Machine Learning (ICML)
+, 2025.
+
+[41]
+
+Edwin T Jaynes.
+
+Information theory and statistical mechanics.
+
+Physical review
+, 106(4):620, 1957.
+
+[42]
+
+Andrei Kapishnikov, Tolga Bolukbasi, Fernanda Viégas, and Michael Terry.
+
+Xrai: Better attributions through regions.
+
+In 
+Proceedings of the IEEE/CVF international conference on
+computer vision
+, pages 4948–4957, 2019.
+
+[43]
+
+Andrei Kapishnikov, Subhashini Venugopalan, Besim Avci, Ben Wedin, Michael
+Terry, and Tolga Bolukbasi.
+
+Guided integrated gradients: An adaptive path method for removing
+noise.
+
+In 
+Proceedings of the IEEE/CVF conference on computer vision
+and pattern recognition
+, pages 5050–5058, 2021.
+
+[44]
+
+Pieter-Jan Kindermans, Sara Hooker, Julius Adebayo, Maximilian Alber, Kristof T
+Schütt, Sven Dähne, Dumitru Erhan, and Been Kim.
+
+The (un)reliability of saliency methods.
+
+In 
+Explainable AI: Interpreting, Explaining and Visualizing
+Deep Learning
+, pages 267–280. Springer, 2019.
+
+[45]
+
+Rohith Krishna, Jue Wang, Woody Ahern, Pascal Sturmfels, Preetham Venkatesh,
+Indrek Kalvet, Gyu Rie Lee, Felix S Morey-Burrows, Ivan Anishchenko, Ian R
+Humphreys, et al.
+
+Generalized biomolecular modeling and design with rosettafold
+all-atom.
+
+Science
+, 384(6693):eadl2528, 2024.
+
+[46]
+
+Matieyendou Lamboni, Bertrand Iooss, Anne-Laure Popelin, and Fabrice Gamboa.
+
+Derivative-based global sensitivity measures: General links with
+Sobol’ indices and numerical tests.
+
+Mathematics and Computers in Simulation
+, 87:45–54,
+2013.
+
+[47]
+
+Shuyang Liu, Zixuan Chen, Ge Shi, Ji Wang, Changjie Fan, Yu Xiong, Runze
+Wu Yujing Hu, Ze Ji, and Yang Gao.
+
+A new baseline assumption of integrated gradients based on shapley
+value.
+
+arXiv preprint arXiv:2310.04821
+, 2023.
+
+[48]
+
+Faridoun Mehri, Mahdieh Soleymani Baghshah, and Mohammad Taher Pilehvar.
+
+Libragrad: Balancing gradient flow for universally better vision
+transformer attributions.
+
+In 
+2025 IEEE/CVF Conference on Computer Vision and Pattern
+Recognition (CVPR)
+, pages 67–78. IEEE, 2025.
+
+[49]
+
+Seyed-Mohsen Moosavi-Dezfooli, Alhussein Fawzi, Jonathan Uesato, and Pascal
+Frossard.
+
+Robustness via curvature regularization, and vice versa.
+
+In 
+Proceedings of the IEEE/CVF Conference on Computer Vision
+and Pattern Recognition
+, pages 9078–9086, 2019.
+
+[50]
+
+Rukmangadh Sai Myana and Sumit Kumar Jha.
+
+Explaining protein folding networks using integrated gradients and
+attention mechanisms.
+
+In 
+Computational Advances in Bio and Medical Sciences
+, pages
+195–211, Cham, 2026. Springer Nature Switzerland.
+
+[51]
+
+Pravin Nair.
+
+Softmax is 
+-Lipschitz: A tight bound across all 
+
+norms.
+
+arXiv preprint arXiv:2510.23012
+, 2025.
+
+[52]
+
+Yurii Nesterov and Vladimir Spokoiny.
+
+Random gradient-free minimization of convex functions.
+
+Foundations of Computational Mathematics
+, 17(2):527–566, 2017.
+
+[53]
+
+Deng Pan, Xin Li, and Dongxiao Zhu.
+
+Explaining deep neural network models with adversarial gradient
+integration.
+
+In 
+Thirtieth International Joint Conference on Artificial
+Intelligence (IJCAI)
+, 2021.
+
+[54]
+
+Jinkyung Park, Ramanathan Arunachalam, Vincent Silenzio, and Vivek K Singh.
+
+Fairness in mobile phone–based mental health assessment algorithms:
+Exploratory study.
+
+JMIR formative research
+, 6(6):e34366,
+2022.
+
+[55]
+
+Omkar M Parkhi, Andrea Vedaldi, Andrew Zisserman, and CV Jawahar.
+
+Cats and dogs.
+
+In 
+2012 IEEE conference on computer vision and pattern
+recognition
+, pages 3498–3505. IEEE, 2012.
+
+[56]
+
+Gabriel Peyré and Marco Cuturi.
+
+Computational optimal transport.
+
+Foundations and Trends in Machine Learning
+, 51(1):1–44, 2019.
+
+[57]
+
+Danfeng Qin, Chas Leichner, Manolis Delakis, Marco Fornoni, Shixin Luo, Fan
+Yang, Weijun Wang, Colby Banbury, Chengxi Ye, Berkin Akin, et al.
+
+Mobilenetv4-universal models for the mobile ecosystem.
+
+arXiv preprint arXiv:2404.10518
+, 2024.
+
+[58]
+
+Laura Rieger and Lars Kai Hansen.
+
+Irof: a low resource evaluation metric for explanation methods.
+
+arXiv preprint arXiv:2003.08747
+, 2020.
+
+[59]
+
+Olga Russakovsky, Jia Deng, Hao Su, Jonathan Krause, Sanjeev Satheesh, Sean Ma,
+Zhiheng Huang, Andrej Karpathy, Aditya Khosla, Michael Bernstein,
+Alexander C. Berg, and Li Fei-Fei.
+
+ImageNet Large Scale Visual Recognition Challenge.
+
+International Journal of Computer Vision (IJCV)
+, 115(3):211–252, 2015.
+
+[60]
+
+Masato Sakai, Akihisa Sakurai, Siyuan Lu, Jorge Olano, Conrad M Albrecht,
+Hendrik F Hamann, and Marcus Freitag.
+
+Ai-accelerated nazca survey nearly doubles the number of known
+figurative geoglyphs and sheds light on their purpose.
+
+Proceedings of the National Academy of Sciences
+, 121(40):e2407652121, 2024.
+
+[61]
+
+Shibani Santurkar, Dimitris Tsipras, Andrew Ilyas, and Aleksander Madry.
+
+How does batch normalization help optimization?
+
+In 
+Advances in Neural Information Processing Systems
+, 2018.
+
+[62]
+
+Mathieu Serrurier, Franck Mamalet, Thomas Fel, Louis Béthune, and Thibaut
+Boissin.
+
+On the explainable properties of 1-lipschitz neural networks: An
+optimal transport perspective.
+
+Advances in Neural Information Processing Systems
+,
+36:54645–54682, 2023.
+
+[63]
+
+Jimeng Shi, Zeda Yin, Rukmangadh Sai Myana, Khandker S Ishtiaq, Anupama John,
+Jayantha Obeysekera, Arturo S Leon, and Giri Narasimhan.
+
+Deep learning models for water stage predictions in south florida.
+
+Journal of Water Resources Planning and Management
+,
+151(10):05025013, 2025.
+
+[64]
+
+Jimeng Shi, Azam Shirali, Bowen Jin, Sizhe Zhou, Wei Hu, Rahuul Rangaraj,
+Zhaonan Wang, Yanzhao Wu, Leonardo Bobadilla, Upmanu Lall, Shaowen Wang,
+Jiawei Han, and Giri Narasimhan.
+
+Deep learning and foundation models for weather prediction: A survey.
+
+In 
+Proceedings of the Thirty-Fifth International Joint
+Conference on Artificial Intelligence, IJCAI-26
+, pages 8023–8031.
+International Joint Conferences on Artificial Intelligence Organization,
+2026.
+
+Survey Track.
+
+[65]
+
+Lachlan Simpson, Federico Costanza, Kyle Millar, Adriel Cheng, Cheng-Chew Lim,
+and Hong Gunn Chew.
+
+Tangentially aligned integrated gradients for user-friendly
+explanations.
+
+arXiv preprint arXiv:2503.08240
+, 2025.
+
+[66]
+
+Shree Singhi and Swadesh Swain.
+
+Riemann sum optimization for accurate integrated gradients
+computation.
+
+In 
+Interpretable AI: Past, Present and Future
+, 2024.
+
+[67]
+
+Leon Sixt, Maximilian Granz, and Tim Landgraf.
+
+When explanations lie: Why many modified bp attributions fail.
+
+In 
+International conference on machine learning
+, pages
+9046–9057. PMLR, 2020.
+
+[68]
+
+Daniel Smilkov, Nikhil Thorat, Been Kim, Fernanda Viégas, and Martin
+Wattenberg.
+
+Smoothgrad: removing noise by adding noise.
+
+arXiv preprint arXiv:1706.03825
+, 2017.
+
+[69]
+
+Ilya M Sobol.
+
+Global sensitivity indices for nonlinear mathematical models and
+their monte carlo estimates.
+
+Mathematics and computers in simulation
+, 55(1-3):271–280, 2001.
+
+[70]
+
+Ilya M Sobol’ and Sergei Kucherenko.
+
+Derivative based global sensitivity measures and their link with
+global sensitivity indices.
+
+Mathematics and Computers in Simulation
+, 79(10):3009–3017, 2009.
+
+[71]
+
+Suraj Srinivas, Kyle Matoba, Himabindu Lakkaraju, and François Fleuret.
+
+Efficiently training low-curvature neural networks.
+
+In 
+Advances in Neural Information Processing Systems
+, 2022.
+
+[72]
+
+Mukund Sundararajan, Ankur Taly, and Qiqi Yan.
+
+Axiomatic attribution for deep networks.
+
+In 
+International conference on machine learning
+, pages
+3319–3328. PMLR, 2017.
+
+[73]
+
+Christian Szegedy, Wojciech Zaremba, Ilya Sutskever, Joan Bruna, Dumitru Erhan,
+Ian Goodfellow, and Rob Fergus.
+
+Intriguing properties of neural networks.
+
+In 
+International Conference on Learning Representations
+, 2014.
+
+[74]
+
+Kazuki Tachikawa, Yuji Kawai, Jihoon Park, and Minoru Asada.
+
+Compensated integrated gradients to reliably interpret eeg
+classification.
+
+arXiv preprint arXiv:1811.08633
+, 2018.
+
+[75]
+
+Mingxing Tan and Quoc Le.
+
+Efficientnet: Rethinking model scaling for convolutional neural
+networks.
+
+In 
+International conference on machine learning
+, pages
+6105–6114. PMLR, 2019.
+
+[76]
+
+Hugo Touvron, Matthieu Cord, and Herve Jegou.
+
+Deit iii: Revenge of the vit.
+
+arXiv preprint arXiv:2204.07118
+, 2022.
+
+[77]
+
+Dimitris Tsipras, Shibani Santurkar, Logan Engstrom, Alexander Turner, and
+Aleksander Madry.
+
+Robustness may be at odds with accuracy.
+
+In 
+International Conference on Learning Representations
+, 2019.
+
+[78]
+
+Aladin Virmaux and Kevin Scaman.
+
+Lipschitz regularity of deep neural networks: analysis and efficient
+estimation.
+
+Advances in neural information processing systems
+, 31, 2018.
+
+[79]
+
+Chase Walker, Sumit Jha, Kenny Chen, and Rickard Ewetz.
+
+Integrated decision gradients: Compute your attributions where the
+model makes its decision.
+
+In 
+Proceedings of the AAAI Conference on Artificial
+Intelligence
+, pages 5289–5297, 2024.
+
+[80]
+
+Ao Wang, Hui Chen, Lihao Liu, Kai Chen, Zijia Lin, Jungong Han, et al.
+
+Yolov10: Real-time end-to-end object detection.
+
+Advances in Neural Information Processing Systems
+,
+37:107984–108011, 2024a.
+
+[81]
+
+Zhou Wang, Eero P Simoncelli, and Alan C Bovik.
+
+Multiscale structural similarity for image quality assessment.
+
+In 
+The thrity-seventh asilomar conference on signals, systems
+& computers, 2003
+, pages 1398–1402. Ieee, 2003.
+
+[82]
+
+Zifu Wang, Maxim Berman, Amal Rannen-Triki, Philip Torr, Devis Tuia, Tinne
+Tuytelaars, Luc V Gool, Jiaqian Yu, and Matthew Blaschko.
+
+Revisiting evaluation metrics for semantic segmentation: Optimization
+and evaluation of fine-grained intersection over union.
+
+Advances in Neural Information Processing Systems
+,
+36:60144–60225, 2023.
+
+[83]
+
+Zichong Wang, Jocelyn Dzuong, Xiaoyong Yuan, Zhong Chen, Yanzhao Wu, Xin Yao,
+and Wenbin Zhang.
+
+Individual fairness with group awareness under uncertainty.
+
+In 
+Joint European Conference on Machine Learning and Knowledge
+Discovery in Databases
+, pages 89–106. Springer, 2024b.
+
+[84]
+
+Wenqi Wei, Ling Liu, Margaret Loper, Ka-Ho Chow, Emre Gursoy, Stacey Truex, and
+Yanzhao Wu.
+
+Cross-layer strategic ensemble defense against adversarial examples.
+
+In 
+2020 International Conference on Computing, Networking and
+Communications (ICNC)
+, pages 456–460. IEEE, 2020.
+
+[85]
+
+Ross Wightman.
+
+Pytorch image models.
+
+https://github.com/huggingface/pytorch-image-models
+, 2019.
+
+[86]
+
+Sanghyun Woo, Shoubhik Debnath, Ronghang Hu, Xinlei Chen, Zhuang Liu, In So
+Kweon, and Saining Xie.
+
+Convnext v2: Co-designing and scaling convnets with masked
+autoencoders.
+
+In 
+Proceedings of the IEEE/CVF conference on computer vision
+and pattern recognition
+, pages 16133–16142, 2023.
+
+[87]
+
+Adam Wróbel, Mikołaj Janusz, Bartosz Zieliński, and Dawid Rymarczyk.
+
+Omenn: One matrix to explain neural networks.
+
+arXiv preprint arXiv:2412.02399
+, 2024.
+
+[88]
+
+Adam Wróbel, Siddhartha Gairola, Jacek Tabor, Bernt Schiele, Bartosz
+Zieliński, and Dawid Rymarczyk.
+
+Dave: Distribution-aware attribution via vit gradient decomposition.
+
+arXiv preprint arXiv:2602.06613
+, 2026.
+
+[89]
+
+Bichen Wu, Chenfeng Xu, Xiaoliang Dai, Alvin Wan, Peizhao Zhang, Zhicheng Yan,
+Masayoshi Tomizuka, Joseph Gonzalez, Kurt Keutzer, and Peter Vajda.
+
+Visual transformers: Token-based image representation and processing
+for computer vision, 2020.
+
+[90]
+
+Yanzhao Wu, Ling Liu, Zhongwei Xie, Ka-Ho Chow, and Wenqi Wei.
+
+Boosting ensemble accuracy by revisiting ensemble diversity metrics.
+
+In 
+Proceedings of the IEEE/CVF Conference on Computer Vision
+and Pattern Recognition
+, pages 16469–16477, 2021.
+
+[91]
+
+Yanzhao Wu, Ka-Ho Chow, Wenqi Wei, and Ling Liu.
+
+Exploring model learning heterogeneity for boosting ensemble
+robustness.
+
+In 
+2023 IEEE International Conference on Data Mining (ICDM)
+,
+pages 648–657. IEEE, 2023.
+
+[92]
+
+Shawn Xu, Subhashini Venugopalan, and Mukund Sundararajan.
+
+Attribution in scale and space.
+
+In 
+Proceedings of the IEEE/CVF Conference on Computer Vision
+and Pattern Recognition
+, pages 9680–9689, 2020.
+
+[93]
+
+Ruo Yang, Binghui Wang, and Mustafa Bilgic.
+
+Idgi: A framework to eliminate explanation noise from integrated
+gradients.
+
+In 
+Proceedings of the IEEE/CVF Conference on Computer Vision
+and Pattern Recognition
+, pages 23725–23734, 2023.
+
+[94]
+
+Chih-Kuan Yeh, Cheng-Yu Hsieh, Arun Suggala, David I Inouye, and Pradeep K
+Ravikumar.
+
+On the (in) fidelity and sensitivity of explanations.
+
+Advances in neural information processing systems
+, 32, 2019.
+
+[95]
+
+Dong Yin, Raphael Gontijo Lopes, Jon Shlens, Ekin Dogus Cubuk, and Justin
+Gilmer.
+
+A fourier perspective on model robustness in computer vision.
+
+Advances in Neural Information Processing Systems
+, 32, 2019.
+
+[96]
+
+Eslam Zaher, Maciej Trzaskowski, Quan Nguyen, and Fred Roosta.
+
+Manifold integrated gradients: Riemannian geometry for feature
+attribution.
+
+In 
+Proceedings of the 41st International Conference on Machine
+Learning
+, pages 58090–58104, 2024.
+
+[97]
+
+Yue Zhuo and Zhiqiang Ge.
+
+Ig2: Integrated gradient on iterative gradient path for feature
+attribution.
+
+IEEE Transactions on Pattern Analysis and Machine
+Intelligence
+, 46(11):7173–7190, 2024.
+
+[98]
+
+Zhike Zi.
+
+Sensitivity analysis approaches applied to systems biology models.
+
+IET Systems Biology
+, 5(6):336–346, 2011.
+
+Appendix A 
+Appendix
+
+A.1 
+Proof of Local Sensitivity
+
+Let 
+ be a very small (
+) random unbiased 
+ perturbation of the
+
+-th coordinate of input 
+. The corresponding perturbed vector is
+
+. A Taylor expansion of
+
+ around 
+ in the 
+-th coordinate gives
+
+(12)
+
+(13)
+
+Taking expectation of 
+ gives us,
+
+(14)
+
+(15)
+
+(16)
+
+Hence, we can compute the variance as,
+
+(17)
+
+(18)
+
+(19)
+
+Here, 
+ acts as the proportionality constant in the approximation, while the squared partial derivative, 
+, measures the local sensitivity of the function 
+ to feature 
+. This quantity, integrated over the entire input space, forms the basis of 
+Derivative-based Global Sensitivity Measures
+ (DGSMs) 
+[
+70
+, 
+46
+]
+, a widely used alternative to Sobol’ sensitivity indices 
+[
+69
+]
+. DGSMs have been applied across a range of domains, including input screening in environmental models 
+[
+6
+]
+, sensitivity analysis of ODEs in biology 
+[
+98
+]
+, and uncertainty quantification in geophysical simulations 
+[
+11
+]
+, etc.
+
+A.2 
+Maximum Entropy Weight Derivation
+
+A.2.1 
+Solution via KKT Conditions
+
+We address the constrained optimization problem via the Karush-Kuhn-Tucker (KKT) conditions. First, we restate the problem in the following standard form:
+
+(20)
+
+(21)
+
+Next, we construct the Lagrangian:
+
+(22)
+
+where 
+ is the Lagrange multiplier for the equality constraint (normalization), and 
+ is the Lagrange multiplier for the inequality constraint (gradient magnitude threshold). The KKT conditions for optimality are:
+
+Stationarity:
+
+(23)
+
+Primal feasibility:
+
+(24)
+
+Dual feasibility:
+
+(25)
+
+Complementary slackness:
+
+(26)
+
+From the stationarity condition (
+23
+), we can solve for 
+:
+
+(27)
+
+(28)
+
+Using the normalization constraint 
+ from the primal feasibility conditions (
+24
+), we eliminate the constant 
+:
+
+(29)
+
+(30)
+
+Substituting equation (
+30
+) into equation (
+28
+), we obtain the normalized weights:
+
+(31)
+
+where 
+ denotes the 
+-th component of the softmax function.
+
+The Lagrange multiplier 
+ controls the trade-off between entropy maximization and gradient emphasis. When 
+, we recover the uniform distribution (maximum entropy with no gradient bias). As 
+ increases, the distribution concentrates more on features with larger gradient magnitudes while assigning lower probability to features with smaller gradients.
+
+A.2.2 
+Relationship Between 
+ and 
+
+From the complementary slackness condition (
+26
+), at the optimal solution either 
+ (in which case the gradient strength constraint will not be active resulting in a uniform distribution) or the constraint holds with equality:
+
+(32)
+
+Substituting 
+Eq.
+ 
+31
+ into 
+Eq.
+ 
+32
+, we obtain the relationship between 
+ and 
+:
+
+(33)
+
+This equation implicitly defines 
+ as a function of 
+. In principle, for a given threshold 
+, one could solve 
+Eq.
+ 
+33
+ numerically to find the corresponding 
+.
+
+A.2.3 
+Practical Implementation
+
+While tuning 
+ would require solving the constrained optimization problem for each value, it is more practical to tune 
+ directly as a hyperparameter. We denote this hyperparameter as 
+ (the temperature parameter in the softmax), which provides direct control over the concentration of the distribution on high-gradient regions without requiring iterative optimization. Hence, the ERIG weighting scheme becomes:
+
+(34)
+
+∎
+
+A.3 
+More Visualization Examples
+
+The attribution values are mapped to a 
+ range following the methodology of Integrated Gradients 
+[
+72
+]
+. Below, you can find more comparisons of attribution maps for the MobileNetV4 model:
+
+Figure 6
+: 
+Additional visualizations of attribution maps for the MobileNetV4 architecture.
+
+A.4 
+Fidelity Distributions
+
+To complement the fidelity results in 
+Tab.
+ 
+1
+, we plot the per-sample distributions of each fidelity metric across all six architectures. Each shaded region spans the inter-quartile range (25th to 75th percentile); the horizontal line inside the shaded region represents the mean, and the vertical capped lines indicate the full range across samples. As discussed in 
+Sec.
+ 
+5.2
+, the substantial overlap in inter-quartile ranges across methods is consistent with the rank-only nature of these metrics, since they depend solely on attribution ranking and methods with markedly different attribution magnitudes and noise characteristics can produce similar fidelity scores.
+
+Figure 7
+: 
+ISC distribution with inter-quartile range and full range across all architectures. Higher is better.
+
+Figure 8
+: 
+AIC distribution with inter-quartile range and full range across all architectures. Higher is better.
+
+Figure 9
+: 
+DEL distribution with inter-quartile range and full range across all architectures. Lower is better.
+
+A.5 
+Localization Distributions
+
+Here we plot the per-sample distributions of each localization metric in 
+Tab.
+ 
+2
+ across all six architectures using the same format as 
+Sec.
+ 
+A.4
+. In contrast to the fidelity distributions, ERIG’s inter-quartile ranges are visibly higher than those of all baselines for IoU and Pixel F1, confirming the localization advantages reported in the main text. Pixel Accuracy shows less separation because, unlike IoU and Pixel F1, it does not penalize false positives relative to the object region and is therefore less sensitive to differences in localization quality. This limitation is well known and has been studied by Csurka et al. 
+[
+18
+]
+ in 2013 and, more recently, by Wang et al. 
+[
+82
+]
+ in 2023.
+
+Figure 10
+: 
+IoU distribution with inter-quartile range and full range across all architectures. Higher is better.
+
+Figure 11
+: 
+Pixel Accuracy distribution with inter-quartile range and full range across all architectures. Higher is better.
+
+Figure 12
+: 
+Pixel F1 distribution with inter-quartile range and full range across all architectures. Higher is better.
+
+A.6 
+Stability Distributions
+
+To complement the tabulated stability results in 
+Tab.
+ 
+3
+, we plot each stability metric across all six architectures on a 
+ scale for ease of visualization. Each shaded region spans the inter-quartile range (25th to 75th percentile); the horizontal line inside the shaded region represents the mean, and the vertical capped lines indicate the full range across samples. The ERIG bar is visually highlighted for clarity. Across all metrics and models, ERIG’s inter-quartile ranges are entirely non-overlapping with those of every baseline, confirming that the improvements reported in the main text are meaningful.
+
+Figure 13
+: 
+Max Sensitivity (MS) with inter-quartile range and full range across all architectures (
+ scale). Lower is better.
+
+Figure 14
+: 
+Local Lipschitz Constant (LLC) with inter-quartile range and full range across all architectures (
+ scale). Lower is better.
+
+Figure 15
+: 
+Relative Input Stability (RIS) with inter-quartile range and full range across all architectures (
+ scale). Lower is better.
+
+A.7 
+Proof of Lipschitz Decomposition
+
+Let 
+ with 
+ and 
+. We bound 
+ and 
+ separately.
+
+A.7.1 
+Model-Response Term
+
+Since 
+ and 
+,
+
+(35)
+
+Define 
+, so that 
+. The derivative of 
+ is the difference of the directional derivatives of 
+ along 
+ and 
+:
+
+(36)
+
+(37)
+
+Using 
+, 
+ with Assumptions 
+1
+ and  
+2
+, one can write,
+
+(38)
+
+Integrating over 
+ yields the model-response bound,
+
+(39)
+
+A.7.2 
+Weight-Variation Term
+
+We first bound the sensitivity of the softmax weights to gradient perturbations. Let 
+ and 
+ denote the gradient vectors at 
+ and 
+ respectively, and let 
+ denote the Hadamard product. From 
+[
+51
+]
+, the softmax operator is 
+-Lipschitz with respect to any 
+ norm. Therefore,
+
+(40)
+
+Using 
+, we expand elementwise,
+
+(41)
+
+Next,
+
+(42)
+
+Since each 
+, we have
+
+(43)
+
+(44)
+
+Similarly, 
+. Combining,
+
+(45)
+
+We apply this to path parameter 
+ by defining 
+. Then, Assumption 
+1
+ gives 
+ and Assumption 
+2
+ gives 
+. So, the pointwise weight perturbation satisfies
+
+(46)
+
+The function increment rate along the unperturbed path satisfies 
+ by Assumption 
+1
+. Integrating the product over 
+ yields the weight-variation bound,
+
+(47)
+
+Applying the triangle inequality to 
+,
+
+(48)
+
+(49)
+
+Factoring out the model-response bound and defining 
+ as the ratio of the two bounds,
+
+(50)
+
+∎
+
+A.7.3 
+Extension to Networks with ReLU Activations
+
+Assumptions 
+1
+ and 
+2
+ hold directly for backbones with smooth activations, which in our evaluation are ViT-Base and DeiT3 with GELU, and EVA-02 and EfficientNet with SiLU. Such smooth activations are moreover the design norm in modern architectures, so the assumptions cover most recent models directly. For the remaining backbones the gradient is not continuous everywhere. ResNet101 is piecewise linear, with 
+ piecewise constant on the network’s linear regions 
+[
+32
+]
+, while MobileNetV4 mixes ReLU stages with smooth attention blocks. In both cases 
+ exists almost everywhere and Assumption 
+2
+ fails only on the kink boundaries.
+
+The standard remedy is Gaussian smoothing, which convolves 
+ with the density 
+ of 
+. The mollified network 
+ is infinitely differentiable (
+) and satisfies Assumptions 
+1
+ and 
+2
+ with 
+ and 
+, respectively. Moreover, 
+ converges uniformly to 
+ as 
+; these are classical properties of Gaussian smoothing 
+[
+52
+, 
+21
+]
+. 
+Theorem
+ 
+2
+ therefore applies verbatim to 
+ for every 
+, that is, to an arbitrarily close smooth surrogate of the network. The same device has already been seen in the XAI literature, and it underlies the analysis of explanation geometry of ReLU models 
+[
+20
+]
+. Additionally, 
+ is exactly the gradient map that SmoothGrad 
+[
+68
+]
+ averages. Hence, our results extend to ReLU networks through this smoothing technique, with the decomposition stated for 
+ and its constants 
+ and 
+. Consistent with this, the stability gains in 
+Tab.
+ 
+3
+ are as large on the ReLU-based backbones as on the smooth ones, and the same holds for the adversarial stability results in 
+Tab.
+ 
+23
+ (Appendix 
+A.15
+). Our empirical results are therefore not tied to the specific activation function used. Finally, as mentioned in 
+Sec.
+ 
+4.2
+, exact Lipschitz constants of deep networks are intractable to compute, and we treat 
+ and 
+ only as analysis quantities rather than computed ones.
+
+A.8 
+Per-step Runtime Distributions
+
+Method
+
+Mean (ms/step)
+
+Std (ms/step)
+
+BIG
+
+GIG
+
+IDGI
+
+IG
+
+ERIG (ours)
+
+Table 5
+: 
+Runtime:
+ ERIG costs 
+ more per step than IG, with the softmax adding only 
+ over IDGI.
+
+Figure 16
+: 
+Per-step runtime with 5%–95% percentile ranges shaded in color. The vertical capped lines indicate the full range across samples. The horizontal lines inside the shaded regions represent the mean values.
+
+All runtime measurements are collected on 
+ validation samples from the ImageNet dataset and are measured on an NVIDIA A100-SXM4-40GB GPU using PyTorch and the ResNet101 model, with a batch size of 
+. SmoothGrad is excluded here because its ensemble-based design requires 
+ independent attribution passes per example, making it extremely slow and its runtime not directly comparable on a per-step basis with path-based methods. 
+Table
+ 
+5
+ summarizes the per-step statistics for these methods and 
+Fig.
+ 
+16
+ visualizes them with 
+–
+ inter-percentile intervals; the shaded regions for IDGI and ERIG roughly align with each other, confirming that their per-step costs are approximately indistinguishable in practice.
+
+Particularly, ERIG adds a small overhead relative to IG with its mean per-step runtime (
+ ms) being 
+ ms (
+) slower than IG (
+ ms). Additionally, IDGI (
+ ms) incurs a nearly identical overhead, indicating that the dominant additional cost shared by both methods is the element-wise squaring of the gradient vector, while the softmax normalization that distinguishes ERIG from IDGI adds only 
+ ms (
+) per step. This marginal cost yields substantial gains in attribution stability, localization, and noise characteristics as demonstrated in the main text. All three methods pre-compute the full set of interpolated path points 
+ before integration and evaluate them in batched forward-backward passes, yielding linear scaling with the step count (
+Fig.
+ 
+17
+, left).
+
+BIG is, on average, 
+ slower per step than IG because each step requires a Gaussian blur of the input, which involves a large spatial convolution in spite of batching. On the other hand, GIG is the slowest method at 
+ the per-step cost of IG because its path is constructed iteratively with each intermediate point 
+ depending on the computation at 
+. This sequential dependency prevents the path points from being pre-computed and batched together, forcing GIG into 
+ separate forward-backward passes, and making it fundamentally more expensive regardless of hardware (
+Fig.
+ 
+17
+, right).
+
+Figure 17
+: 
+Mean total runtime as a function of the number of integration steps over 1000 examples. The left subplot shows IG, IDGI, and ERIG, which scale linearly and overlap considerably. The right subplot shows BIG and GIG on a separate scale due to their higher costs.
+
+A.9 
+ERIG Algorithm
+
+The following algorithm provides a practical way of estimating ERIG attributions approximately:
+
+Algorithm 1
+ 
+ Computing ERIG Attributions
+
+1:
+
+function
+ 
+ERIG
+(
+)
+
+2:
+
+              
+              
+              
+
+3:
+
+              
+              
+              
+for
+ 
+ 
+do
+
+4:
+
+              
+              
+               
+
+5:
+
+              
+              
+               
+
+6:
+
+              
+              
+              
+end
+ 
+for
+
+7:
+
+              
+              
+              
+return
+ 
+
+8:
+
+end
+ 
+function
+
+A.10 
+SmoothGrad Ensembles
+
+Table 6
+: 
+SmoothGrad Stability:
+ The ERIG ensemble improves stability by 
+ on average over the next-best ensemble.
+
+Model
+
+Method
+
+MS 
+
+LLC 
+
+RIS 
+
+ResNet101
+
+SG + BIG
+
+SG + GIG
+
+SG + IDGI
+
+SG + IG
+
+SG + ERIG (ours)
+
+EfficientNet
+
+SG + BIG
+
+SG + GIG
+
+SG + IDGI
+
+SG + IG
+
+SG + ERIG (ours)
+
+MobileNetV4
+
+SG + BIG
+
+SG + GIG
+
+SG + IDGI
+
+SG + IG
+
+SG + ERIG (ours)
+
+ViT-Base
+
+SG + BIG
+
+SG + GIG
+
+SG + IDGI
+
+SG + IG
+
+SG + ERIG (ours)
+
+EVA-02
+
+SG + BIG
+
+SG + GIG
+
+SG + IDGI
+
+SG + IG
+
+SG + ERIG (ours)
+
+DeiT3
+
+SG + BIG
+
+SG + GIG
+
+SG + IDGI
+
+SG + IG
+
+SG + ERIG (ours)
+
+Table 7
+: 
+SmoothGrad Noise:
+ The ERIG ensemble attains the highest LINV in every cell, exceeding second by 
+ to 
+ units.
+
+Model
+
+Method
+
+LINV-C 
+
+LINV-P 
+
+ResNet101
+
+SG + BIG
+
+SG + GIG
+
+SG + IDGI
+
+SG + IG
+
+SG + ERIG (ours)
+
+EfficientNet
+
+SG + BIG
+
+SG + GIG
+
+SG + IDGI
+
+SG + IG
+
+SG + ERIG (ours)
+
+MobileNetV4
+
+SG + BIG
+
+SG + GIG
+
+SG + IDGI
+
+SG + IG
+
+SG + ERIG (ours)
+
+ViT-Base
+
+SG + BIG
+
+SG + GIG
+
+SG + IDGI
+
+SG + IG
+
+SG + ERIG (ours)
+
+EVA-02
+
+SG + BIG
+
+SG + GIG
+
+SG + IDGI
+
+SG + IG
+
+SG + ERIG (ours)
+
+DeiT3
+
+SG + BIG
+
+SG + GIG
+
+SG + IDGI
+
+SG + IG
+
+SG + ERIG (ours)
+
+To evaluate whether the intrinsic properties of ERIG complement external stochastic smoothing techniques, we construct ensembles of each attribution method with SmoothGrad. To ensure a principled comparison with the vanilla methods discussed in the main text, we enforce a fixed computational budget of 200 total forward and backward passes. Specifically, we utilize 
+ noise samples with 
+ integration steps per sample (
+). While Smilkov et al. 
+[
+68
+]
+ suggest diminishing returns beyond approximately 50 noise samples for standalone SmoothGrad, path-based methods in an ensemble setting require a sufficiently high step count (
+) to maintain a reliable Riemann sum approximation. This configuration represents a practical equilibrium between smoothing variance reduction and integration accuracy under strict resource constraints.
+
+We maintain a fixed temperature of 
+ for ERIG throughout these evaluations, consistent with the stability and noise experiments in the main text. We acknowledge that since SmoothGrad introduces external Gaussian noise which interacts with ERIG’s temperature-controlled weighting, the optimal temperature (
+) for ensembles may deviate from the vanilla setting. A joint optimization over the hyper-parameter space of 
+ is deferred to future work. Nonetheless, even with this untuned 
+, the ERIG ensemble achieves superior stability and noise scores across nearly all architectures (Tables 
+7
+–
+7
+). These results demonstrate that ERIG’s intrinsic stability and noise reduction mechanisms are orthogonal to external smoothing, confirming its effectiveness across diverse computational regimes.
+
+We are also interested in how the optimal 
+ is affected when SmoothGrad’s external smoothing interacts with ERIG’s intrinsic smoothing. To this end, we sweep the ensemble temperature over 
+, using 
+ noise samples and 
+ path steps per sample, on MobileNetV4, ResNet101, and ViT-Base. 
+Figure
+ 
+18
+ reports the same four metrics as 
+Fig.
+ 
+5
+, and the resulting pattern closely mirrors that observed in the latter. Fidelity remains on a broad plateau around the default value, localization peaks at an intermediate 
+, stability likewise reaches its minimum around these values, and noise reduction improves monotonically with 
+. The default 
+ therefore remains a meaningful choice under ensembling as well.
+
+(a)
+ 
+Fidelity (AIC) vs. 
+
+(b)
+ 
+Localization (IoU) vs. 
+
+(c)
+ 
+Stability (MS) vs. 
+
+(d)
+ 
+Noise (LINV-P) vs. 
+
+Figure 18
+: 
+Ablation of the softmax temperature 
+ in SmoothGrad+ERIG ensembles across MobileNetV4, ResNet101, and ViT-Base models. All plots use a log-scale x-axis and a linear-scale y-axis, except stability, which also uses a log-scale y-axis.
+
+A.11 
+Generalization Beyond ImageNet
+
+To verify that our conclusions are not specific to the ImageNet family, we repeat the full evaluation protocol in two additional settings: the Oxford-IIIT Pet dataset 
+[
+55
+]
+ and the FunnyBirds benchmark 
+[
+37
+]
+. This section provides the complete results behind the summary in 
+Section
+ 
+5.6
+ of the main text.
+
+A.11.1 
+Oxford-IIIT Pet
+
+Oxford-IIIT Pet 
+[
+55
+]
+ is a 37-class fine-grained classification dataset that ships a pixel-aligned segmentation trimap with every image. Hence fidelity, stability, noise, 
+and
+ localization can all be evaluated within one non-ImageNet domain; for localization, the trimap’s boundary band is counted as background. For meaningful results, we evaluate the methods on models with good accuracy on the dataset. We therefore use five domain-fine-tuned public checkpoints spanning four architecture families, namely ResNet-50, MobileNetV2, ConvNeXt-B, ViT-B, and DINOv2-S. 
+Tables
+ 
+9
+, 
+9
+, 
+11
+ and 
+11
+ report the results. ERIG remains competitive on fidelity, trailing the strongest baseline IDGI, on average, by only 
+, and outperforms the second-best method on localization by 
+ on average across model–metric combinations. It additionally takes 24 of the 25 stability and noise cells, lowering MS and LLC by up to two orders of magnitude and posting LINV scores 
+ to 
+ units higher than those of the next-best method.
+
+Table 8
+: 
+Oxford-IIIT Pet Fidelity:
+ ERIG is competitive and only trails the strongest baseline by 
+ on average.
+
+Model
+
+Method
+
+ISC 
+
+AIC 
+
+DEL 
+
+ResNet50
+
+IG
+
+0.1131
+
+0.3863
+
+0.3668
+
+IDGI
+
+0.5649
+
+0.8211
+
+0.2497
+
+BIG
+
+0.1102
+
+0.3265
+
+0.3648
+
+GIG
+
+0.1579
+
+0.4053
+
+0.5246
+
+SmoothGrad
+
+0.1075
+
+0.2868
+
+0.6394
+
+ERIG (ours)
+
+0.5704
+
+0.8228
+
+0.2491
+
+MobileNetV2
+
+IG
+
+0.1204
+
+0.2520
+
+0.3128
+
+IDGI
+
+0.5873
+
+0.6464
+
+0.2208
+
+BIG
+
+0.1027
+
+0.1981
+
+0.2836
+
+GIG
+
+0.1620
+
+0.2807
+
+0.3103
+
+SmoothGrad
+
+0.0918
+
+0.1592
+
+0.5581
+
+ERIG (ours)
+
+0.5898
+
+0.6320
+
+0.2194
+
+ConvNeXt-B
+
+IG
+
+0.8434
+
+0.8805
+
+0.6499
+
+IDGI
+
+0.8588
+
+0.9002
+
+0.5568
+
+BIG
+
+0.7725
+
+0.8521
+
+0.6429
+
+GIG
+
+0.8211
+
+0.8744
+
+0.6724
+
+SmoothGrad
+
+0.4073
+
+0.4982
+
+0.8228
+
+ERIG (ours)
+
+0.8577
+
+0.9029
+
+0.5562
+
+ViT-B
+
+IG
+
+0.3919
+
+0.6223
+
+0.4886
+
+IDGI
+
+0.6349
+
+0.7463
+
+0.3680
+
+BIG
+
+0.2949
+
+0.5332
+
+0.5286
+
+GIG
+
+0.4876
+
+0.6409
+
+0.4345
+
+SmoothGrad
+
+0.1624
+
+0.2920
+
+0.6944
+
+ERIG (ours)
+
+0.6222
+
+0.7327
+
+0.3808
+
+DINOv2-S
+
+IG
+
+0.6193
+
+0.7217
+
+0.4638
+
+IDGI
+
+0.7104
+
+0.8078
+
+0.3783
+
+BIG
+
+0.4322
+
+0.5879
+
+0.4863
+
+GIG
+
+0.5914
+
+0.7492
+
+0.3766
+
+SmoothGrad
+
+0.2010
+
+0.2518
+
+0.6781
+
+ERIG (ours)
+
+0.7150
+
+0.8083
+
+0.3766
+
+Table 9
+: 
+Oxford-IIIT Pet Localization:
+ ERIG improves localization by 
+ on average over the second-best method.
+
+Model
+
+Method
+
+IoU 
+
+PA 
+
+PF1 
+
+ResNet50
+
+IG
+
+0.0829
+
+0.6131
+
+0.1348
+
+IDGI
+
+0.0200
+
+0.5938
+
+0.0361
+
+BIG
+
+0.0531
+
+0.6030
+
+0.0901
+
+GIG
+
+0.0251
+
+0.5949
+
+0.0442
+
+SmoothGrad
+
+0.1122
+
+0.6232
+
+0.1760
+
+ERIG (ours)
+
+0.1534
+
+0.6340
+
+0.2509
+
+MobileNetV2
+
+IG
+
+0.0753
+
+0.5700
+
+0.1245
+
+IDGI
+
+0.0218
+
+0.5536
+
+0.0393
+
+BIG
+
+0.0475
+
+0.5600
+
+0.0819
+
+GIG
+
+0.0394
+
+0.5556
+
+0.0666
+
+SmoothGrad
+
+0.0993
+
+0.5740
+
+0.1602
+
+ERIG (ours)
+
+0.1542
+
+0.5962
+
+0.2507
+
+ConvNeXt-B
+
+IG
+
+0.0560
+
+0.5607
+
+0.0941
+
+IDGI
+
+0.0088
+
+0.5476
+
+0.0166
+
+BIG
+
+0.0450
+
+0.5547
+
+0.0776
+
+GIG
+
+0.0745
+
+0.5474
+
+0.1243
+
+SmoothGrad
+
+0.1057
+
+0.5662
+
+0.1661
+
+ERIG (ours)
+
+0.1033
+
+0.5713
+
+0.1773
+
+ViT-B
+
+IG
+
+0.0828
+
+0.6986
+
+0.1370
+
+IDGI
+
+0.0169
+
+0.6923
+
+0.0309
+
+BIG
+
+0.0592
+
+0.6955
+
+0.1009
+
+GIG
+
+0.0502
+
+0.6953
+
+0.0862
+
+SmoothGrad
+
+0.1287
+
+0.7141
+
+0.2013
+
+ERIG (ours)
+
+0.1405
+
+0.7025
+
+0.2335
+
+DINOv2-S
+
+IG
+
+0.0477
+
+0.5518
+
+0.0820
+
+IDGI
+
+0.0072
+
+0.5412
+
+0.0138
+
+BIG
+
+0.0273
+
+0.5448
+
+0.0493
+
+GIG
+
+0.0266
+
+0.5453
+
+0.0477
+
+SmoothGrad
+
+0.0716
+
+0.5589
+
+0.1193
+
+ERIG (ours)
+
+0.0973
+
+0.5606
+
+0.1690
+
+Table 10
+: 
+Oxford-IIIT Pet Stability:
+ ERIG improves stability by 
+ on average over the next-best method.
+
+Model
+
+Method
+
+MS 
+
+LLC 
+
+RIS 
+
+ResNet50
+
+IG
+
+0.6025
+
+0.0269
+
+23.753
+
+IDGI
+
+0.0115
+
+24.485
+
+BIG
+
+0.1094
+
+0.0049
+
+13.453
+
+GIG
+
+0.1933
+
+0.0086
+
+37.823
+
+SmoothGrad
+
+0.0863
+
+0.0039
+
+21.475
+
+ERIG (ours)
+
+1.597
+
+MobileNetV2
+
+IG
+
+1.5538
+
+0.0694
+
+16.533
+
+IDGI
+
+0.0121
+
+10.858
+
+BIG
+
+0.1796
+
+0.0080
+
+14.231
+
+GIG
+
+0.3133
+
+0.0140
+
+22.746
+
+SmoothGrad
+
+0.3353
+
+0.0150
+
+11.542
+
+ERIG (ours)
+
+1.838
+
+ConvNeXt-B
+
+IG
+
+0.2638
+
+0.0118
+
+11.672
+
+IDGI
+
+0.0049
+
+6.387
+
+BIG
+
+0.0412
+
+0.0018
+
+4.154
+
+GIG
+
+0.1334
+
+0.0060
+
+45.412
+
+SmoothGrad
+
+0.0303
+
+0.0014
+
+13.726
+
+ERIG (ours)
+
+0.546
+
+ViT-B
+
+IG
+
+0.6060
+
+0.0270
+
+10.238
+
+IDGI
+
+0.0105
+
+0.0005
+
+11.206
+
+BIG
+
+0.1630
+
+0.0073
+
+9.854
+
+GIG
+
+0.3275
+
+0.0146
+
+22.302
+
+SmoothGrad
+
+0.2084
+
+0.0093
+
+11.156
+
+ERIG (ours)
+
+0.0064
+
+0.0003
+
+25.986
+
+DINOv2-S
+
+IG
+
+0.1669
+
+0.0075
+
+6.395
+
+IDGI
+
+0.0035
+
+5.402
+
+BIG
+
+0.0380
+
+0.0017
+
+3.749
+
+GIG
+
+0.2570
+
+0.0115
+
+51.372
+
+SmoothGrad
+
+0.0506
+
+0.0023
+
+12.857
+
+ERIG (ours)
+
+0.574
+
+Table 11
+: 
+Oxford-IIIT Pet Noise:
+ ERIG attains the highest LINV on every backbone, exceeding second by 
+ to 
+ units.
+
+Model
+
+Method
+
+LINV-C 
+
+LINV-P 
+
+ResNet50
+
+IG
+
+5.9780
+
+5.8854
+
+IDGI
+
+9.6196
+
+9.6044
+
+BIG
+
+6.8119
+
+6.7880
+
+GIG
+
+7.4204
+
+7.3881
+
+SmoothGrad
+
+7.8837
+
+7.7788
+
+ERIG (ours)
+
+18.3365
+
+18.3209
+
+MobileNetV2
+
+IG
+
+5.7686
+
+5.5927
+
+IDGI
+
+9.5097
+
+9.4758
+
+BIG
+
+7.1561
+
+7.1005
+
+GIG
+
+7.1572
+
+7.1022
+
+SmoothGrad
+
+6.8095
+
+6.5869
+
+ERIG (ours)
+
+17.2354
+
+17.2044
+
+ConvNeXt-B
+
+IG
+
+7.5820
+
+7.5434
+
+IDGI
+
+9.3397
+
+9.2465
+
+BIG
+
+7.3031
+
+7.3255
+
+GIG
+
+7.9877
+
+7.9592
+
+SmoothGrad
+
+10.9739
+
+10.9233
+
+ERIG (ours)
+
+17.0081
+
+16.9278
+
+ViT-B
+
+IG
+
+7.1427
+
+7.1941
+
+IDGI
+
+10.2746
+
+10.2591
+
+BIG
+
+7.7444
+
+7.7675
+
+GIG
+
+7.3616
+
+7.3296
+
+SmoothGrad
+
+8.6479
+
+8.7419
+
+ERIG (ours)
+
+17.9810
+
+17.9928
+
+DINOv2-S
+
+IG
+
+7.2419
+
+7.0304
+
+IDGI
+
+9.4936
+
+9.3007
+
+BIG
+
+7.3595
+
+6.9305
+
+GIG
+
+7.3323
+
+7.2198
+
+SmoothGrad
+
+8.8473
+
+8.5305
+
+ERIG (ours)
+
+18.2027
+
+18.0135
+
+A.11.2 
+FunnyBirds
+
+Table 12
+: 
+FunnyBirds Protocol:
+ ERIG places first or second in all 21 cells, leading completeness by 
+ and contrastivity by 
+.
+
+Completeness
+
+Correctness
+
+Contrastivity
+
+Model
+
+Method
+
+CSDC
+   
+
+PC
+   
+
+DC
+   
+
+Dist
+
+Com.
+
+SD
+
+TS
+
+ResNet-50
+
+IG
+
+0.920   
+
+0.940   
+
+0.880   
+
+0.810
+
+0.862
+
+0.590
+
+0.980
+
+IDGI
+
+0.934
+   
+
+0.958
+   
+
+0.912
+   
+
+0.788
+
+0.861
+
+0.615
+
+0.958
+
+BIG
+
+0.794   
+
+0.700   
+
+0.676   
+
+0.699
+
+0.711
+
+0.440
+
+0.491
+
+GIG
+
+0.765   
+
+0.684   
+
+0.646   
+
+0.799
+
+0.749
+
+0.437
+
+0.780
+
+SmoothGrad
+
+0.827   
+
+0.836   
+
+0.810   
+
+0.795
+
+0.810
+
+0.545
+
+0.873
+
+ERIG (ours)
+
+0.968
+   
+
+0.951
+   
+
+0.905
+   
+
+0.872
+
+0.907
+
+0.608
+
+0.985
+
+VGG16
+
+IG
+
+0.920   
+
+0.920   
+
+0.920   
+
+0.970
+
+0.945
+
+0.670
+
+0.920
+
+IDGI
+
+0.945
+   
+
+0.972
+   
+
+0.958
+   
+
+0.949
+
+0.954
+
+0.688
+
+0.931
+
+BIG
+
+0.766   
+
+0.668   
+
+0.692   
+
+0.723
+
+0.716
+
+0.612
+
+0.582
+
+GIG
+
+0.770   
+
+0.686   
+
+0.694   
+
+0.840
+
+0.778
+
+0.588
+
+0.751
+
+SmoothGrad
+
+0.937   
+
+0.820   
+
+0.854   
+
+0.824
+
+0.847
+
+0.709
+
+0.903
+
+ERIG (ours)
+
+0.974
+   
+
+0.964
+   
+
+0.949
+   
+
+0.978
+
+0.970
+
+0.698
+
+0.955
+
+ViT-B
+
+IG
+
+0.890   
+
+0.860   
+
+0.850   
+
+0.900
+
+0.883
+
+0.650
+
+0.910
+
+IDGI
+
+0.928   
+
+0.941
+   
+
+0.917
+   
+
+0.871
+
+0.900
+
+0.664
+
+0.918
+
+BIG
+
+0.761   
+
+0.650   
+
+0.708   
+
+0.735
+
+0.721
+
+0.668
+
+0.533
+
+GIG
+
+0.738   
+
+0.628   
+
+0.698   
+
+0.841
+
+0.764
+
+0.663
+
+0.659
+
+SmoothGrad
+
+0.937
+   
+
+0.826   
+
+0.880   
+
+0.834
+
+0.857
+
+0.780
+
+0.856
+
+ERIG (ours)
+
+0.961
+   
+
+0.933
+   
+
+0.909
+   
+
+0.924
+
+0.929
+
+0.766
+
+0.948
+
+FunnyBirds 
+[
+37
+]
+ is a synthetic vision dataset purpose-built for part-based analysis of XAI methods. Every image is assembled from annotated bird parts, so the framework can map an attribution map to per-part importances and score it through part-level interventions. We evaluate ERIG and all compared path methods under its standard protocol, which evaluates along the completeness, correctness, and contrastivity dimensions, using the three checkpoints provided by the framework, namely ResNet-50, VGG16, and ViT-B. All metrics lie in 
+ and higher is better. Following 
+[
+37
+]
+, let 
+ denote the 
+-th sample of 
+ test images with label 
+ and let 
+ denote the model prediction. The part importance 
+ of a bird part 
+ is the sum of the attribution values inside the part’s segmentation mask, dilated by a 
+ kernel to include the part edges, and the important-part set is 
+, where 
+ is the total attribution of the map and the protocol sweeps the threshold 
+ over 
+, selecting it automatically to optimally trade off the comprehensiveness checks against distractibility. We explain the metrics below:
+
+•
+
+Controlled synthetic data check (CSDC, completeness).
+ With 
+ the part subsets known to suffice for class 
+,
+
+(51)
+
+measures how completely the explanation recovers a part set that suffices for the classification.
+
+•
+
+Preservation check (PC, completeness).
+ With 
+ the image keeping only the parts in 
+ and 
+ the indicator function,
+
+(52)
+
+checks that the parts deemed important preserve the prediction.
+
+•
+
+Deletion check (DC, completeness).
+ With 
+ the image with the parts in 
+ removed,
+
+(53)
+
+checks that removing those parts changes the prediction.
+
+•
+
+Distractibility (Dist, completeness).
+ With 
+ the parts whose individual removal changes the target logit by less than 
+,
+
+(54)
+
+penalizes attribution mass placed on parts the model demonstrably ignores.
+
+•
+
+Single deletion (SD, correctness).
+ With 
+ the Spearman correlation between the explanation’s part i

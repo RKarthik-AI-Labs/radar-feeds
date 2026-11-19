@@ -1,0 +1,2563 @@
+X-split Argus: Learning Reusable History Tokens for Efficient CTR Prediction
+https://arxiv.org/abs/2611.24283
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+X-split Argus: Learning Reusable History Tokens for Efficient CTR Prediction
+
+Alexander Ploshkin
+*
+
+  
+
+Nikita Stepanov
+*
+
+  
+
+Alexey Pismenny
+*
+
+Affiliation: 
+Viacheslav Ovchinnikov, Nikolay Savushkin
+
+Abstract
+
+Accurate click-through rate (CTR) prediction depends on user representations
+that capture both persistent preferences and recent intent, yet processing
+extensive behavioral histories for every ranking request is costly under
+production compute and latency constraints. We present X-split ARGUS, a
+framework for ad ranking whose history compressor and online ranker are
+trained end to end. The compressor encodes past interactions into a compact
+set of tokens that are computed offline and reused across candidates, while
+the online ranker scores ads through cross-attention to these tokens and
+representations of recent events. Training combines an autoregressive loss for
+click feedback with distillation of candidate-specific click logits from a
+larger teacher that scores each candidate using the uncompressed history. The
+number of compressed history tokens and the length of recent history can be
+adjusted to fit serving compute and latency budgets. Offline evaluation shows
+a 0.81% relative reduction in normalized entropy (NE) compared with the
+production baseline. Deployment in a large-scale real-time bidding system
+increases online inference cost by 15% relative to the production baseline.
+An online A/B test against this baseline yields relative gains of
+
+4.65%
+ in a business metric reflecting the monetary value of
+conversions generated for advertisers and 
+2.96%
+ in clicks.
+
+1
+1
+footnotetext: 
+These authors contributed equally to this work
+
+Keywords:
+ recommendation systems, CTR prediction, sequential modeling, user interest modeling, knowledge distillation, ranking models
+
+1. Introduction
+
+Accurate click-through rate (CTR) prediction requires user representations that
+capture persistent preferences, respond to recent intent, and retain behavioral
+signals relevant to each candidate ad. Longer histories can provide additional
+evidence for these predictions, and recent sequential models demonstrate the
+benefits of scaling behavioral context and model capacity 
+[
+1
+, 
+2
+]
+.
+However, encoding extensive histories for each ranking request increases GPU
+computation and memory traffic, while processing that depends on the candidate can limit reuse across ads. At production request rates, these costs must fit strict
+compute and response latency budgets, making the representation of historical
+context a central deployment decision.
+
+Existing systems already address important parts of this problem.
+TransAct 
+[
+3
+]
+ and LLaTTE 
+[
+4
+]
+ combine precomputed user
+representations with online processing of recent behavior, while
+VISTA 
+[
+5
+]
+ learns reusable history summaries for candidate-aware
+scoring. TM20K 
+[
+6
+]
+ further combines sequence compression with
+supervision from a teacher that retains the full history. These approaches
+motivate a concrete question for our deployment: how much of a teacher’s predictive benefit from uncompressed history can be retained when past interactions are represented by a compact token set that does not depend on the candidate?
+We study this question for a jointly trained compressor and ranker, with
+explicit control over the history processed online.
+
+We present 
+X-split ARGUS
+, a framework that uses autoregressive
+feedback prediction, as in ARGUS 
+[
+7
+]
+, while changing the
+interface between history modeling and candidate scoring. ARGUS uses
+two-tower fine-tuning to support scoring with precomputed user and item
+representations. In X-split ARGUS, a history compressor instead produces a set
+of tokens without conditioning on the candidate, and an online ranker scores
+ads through cross-attention to these tokens and representations of recent
+events. The compressor and ranker are trained end to end, while the history
+tokens are precomputed offline for reuse during serving. Their number and the
+length of recent history determine the amount of history processed online.
+
+Observed click feedback and click logits for individual candidates from a
+larger teacher jointly supervise the compressor and online ranker. The teacher
+scores ads using the uncompressed history. The distillation objective reaches the history
+compressor through the online ranker, allowing observed feedback and teacher
+predictions to shape the information retained in the summaries.
+
+For online evaluation, we use 
+Ad Conversion Value
+ (ACV), our primary
+internal metric for accepting advertising A/B experiments. ACV reflects
+the monetary value of advertiser conversions delivered at the same advertising
+budget, capturing the benefit of improved conversion delivery.
+
+Our main contributions are as follows:
+
+•
+
+Joint offline–online history modeling.
+
+We introduce a jointly trained history compressor and candidate-aware
+ranker that combines reusable history tokens with recent events.
+The number of summary tokens and the length of recent history control the amount of history processed online.
+
+•
+
+Training and evaluation under history compression.
+
+We combine autoregressive prediction losses with supervision from the click logits of a teacher using uncompressed history and evaluate the predictive quality retained by the compressed student. In the main offline comparison,
+X-split ARGUS reduces normalized entropy (NE) by 0.81% relative to
+Context-aware ARGUS and retains over 70% of the teacher’s improvement
+over the same baseline.
+
+•
+
+Production deployment and measured impact.
+
+We deploy X-split ARGUS on an advertising surface of our real-time bidding
+system handling roughly a hundred thousand requests per second.
+The model meets the existing latency budget using 15% more online
+GPUs of the same type to serve the same traffic. An online A/B test
+against the production baseline yields relative gains of 
+4.65%
+ in
+ACV and 
+2.96%
+ in clicks.
+
+2. Related Work
+
+2.1 Sequential Modeling in Recommender Systems
+
+Early attention-based sequential recommenders established complementary
+learning objectives: SASRec 
+[
+8
+]
+ predicts the next item using causal
+self-attention, BERT4Rec 
+[
+9
+]
+ reconstructs masked items from
+bidirectional context, and S
+3
+-Rec 
+[
+10
+]
+ learns associations among
+attributes, items, and subsequences through self-supervised pretraining.
+For CTR prediction, DIN 
+[
+11
+]
+ makes history aggregation dependent on the
+candidate through a local activation mechanism. This distinction between
+learning a reusable user state and extracting information for a particular
+candidate remains central to modern ranking architectures.
+
+HSTU 
+[
+1
+]
+ scales retrieval and ranking as sequential transduction using
+pointwise aggregated attention and multiplicative feature transformations.
+ARGUS 
+[
+7
+]
+ combines autoregressive feedback and next-item prediction
+with impression-aware two-tower fine-tuning for offline representation
+computation. X-split ARGUS exposes multiple history tokens to an online ranker
+that conditions its predictions on each candidate. Kunlun 
+[
+2
+]
+
+addresses compute allocation through hierarchical seed pooling and
+
+Computation Skip
+, which alternates self-attention and summarization
+modules across layers.
+
+Industrial rankers also differ in how they combine history and nonsequential
+features. WHALE 
+[
+12
+]
+ connects Wukong feature interactions to HSTU
+sequence states through attention; MTGR 
+[
+13
+]
+ retains engineered cross
+features in candidate tokens within an encoder based on HSTU; and
+OneTrans 
+[
+14
+]
+ processes sequential and nonsequential tokens in a
+unified backbone. HyFormer 
+[
+15
+]
+ alternates attention from global
+queries to history representations with interactions among the queries.
+These designs concern the interaction between history and ranking features;
+the timing and reuse of history computation introduce an additional serving
+choice.
+
+Sequential modeling also supports generative retrieval, which predicts
+item identifiers from user histories. TIGER 
+[
+16
+]
+
+generates semantic item identifiers, while Gryphon 
+[
+17
+]
+ shares a
+history encoder between identifier generation and scoring individual items.
+These methods illustrate the use of autoregressive history representations
+across retrieval and ranking; our focus is the prediction of click feedback
+for supplied candidate ads under online serving constraints.
+
+2.2 Efficient Modeling of Long Histories
+
+Systems for long histories differ in what they retain, when they compute it, and how
+candidates access it. Event selection, representation compression, and
+computation reuse can coexist within the same architecture. Particularly
+relevant to our setting, TransAct 
+[
+3
+]
+ combines user embeddings computed in batches with a Transformer conditioned on the candidate to process recent actions.
+LLaTTE 
+[
+4
+]
+ scales an asynchronous user model whose cached
+representations augment a compact online ranker with fresh events and ad
+context. Both establish the use of separate paths for historical context and
+recent intent.
+
+VISTA 
+[
+5
+]
+ learns summary tokens for downstream candidate attention
+and caches these tokens for reuse. Its reported variants include joint
+training with HSTU and an auxiliary objective for sequence reconstruction.
+SITA 
+[
+18
+]
+ organizes stored interest tokens through semantic identifiers
+and uses each candidate’s identifiers to select tokens before target attention.
+Our design uses cross-attention from candidates to learned history summaries and representations of recent events. A teacher using uncompressed history supervises the jointly trained compressor and ranker. We study the quality
+retained by this combination under production constraints.
+
+Systems using retrieval retain selected events or historical embeddings.
+SIM 
+[
+19
+]
+ retrieves a subsequence relevant to the candidate before applying
+finer target attention, and TWIN 
+[
+20
+]
+ aligns the relevance measures of
+these two stages. TransAct V2 
+[
+21
+]
+ selects nearest neighbors from
+lifelong, recent, and impression histories while explicitly keeping the
+freshest actions. Representation Memento 
+[
+22
+]
+ retrieves relevant
+and diverse temporally aggregated embeddings using a modified maximal
+marginal relevance criterion. These approaches select context according to the candidate, controlling what is passed to the ranker.
+
+Other methods reduce the history representation through aggregation.
+TWIN V2 
+[
+23
+]
+ uses offline hierarchical clustering and cluster-aware
+target attention; CAUSE 
+[
+24
+]
+ forms history tokens by category while
+retaining recent events; and LONGER 
+[
+25
+]
+ combines local token merging
+with cross-attention into a shorter sequence. More general attention
+bottlenecks, including Perceiver’s latent array 
+[
+26
+]
+ and the learned
+queries of BLIP-2’s Q-Former 
+[
+27
+]
+, provide architectural precedents for
+extracting compact representations from larger inputs.
+
+Representation reduction and computation reuse also interact within serving
+requests. HELIX 
+[
+28
+]
+ constructs compressed history states independently of the candidate once per request and lets tokens conditioned on each candidate repeatedly attend to them. This execution strategy differs from computing
+summaries of long histories offline, as in our deployment.
+
+Make It Long, Keep It Fast
+ 
+[
+29
+]
+ uses stacked cross-attention from targets to history and batching within each request to share history encoding;
+OneTrans 
+[
+14
+]
+ reuses causal sequence computations; and
+MARM 
+[
+30
+]
+ caches intermediate history states for multilayer target
+attention. These reuse strategies reduce repeated computation without
+necessarily imposing a compact summary representation.
+
+2.3 Distillation under Serving Constraints
+
+Knowledge distillation supplements observed labels with teacher predictions
+to train a constrained student 
+[
+31
+]
+. Ranking
+Distillation 
+[
+32
+]
+ transfers a teacher’s top-ranked
+unobserved items as weighted supervision, while Collaborative
+Distillation 
+[
+33
+]
+ combines soft targets with
+rank-aware sampling. Privileged Features
+Distillation 
+[
+34
+]
+ addresses a different asymmetry:
+teachers can use predictive features unavailable to the deployed student.
+In our setting, historical interactions remain available to the offline
+compressor; the constraint concerns their representation and processing during
+online ranking.
+
+TM20K 
+[
+6
+]
+ is a close precedent for distillation under history
+compression: a teacher retains the full sequence, while students merge tokens
+according to item identity, position, and layer depth. X-split ARGUS learns
+summary tokens for offline precomputation and reuse alongside recent events.
+Gryphon-v2 
+[
+35
+]
+ distills scores for generated and logged candidates
+into both a ranking module and its shared history encoder.
+Meta Lattice 
+[
+36
+]
+ combines logit supervision with asynchronously
+precomputed teacher embeddings for user–item pairs, which students consume
+during both training and serving. Our stored summaries do not depend on the candidate; teacher logits for individual candidates supervise their learning through the online ranker. The focus of our evaluation is the predictive quality retained by this
+representation and training design under production serving constraints.
+
+3. X-split ARGUS Design
+
+X-split ARGUS combines precomputed historical context with online modeling of
+recent behavior, while allowing supervision for individual candidates to train both
+parts end to end. Let 
+ be a chronological user history with
+
+, where 
+ contains item features 
+ and observed
+binary click feedback 
+. The item features comprise an item identifier and
+tokenized metadata. For a target event at position 
+, the model predicts
+
+ using 
+ and information available before that event. We use 
+
+representations of recent events and 
+ compressed history tokens as the
+candidate’s historical memory. The student consists of a history compressor,
+a runtime user encoder, a candidate encoder, and a decoder with cross-attention,
+as shown in Figure 
+1
+. A teacher that processes
+the history without compression provides additional training supervision.
+Numerical hyperparameters are reported in
+Appendix 
+A
+.
+Throughout this section, 
+ denotes concatenation along the
+sequence dimension, while 
+ denotes concatenation along the
+feature dimension. We omit model parameter subscripts for readability.
+
+Figure 1: 
+X-split ARGUS architecture: jointly trained history compression and
+candidate-aware ranking with recent events, supervised click prediction,
+and knowledge distillation.
+
+3.1 Student Architecture and Serving
+
+History compressor.
+
+The compressor is a Transformer 
+[
+37
+]
+ with causal self-attention
+over historical events, including their observed feedback. It produces one
+contextualized state per input event:
+
+(1)
+
+For a prefix ending at event 
+, where 
+, its compressed
+representation consists of the last 
+ states of that prefix:
+
+(2)
+
+Selecting the final 
+ contextualized states gives a compact history
+representation while allowing compressed representations for multiple
+training cutoffs to be extracted from a single causal pass. Each retained
+state carries information from its causal prefix, and the final state can
+attend to every event up to 
+. The student prediction objectives train
+these states to preserve information useful for subsequent candidate scoring.
+Their computation does not depend on the candidates scored against them.
+
+Runtime user encoder.
+
+The runtime encoder processes recent events and their observed feedback using
+causal self-attention with a sliding window. The window at each layer controls
+the temporal receptive field of the output states; stacked layers with local attention
+can propagate information beyond a single layer’s window 
+[
+38
+]
+.
+For a serving request, let 
+ contain up to the most
+recent 
+ events available in the user profile. The online representations are
+
+(3)
+
+The encoder uses neither candidate features nor decoder outputs. The use of a
+shared sequence pass during training is described in
+Section 
+3.3
+.
+
+Candidate encoder and decoder.
+
+The candidate encoder maps an ad’s item identifier and metadata to a
+single item token 
+, which excludes the candidate’s
+click outcome. The student decoder receives this token without
+introducing a separate feedback token. It conditions the item
+representation on both sources of user context through cross-attention, with
+candidate states supplying queries and history states supplying keys and
+values 
+[
+37
+]
+. Its historical memory is
+
+(4)
+
+where 
+ is the cutoff of the cached history representation available for
+the request. The two history streams have the same feature dimension for
+this concatenation. Thus, the compressed tokens join the states of recent
+events 
+after
+ the runtime
+encoder, and the decoder attends to 
+ history states for a full window.
+
+The optional decoder self-attention (SA) operates only over these 
+
+history states, using full attention within the historical memory.
+Candidate tokens do not participate in this operation, so the resulting
+history representations remain independent of the candidates being scored.
+All states in the memory precede the prediction target; allowing them to
+attend to one another does not expose the target’s feedback or future events.
+Candidate scores remain independent when evaluated against the same memory.
+
+As shown in Figure 
+1
+, a second concatenation
+combines the decoder output 
+ with the candidate
+representation along the feature dimension, yielding 
+.
+This gives both prediction heads access to the representation conditioned
+on user history and the original candidate representation. The supervised
+head produces the serving CTR prediction.
+
+Computation reuse.
+
+The architecture supports three scopes of execution
+(Figure 
+1
+). The compressor outputs are precomputed
+and cached across requests. Within each request, the runtime encoder and
+any self-attention over the decoder’s historical memory are independent of
+the candidates and can be shared across them. Candidate encoding,
+cross-attention to this memory, and the prediction heads provide computation
+for individual candidates. The absence of a dependency from candidate
+scoring back to either history encoder enables this reuse. The budgets 
+
+and 
+ control the decoder memory size, while 
+ also controls how many raw
+events are encoded online.
+
+Snapshot and recent history boundaries.
+
+For a request with 
+ available historical events, let 
+.
+The runtime input contains events 
+, whereas the cached
+compressor states summarize a prefix ending at 
+.
+These boundaries need not coincide: 
+ gives adjacent coverage,
+
+ leaves events 
+ outside both branches, and
+
+ represents events 
+ in both branches.
+This distinction concerns which events are available to the two branches;
+it is separate from the difference in the runtime encoder’s receptive field
+between training and serving, described in Section 
+3.3
+.
+
+3.2 Teacher with Uncompressed History
+
+The teacher is a larger Transformer that processes the retained event history
+
+ with full causal self-attention, without compressing it into summary
+states. For a target at position 
+, it uses the current item features 
+
+and the same retained events preceding 
+; its access to these events is
+not restricted to the student’s 
+ compressed states and 
+ recent states.
+It follows the
+autoregressive formulation of feedback prediction used in HSTU and
+ARGUS 
+[
+1
+, 
+7
+]
+: item information precedes its observed feedback,
+allowing the model to predict the latter from the former and the preceding
+history. In our teacher, each target event is represented by an item token
+followed by a feedback token. The item token contains the item features but
+excludes 
+; the feedback token carries the observed click
+outcome. This separation into two tokens is specific to the teacher. The
+student decoder uses the single item token described above, while both
+student history encoders receive observed feedback as an event feature.
+
+Let 
+ denote this token sequence and 
+ the position of
+the item token for target event 
+. The teacher’s click logit is
+
+(5)
+
+Here 
+ is the teacher state at token position 
+, 
+ is its click
+prediction head, and the superscript 
+ identifies teacher quantities.
+The feedback token for event 
+ occurs after 
+ and is unavailable to
+its own click prediction. Once present in the prefix, the event and its
+feedback can contribute to subsequent predictions. Teacher and student
+outputs are aligned by target event rather than by token index, since their
+sequence representations differ. The teacher is trained separately from the
+student, and its checkpoint provides fixed logit targets during student
+updates. No student gradient updates the teacher, which is absent from the
+online scoring path.
+
+3.3 End-to-End Autoregressive Training
+
+Sequence construction and temporal boundaries.
+
+We train on complete retained user histories. Let 
+ denote
+the set of event positions selected for click supervision in history 
+.
+For a target event 
+, the student decoder
+receives an item token computed from 
+, and 
+ serves only as the
+prediction target. Historical events supplied to the compressor and runtime
+encoder include their observed feedback, but the decoder memory for event
+
+ is assembled exclusively from states preceding 
+.
+
+For the default construction at target position 
+, the boundary separating
+the selected recent events from the older prefix is
+
+(6)
+
+This training boundary is defined for each target; the cached cutoff 
+
+used at serving time is determined by the available offline snapshot and
+need not follow this rule. Both history encoders process the sequence in
+a single causal pass. Writing 
+, for a full memory
+window with 
+ the target’s decoder memory is assembled as
+
+(7)
+
+All selected states precede the target event. Consequently, neither its
+feedback nor future events enter its click prediction through the history
+branches. The input event sequence is shared across prediction positions,
+avoiding a separate pass over the historical prefix for every target.
+Each supervised event contributes a prediction target at its own position
+and historical context at later positions.
+In the history budget experiments of Section 
+4.4
+,
+we hold the boundary at its reference value while varying the numbers
+of retained compressor and runtime states.
+
+Runtime context during training and serving.
+
+Independently of the cached prefix boundary, the runtime encoder’s shared
+training pass and its truncated serving input
+have different left boundaries. During training, early states within the
+selected recent block can incorporate older events through local attention.
+During serving, only the most recent 
+ raw events are supplied to the
+encoder, truncating this preceding context. Thus, 
+ specifies the selected
+runtime states during training and the raw online input length during
+serving; it does not impose an identical total receptive field in both modes.
+
+Click prediction.
+
+For target event 
+, let 
+ and
+
+. The two prediction heads receive
+the shared representation 
+ shown in
+Figure 
+1
+. The supervised head
+produces 
+ and
+
+, where 
+ is the logistic sigmoid.
+The binary cross-entropy for this event is
+
+(8)
+
+Optional smoothing of negative targets.
+
+Some configurations regularize the supervised objective with asymmetric
+label smoothing 
+[
+39
+, 
+40
+]
+. The training target
+for an impression without a click is raised from zero to 
+,
+while an observed click retains a target of one:
+
+(9)
+
+For these configurations, 
+ replaces 
+ in
+Equation 
+8
+. Smoothing applies only to the supervised loss
+and leaves the teacher logits used for distillation unchanged. The value
+of 
+ is reported in Appendix 
+A
+.
+
+This regularization is motivated by the limited evidence about user
+interest provided by an impression without a click: the user may not have
+seen the ad. An unclicked impression remains a valid negative outcome for
+CTR prediction; smoothing softens the training objective without treating
+that observation as an incorrect label. We evaluate this optional training
+choice in Section 
+4.4
+.
+
+Knowledge distillation.
+
+Teacher supervision supplements observed clicks through knowledge
+distillation 
+[
+31
+]
+. We use separate supervised and distillation
+heads over the same student representation, an arrangement also explored in
+distillation for industrial sequence models 
+[
+6
+]
+. The auxiliary head
+produces 
+ and matches the teacher’s
+raw click logit using an 
+ objective:
+
+(10)
+
+The 
+ loss penalizes discrepancies between raw student and teacher
+logits linearly. The supervised head is trained with the click prediction
+loss, while the auxiliary distillation head is trained to match teacher
+logits. Both losses update the shared student components, allowing teacher
+supervision to shape the representations used by the serving head.
+At serving time, predictions are obtained exclusively from
+
+; the distillation head is used only during training.
+
+Joint objective and parameter updates.
+
+Let 
+ and 
+ denote the
+corresponding aggregate losses over positions in 
+. The combined
+click supervision and distillation objective is
+
+(11)
+
+The nonnegative weight 
+ controls the contribution of
+distillation and is specified in Appendix 
+A
+.
+For each training sequence, we obtain teacher logits for the target events,
+compute both student history streams, select the prefix and recent states
+for each target, and evaluate the decoder objectives. The student components
+and prediction heads are optimized jointly. In particular, gradients of the
+student prediction objectives propagate through the decoder into both the
+runtime encoder and the history compressor. Teacher outputs remain detached
+during these updates. Offline precomputation is therefore an execution
+choice for serving, while the compressor remains part of the differentiable
+student during training.
+
+4. Offline Evaluation
+
+4.1 Experimental Setup and Metrics
+
+Dataset and global temporal split.
+
+We use a large internal industrial dataset containing all data collected by
+our real-time bidding system. Table 
+1
+ summarizes the
+dataset, retained user histories, and temporal split. We use the same
+training and test time boundaries across users. The gap between the two
+periods emulates the delay between the completion of model training and
+the model’s actual deployment.
+
+Table 1: 
+Dataset and temporal split. History lengths count original
+events; the cap corresponds to the 99.5th percentile of user event counts.
+
+Parameter
+
+Value
+
+Source
+
+Internal RTB logs
+
+Data and history horizon
+
+365 days
+
+Training unit
+
+User history
+
+Training targets (including repeats)
+
+History cap
+
+ events
+
+Target
+
+Binary click feedback
+
+Split
+
+Global temporal
+
+Train–test gap
+
+1 day
+
+Test period
+
+3 days
+
+Prediction context and model checkpoints.
+
+Each model’s checkpoint remains fixed throughout the test period,
+while both compressed history and runtime history are updated as evaluation
+progresses. Context uses events available before the impression being
+scored, including events from the gap and the elapsed portion of the test
+period. For X-split ARGUS predictions, the runtime encoder is recomputed on
+the last 
+ raw events preceding the target. Its states are obtained from
+the restricted recent input, rather than selected from a shared pass over
+the full history. All configurations are evaluated on the same set of
+target impressions.
+
+Evaluated configurations.
+
+We compare X-split ARGUS with Context-aware ARGUS, described in
+Section 
+4.2
+, and the uncompressed teacher from
+Section 
+3.2
+. The X-split ARGUS configuration in this
+comparison uses target attention, knowledge distillation, self-attention
+over the decoder’s historical memory, and negative target smoothing.
+The deployed configuration and its serving costs are
+discussed in Section 
+5
+.
+
+The teacher provides a quality reference using the retained lifetime
+history without compression. Serving it would require processing extensive
+event sequences and keeping those sequences accessible in runtime user
+profiles. The resulting inference workload and profile storage costs make
+this configuration impractical under our production resource and latency
+constraints. X-split ARGUS uses precomputed history states and a bounded
+recent history during online ranking.
+
+Normalized entropy.
+
+We use normalized entropy (NE), a standard metric for assessing the quality
+of predicted click probabilities 
+[
+41
+]
+. Let 
+
+denote the evaluated impressions, 
+ the observed binary click feedback,
+and 
+ the binary cross-entropy of the predicted probability for
+impression 
+. Sampling correction is applied through impression weights
+
+, which are used in both the test log loss and the background CTR 
+:
+
+(12)
+
+Both quantities are computed over the entire test set. NE normalizes the
+weighted log loss by the binary entropy of this background CTR:
+
+(13)
+
+Lower NE indicates better prediction quality. For a model with NE 
+ and
+a reference with NE 
+, we report the relative reduction
+
+(14)
+
+A positive reduction denotes an improvement. Each table explicitly identifies
+its reference. NE is displayed to four decimal places; relative reductions
+and retained teacher gains are computed from unrounded values.
+On this test set, a relative NE change of 0.1% is statistically significant.
+
+4.2 Baseline
+
+Context-aware ARGUS is a two-tower ranker based on ARGUS 
+[
+7
+]
+
+whose user tower contains a history compressor and a runtime encoder,
+while its item tower represents the candidate ad. It scores ads with a
+dot product between the two tower outputs and therefore already models
+both historical context and recent behavior. The 
+Context-aware
+
+variant separates each event into context and item components. This
+separation allows the runtime user encoder to receive all available
+contextual information when scoring the corresponding item. At serving
+time, context enters the user encoder while the candidate item is
+represented by the item tower. The baseline therefore combines historical
+behavior with the context available at ranking time.
+
+4.3 Comparison with the Baseline and Teacher
+
+Table 
+2
+ shows that X-split ARGUS improves NE over
+Context-aware ARGUS, while the uncompressed teacher achieves the lowest NE.
+The result supports the combined design of target attention and teacher
+supervision for ranking with compressed history.
+
+Table 2: 
+Overall comparison of complete model configurations on the
+common RTB test set. Relative reductions use Context-aware ARGUS as
+the reference. 
+ is the share of the teacher’s NE improvement
+retained, defined in Equation 
+15
+.
+
+Model
+
+NE 
+
+NE
+
+(%) 
+
+(%) 
+
+Context-aware ARGUS
+
+0.7204
+
+0.000
+
+—
+
+X-split ARGUS
+
+0.7146
+
++0.814
+
+71.6
+
+Teacher
+
+0.7123
+
++1.136
+
+100.0
+
+To quantify how much of the teacher’s improvement a student retains, we
+compare their gains over the same Context-aware ARGUS baseline:
+
+(15)
+
+where 
+ and 
+ are the NE of the baseline
+and teacher, respectively. X-split ARGUS retains more than 70% of the
+teacher’s improvement. This shows that substantial predictive benefit
+can be retained in a student that uses compact history representations
+and does not execute the teacher using the full history during serving.
+
+4.4 Ablation Study
+
+To complement the overall comparison, we study how the X-split ARGUS baseline
+responds to changes in compressed and recent context, encoder depth, and
+negative training targets. Table 
+3
+ reports
+changes to the compressed history budget 
+, runtime history budget 
+,
+and encoder depth 
+ relative to this ablation baseline.
+In the history budget experiments, the split between the compressed prefix
+and recent history is fixed at its reference value: we vary 
+ or 
+
+independently, without moving the split or changing other hyperparameters.
+In the depth experiments, both the compressor and the runtime encoder have
+
+ layers, while the runtime attention window at each layer remains fixed.
+The smoothing comparison holds 
+ in both configurations.
+
+Table 3: 
+Configuration sensitivity relative to the X-split ARGUS
+baseline defined in Table 
+7
+
+in Appendix 
+A
+.
+The history split is fixed across token budget experiments; the runtime
+attention window at each layer is fixed across depth experiments.
+Negative reductions denote higher NE than the ablation baseline.
+
+Configuration
+
+NE 
+
+NE (%) 
+
+X-split ARGUS baseline
+
+0.7155
+
+0.000
+
+Compressed history tokens
+
+0.7168
+
+0.7149
+
+Runtime history states
+
+0.7179
+
+0.7157
+
+Layers in each history encoder
+
+0.7148
+
+0.7137
+
+Compressed history tokens.
+
+We compare compressed token budgets of 
+, 
+, and 
+. Increasing
+the number of compressor states available to candidate attention improves
+prediction quality across these settings. Reducing the budget below the
+ablation baseline causes a larger quality loss than the gain from
+increasing it above the baseline.
+
+Runtime history tokens.
+
+We compare runtime history budgets of 
+, 
+, and 
+ events.
+For each target and budget, we recompute the runtime encoder on the last
+
+ raw events and pass their output states to the decoder. Earlier events
+are excluded from this encoder pass, while the compressed prefix remains
+the same across configurations. The smallest budget produces the largest
+loss in prediction quality, while the intermediate budget is closer to
+the ablation baseline. Retaining more recent events in the runtime branch
+therefore improves prediction quality with the same compressed historical
+context.
+
+Encoder depth.
+
+We increase both history encoders from six to eight and ten layers.
+Deeper encoders improve prediction quality across the tested
+configurations without increasing the number of history tokens exposed to
+the decoder. With a fixed window at each layer,
+additional layers can also expand the context propagated through the
+runtime encoder stack. The experiment therefore measures the combined
+effect of depth in both branches, without separating their individual
+contributions or the effects of capacity and context propagation.
+
+Smoothing negative targets.
+
+We test whether regularizing negative training targets with the asymmetric
+smoothing defined in Section 
+3.3
+ improves prediction
+quality. The paired comparison uses the same 
+ configuration with
+binary or smoothed targets, keeping all other settings unchanged.
+
+Table 4: 
+Negative target smoothing at fixed 
+. Relative NE
+reductions use the configuration with binary targets as the reference.
+
+Targets
+
+NE 
+
+NE (%)
+
+vs. binary
+
+Binary
+
+0.7168
+
+0.000
+
+Smoothed negatives
+
+0.7155
+
+Table 
+4
+ shows that smoothing produces a
+statistically significant improvement in prediction quality over binary
+supervision without changing training or online inference cost.
+
+5. Production Deployment
+
+We deploy X-split ARGUS on the largest advertising surface of our real-time
+bidding system. This section reports its online impact, the resources
+required to serve it, and the processes used to refresh historical
+representations and model parameters. The deployed model configuration is
+listed in Table 
+6
+ in
+Appendix 
+A
+.
+
+5.1 Online Experiment and Deployment Impact
+
+The surface accounts for approximately 50% of total RTB traffic and
+handles roughly a hundred thousand requests per second. We conducted an
+A/B test lasting seven days against the prior production ranker, Context-aware ARGUS
+(Section 
+4.2
+). Users were assigned to treatment and
+control by hashing their identifiers with an experiment salt, keeping
+assignment consistent across requests. Each group received 6% of the
+surface’s traffic; the request rate above refers to the entire surface.
+
+Table 
+5
+ reports relative changes against the
+control. X-split ARGUS increases ACV by 
+4.65%
+ and the number of
+clicks by 
+2.96%
+. ACV is our primary internal metric for advertising
+A/B acceptance and captures the monetary value of advertiser conversions
+delivered at the same advertising budget.
+Both improvements are statistically significant
+(
+).
+
+A reverse
+A/B test conducted one month after deployment confirmed the gains.
+
+Table 5: 
+Online A/B results relative to the Context-aware ARGUS
+production baseline. Each group received 6% of the evaluated
+surface’s traffic during the test, which lasted seven days.
+
+Metric
+
+Relative change
+
+ACV
+
++4.65%
+
+Number of clicks
+
++2.96%
+
+At this request volume, deployment must satisfy both the latency budget
+imposed by user response requirements and the throughput supported by
+the available GPUs. The ML service has a latency budget in the hundreds
+of milliseconds. X-split ARGUS meets the same budget as Context-aware
+ARGUS while requiring 15% more online GPUs of the same type to serve the
+same traffic volume. The computation reuse described in
+Section 
+3.1
+ keeps long history processing outside the
+request path and shares recent history encoding across candidates. The
+online gains are thus achieved within the existing latency constraint,
+with a measured increase in online GPU capacity. Precomputation, storage,
+and model updates incur additional resources, described below.
+
+5.2 History Precomputation and Storage
+
+A daily batch pipeline collects new user events, appends them to the
+retained user profiles, and runs the history compressor for users with
+new events. For each such user, it publishes 
+ contextualized history
+states to an embedding store. The online ranker retrieves these states
+and combines them with representations of recent events, as described
+in Section 
+3.1
+. Historical representations are
+therefore reused across requests, while recent behavior remains available
+through the runtime user profile.
+
+We store the compressor states in BF16. For a stored state dimension
+
+, the uncompressed embedding payload per user is
+
+(16)
+
+With standard storage compression, the database of precomputed embeddings
+occupies hundreds of gigabytes. This footprint refers to the computed
+embeddings, separately from the retained event histories used by the
+batch pipeline. The GPU compute required for daily precomputation is
+small relative to continuous online inference; storing the resulting
+representations is an additional infrastructure requirement.
+
+5.3 Model Freshness and Daily Fine-Tuning
+
+To inform the update schedule, we evaluate a fixed X-split ARGUS checkpoint
+on test windows spanning one day, with gaps of zero to four days between
+the latest training event and the start of each window. User histories
+and precomputed compressor embeddings are refreshed using events available
+before each prediction. Figure 
+2
+ shows the
+change in relative NE reduction over the production system evaluated on
+each test day, with the value at a gap of one day set to zero. This advantage decreases
+approximately linearly, by about 0.05 percentage points per day,
+despite the refreshed historical context.
+
+Figure 2: 
+Relative prediction quality deteriorates as the gap between the latest
+training event and the test day increases. Histories and compressor
+embeddings are refreshed while model weights remain fixed.
+
+Based on this observation, we fine-tune the deployed student daily using
+prediction targets from the most recent three days. Data preparation,
+training, and deployment yield a gap of approximately one to two days
+between the latest training events and serving predictions.
+Daily fine-tuning requires additional GPU compute,
+but this workload is small relative to continuous online inference.
+The larger improvement with no gap suggests that more frequent or
+online model updates could yield further gains.
+
+6. Conclusion
+
+We presented X-split ARGUS, a framework for CTR prediction that combines
+compressed historical context with recent user behavior and candidate
+scoring through cross-attention. Its history compressor and online ranker
+are trained end to end using observed click feedback and distillation
+from a teacher that processes the uncompressed history. Precomputed
+compressor states are reused across requests, while runtime history
+representations are shared across candidates, keeping extensive history
+processing outside the online ranking path. In the offline comparison,
+the compressed student improves normalized entropy over Context-aware
+ARGUS and retains more than 70% of the uncompressed teacher’s improvement
+over the same baseline.
+
+Deployment on the largest advertising surface of our RTB system confirms
+the practical value of this design. An online A/B test against the
+production baseline yields relative gains of 
+4.65%
+ in ACV and 
+2.96%
+ in
+clicks. X-split ARGUS serves the same traffic volume within
+the existing latency budget using 15% more online GPUs of the same type.
+Daily history precomputation and model fine-tuning support continued
+operation, with the latter motivated by the observed decline in the
+relative advantage of a fixed checkpoint. These results demonstrate that
+reusable history compression and candidate attention can bring the
+benefits of richer user context to production ranking within practical
+latency and resource constraints.
+
+References
+
+[1]
+
+J. Zhai, L. Liao, X. Liu, Y. Wang, R. Li, X. Cao, L. Gao, Z. Gong, F. Gu, J. He, Y. Lu, and Y. Shi
+ (2024)
+
+Actions speak louder than words: trillion-parameter sequential transducers for generative recommendations
+.
+
+In 
+Proceedings of the 41st International Conference on Machine Learning
+,
+
+Proceedings of Machine Learning Research
+, Vol. 
+235
+, 
+pp. 58484–58509
+.
+
+External Links: 
+Link
+
+Cited by: 
+§1
+,
+
+§2.1
+,
+
+§3.2
+.
+
+[2]
+
+B. Hou, X. Liu, X. Liu, J. Xu, Y. Badr, M. Hang, S. Chanpuriya, J. Zhou, Y. Yang, H. Xu, Q. Suo, L. Chen, Y. Hu, J. Zhang, H. Xiong, Y. Huang, C. Chen, Y. Dong, Y. Yang, S. Chang, X. Gan, W. Chen, S. Kolay, D. Liu, J. Nie, C. Yang, E. Wen, J. Yang, and H. Li
+ (2026)
+
+Kunlun: establishing scaling laws for massive-scale recommendation systems through unified architecture design
+.
+
+External Links: 
+2602.10016
+,
+
+Document
+,
+
+Link
+
+Cited by: 
+§1
+,
+
+§2.1
+.
+
+[3]
+
+X. Xia, P. Eksombatchai, N. Pancha, D. D. Badani, P. Wang, N. Gu, S. V. Joshi, N. Farahpour, Z. Zhang, and A. Zhai
+ (2023)
+
+TransAct: transformer-based realtime user action model for recommendation at Pinterest
+.
+
+In 
+Proceedings of the 29th ACM SIGKDD Conference on
+Knowledge Discovery and Data Mining
+,
+
+KDD ’23
+, 
+pp. 5249–5259
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§1
+,
+
+§2.2
+.
+
+[4]
+
+L. Xiong, Z. Chen, R. Mayuranath, S. Qiu, A. Ozdemir, L. Li, Y. Hu, D. Li, J. Ren, H. Cheng, F. Souto Herrera, A. Agiza, B. Epshtein, A. Aggarwal, J. Ulziisaikhan, C. Wang, D. Ramasamy, P. Doshi, S. Reddy, and A. Overwijk
+ (2026)
+
+LLaTTE: scaling laws for multi-stage sequence modeling in large-scale ads recommendation
+.
+
+External Links: 
+2601.20083
+,
+
+Link
+
+Cited by: 
+§1
+,
+
+§2.2
+.
+
+[5]
+
+Z. Chen, C. Zhao, K. Mo, Y. Jiang, J. Lee, K. C. Mahajan, N. Jiang, K. Ren, C. Li, and W. Yang
+ (2026)
+
+Massive memorization with hundreds of trillions of parameters for sequential transducer generative recommenders
+.
+
+In 
+International Conference on Learning Representations
+,
+
+External Links: 
+Link
+
+Cited by: 
+§1
+,
+
+§2.2
+.
+
+[6]
+
+X. Li, D. Zheng, W. Zhao, H. Ding, Z. Zhou, J. Tan, H. Yang, Y. Jiang, Z. Chen, Y. Zheng, L. Chen, D. Wang, D. Wang, X. Li, H. Mao, and Y. Tan
+ (2026)
+
+Teacher retains full tokens, student merges efficiently: TM20K for e-commerce sequence modeling in ad recommendation
+.
+
+External Links: 
+2608.07055
+,
+
+Document
+,
+
+Link
+
+Cited by: 
+§1
+,
+
+§2.3
+,
+
+§3.3
+.
+
+[7]
+
+K. Khrylchenko, A. Matveev, S. Makeev, and V. Baikalov
+ (2026)
+
+Scaling recommender transformers to one billion parameters
+.
+
+In 
+Proceedings of the 32nd ACM SIGKDD Conference on Knowledge Discovery and Data Mining V.1
+,
+
+pp. 2255–2265
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§1
+,
+
+§2.1
+,
+
+§3.2
+,
+
+§4.2
+.
+
+[8]
+
+W. Kang and J. McAuley
+ (2018)
+
+Self-attentive sequential recommendation
+.
+
+In 
+2018 IEEE International Conference on Data Mining (ICDM)
+,
+
+pp. 197–206
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2.1
+.
+
+[9]
+
+F. Sun, J. Liu, J. Wu, C. Pei, X. Lin, W. Ou, and P. Jiang
+ (2019)
+
+BERT4Rec: sequential recommendation with bidirectional encoder representations from transformer
+.
+
+In 
+Proceedings of the 28th ACM International Conference on
+Information and Knowledge Management
+,
+
+CIKM ’19
+, 
+pp. 1441–1450
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2.1
+.
+
+[10]
+
+K. Zhou, H. Wang, W. X. Zhao, Y. Zhu, S. Wang, F. Zhang, Z. Wang, and J. Wen
+ (2020)
+
+S
+-Rec: self-supervised learning for sequential recommendation with mutual information maximization
+.
+
+In 
+Proceedings of the 29th ACM International Conference on
+Information & Knowledge Management
+,
+
+CIKM ’20
+, 
+pp. 1893–1902
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2.1
+.
+
+[11]
+
+G. Zhou, X. Zhu, C. Song, Y. Fan, H. Zhu, X. Ma, Y. Yan, J. Jin, H. Li, and K. Gai
+ (2018)
+
+Deep interest network for click-through rate prediction
+.
+
+In 
+Proceedings of the 24th ACM SIGKDD International Conference
+on Knowledge Discovery & Data Mining
+,
+
+KDD ’18
+, 
+pp. 1059–1068
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2.1
+.
+
+[12]
+
+R. Cai, D. Sun, Y. Yao, Z. Wang, V. Fu, M. Zhuang, Y. Shi, Z. Fang, X. Cao, J. Qian, and R. Li
+ (2026)
+
+WHALE: a scalable unified model for recommendation with Wukong-HSTU architecture
+.
+
+External Links: 
+2607.17017
+,
+
+Document
+,
+
+Link
+
+Cited by: 
+§2.1
+.
+
+[13]
+
+R. Han, B. Yin, S. Chen, H. Jiang, F. Jiang, X. Li, C. Ma, M. Huang, X. Li, C. Jing, Y. Han, M. Zhou, L. Yu, C. Liu, and W. Lin
+ (2025)
+
+MTGR: industrial-scale generative recommendation framework in Meituan
+.
+
+In 
+Proceedings of the 34th ACM International Conference on Information and Knowledge Management
+,
+
+CIKM ’25
+, 
+pp. 5731–5738
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2.1
+.
+
+[14]
+
+Z. Zhang, H. Pei, J. Guo, T. Wang, Y. Feng, H. Sun, S. Liu, and A. Sun
+ (2026)
+
+OneTrans: unified feature interaction and sequence modeling with one transformer in industrial recommender
+.
+
+In 
+Proceedings of the ACM Web Conference 2026
+,
+
+WWW ’26
+, 
+pp. 8162–8170
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2.1
+,
+
+§2.2
+.
+
+[15]
+
+Y. Huang, S. Hong, X. Xiao, J. Jin, X. Luo, Z. Wang, Z. Chai, S. Wu, Y. Zheng, and J. Lin
+ (2026)
+
+HyFormer: revisiting the roles of sequence modeling and feature interaction in CTR prediction
+.
+
+External Links: 
+2601.12681
+,
+
+Document
+,
+
+Link
+
+Cited by: 
+§2.1
+.
+
+[16]
+
+S. Rajput, N. Mehta, A. Singh, R. Hulikal Keshavan, T. Vu, L. Heldt, L. Hong, Y. Tay, V. Tran, J. Samost, M. Kula, E. Chi, and M. Sathiamoorthy
+ (2023)
+
+Recommender systems with generative retrieval
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+Vol. 
+36
+, 
+pp. 10299–10315
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2.1
+.
+
+[17]
+
+D. Tikhonovich, O. Sorokin, V. Dodonov, M. Ulianova, and I. Murzin
+ (2026)
+
+Gryphon: a unified architecture for Semantic-ID generation and item-level scoring in industrial recommendations
+.
+
+External Links: 
+2606.08604
+,
+
+Document
+,
+
+Link
+
+Cited by: 
+§2.1
+.
+
+[18]
+
+R. Zhou, B. Chen, Q. Jia, J. Ji, C. Ma, R. Tang, H. Wang, and E. Chen
+ (2026)
+
+SITA: semantic interest tokens for target-aware compression in long-sequence recommendation
+.
+
+External Links: 
+2608.03692
+,
+
+Document
+,
+
+Link
+
+Cited by: 
+§2.2
+.
+
+[19]
+
+Q. Pi, G. Zhou, Y. Zhang, Z. Wang, L. Ren, Y. Fan, X. Zhu, and K. Gai
+ (2020)
+
+Search-based user interest modeling with lifelong sequential behavior data for click-through rate prediction
+.
+
+In 
+Proceedings of the 29th ACM International Conference on Information & Knowledge Management
+,
+
+CIKM ’20
+, 
+pp. 2685–2692
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2.2
+.
+
+[20]
+
+J. Chang, C. Zhang, Z. Fu, X. Zang, L. Guan, J. Lu, Y. Hui, D. Leng, Y. Niu, Y. Song, and K. Gai
+ (2023)
+
+TWIN: TWo-stage interest network for lifelong user behavior modeling in CTR prediction at Kuaishou
+.
+
+In 
+Proceedings of the 29th ACM SIGKDD Conference on Knowledge Discovery and Data Mining
+,
+
+KDD ’23
+, 
+pp. 3785–3794
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2.2
+.
+
+[21]
+
+X. Xia, S. Joshi, K. Rajesh, K. Li, Y. Lu, N. Pancha, D. Badani, J. Xu, and P. Eksombatchai
+ (2025)
+
+TransAct V2: lifelong user action sequence modeling on Pinterest recommendation
+.
+
+In 
+Proceedings of the 34th ACM International Conference on Information and Knowledge Management
+,
+
+CIKM ’25
+, 
+pp. 6881–6882
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2.2
+.
+
+[22]
+
+X. Chen, R. Wang, J. Di, S. Feng, N. Abrar, L. Kumari, T. Tsui, Y. Liu, Y. Lu, S. Patapati, J. Xiong, Q. Yang, D. Sun, Y. Cao, V. Chen, P. Chen, R. Sundarkumar, S. P. Singh, A. Overwijk, L. Leng, D. Ramasamy, S. Reddy, R. Malkin, and S. Pandey
+ (2026)
+
+Memento: personalized RAG-style long-retention data scaling for META ads recommendation
+.
+
+External Links: 
+2605.24051
+,
+
+Document
+,
+
+Link
+
+Cited by: 
+§2.2
+.
+
+[23]
+
+Z. Si, L. Guan, Z. Sun, X. Zang, J. Lu, Y. Hui, X. Cao, Z. Yang, Y. Zheng, D. Leng, K. Zheng, C. Zhang, Y. Niu, Y. Song, and K. Gai
+ (2024)
+
+TWIN V2: scaling ultra-long user behavior sequence modeling for enhanced CTR prediction at Kuaishou
+.
+
+In 
+Proceedings of the 33rd ACM International Conference on Information and Knowledge Management
+,
+
+CIKM ’24
+, 
+pp. 4890–4897
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2.2
+.
+
+[24]
+
+Q. Liu, L. Fan, Z. Liu, X. Dong, Y. Luo, G. An, N. Chen, W. Guo, Y. Liu, and X. Wu
+ (2026)
+
+Accelerating generative recommendation via simple categorical user sequence compression
+.
+
+In 
+Proceedings of the Nineteenth ACM International Conference on Web Search and Data Mining
+,
+
+WSDM ’26
+, 
+pp. 1195–1199
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2.2
+.
+
+[25]
+
+Z. Chai, Q. Ren, X. Xiao, H. Yang, B. Han, S. Zhang, D. Chen, H. Lu, W. Zhao, L. Yu, X. Xie, S. Ren, X. Sun, Y. Tan, P. Xu, Y. Zheng, and D. Wu
+ (2025)
+
+LONGER: scaling up long sequence modeling in industrial recommenders
+.
+
+In 
+Proceedings of the Nineteenth ACM Conference on Recommender Systems
+,
+
+RecSys ’25
+, 
+pp. 247–256
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2.2
+.
+
+[26]
+
+A. Jaegle, F. Gimeno, A. Brock, O. Vinyals, A. Zisserman, and J. Carreira
+ (2021)
+
+Perceiver: general perception with iterative attention
+.
+
+In 
+Proceedings of the 38th International Conference on Machine Learning
+,
+
+Proceedings of Machine Learning Research
+, Vol. 
+139
+, 
+pp. 4651–4664
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2.2
+.
+
+[27]
+
+J. Li, D. Li, S. Savarese, and S. Hoi
+ (2023)
+
+BLIP-2: bootstrapping language-image pre-training with frozen image encoders and large language models
+.
+
+In 
+Proceedings of the 40th International Conference on Machine Learning
+,
+
+Proceedings of Machine Learning Research
+, Vol. 
+202
+, 
+pp. 19730–19742
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2.2
+.
+
+[28]
+
+Y. Zheng, M. Zhang, Y. Ding, Y. Tang, L. Chen, H. Wang, Q. Li, S. Cai, Y. Lin, J. Li, Y. Feng, W. Yang, R. Xing, J. Wang, M. Zhang, F. Gong, X. Gao, J. Dong, Y. Zhang, P. Ren, and Y. Wang
+ (2026)
+
+HELIX: purified and unified – rethinking feature interaction and sequence modeling for large-scale recommendation
+.
+
+External Links: 
+2609.37183
+,
+
+Link
+
+Cited by: 
+§2.2
+.
+
+[29]
+
+L. Guan, J. Yang, Z. Zhao, B. Zhang, B. Sun, X. Luo, J. Ni, X. Li, Y. Qi, Z. Fan, H. Wang, Q. Chen, Y. Cheng, F. Zhang, and X. Yang
+ (2026)
+
+Make it long, keep it fast: end-to-end 10k-sequence modeling at billion scale on Douyin
+.
+
+In 
+Proceedings of the ACM Web Conference 2026
+,
+
+WWW ’26
+, 
+pp. 7989–7998
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2.2
+.
+
+[30]
+
+X. Lv, J. Cao, S. Guan, X. Zhou, Z. Qi, Y. Zang, B. Wang, and G. Zhou
+ (2025)
+
+MARM: unlocking the recommendation cache scaling-law through memory augmentation and scalable complexity
+.
+
+In 
+Proceedings of the 34th ACM International Conference on Information and Knowledge Management
+,
+
+CIKM ’25
+, 
+pp. 2022–2031
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2.2
+.
+
+[31]
+
+G. Hinton, O. Vinyals, and J. Dean
+ (2015)
+
+Distilling the knowledge in a neural network
+.
+
+External Links: 
+1503.02531
+,
+
+Document
+,
+
+Link
+
+Cited by: 
+§2.3
+,
+
+§3.3
+.
+
+[32]
+
+J. Tang and K. Wang
+ (2018)
+
+Ranking distillation: learning compact ranking models with high performance for recommender system
+.
+
+In 
+Proceedings of the 24th ACM SIGKDD International Conference
+on Knowledge Discovery & Data Mining
+,
+
+KDD ’18
+, 
+pp. 2289–2298
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2.3
+.
+
+[33]
+
+J. Lee, M. Choi, J. Lee, and H. Shim
+ (2019)
+
+Collaborative distillation for top-N recommendation
+.
+
+In 
+2019 IEEE International Conference on Data Mining (ICDM)
+,
+
+pp. 369–378
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2.3
+.
+
+[34]
+
+C. Xu, Q. Li, J. Ge, J. Gao, X. Yang, C. Pei, F. Sun, J. Wu, H. Sun, and W. Ou
+ (2020)
+
+Privileged features distillation at Taobao recommendations
+.
+
+In 
+Proceedings of the 26th ACM SIGKDD International Conference
+on Knowledge Discovery & Data Mining
+,
+
+KDD ’20
+, 
+pp. 2590–2598
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2.3
+.
+
+[35]
+
+A. Lipkina, D. Tikhonovich, V. Yanush, M. Ulianova, O. Sorokin, V. Dodonov, I. Murzin, D. Burshtein, and N. Savushkin
+ (2026)
+
+Gryphon-v2: one model in place of a cascade – generate-and-rank recommender with rollout distillation
+.
+
+External Links: 
+2608.06213
+,
+
+Document
+,
+
+Link
+
+Cited by: 
+§2.3
+.
+
+[36]
+
+L. Luo, Y. Chen, Z. Zhang, M. Hang, A. Gu, B. Zhang, B. Liu, C. Chen, C. Fan, D. Liang, F. Yang, F. Gu, H. Li, J. Nie, J. Xu, J. Yang, J. Park, L. Chen, L. Jin, Q. Li, Q. Huang, S. Jiang, S. Shen, S. Wang, S. Zeng, S. Yuan, T. Tang, W. Zhang, W. Wang, X. Liu, X. Wei, X. Xia, Y. Hao, Y. He, Y. Badr, Z. Chen, M. Naumov, Y. Yao, W. Chen, S. Kolay, G. Musumeci, and E. D. Wen
+ (2025)
+
+Meta Lattice: model space redesign for cost-effective industry-scale ads recommendations
+.
+
+External Links: 
+2512.09200
+,
+
+Document
+,
+
+Link
+
+Cited by: 
+§2.3
+.
+
+[37]
+
+A. Vaswani, N. Shazeer, N. Parmar, J. Uszkoreit, L. Jones, A. N. Gomez, Ł. Kaiser, and I. Polosukhin
+ (2017)
+
+Attention is all you need
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+Vol. 
+30
+.
+
+External Links: 
+Link
+
+Cited by: 
+§3.1
+,
+
+§3.1
+.
+
+[38]
+
+I. Beltagy, M. E. Peters, and A. Cohan
+ (2020)
+
+Longformer: the long-document transformer
+.
+
+External Links: 
+2004.05150
+,
+
+Document
+,
+
+Link
+
+Cited by: 
+§3.1
+.
+
+[39]
+
+C. Szegedy, V. Vanhoucke, S. Ioffe, J. Shlens, and Z. Wojna
+ (2016)
+
+Rethinking the Inception architecture for computer vision
+.
+
+In 
+Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition
+,
+
+CVPR
+, 
+pp. 2818–2826
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§3.3
+.
+
+[40]
+
+R. Müller, S. Kornblith, and G. E. Hinton
+ (2019)
+
+When does label smoothing help?
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+Vol. 
+32
+, 
+pp. 4694–4703
+.
+
+External Links: 
+Link
+
+Cited by: 
+§3.3
+.
+
+[41]
+
+X. He, J. Pan, O. Jin, T. Xu, B. Liu, T. Xu, Y. Shi, A. Atallah, R. Herbrich, S. Bowers, and J. Quiñonero Candela
+ (2014)
+
+Practical lessons from predicting clicks on ads at Facebook
+.
+
+In 
+Proceedings of the Eighth International Workshop on Data Mining for Online Advertising
+,
+
+ADKDD’14
+, 
+New York, NY, USA
+, 
+pp. 1–9
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§4.1
+.
+
+Appendix A 
+X-split ARGUS Configuration
+
+Table 
+6
+ reports the model configuration and loss
+weights used in the deployment described in this paper. Sequence lengths
+count original events, before the teacher represents target events as
+separate item and feedback tokens.
+The maximum history length corresponds to the 99.5th percentile of the
+distribution of event counts.
+The deployed runtime encoder uses a window parameter 
+ at each of its
+
+ layers and a configured recent history budget
+
+.
+
+Table 6: 
+Model and training hyperparameters.
+
+Hyperparameter
+
+Value
+
+Maximum history horizon
+
+1 year
+
+Maximum history length 
+
+8192
+
+Recent history budget 
+
+240
+
+Compressed history tokens 
+
+8
+
+Compressor layers
+
+6
+
+Compressor hidden dimension
+
+1024
+
+Runtime encoder layers 
+
+6
+
+Runtime attention window 
+
+40
+
+Runtime encoder hidden dimension
+
+1024
+
+Decoder layers
+
+2
+
+Decoder hidden dimension
+
+256
+
+Distillation weight 
+
+0.15
+
+Smoothed negative target 
+
+0.01
+
+Table 
+7
+ defines the X-split ARGUS
+baseline used for the offline ablation study. The X-split ARGUS
+configuration in the main offline comparison additionally enables
+self-attention over history and negative target smoothing.
+
+Table 7: 
+X-split ARGUS baseline settings for the offline ablation study.
+
+Setting
+
+Value
+
+Compressed history tokens 
+
+8
+
+Recent history budget 
+
+256
+
+Compressor layers
+
+6
+
+Runtime encoder layers
+
+6
+
+Decoder self-attention over history
+
+Disabled
+
+Supervised targets
+
+Binary
+
+Knowledge distillation
+
+Enabled
+
+For the X-split ARGUS baseline, the runtime encoder uses a window
+parameter at each layer of
+
+, where 
+ is the configured visibility
+budget (
+seqlen
+). In the depth experiments of
+Section 
+4.4
+, this window remains fixed as the number
+of layers increases; it is not recomputed for each depth.
+The window bounds the context propagated through the encoder stack.
+It does not make the last 
+ states of a full training
+sequence identical to states recomputed from only the last 
+ raw events
+during serving, as discussed in Section 
+3.3
+.
+

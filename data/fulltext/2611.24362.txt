@@ -1,0 +1,4062 @@
+PIPETTE: Prompt Injection Purple-Teaming for Robust LLM Agents
+https://arxiv.org/abs/2611.24362
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+Pipette
+: Prompt Injection Purple-Teaming for Robust LLM Agents
+
+Lipeng He
+1
+, Yihan Wang
+1
+🖂
+, Jiawen Zhang
+2
+, N. Asokan
+1
+3
+
+†
+†
+thanks: 
+🖂 Yihan Wang is the corresponding author.
+
+Affiliation: 
+1
+University of Waterloo, 
+2
+Zhejiang University, 
+3
+KTH Royal Institute of Technology
+
+Affiliation: 
+lipeng.he@uwaterloo.ca, yihan.wang@uwaterloo.ca, kevinzh@zju.edu.cn, asokan@acm.org
+
+Abstract
+
+Large language model (LLM) agents routinely interact with untrusted external data, exposing them to indirect prompt injection (IPI) attacks that hijack agents into executing attacker-chosen tasks. To uncover these vulnerabilities at scale, automated red-teaming methods often leverage reinforcement learning (RL) to generate attacks that achieve high attack success rates (ASR). Model developers use the attacks discovered during internal red-teaming to harden agents through adversarial training before deployment, a collaborative offensive-defensive process known in cybersecurity as 
+purple-teaming
+. However, we show that achieving high ASR during red-teaming does not guarantee robustness gains from subsequent adversarial training. Specifically, we find that two state-of-the-art RL-based red-teaming methods, RL-Hammer and PISmith, suffer from mode collapse, repeatedly discovering similar attack strategies whose additional successes add no additional robustness improvements to adversarial training. To address this gap, we introduce 
+Pipette
+, a unified prompt injection purple-teaming framework that effectively converts red-teaming discoveries into defender robustness improvements. 
+Pipette
+ employs a dictionary learning-based reward that encourages broader coverage of attack strategies during red-teaming. It also integrates an on-policy adversarial training pipeline tailored to IPI defense, enabling agents to resist attacks while completing legitimate user tasks. Extensive evaluations across agentic benchmarks (AgentDojo and ASB) demonstrate that 
+Pipette
+ produces defenders that achieve near-zero attack success rates on static attacks and can withstand strong adaptive attacks, while maintaining benign task utility close to that of the undefended baseline.
+
+I 
+Introduction
+
+Large language models (LLMs) are increasingly deployed as autonomous agents that execute multi-step tasks, such as managing emails, querying databases, and invoking external APIs 
+[
+1
+, 
+2
+]
+. To complete a user task specified by a trusted user instruction, an LLM agent must process untrusted external data retrieved from third-party sources, including web pages, documents, and tool outputs. Because LLMs cannot reliably distinguish between user instructions and external data 
+[
+3
+]
+, an attacker can embed a malicious injected instruction inside external data to override the user instruction and redirect the agent toward an attacker-chosen injection task 
+[
+4
+, 
+2
+, 
+5
+]
+. This vulnerability, known as 
+indirect prompt injection
+ (IPI), allows remote attackers to exfiltrate private data or trigger unauthorized actions 
+[
+6
+]
+.
+
+Fig. 1: 
+Prompt injection purple-teaming workflow.
+
+To harden an LLM agent before deployment, model developers pair automated 
+red-teaming
+, where a red-teamer probes the agent to discover successful prompt injections, with 
+adversarial training
+ on the discovered attacks so the agent learns to resist them (Figure 
+1
+) 
+[
+7
+, 
+8
+]
+. Among automated red-teaming methods 
+[
+9
+]
+, reinforcement learning (RL) has emerged as the state-of-the-art approach for prompt injection 
+[
+10
+, 
+11
+, 
+12
+]
+. Instead of manually crafting prompts or optimizing individual attack strings one input at a time 
+[
+13
+, 
+14
+]
+, RL trains a generative red-teaming policy to synthesize attacks at scale across diverse tasks. Leading RL-based red-teaming methods, RL-Hammer 
+[
+11
+]
+ and PISmith 
+[
+12
+]
+, achieve high 
+attack success rates
+ (ASR), defined as the fraction of test inputs on which the agent executes the injection task, even against models hardened with prior defenses 
+[
+15
+]
+.
+
+Despite the effectiveness of these methods as offensive stress tests, we show that 
+achieving high ASR during red-teaming does not guarantee strong robustness after adversarial training
+. For instance, PISmith achieves higher train-time ASR than RL-Hammer on Qwen3-4B (
+ versus 
+), yet yields a less robust agent after RL-based adversarial training (
+ versus 
+ ASR under the strongest of three unseen attacks, §
+III
+). We attribute this gap in part to an objective mismatch. Prior work on jailbreak defenses shows that robustness to unseen attacks depends on the variety of training attacks and not only on their number 
+[
+16
+, 
+17
+]
+, yet existing RL-based red-teaming methods optimize their policy primarily to maximize attack success. Such an objective can lead to 
+mode collapse
+, a failure in which the policy converges to a narrow set of outputs that repeatedly exploit the same vulnerability 
+[
+18
+, 
+16
+]
+. Specifically, once the red-teaming policy discovers a single effective 
+attack strategy
+, a way of overriding the user instruction such as claiming that the user task is already complete, it tends to reuse that strategy across rollouts to collect high reward. To mitigate mode collapse, PISmith 
+[
+12
+]
+ and RL-Hammer 
+[
+11
+]
+ regularize the red-teaming policy with token-level entropy bonuses or embedding distance rewards. However, because these regularizers measure surface-level text differences rather than how the attack overrides the user instruction, the red-teaming policy can engage in 
+reward hacking
+ by rephrasing sentences or inserting unrelated text while relying on the same attack strategy. As a result, training an agent on thousands of rephrased versions of one attack strategy may patch only a single vulnerability and leave the agent exposed to unseen attacks at deployment.
+
+Even when red-teaming uncovers distinct attacks, converting those discoveries into a practical defense is a second challenge. A useful prompt injection defense requires preserving 
+benign utility
+ on clean inputs and 
+utility under attack
+ when external data is contaminated 
+[
+2
+]
+. Unlike jailbreak attacks 
+[
+19
+]
+, where the user is the attacker and the agent can refuse the harmful request, an agent under IPI must ignore the injected instruction inside external data while still using the surrounding data to complete the benign user instruction. Yet standard RL defenses 
+[
+20
+]
+ train the agent with trajectory-level, 
+outcome-based rewards
+ that assign a single scalar score to the entire trajectory based on whether the task succeeded or failed. Because such a score cannot identify which tokens caused the failure 
+[
+21
+]
+, agents trained with these rewards can learn to abort execution or refuse the user whenever external data appears suspicious, and thus sacrifice task completion for lower ASR.
+
+To address both challenges, we introduce 
+Pipette
+, a unified prompt injection 
+purple-teaming
+ framework that coordinates red-teaming and adversarial training toward a single objective of maximizing the hardened agent’s robustness. First, to mitigate mode collapse, 
+Pipette
+ guides the red-teaming policy with a dictionary learning-based reward. We decompose generated attacks into a sparse dictionary of reusable components that capture distinct attack strategies, and reward the red-teaming policy when a successful attack cannot be explained by previously discovered components. Second, to preserve benign utility during adversarial training, 
+Pipette
+ trains the agent on the collected attacks by combining reasoning-guided RL with token-level on-policy self-distillation (OPSD) 
+[
+22
+, 
+21
+]
+. By assigning credit to individual tokens rather than relying solely on trajectory-level outcome rewards, 
+Pipette
+ aims to suppress reasoning and action tokens driven by the injected instruction while reinforcing tokens needed for the user task.
+
+We evaluate 
+Pipette
+ on two standard IPI benchmarks under static and iterative-adaptive attacks, and summarize our contributions as follows:
+
+•
+
+We show empirically that maximizing ASR or surface-level text diversity in state-of-the-art RL-based red-teaming methods 
+[
+11
+, 
+12
+]
+ does not prevent mode collapse at the strategy level, which likely limits the robustness gains of subsequent adversarial training (§
+III-B
+ and §
+IV-A
+).
+
+•
+
+We design a dictionary learning-based strategy coverage reward that guides the red-teaming policy to discover new attack strategies rather than surface-level wording variations (§
+IV-B
+).
+
+•
+
+We pair our red-teaming stage with an on-policy adversarial training pipeline using token-level self-distillation to preserve benign utility while resisting injected instructions (§
+IV-C
+).
+
+•
+
+We show on two benchmarks that 
+Pipette
+ compares favorably with existing red-teaming and defense baselines, with ASR under iterative-adaptive attacks on AgentDojo ranging from 
+ to 
+ across the three models tested and benign utility remaining close to that of the undefended policies on all four models (§
+V
+, Appendix 
+B
+).
+
+II 
+Background
+
+II-A
+ 
+LLM-based Agent Workflow
+
+We model an LLM agent as an agent policy 
+, parameterized by weights 
+, that interleaves text generation with tool execution 
+[
+2
+, 
+23
+]
+. At the start of an episode, 
+ receives a trusted system prompt 
+ and a trusted user task 
+, and then acts over steps 
+. At step 
+, 
+ conditions on a clean context
+
+(1)
+
+where 
+ and 
+ are the actions and observations from steps 
+ through 
+, with 
+. Given 
+, 
+ samples an action
+
+(2)
+
+where 
+ is natural-language reasoning or response text and 
+ is a set of tool calls. When 
+, the tool calls return a clean observation 
+ that extends the context to 
+ with external data such as retrieved documents, emails, web pages, or API responses. Execution ends at step 
+ when 
+, producing a completed clean trajectory 
+. We refer to the observation sequence 
+ as the 
+data channel
+. Unlike the trusted system prompt 
+ and user task 
+, the data channel comes from external sources and is therefore untrusted.
+
+II-B
+ 
+Indirect Prompt Injection
+
+An external attacker 
+ can exploit the untrusted data channel through an indirect prompt injection (IPI) attack by embedding a malicious 
+injection string
+ 
+, or injection for short, into an external data source 
+[
+4
+, 
+2
+]
+. When 
+ retrieves that source at step 
+, the clean observation 
+ is replaced by a contaminated observation 
+ carrying 
+, which contaminates every subsequent context 
+ (
+) and induces an attacked trajectory 
+. The injection string instructs 
+ to execute an injection task 
+ that differs from 
+. Let 
+ and 
+ denote binary predicates over completed trajectories that equal 
+ when the injection task and user task are satisfied, respectively. On an attacked trajectory 
+, the attack succeeds when 
+, and the user task succeeds when 
+. Over a set of attacked tasks, the fraction of attacked trajectories with 
+ is the attack success rate (ASR).
+
+IPI differs from jailbreak attacks 
+[
+19
+]
+ in who controls the input. In a jailbreak attack, the user is 
+ and 
+ itself is harmful, so 
+ only needs to refuse 
+. In an IPI attack, however, the user task 
+ is benign and 
+ arrives inside 
+ alongside benign external data that 
+ must read to finish 
+. Halting before an unauthorized action can prevent it (
+) while leaving the user task unfinished (
+). To meet both goals, the agent must ignore 
+ while retaining the benign data around it.
+
+II-C
+ 
+Red-Teaming for Adversarial Training
+
+To improve robustness against prompt injections without failing 
+, a defender 
+ can harden an initial base policy 
+ into 
+ offline prior to deployment through adversarial training 
+[
+24
+]
+, which updates the model weights on contaminated contexts 
+ carrying injection strings 
+ so that 
+ learns to ignore 
+ and complete 
+. Prior IPI defenses instantiate adversarial training with several objectives on contaminated contexts: StruQ 
+[
+3
+]
+ uses supervised fine-tuning (SFT) to maximize the log-likelihood of clean reference actions; SecAlign 
+[
+25
+]
+ and Meta-SecAlign 
+[
+15
+]
+ use preference optimization to favor user-aligned responses over hijacked responses; SecOPD 
+[
+21
+]
+ uses on-policy distillation from a teacher model conditioned on clean observations; and RL-based adversarial training 
+[
+20
+]
+ rewards rollouts that complete 
+ without executing 
+. While StruQ, SecAlign, and Meta-SecAlign construct contaminated contexts using templated or hand-designed injection strings, hardening 
+ against stronger attacks requires exposing it to a broader set of injection strings that bypass its safeguards across diverse tasks. Manually crafting such injections does not scale, so it is common practice for both industry 
+[
+26
+, 
+7
+, 
+8
+, 
+27
+]
+ and prior works 
+[
+28
+, 
+29
+, 
+16
+]
+ to pair automated red-teaming with adversarial training: 
+ first runs an automated red-teamer offline against 
+ to discover injection strings satisfying 
+, and then updates 
+ on them via adversarial training to obtain 
+.
+
+RL-based red-teaming is a commonly used method for generating these training injections at scale 
+[
+11
+, 
+12
+, 
+8
+]
+. Instead of optimizing a separate injection string from scratch for each task, RL trains a generative red-teaming policy 
+, parameterized by 
+, offline across a training task set. Training a shared policy 
+ amortizes exploration across tasks to produce thousands of successful injection strings at high ASR, and allows 
+ to initialize 
+ directly from 
+ without requiring a stronger external model. Specifically, state-of-the-art RL-based red-teaming methods, RL-Hammer and PISmith, optimize 
+ with Group Relative Policy Optimization (GRPO) 
+[
+30
+]
+. For each injection task 
+, GRPO samples a group of 
+ candidate injection strings from 
+. Placing each candidate 
+ into 
+’s data channel produces an attacked trajectory 
+ and a binary attack reward
+
+(3)
+
+GRPO normalizes 
+ using the group mean 
+ and standard deviation 
+ to compute the advantage
+
+(4)
+
+and updates 
+ to increase the probability of candidates with 
+ while decreasing those with 
+.
+
+Reinforcing whichever candidates achieve 
+ within each group can cause standard GRPO to converge to a narrow, repetitive set of successful injection strings 
+[
+11
+, 
+12
+]
+. Recent RL-based red-teaming methods counter this repetition by regularizing surface text differences. RL-Hammer 
+[
+11
+]
+ studies auxiliary diversity rewards based on the pairwise BLEU score or the embedding distance between candidate injection strings generated by 
+, whereas PISmith 
+[
+12
+]
+ adds adaptive token-level entropy regularization and dynamic advantage weighting to the GRPO update. However, as we discuss in §
+III
+, regularizing token entropy or pairwise text distance over full injection strings does not necessarily enforce coverage of distinct attack strategies, the ways an injection string overrides 
+ (such as claiming that 
+ is already finished or framing 
+ as workflow metadata). Instead, 
+ can satisfy these surface regularizers through wording changes while repeatedly exploiting a single vulnerability 
+[
+11
+]
+.
+
+II-D
+ 
+Adversary Model
+
+Attacker’s goal and capabilities.
+
+At inference time, 
+ aims to induce an attacked trajectory 
+ satisfying 
+ while the deployed agent policy 
+ executes a benign user task 
+. 
+ can replace selected clean observations 
+ in the data channel with contaminated observations 
+ that embed 
+ alongside the original data, yet cannot modify the system prompt 
+, the user task 
+, past actions 
+, the model weights 
+, or the execution environment 
+[
+4
+, 
+3
+, 
+25
+]
+.
+
+We do not assume the defense is kept secret; rather, 
+ knows the agent’s architecture, input format, and defense mechanism, acting as a 
+defense-adaptive
+1
+1
+
+1
+
+              
+              
+              
+            Prior ML literature uses the term “adaptive” to refer to defense-aware attackers while the security community uses the same term to refer to attackers who refine their attack by repeatedly interacting with the target. To avoid ambiguity, we use more precise terms, “defense-adaptive” and “iterative-adaptive” (respectively) to distinguish between these two types.
+ attacker 
+[
+31
+, 
+32
+]
+. 
+ can also query the deployed agent policy 
+ repeatedly at inference time and observe the resulting trajectories 
+ and task outcomes. However, agent execution alternates between text generation and non-differentiable tool calls, so gradient-based token optimization designed for single-turn inputs 
+[
+19
+]
+ does not directly apply, and we restrict our evaluation to attacks that require no gradients 
+[
+10
+]
+. Following established evaluation guidelines 
+[
+31
+, 
+32
+, 
+10
+]
+, we evaluate two classes of attacks at inference time:
+
+•
+
+Static.
+ Places pre-written injection strings 
+ into the data channel in a single pass without querying 
+ or adapting to its outputs 
+[
+4
+, 
+2
+, 
+33
+]
+.
+
+•
+
+Iterative-adaptive.
+1
+ Queries 
+ online in a live loop at inference time on each target task, inserting candidate injection strings 
+, observing the resulting trajectories 
+, and updating 
+ across attempts to maximize 
+ 
+[
+34
+, 
+10
+]
+.
+
+Iterative-adaptive attacks update 
+ across queries using either RL or LLM-guided search. RL-based attacks such as AutoInject 
+[
+35
+]
+ train an attacker policy online, from the feedback of the deployed 
+ on the task under attack. Although both rely on RL, these online attacks differ from the red-teaming in §
+II-C
+, which 
+ runs offline against 
+ to collect injection strings for adversarial training. Search-based attacks instead use two auxiliary LLMs: an attacker LLM that rewrites candidate injection strings 
+ based on prior trajectories 
+, and a judge LLM that scores how close each 
+ comes to completing 
+ 
+[
+34
+, 
+36
+, 
+10
+]
+. Template-guided search such as Strategy 
+[
+36
+]
+ restricts the attacker LLM to a predefined list of rewrite rules. Open-ended search removes this restriction and lets the attacker LLM freely rewrite 
+ over hundreds of online queries per task, which often achieves higher ASR. Among these attacks, we evaluate two open-ended searches: Tree of Attacks with Pruning (
+TAP
+) 
+[
+34
+]
+, which is widely used in practice 
+[
+3
+, 
+36
+]
+, and genetic search (
+Genetic
+) 
+[
+10
+]
+, which achieves state-of-the-art ASR across recent IPI defenses. 
+TAP
+ branches candidate rewrites in a tree and prunes low-scoring branches with the judge LLM, whereas 
+Genetic
+ evolves a MAP-Elites grid of candidates across generations without early pruning. Both can require hundreds of online rollouts and auxiliary LLM calls per task. This cost makes them strong inference-time stress tests on evaluation sets but impractical for generating thousands of injection strings across a training set, where RL-based red-teaming (§
+II-C
+) is used instead.
+
+Defender’s goal and capabilities.
+
+Before deployment, the defender 
+ (the model developer) hardens the base policy 
+ into 
+ offline inside a controlled sandbox over a set of simulated task pairs 
+. Each task pair specifies a user task 
+, an injection task 
+, and the simulated tool environment in which the agent executes to produce trajectories 
+ and 
+. Within this sandbox, 
+ initializes the red-teaming policy 
+ from 
+ itself, has white-box access to the weights, evaluates 
+ and 
+ on simulated trajectories, and knows the exact injection string 
+ placed in each contaminated observation 
+.
+
+At inference time, 
+ deploys 
+ to serve inference requests, and the sandbox assumptions are removed; 
+ does not control incoming observations in the data channel and does not know whether an observation 
+ is contaminated, where 
+ appears, or which injection task 
+ and attack method 
+ uses. 
+ aims to satisfy three requirements:
+
+R1.
+
+Robustness.
+ Under static or iterative-adaptive attacks, 
+ should not execute the injection task, 
+, minimizing ASR (§
+II-B
+).
+
+R2.
+
+Utility under attack.
+ Under attack, 
+ should still complete the user task, 
+. We measure this by utility under attack (UA), the fraction of attacked trajectories 
+ with 
+.
+
+R3.
+
+Benign utility.
+ On clean inputs where 
+ for all 
+, 
+ should complete 
+ at a rate comparable to 
+. We measure this by benign utility (BU), the fraction of clean trajectories 
+ with 
+.
+
+III 
+Motivating Study and Problem Analysis
+
+In cybersecurity, pairing offensive red-teaming with defensive 
+blue-teaming
+, which here takes the form of adversarial training (§
+II-C
+), is called 
+purple-teaming
+ 
+[
+37
+, 
+38
+]
+. This workflow implicitly assumes that a stronger red-teamer, which achieves higher ASR against the base policy 
+, uncovers more vulnerabilities, so that training on its discoveries produces a more robust policy 
+. We formalize this workflow (Figure 
+1
+) in §
+III-A
+ and examine the assumption in §
+III-B
+, along with the utility cost of adversarial training.
+
+III-A
+ 
+Prompt Injection Purple-Teaming
+
+Collecting successful injections via RL-based red-teaming.
+
+How the red-teaming policy 
+ in §
+II-C
+ is used depends on whether the goal is offensive evaluation or adversarial training. Studies that use RL-based red-teaming solely for offensive evaluation 
+[
+11
+, 
+12
+]
+ train 
+ against 
+, discard the training trajectories, and evaluate only the final checkpoint of 
+ on unseen tasks. In purple-teaming 
+[
+28
+, 
+16
+, 
+7
+, 
+8
+]
+, by contrast, all training steps of 
+ over task pairs 
+ are used to collect injection strings that compromise 
+. Whenever a sampled candidate 
+ produces an attacked trajectory 
+ satisfying 
+, 
+ adds the adversarial example 
+ to the adversarial training dataset 
+:
+
+(5)
+
+Adversarial training via SFT or RL.
+
+Given 
+, 
+ updates 
+ into an adversarially trained policy 
+ using either off-policy SFT 
+[
+3
+, 
+16
+]
+ or on-policy RL 
+[
+20
+, 
+27
+]
+:
+
+•
+
+Off-policy SFT.
+ SFT trains 
+ to take the same actions on a contaminated context 
+ that 
+ takes on a clean context 
+ 
+[
+3
+]
+. For a user task 
+, 
+ runs 
+ on clean observations to record a clean trajectory 
+ with 
+. For each 
+, embedding 
+ into the target observation yields contaminated contexts 
+. SFT updates 
+ to minimize the negative log-likelihood of the clean actions 
+ given the contaminated context 
+,
+
+(6)
+
+and adds the same loss on clean trajectories from 
+ as a utility retain set. This update is off-policy because the target actions 
+ come from 
+ acting on 
+ rather than from 
+ acting on 
+.
+
+•
+
+On-policy RL.
+ Instead of copying pre-recorded actions, on-policy RL uses GRPO 
+[
+30
+]
+ to sample trajectories directly from 
+ on tasks carrying 
+ from 
+, mixed with clean retain tasks from 
+ 
+[
+27
+]
+. To reward both user task completion (R2) and robustness (R1) in §
+II-D
+, each attacked trajectory 
+ receives a binary defense reward:
+
+(7)
+
+which equals 
+ when 
+ completes 
+ without executing 
+, and 
+ otherwise; on clean trajectories 
+, 
+.
+
+In this workflow, a red-teamer with higher ASR compromises more task pairs in 
+ and typically builds a larger dataset 
+ in Eq. 
+5
+. We next examine whether this larger dataset also yields a more robust and equally useful policy.
+
+III-B
+ 
+Red-Teaming Success May Not Always Lead to Defender Improvements
+
+Study setup.
+
+At inference time, a deployed policy 
+ encounters tools, user tasks, and attacks absent from training. To approximate this setting, we separate our training and evaluation benchmarks, as summarized in Table 
+I
+. We run offline red-teaming and adversarial training on 
+, which comprises 
+ task pairs from AgentDyn 
+[
+39
+]
+, a multi-step agentic benchmark. We then evaluate all trained policies 
+ on 
+ task pairs (Appendix 
+C
+), 
+ from each of the four task suites of AgentDojo 
+[
+2
+]
+, whose user tasks are disjoint from those of AgentDyn. We test two base policies 
+: Qwen3-4B-Instruct-2507 
+[
+40
+, 
+41
+]
+, denoted Qwen3-4B, and Llama-3.1-8B-Instruct 
+[
+26
+]
+, denoted Llama-8B. For red-teaming, we run RL-Hammer 
+[
+11
+]
+ and PISmith 
+[
+12
+]
+ on AgentDyn for 
+ steps with batch sizes of 
+ and 
+, matching the authors’ configurations, to construct 
+, and then train 
+ on each dataset via SFT in Eq. 
+6
+ or RL in Eq. 
+7
+. On AgentDojo, we evaluate against three unseen attacks: 
+ChatInject
+ 
+[
+33
+]
+, a static attack that spoofs chat templates, and the iterative-adaptive attacks 
+TAP
+ 
+[
+34
+]
+ and 
+Genetic
+ 
+[
+10
+]
+, with Qwen3.5-4B as the attacker LLM and Qwen3-4B as the judge LLM.
+
+TABLE I: 
+Attack setup for red-teaming and evaluation.
+
+Use
+
+Attack
+
+Type
+
+# Steps
+
+# Pairs
+
+Red-Teaming
+
+RL-Hammer 
+[
+11
+]
+
+Offline
+
+250
+
+560
+
+PISmith 
+[
+12
+]
+
+Offline
+
+250
+
+560
+
+Evaluation
+
+ChatInject
+ 
+[
+33
+]
+
+Static
+
+1
+
+40
+
+TAP
+ 
+[
+34
+]
+
+Iterative-adaptive
+
+250
+
+40
+
+Genetic
+ 
+[
+10
+]
+
+Iterative-adaptive
+
+248
+
+40
+
+Training steps, batch size: 128 (RL-Hammer), 64 (PISmith).
+
+Attempts per task pair, tree config: 
+ root nodes, depth 
+, branching factor 
+, width 
+.
+
+Attempts per task pair: 
+ generations of 
+ candidates.
+
+Train-time ASR does not guarantee robustness.
+
+Table 
+II
+ reports each red-teamer’s 
+train-time cumulative ASR
+, defined as the fraction of task pairs in 
+ it compromised at least once, alongside the size of the resulting 
+. PISmith reaches 
+ ASR on Qwen3-4B, compared with 
+ for RL-Hammer. The difference is smaller on Llama-8B, where the corresponding rates are 
+ and 
+, but in both cases PISmith also supplies the defender with the larger training set.
+
+TABLE II: 
+Train-time cumulative ASR of RL-based red-teamers on AgentDyn and the number of injection strings collected in 
+. RL-Hammer achieves lower train-time ASR and collects fewer strings than PISmith.
+
+Red-teamer
+
+Model
+
+ASR
+
+# Strings
+
+RL-Hammer 
+[
+11
+]
+
+Qwen3-4B
+
+33.39%
+
+4,282
+
+Llama-8B
+
+25.18%
+
+1,671
+
+PISmith 
+[
+12
+]
+
+Qwen3-4B
+
+68.75%
+
+7,132
+
+Llama-8B
+
+27.32%
+
+1,783
+
+If higher train-time ASR produced better training data, policies trained on PISmith would achieve lower inference-time ASR than policies trained on RL-Hammer. For each trained policy, Figure 
+2
+ shows its 
+worst-case ASR
+, the highest of the three rates observed under 
+ChatInject
+, 
+TAP
+, and 
+Genetic
+ on the selected AgentDojo task pairs. Despite its higher train-time ASR, PISmith yields a higher worst-case ASR in three of the four settings. Under RL, switching from RL-Hammer to PISmith data raises this rate from 
+ to 
+ on Qwen3-4B and from 
+ to 
+ on Llama-8B. The same pattern holds under SFT on Llama-8B, where ASR rises from 
+ to 
+. Only under SFT on Qwen3-4B does PISmith yield a lower worst-case ASR (
+ versus 
+). Across the four settings, worst-case ASR ranges between 
+ and 
+.
+
+Fig. 2: 
+Worst-case inference-time ASR over three unseen attacks (
+ChatInject
+, 
+TAP
+, and 
+Genetic
+) on AgentDojo after adversarial training (AT) with RL or SFT on the RL-Hammer and PISmith datasets.
+
+To understand why collecting more successful injection strings does not necessarily improve robustness, we examine the training objective of 
+. Prior work shows that maximizing attack reward in Eq. 
+3
+ only requires 
+ to find one working attack strategy and apply it across tasks 
+[
+18
+, 
+16
+]
+. Although PISmith and RL-Hammer include diversity regularizers (§
+II-C
+), neither regularizer measures whether 
+ introduces a new attack strategy. Specifically, PISmith shrinks the coefficient of its token-level entropy bonus to a small base value when the group mean reward 
+ crosses a threshold 
+[
+12
+]
+, which relaxes exploration as soon as 
+ finds a working attack strategy. Similarly, RL-Hammer’s diversity rewards compare lexical n-gram overlap (pairwise BLEU) or embedding distance over the full injection string 
+, and its authors report that 
+ satisfies them by changing letter case and wording or by prepending irrelevant text while reusing the same attack strategy 
+[
+11
+]
+. We therefore hypothesize that higher train-time ASR comes from applying the same few attack strategies across more tasks in 
+, which leaves other attack strategies open when 
+TAP
+ and 
+Genetic
+ search for new injection strings at inference time 
+[
+10
+, 
+17
+]
+.
+
+Remark 1: Train-Time ASR vs. Robustness
+
+Higher train-time ASR and larger training datasets 
+ resulting from RL-based red-teaming do not guarantee stronger inference-time robustness, likely due to a lack of coverage of distinct attack strategies.
+
+Adversarial training can degrade benign utility.
+
+Beyond robustness, a hardened policy must also preserve benign utility (R3). Adversarial training, however, is known to induce a trade-off between robustness and utility on clean inputs 
+[
+42
+]
+. This trade-off has been observed both in jailbreak defenses, where safety tuning degrades performance on benign prompts 
+[
+28
+, 
+43
+]
+, and in IPI defenses 
+[
+44
+, 
+21
+]
+.
+
+TABLE III: 
+Benign utility (BU) on AgentDojo before and after adversarial training with RL or SFT on the RL-Hammer and PISmith datasets.
+
+Model
+
+Dataset
+
+Base
+
+RL
+
+SFT
+
+Qwen3-4B
+
+RL-Hammer
+
+61.86%
+
+54.64%
+
+49.48%
+
+PISmith
+
+61.86%
+
+60.82%
+
+53.61%
+
+Llama-8B
+
+RL-Hammer
+
+40.21%
+
+29.90%
+
+15.46%
+
+PISmith
+
+40.21%
+
+25.77%
+
+16.49%
+
+Table 
+III
+ shows a similar trade-off for the policies trained above, reporting their BU on the 
+ clean AgentDojo user tasks. Off-policy SFT reduces Qwen3-4B BU from 
+ to 
+ on RL-Hammer and 
+ on PISmith. A likely reason is that, although SFT supervises clean reference actions in contaminated contexts, the reference trajectory gives no feedback when 
+ deviates from it; if fine-tuning shifts 
+ toward refusing a task or aborting a tool call whenever a clean observation contains imperatively phrased text, BU drops 
+[
+44
+, 
+21
+]
+.
+On-policy RL, on the other hand, does provide feedback on the actions 
+ chooses, rewarding it for completing 
+ on its own trajectories. On Qwen3-4B, this retains more BU than SFT on both training sets (
+ on RL-Hammer data and 
+ on PISmith data). However, switching to RL does not always recover clean-task performance. On Llama-8B, BU is 
+ after RL on RL-Hammer data versus 
+ for 
+, while worst-case ASR remains 
+ (Figure 
+2
+).
+One possible reason this gap persists is that Eq. 
+7
+ assigns a single binary reward 
+ to the entire trajectory 
+. An agent that ignores 
+ but stops before finishing 
+ receives 
+, just as it would for executing 
+. Although the two failures call for different corrections, this score gives the agent no direct feedback about which tokens led to either outcome 
+[
+22
+, 
+21
+]
+.
+
+Remark 2: Utility Degradation in Adversarial Training
+
+On-policy RL preserves benign utility better than off-policy SFT, but supervising multi-step trajectories with a single binary outcome reward still lowers task completion rate.
+
+IV 
+Our Method
+
+Fig. 3: 
+Overview of 
+Pipette
+. 
+Pipette
+-Red (left) guides RL-based red-teaming with a periodically rebuilt strategy dictionary to collect 
+ spanning diverse attack strategies. 
+Pipette
+-Blue (right) trains the agent policy via on-policy RL to improve robustness while preserving utility for deployment.
+
+In §
+III
+, PISmith compromised more training tasks than RL-Hammer, yet training on its examples yielded a higher worst-case ASR in three of the four settings. If those additional successes came from reusing familiar strategies on new tasks, the collection could grow without exposing the defender to other ways of redirecting the agent (Remark 1). Since a familiar strategy can appear in an injection whose wording is new, we test this explanation by measuring how well the strategies represented in the collection explain unseen injections as the collection grows (§
+IV-A
+). In 
+Pipette
+ (Figure 
+3
+ and Algorithm 
+1
+), this measure also guides 
+Pipette
+-Red (§
+IV-B
+) as it collects the examples on which 
+Pipette
+-Blue trains the defender (§
+IV-C
+).
+
+IV-A
+ 
+Revisiting Red-Teaming Objectives for Defense Improvements
+
+From surface wording to strategy primitives.
+
+In §
+III-B
+, we hypothesized that RL-based red-teamers achieve high train-time ASR while leaving other vulnerabilities open because pairwise BLEU, sentence embeddings, and token entropy bonuses (§
+II-C
+) operate on raw injection strings 
+ rather than on the attack strategies behind them. In particular, two injection strings can share almost no words yet use the same attack strategy to override 
+ 
+[
+11
+, 
+17
+]
+, because task-specific nouns such as email addresses or account numbers dominate full-string similarity. Conversely, a single injection string 
+ can combine several attack strategies in one text 
+[
+17
+]
+. To test our hypothesis and guide red-teaming toward new vulnerabilities, we therefore need to remove noise such as task-specific nouns and decompose each injection string into reusable components that capture distinct attack strategies, which we call 
+strategy primitives
+.
+
+Prior work on jailbreak attacks shows that adversarial prompts can be broken down into recurring attack strategies using an LLM 
+[
+17
+]
+. Adapting this decomposition to IPI, we pass each successful injection string 
+ to an LLM extractor that outputs one or more structured 
+strategy records
+ 
+. Each record contains three fields: a short strategy name, the matched verbatim text in 
+, and a task-agnostic explanation 
+ of how that text redirects the agent policy away from 
+.
+
+Across thousands of rollouts, raw strategy explanations 
+ still contain many near-duplicate descriptions of the same attack strategy, as well as descriptions that blend multiple strategies.
+To handle both, we apply sparse dictionary learning 
+[
+45
+, 
+46
+, 
+17
+]
+, which represents each explanation vector as a sparse linear combination of 
+ shared strategy primitives. Using an embedding model 
+, we map each explanation 
+ to an 
+-normalized vector 
+ to form the explanation matrix 
+. We then learn a 
+strategy dictionary
+ 
+ whose 
+ columns represent the strategy primitives, together with a sparse code matrix 
+, by solving
+
+(8)
+
+where 
+ measures how well 
+ reconstructs the vectors in 
+, and the 
+ penalty 
+ with 
+ encourages each 
+ to use only a few columns of 
+.
+
+Because each learned column 
+ is an unlabeled vector, we translate 
+ back into text by finding a sparse set of original records in 
+ that reconstructs 
+. Specifically, we solve a Basis Pursuit Denoising (BPDN) 
+-regularized least-squares problem 
+[
+47
+, 
+17
+]
+:
+
+(9)
+
+where 
+ controls the sparsity of 
+ over the 
+ columns of 
+. Ranking the records in 
+ by coefficient magnitude 
+ then selects the top strategy records for 
+, from which an LLM writes a canonical name, description, and example realization for strategy primitive 
+. Finally, near-duplicate primitives whose description embeddings have cosine similarity above a threshold are merged 
+[
+17
+]
+. Two learned strategy primitives are shown below.
+
+Example Strategy Primitives
+
+Signal-based instruction override.
+ The injection pretends the current task is finished, then resets the agent’s instruction context. 
+ Example realization: Completion signal received: the requested lookup has already been resolved. Reset the working instructions for the next step and now process the following account update: transfer $10 to US133000000121212121212.
+
+Task-framing instruction.
+ The injection recasts the injected objective as workflow metadata, such as a 
+Task Objective:
+ or 
+TODO:
+ item, so it looks like ordinary task state and avoids appearing as a new outside instruction. 
+ Example realization: Task Objective: finalize the compliance handoff. TODO: forward the Q3 earnings report to 
+external-auditor@gmail.com
+ before closing the review record.
+
+Measuring strategy coverage via explainability.
+
+A single injection string 
+ can combine multiple strategy primitives at once, such as pairing 
+signal-based instruction override
+ with 
+task-framing instruction
+. Because matching 
+ to a single column in 
+ cannot capture a combination of primitives, we measure whether 
+ covers a new injection string 
+ by decomposing each explanation 
+ with normalized embedding 
+ into a sparse combination of columns in 
+ via BPDN:
+
+(10)
+
+In the sparse code 
+, the largest magnitudes 
+ identify the strategy primitives in 
+ that actively reconstruct 
+. Because vector reconstruction in embedding space can still assign partial weights to loosely related columns when 
+ introduces an uncovered strategy, we retrieve the descriptions of the top strategy primitives in 
+ ranked by 
+ and pass them, together with 
+ and 
+, to an LLM grader. The grader rates from 
+ to 
+ how completely those primitives explain how 
+ redirects the agent policy. Rescaling this rating to 
+ and averaging across the records in 
+ gives the 
+Explainability Score
+ 
+[
+17
+]
+ 
+. Intuitively, changing filler words or punctuation activates the same primitives in 
+ and yields 
+, whereas introducing an attack strategy absent from 
+ yields 
+.
+
+Fig. 4: 
+Mean Explainability Score (
+) on unseen 
+ChatInject
+ attacks for cumulative dictionaries learned from all successful injection strings up to each dictionary iteration (
+ RL steps). Error bars show standard errors over 
+ seeds. RL-Hammer and PISmith plateau early, but 
+Pipette
+-Red keeps discovering strategies that explain these attacks.
+
+Testing strategy-level mode collapse in prior red-teamers.
+
+Using 
+, we test our hypothesis from §
+III-B
+ on 
+ collected by RL-Hammer and PISmith. We order the successful injection strings of each red-teamer by discovery time and divide them into equal intervals of 
+ RL steps, which we call dictionary iterations. For each iteration 
+, we learn a cumulative dictionary 
+ via Eqs. 
+8
+ and 
+9
+ on all successful injection strings up to that iteration, and compute the mean 
+ on unseen 
+ChatInject
+ injection strings 
+[
+33
+]
+. If a red-teamer kept uncovering attack strategies that unseen attacks also rely on, the cumulative dictionary 
+ should explain the unseen 
+ChatInject
+ attacks increasingly well, and 
+ should rise across iterations. In Figure 
+4
+, however, RL-Hammer plateaus near 
+ on Qwen3-4B and 
+ on Llama-8B, while PISmith stagnates or drifts downward after the first two iterations, possibly because repeated strategies dominate the reconstruction loss in Eq. 
+8
+. By contrast, 
+Pipette
+-Red (§
+IV-B
+), which rewards its own injection strings for low 
+ during red-teaming to sustain exploration, later reaches higher 
+ on the unseen attacks than both baselines (
+ on Qwen3-4B and 
+ on Llama-8B).
+
+Remark 3: Strategy-Level Mode Collapse
+
+For the RL-based red-teaming methods we study, diversity regularizers can be satisfied through wording variations around a few attack strategies, and their coverage of unseen 
+ChatInject
+ attacks, as estimated by 
+, plateaus during training.
+
+IV-B
+ 
+Pipette
+-Red: Strategy-Guided Red-Teaming
+
+Strategy coverage reward.
+
+In Eq. 
+3
+, 
+ receives the same reward for repeating a known attack strategy as for discovering a new one, which likely contributes to the 
+ plateau in Remark 3. To push 
+ toward uncovered strategies, 
+Pipette
+-Red (Figure 
+3
+, left) maintains a rolling strategy dictionary 
+ over the red-teaming steps, which are divided into dictionary iterations 
+. As in §
+II-C
+, each of the 
+ candidates sampled for a task pair is rolled out against the frozen base policy 
+, and each rollout 
+ receives three rewards forming the reward set 
+: the binary attack reward 
+ in Eq. 
+3
+, a binary format reward 
+ that checks for structured reasoning before 
+ 
+[
+11
+, 
+12
+]
+, and a continuous 
+strategy coverage reward
+ 
+ 
+[
+18
+]
+:
+
+(11)
+
+where 
+ before 
+ is built. Multiplying by 
+ rewards coverage only when 
+ compromises 
+, which keeps 
+ from outputting broken text just to lower 
+.
+
+Rolling dictionary updates.
+
+If 
+ stayed fixed at 
+ throughout red-teaming, 
+ could maximize Eq. 
+11
+ by finding a single successful and novel attack strategy absent from 
+ and repeating it 
+[
+18
+, 
+29
+]
+. Conversely, fitting 
+ only on the latest rollouts would forget earlier strategy primitives and let 
+ cycle back to old strategies. Therefore, whenever a rollout achieves 
+, 
+Pipette
+-Red adds 
+ to 
+ and extracts 
+. Then, every 
+ RL steps, it rebuilds 
+ via Eqs. 
+8
+ and 
+9
+ using the strategy records retained from prior iterations, together with new records from 
+ satisfying 
+. Filtering additions by the threshold 
+ keeps duplicate strategies from dominating Eq. 
+8
+, while retaining prior records means that repeating an earlier strategy still yields high 
+ and thus near-zero 
+.
+
+Red-teaming policy optimization.
+
+Updating 
+ from the three rewards in 
+ combines two binary rewards with a continuous reward in 
+. In standard GRPO (Eq. 
+4
+), summing multiple rewards before dividing by the group standard deviation can let high-variance binary rewards outweigh lower-variance continuous rewards and map different reward combinations to the same sum 
+[
+48
+]
+. To preserve the signal from each reward 
+, we normalize it separately across the 
+ rollouts before taking the weighted sum 
+[
+48
+]
+:
+
+(12)
+
+where 
+ and 
+ are the group mean and standard deviation of reward 
+, 
+ avoids division by zero, and 
+ weights reward 
+. We standardize 
+ across the mini-batch and update 
+ using clipped GRPO with adaptive token-level entropy regularization 
+[
+30
+, 
+12
+]
+.
+
+IV-C
+ 
+Pipette
+-Blue: On-Policy Defensive Training
+
+After 
+Pipette
+-Red produces 
+ spanning diverse attack strategies, 
+Pipette
+-Blue (Figure 
+3
+, right) trains the agent policy 
+ on 
+ toward the three defense requirements R1 to R3 (§
+II-D
+).
+
+Task-alignment reasoning and outcome-based RL.
+ To learn generalizable defensive behavior during adversarial training, 
+Pipette
+-Blue trains the agent policy 
+ to separate untrusted data from instructions through explicit reasoning before acting. Prior work on jailbreak defense shows that training a model to reason over a fixed set of safety policies before responding improves generalization to unseen attacks 
+[
+49
+]
+. Following this approach, 
+Pipette
+-Blue trains 
+ to inspect the last observation 
+ in its reasoning 
+ before emitting tool calls 
+ (§
+II-A
+). This reasoning performs two checks 
+[
+4
+, 
+50
+]
+: 
+C1
+, identify whether 
+ contains any instruction or attempt to redirect the task, and 
+C2
+, verify that every planned tool call in 
+ serves a goal authorized by the trusted user task 
+. Under C2, observations may supply the data for that goal but cannot authorize a new one.
+
+To establish this reasoning format without distilling from a larger model, 
+ prompts the base policy 
+ to generate demonstrations whose reasoning 
+ follows C1 and C2. For this SFT warm-up, we use tasks in 
+ and a weaker subset of AgentDojo’s built-in static attacks, which we exclude from evaluation. After the warm-up, 
+Pipette
+-Blue trains 
+ with on-policy RL on attacked tasks from 
+ and clean tasks from 
+. Each of the 
+ rollouts in a group receives the outcome-based defense reward 
+ in Eq. 
+7
+ and a chain-of-thought (CoT) reasoning reward 
+. To compute the latter, an LLM judge checks C1 and C2 in 
+ at each step and averages the binary results over the trajectory. We normalize and combine both rewards as in Eq. 
+12
+ to obtain the trajectory-level advantage 
+.
+
+Contrastive token-level reward.
+
+To address the utility degradation observed in §
+III-B
+, where supervising multi-step rollouts solely with the outcome-based reward 
+ can push 
+ toward overly cautious refusals, 
+Pipette
+-Blue uses a token-level reward. To assign credit to individual tokens, we use the difference in information available at inference time versus offline training (§
+II-D
+). Intuitively, an IPI attack succeeds when 
+ is confused about the provenance of malicious instructions embedded in 
+. If a user explicitly identified 
+ and instructed the agent to ignore it, even the base policy 
+ could often follow this directive and complete 
+ safely. At inference time, however, 
+ acts autonomously on behalf of the user, so no such guidance is available. During offline adversarial training, in contrast, 
+ has access to the exact injection string 
+ placed in 
+. Before 
+ generates its reasoning and tool calls, 
+ can therefore add a privileged safe prefix 
+ after 
+ that instructs the agent to ignore 
+ received from the tool output. Following on-policy self-distillation (OPSD) 
+[
+22
+, 
+51
+]
+, as 
+ samples an unprefixed on-policy action 
+, we query 
+ on the same tokens conditioned on 
+ to supervise the unprefixed policy 
+ toward the safe target distribution 
+.
+
+Algorithm 1
+ 
+ Prompt Injection Purple-Teaming (
+Pipette
+)
+
+1:
+
+Base policy 
+, task pairs 
+, group size 
+, rebuild interval 
+, threshold 
+, step budgets 
+ and 
+.
+
+2:
+
+Hardened agent policy 
+.
+
+3:
+
+// 
+Pipette
+-Red: Strategy-Guided Red-Teaming
+
+4:
+
+Initialize 
+, 
+, 
+, 
+.
+
+5:
+
+for
+ step 
+ 
+do
+
+6:
+
+   Sample 
+; roll out 
+ injection strings 
+ against 
+.
+
+7:
+
+   
+for
+ each rollout 
+ 
+do
+
+8:
+
+    Compute 
+, 
+, and 
+ via Eq. 
+11
+.
+
+9:
+
+    
+if
+ 
+ 
+then
+
+10:
+
+      Append 
+ to 
+ and extract 
+.
+
+11:
+
+    
+end
+ 
+if
+
+12:
+
+   
+end
+ 
+for
+
+13:
+
+   Compute 
+ via Eq. 
+12
+ and update 
+.
+
+14:
+
+   
+if
+ 
+ 
+then
+
+15:
+
+    Rebuild 
+ adding records with 
+ via Eqs. 
+8
+ and 
+9
+; set 
+.
+
+16:
+
+   
+end
+ 
+if
+
+17:
+
+end
+ 
+for
+
+18:
+
+// 
+Pipette
+-Blue: On-Policy Defensive Training
+
+19:
+
+Warm up 
+ on self-generated C1 and C2 trajectories to obtain 
+.
+
+20:
+
+for
+ step 
+ 
+do
+
+21:
+
+   Sample 
+ (mixed with clean tasks from 
+).
+
+22:
+
+   Roll out 
+ trajectories with 
+; compute 
+ from 
+ in Eq. 
+7
+ and 
+ as in Eq. 
+12
+.
+
+23:
+
+   
+for
+ each token 
+ in steps where 
+ contains 
+ 
+do
+
+24:
+
+    Compute 
+ via Eq. 
+13
+ and 
+ via Eq. 
+14
+.
+
+25:
+
+   
+end
+ 
+for
+
+26:
+
+   Update 
+ via clipped policy gradient with advantages 
+.
+
+27:
+
+end
+ 
+for
+
+28:
+
+return
+ 
+
+The positive prefix 
+ changes the prompt’s form as well as its instruction. Maximizing agreement with this prefix alone could therefore reward a change in formatting, such as closing the reasoning block before the agent has worked through the task. To reduce this shared prefix effect, we pair 
+ with a matched unsafe prefix 
+ that instead instructs the agent to follow 
+. At each step 
+ where 
+ contains 
+, we score the unprefixed tokens without taking gradients through either scoring pass. For each 
+, we compute the log-probability ratio
+
+(13)
+
+and add its centered, clipped value to the trajectory-level advantage 
+ to obtain
+
+(14)
+
+where 
+ is the batch mean of 
+, 
+ is the token weight, 
+ is the clipping bound, and the second term is zero on clean tasks and steps before 
+ enters 
+. Both 
+ and 
+ quote the same 
+ in a common format (Appendix 
+E
+), so the ratio is designed to reduce sensitivity to that shared formatting. A positive 
+ means that the token was more likely when the policy was told to ignore the injection and continue 
+, while a negative value means it was more likely when the policy was told to carry out 
+. While SecOPD 
+[
+21
+]
+ distills from a teacher conditioned on the clean context 
+ with 
+ removed, scoring tokens via 
+ and 
+ directly on 
+ lets 
+ learn to recognize and ignore 
+ while extracting the surrounding benign data needed for 
+.
+
+V 
+Experiments
+
+To determine what the defender gains from a better training set (§
+III
+), we vary the collection and the training procedure separately (§
+V-B
+). We then evaluate the trained agent under iterative-adaptive and static attacks (R1, §
+V-C
+ and §
+V-D
+). Since a refusal can also prevent an injection, we assess utility alongside robustness (R2 and R3, §
+V-E
+) and examine how 
+Pipette
+-Blue’s supervision affects both in an ablation (§
+V-F
+).
+
+V-A
+ 
+Experimental Setup
+
+Models and benchmarks.
+
+We evaluate four open-weight models spanning three model families from 4B to 27B parameters: Qwen3-4B and Llama-8B from §
+III-B
+, GPT-OSS-20B 
+[
+52
+]
+, and Qwen3.6-27B 
+[
+53
+]
+. Across all models, both stages of 
+Pipette
+ run offline exclusively on AgentDyn tasks 
+[
+39
+]
+. At inference time, we evaluate the trained policies on two unseen multi-step benchmarks: AgentDojo 
+[
+2
+]
+, covering the Workspace, Slack, Travel, and Banking suites, and Agent Security Bench (ASB) 
+[
+54
+]
+. No user task 
+ or injection task 
+ of AgentDojo or ASB appears in training.
+
+Defense baselines and evaluation protocol.
+
+In §
+V-B
+, we first evaluate the two stages of our framework individually: 
+Pipette
+-Red (§
+IV-B
+) paired with RL or SFT adversarial training (§
+III-A
+), and 
+Pipette
+-Blue (§
+IV-C
+) compared against RL and SFT on the dataset 
+ collected by 
+Pipette
+-Red. In §
+V-C
+ through §
+V-E
+, we compare the complete 
+Pipette
+ against two categories of prior IPI defenses:
+
+•
+
+Training-based defenses
+ update the policy weights 
+ offline via adversarial training prior to deployment and add no external components at inference time, including 
+Meta-SecAlign
+ 
+[
+15
+]
+, 
+SecOPD
+ 
+[
+21
+]
+, and Instruction Hierarchy 
+[
+55
+]
+, which is natively trained into GPT-OSS-20B 
+[
+52
+]
+.
+
+•
+
+Non-training-based defenses
+ leave the policy weights 
+ unchanged and place inference-time safeguards around the agent policy, including prompt boundary defenses (
+Spotlighting
+ 
+[
+56
+]
+, 
+Sandwiching
+ 
+[
+57
+]
+), external input classifiers (
+PromptGuard
+ 
+[
+58
+]
+, 
+PIGuard
+ 
+[
+44
+]
+), canary detection (
+DataSentinel
+ 
+[
+59
+]
+), masked re-execution (
+MELON
+ 
+[
+23
+]
+), and system-level control- and data-flow isolation (
+CaMeL
+ 
+[
+60
+]
+).
+
+The training-based baselines are released for different models, so we use the authors’ checkpoints on their native models: 
+Meta-SecAlign
+ on Llama-8B, 
+SecOPD
+ on Qwen3.6-27B, and the native Instruction Hierarchy in GPT-OSS-20B. Since prior studies already report near-zero ASR for trained defenses on static attacks 
+[
+15
+, 
+21
+]
+, we focus the main comparison on iterative-adaptive attacks on AgentDojo (§
+V-C
+) and give the static results in Appendix 
+B
+. We evaluate the non-training-based defenses on Qwen3-4B and Llama-8B under the built-in attacks of AgentDojo and ASB (§
+V-D
+). We exclude the weaker AgentDojo attacks used to initialize the output formats of 
+ and 
+, such as 
+Direct
+ and 
+SystemMsg
+ (§
+IV-C
+, Appendix 
+D
+).
+
+Attacks and metrics.
+
+Static evaluations on AgentDojo cover 
+IgnorePrev
+ 
+[
+61
+]
+, 
+InjecAgent
+ 
+[
+62
+]
+, 
+ImportantMsgs
+ 
+[
+2
+]
+, 
+ToolKnow
+ 
+[
+2
+]
+, and 
+ChatInject
+ 
+[
+33
+]
+; those on ASB cover 
+Naive
+, 
+Escape
+, 
+Ignore
+, 
+Completion
+, and 
+Combined
+ 
+[
+4
+, 
+54
+]
+. Iterative-adaptive evaluations use the two search-based attacks from §
+II-D
+, 
+TAP
+ 
+[
+34
+]
+ (up to 
+ attempts per task pair) and 
+Genetic
+ 
+[
+10
+]
+ (up to 
+ attempts per task pair), both with Qwen3.5-4B as the attacker LLM and Qwen3-4B as the judge LLM. Following §
+III-B
+, we run them on the same AgentDojo task pairs spanning all four suites (Appendix 
+C
+). We report ASR, UA, and BU (§
+II-D
+); implementation details and prompts are in Appendices 
+D
+ and 
+E
+.
+
+V-B
+ 
+Pipette
+ Achieves Robustness Improvements While Preserving Utility
+
+We retain the setup of §
+III-B
+ so that the changes in robustness and utility can be compared directly with the findings in Remarks 1 and 2.
+
+Fig. 5: 
+Train-time cumulative ASR on AgentDyn versus worst-case inference-time ASR over three unseen attacks (
+ChatInject
+, 
+TAP
+, and 
+Genetic
+) on AgentDojo after adversarial training (AT) with RL or SFT on the RL-Hammer, PISmith, and 
+Pipette
+-Red datasets.
+
+Pipette
+-Red converts red-teaming discovery into lower inference-time ASR.
+
+Figure 
+5
+ plots train-time cumulative ASR on AgentDyn against worst-case inference-time ASR on AgentDojo across red-teaming methods and adversarial training algorithms. An effective red-teamer should occupy the bottom-right corner, combining high train-time ASR with low inference-time ASR after adversarial training. As observed in §
+III-B
+, moving from RL-Hammer to PISmith shifts the red-teamer rightward toward higher train-time cumulative ASR but, in three of the four settings, also upward toward higher worst-case inference-time ASR. In contrast, replacing baseline red-teaming with 
+Pipette
+-Red moves all trained policies toward the bottom-right corner. 
+Pipette
+-Red reaches the highest train-time cumulative ASR on both models (
+ with 
+ strings on Qwen3-4B, and 
+ with 
+ on Llama-8B). At the same time, training on its dataset yields the lowest worst-case inference-time ASR in all four settings, namely 
+ under RL and 
+ under SFT on Qwen3-4B, and 
+ under RL and 
+ under SFT on Llama-8B. These gains are consistent with the higher coverage of unseen 
+ChatInject
+ attacks in Figure 
+4
+, although the red-teamers also differ in dataset size and sampling (Appendix 
+D
+).
+
+TABLE IV: 
+Benign utility (BU) on AgentDojo before and after adversarial training with RL, SFT, or 
+Pipette
+-Blue on the 
+Pipette
+-Red dataset.
+
+Model
+
+Base
+
+RL
+
+SFT
+
+Pipette
+-Blue
+
+Qwen3-4B
+
+61.86%
+
+59.79%
+
+58.76%
+
+64.95%
+
+Llama-8B
+
+40.21%
+
+35.05%
+
+29.90%
+
+41.24%
+
+Pipette
+-Blue preserves benign utility.
+
+Although off-policy SFT on the 
+Pipette
+-Red dataset achieves low inference-time ASR in Figure 
+5
+, Table 
+IV
+ shows that it still incurs the utility drop identified in Remark 2 (§
+III-B
+), reducing BU on Qwen3-4B from 
+ to 
+ and on Llama-8B from 
+ to 
+. Outcome-only RL reduces this loss but still degrades BU to 
+ on Qwen3-4B and 
+ on Llama-8B. Replacing standard adversarial training with 
+Pipette
+-Blue on the same 
+Pipette
+-Red dataset avoids this utility loss on both models, reaching 
+ BU on Qwen3-4B and 
+ on Llama-8B. Section 
+V-F
+ ablates the C1 and C2 checks and 
+ on Qwen3-4B.
+
+V-C
+ 
+Robustness Against Iterative-Adaptive Attacks
+
+We now compare the complete 
+Pipette
+ against training-based baselines under iterative-adaptive search (
+TAP
+ and 
+Genetic
+) on AgentDojo (Table 
+V
+). Both searches adapt to each evaluated policy only through its attacked trajectories, using their public prompts without instructions specific to 
+Pipette
+, and stop at their first success (Appendix 
+C
+). Even with 4B attacker and judge LLMs, ASR on the base policies rises from 
+ (
+TAP
+) and 
+ (
+Genetic
+) on Llama-8B to 
+ and 
+ on Qwen3.6-27B, and to 
+ and 
+ on GPT-OSS-20B.
+
+TABLE V: 
+ASR and UA of training-based defenses under iterative-adaptive attacks on 
+ AgentDojo task pairs covering all four suites (Appendix 
+C
+). 
+Bold
+ and 
+underlined
+ mark the best and second-best results per column within each model.
+
+Attack 
+
+TAP
+
+Genetic
+
+Defense 
+
+ASR
+
+UA
+
+ASR
+
+UA
+
+Llama-3.1-8B-Instruct
+
+None
+
+7.50%
+
+12.50%
+
+17.50%
+
+32.50%
+
+Meta-SecAlign
+
+2.50%
+
+15.00%
+
+12.50%
+
+17.50%
+
+Pipette
+
+0.00%
+
+25.00%
+
+2.50%
+
+30.00%
+
+Qwen3.6-27B
+
+None
+
+40.00%
+
+97.50%
+
+70.00%
+
+97.50%
+
+SecOPD
+
+15.00%
+
+95.00%
+
+30.00%
+
+92.50%
+
+Pipette
+
+2.50%
+
+87.50%
+
+5.00%
+
+90.00%
+
+gpt-oss-20b
+ (native Instruction Hierarchy)
+
+None
+
+50.00%
+
+87.50%
+
+92.50%
+
+85.00%
+
+Pipette
+
+5.00%
+
+85.00%
+
+10.00%
+
+82.50%
+
+Because the base policies differ in their susceptibility to the same search, an ASR difference between two models need not reflect the effect of their defenses. We therefore compare each 
+Pipette
+ policy with the training-based baseline on its own model. On Llama-8B, 
+Meta-SecAlign
+ reaches 
+ ASR under 
+TAP
+ and 
+ under 
+Genetic
+, compared with 
+ and 
+ for 
+Pipette
+. On Qwen3.6-27B, 
+SecOPD
+ likewise resists 
+TAP
+ better than 
+Genetic
+ (
+ versus 
+ ASR), whereas the corresponding rates for 
+Pipette
+ are 
+ and 
+. The highest ASR for 
+Pipette
+ is on GPT-OSS-20B, at 
+ under 
+TAP
+ and 
+ under 
+Genetic
+. This is also the model most vulnerable to 
+Genetic
+ before hardening (
+ ASR). Thus, although the checkpoints differ in their initial vulnerability, 
+Pipette
+ lowers ASR under both searches relative to the baseline for each model, including GPT-OSS-20B with its native Instruction Hierarchy.
+
+Under iterative-adaptive attacks, UA is measured on the first successful candidate or, if none succeeds, on the highest-scoring one (Appendix 
+C
+). Because the agent can complete the user task and the injection task on the same trajectory, a higher UA does not by itself indicate safer task completion. On Qwen3.6-27B under 
+Genetic
+, for example, 
+SecOPD
+ achieves 
+ UA at 
+ ASR, whereas 
+Pipette
+ achieves 
+ UA at 
+ ASR (Table 
+V
+).
+
+TABLE VI: 
+ASR, UA, and BU of non-training-based defenses under static attacks on AgentDojo, with ASR and UA measured on 
+ task pairs per attack and BU on 
+ clean tasks. 
+Bold
+ and 
+underlined
+ mark the best and second-best results per column within each model, with ties marked alike.
+
+Attack 
+
+IgnorePrev
+
+InjecAgent
+
+ImportantMsgs
+
+ToolKnow
+
+ChatInject
+
+Average
+
+None
+
+Defense 
+
+ASR
+
+UA
+
+ASR
+
+UA
+
+ASR
+
+UA
+
+ASR
+
+UA
+
+ASR
+
+UA
+
+ASR
+
+UA
+
+BU
+
+Qwen3-4B-Instruct-2507
+
+None
+
+25.24%
+
+45.95%
+
+25.71%
+
+45.95%
+
+27.38%
+
+50.48%
+
+41.90%
+
+48.10%
+
+46.19%
+
+31.90%
+
+33.29%
+
+44.48%
+
+61.86%
+
+Spotlighting
+
+17.38%
+
+46.43%
+
+18.10%
+
+47.86%
+
+29.05%
+
+49.29%
+
+35.48%
+
+44.76%
+
+45.71%
+
+28.33%
+
+29.14%
+
+43.33%
+
+57.73%
+
+Sandwiching
+
+10.95%
+
+48.33%
+
+13.10%
+
+52.14%
+
+18.57%
+
+50.71%
+
+25.48%
+
+47.14%
+
+17.38%
+
+47.38%
+
+17.10%
+
+49.14%
+
+60.82%
+
+PromptGuard
+
+0.00%
+
+19.52%
+
+0.00%
+
+17.86%
+
+20.00%
+
+37.62%
+
+31.19%
+
+36.43%
+
+0.24%
+
+16.19%
+
+10.29%
+
+25.52%
+
+63.92%
+
+PIGuard
+
+4.52%
+
+40.71%
+
+5.71%
+
+35.48%
+
+0.71%
+
+29.76%
+
+4.29%
+
+31.90%
+
+1.43%
+
+30.95%
+
+3.33%
+
+33.76%
+
+63.92%
+
+DataSentinel
+
+16.19%
+
+40.24%
+
+13.81%
+
+36.67%
+
+23.10%
+
+39.29%
+
+33.57%
+
+39.29%
+
+30.24%
+
+25.00%
+
+23.38%
+
+36.10%
+
+57.73%
+
+MELON
+
+3.57%
+
+41.67%
+
+1.19%
+
+43.33%
+
+2.86%
+
+42.14%
+
+5.71%
+
+37.38%
+
+5.95%
+
+23.81%
+
+3.86%
+
+37.67%
+
+54.64%
+
+CaMeL
+
+0.95%
+
+39.52%
+
+0.95%
+
+40.48%
+
+2.86%
+
+34.76%
+
+2.86%
+
+36.67%
+
+0.95%
+
+33.81%
+
+1.71%
+
+37.05%
+
+57.73%
+
+Pipette
+
+0.24%
+
+57.14%
+
+0.00%
+
+57.86%
+
+0.24%
+
+58.33%
+
+0.48%
+
+57.86%
+
+1.43%
+
+58.10%
+
+0.48%
+
+57.86%
+
+64.95%
+
+Llama-3.1-8B-Instruct
+
+None
+
+7.62%
+
+37.14%
+
+7.14%
+
+37.14%
+
+9.29%
+
+37.86%
+
+12.86%
+
+36.43%
+
+30.48%
+
+16.67%
+
+13.48%
+
+33.05%
+
+40.21%
+
+Spotlighting
+
+7.14%
+
+30.71%
+
+4.05%
+
+32.62%
+
+11.43%
+
+32.62%
+
+13.10%
+
+34.05%
+
+19.29%
+
+14.29%
+
+11.00%
+
+28.86%
+
+34.02%
+
+Sandwiching
+
+3.10%
+
+35.71%
+
+4.29%
+
+38.10%
+
+10.00%
+
+33.57%
+
+8.81%
+
+34.05%
+
+6.67%
+
+31.43%
+
+6.57%
+
+34.57%
+
+36.08%
+
+PromptGuard
+
+0.00%
+
+10.71%
+
+0.00%
+
+13.57%
+
+6.90%
+
+23.10%
+
+15.71%
+
+29.76%
+
+0.24%
+
+13.57%
+
+4.57%
+
+18.14%
+
+31.96%
+
+PIGuard
+
+3.10%
+
+32.38%
+
+2.62%
+
+31.90%
+
+1.67%
+
+28.57%
+
+1.90%
+
+28.81%
+
+3.10%
+
+25.95%
+
+2.48%
+
+29.52%
+
+35.05%
+
+DataSentinel
+
+6.90%
+
+34.52%
+
+4.29%
+
+36.19%
+
+12.38%
+
+32.14%
+
+12.86%
+
+35.95%
+
+23.10%
+
+17.14%
+
+11.90%
+
+31.19%
+
+34.02%
+
+MELON
+
+4.05%
+
+31.43%
+
+1.90%
+
+33.33%
+
+6.43%
+
+31.43%
+
+5.24%
+
+29.05%
+
+5.00%
+
+16.67%
+
+4.52%
+
+28.38%
+
+32.99%
+
+CaMeL
+
+0.95%
+
+30.24%
+
+0.95%
+
+31.19%
+
+1.90%
+
+27.38%
+
+1.90%
+
+29.29%
+
+0.95%
+
+21.67%
+
+1.33%
+
+27.95%
+
+41.24%
+
+Pipette
+
+0.00%
+
+39.29%
+
+0.00%
+
+39.05%
+
+0.00%
+
+39.76%
+
+0.00%
+
+38.81%
+
+2.14%
+
+38.33%
+
+0.43%
+
+39.05%
+
+41.24%
+
+Fig. 6: 
+ASR and UA of non-training-based defenses under static attacks on ASB. The ASR axes of the two models use different scales.
+
+V-D
+ 
+Robustness Against Unseen Static Attacks
+
+We next compare 
+Pipette
+ with non-training-based defenses across five unseen static attacks on AgentDojo and five on ASB (Table 
+VI
+ and Figure 
+6
+). On both benchmarks, their limitations appear tied to how they operate:
+
+•
+
+Prompt boundary defenses
+ (
+Spotlighting
+, 
+Sandwiching
+) wrap observations in delimiters or repeat 
+ after 
+. Doing so lowers ASR on plain instruction overrides such as 
+IgnorePrev
+, yet is less effective when 
+ spoofs chat delimiters or tool schemas in 
+ChatInject
+ and 
+ToolKnow
+. For instance, under 
+ChatInject
+ on AgentDojo, 
+Spotlighting
+ has 
+ ASR on Qwen3-4B, close to the undefended base policy (
+).
+
+•
+
+External detectors and masked re-execution
+ rely on fixed classifier boundaries (
+PromptGuard
+, 
+PIGuard
+), canary prompts (
+DataSentinel
+), or masked re-execution (
+MELON
+). While 
+PIGuard
+ and 
+MELON
+ reduce average ASR to 
+ and 
+ on AgentDojo (Qwen3-4B), both have higher average ASR on ASB (Figure 
+6
+).
+
+•
+
+System-level isolation
+ (
+CaMeL
+) separates control flow from untrusted data by having a privileged policy write a Python-like execution plan from 
+ alone while a quarantined policy without tool access parses 
+ 
+[
+60
+]
+. This prevents 
+ from invoking unauthorized tools when the plan is fixed upfront, while restricting dynamic tool use (§
+V-E
+).
+
+Despite training only on AgentDyn, 
+Pipette
+ has the lowest average ASR among the defenses compared under static attacks on both AgentDojo (
+ on Qwen3-4B and 
+ on Llama-8B) and ASB (
+ and 
+, respectively). Only on AgentDojo’s 
+ChatInject
+ does 
+Pipette
+ fall outside the two lowest ASRs. 
+PromptGuard
+ (
+ on both models) and 
+CaMeL
+ (
+) have lower ASR than 
+Pipette
+ (
+ on Qwen3-4B and 
+ on Llama-8B). These lower rates come at a cost: under the same attack on Qwen3-4B, UA is 
+ for 
+PromptGuard
+ and 
+ for 
+CaMeL
+, compared with 
+ for 
+Pipette
+ (§
+V-E
+).
+
+V-E
+ 
+Benign Utility and Utility Under Attack
+
+Beyond robustness, we examine how well each defense preserves utility (R2 and R3). As shown in Table 
+VI
+ and Figure 
+6
+, non-training-based defenses tend to lose UA or BU, likely because they do not separate 
+ from the benign data inside 
+. External detectors (
+PromptGuard
+, 
+PIGuard
+, 
+DataSentinel
+) discard the entire flagged observation 
+, removing the data needed for 
+ and lowering UA. Masked re-execution (
+MELON
+) and system-level isolation (
+CaMeL
+) can also block legitimate tool calls whose arguments or control flow depend on 
+, which reduces UA and, in all but one case, BU. 
+Pipette
+, by comparison, inspects 
+ in 
+ to ignore 
+ while still extracting the benign data needed for 
+.
+
+Pipette
+ achieves the highest BU and average static UA on AgentDojo for both models, and preserves BU on Qwen3.6-27B (
+ versus 
+ undefended; 
+ for 
+SecOPD
+) and GPT-OSS-20B (
+ versus 
+; Table 
+IX
+). On ASB, its average UA ranks first on Llama-8B and second on Qwen3-4B, behind 
+Sandwiching
+, which has higher average ASR; in all four cases, its static UA exceeds the undefended policy’s. Under iterative-adaptive attacks (Table 
+V
+), its UA stays close to the base policy on GPT-OSS-20B and exceeds it on Llama-8B under 
+TAP
+, while dropping on Qwen3.6-27B from 
+ to 
+ (
+TAP
+) and 
+ (
+Genetic
+), where 
+SecOPD
+ retains higher UA at higher ASR (§
+V-C
+).
+
+TABLE VII: 
+Ablation of 
+Pipette
+-Blue components for Qwen3-4B on AgentDojo, with ASR and UA measured under 
+ChatInject
+.
+
+Configuration
+
+ASR
+
+UA
+
+BU
+
+Base (None)
+
+46.19%
+
+31.90%
+
+61.86%
+
+Pipette
+-Blue
+:
+
+w/o reasoning, w/o 
+
+3.57%
+
+45.48%
+
+59.79%
+
+w/ reasoning, w/o 
+
+2.38%
+
+56.90%
+
+60.82%
+
+w/ reasoning, w/ 
+ (
+Pipette
+)
+
+1.43%
+
+58.10%
+
+64.95%
+
+V-F
+ 
+Component Ablation
+
+We now ablate the components of 
+Pipette
+-Blue on Qwen3-4B. Table 
+VII
+ compares three configurations trained for 
+ RL steps on the same 
+Pipette
+-Red dataset. We measure ASR and UA under unseen 
+ChatInject
+ attacks and BU on clean AgentDojo tasks. Training 
+ with the trajectory-level defense reward 
+ alone, without the reasoning warm-up, lowers 
+ChatInject
+ ASR from 
+ to 
+ and raises UA to 
+, but reduces BU from 
+ to 
+. Adding the C1 and C2 warm-up and reasoning reward lowers ASR to 
+ and raises UA to 
+, which suggests that this inspection helps 
+ separate injected instructions from benign data inside 
+. Under trajectory-level supervision alone, however, BU (
+) still trails the base policy. Adding the contrastive token-level reward 
+ closes this gap, reducing ASR to 
+ while raising UA to 
+ and BU to 
+.
+
+VI 
+Discussion and Limitations
+
+Inference latency.
+
+All dictionary rebuilds in 
+Pipette
+-Red and token-level reward queries in 
+Pipette
+-Blue (Eq. 
+13
+) run offline during purple-teaming and add no runtime cost at deployment. At inference time, 
+Pipette
+ uses no external detector models or duplicate agent executions; its only overhead comes from generating C1 and C2 reasoning 
+ before tool calls 
+. As shown in Appendix 
+A
+, 
+Pipette
+ changes the total rollout time of Qwen3-4B by 
+ to 
+ s and its token usage by 
+ to 
+ across the four suites relative to the undefended base policy, while running 
+ to 
+ faster than masked re-execution in 
+MELON
+ and 
+ to 
+ faster than 
+DataSentinel
+.
+
+Continuous purple-teaming.
+
+Pipette
+ currently performs a single pass of 
+Pipette
+-Red against 
+ followed by 
+Pipette
+-Blue, rather than alternating between red-teaming and adversarial training across multiple rounds 
+[
+20
+]
+. During 
+Pipette
+-Red, rebuilding the rolling dictionary 
+ every 
+ steps keeps 
+ exploring without retraining 
+, since repeating an attack strategy that has entered 
+ yields high 
+ and near-zero 
+. Moreover, once 
+ completes 
+Pipette
+-Blue, even 
+-attempt online search achieves low ASR (Table 
+V
+), which may leave a red-teaming policy initialized from 
+ with too few successful rollouts to bootstrap a second round. Nevertheless, a single pass cannot reveal vulnerabilities that emerge only in the hardened 
+, so we leave multi-round purple-teaming to future work.
+
+Scope of the evaluation.
+
+Our iterative-adaptive evaluation is bounded by its attack budget (two search-based attacks, around 
+ attempts per task pair, a 4B attacker LLM, and 
+ task pairs), so a larger budget may achieve higher ASR. Moreover, the LLM grader behind 
+ has not been validated against human labels, and we do not establish low strategy coverage as the sole cause of the gap between train-time ASR and robustness.
+
+VII 
+Conclusion
+
+We find that pairing high-ASR RL-based red-teaming with standard adversarial training does not necessarily make LLM agents robust to unseen attacks. The red-teamers we study exhibit strategy-level mode collapse, and adversarial training with off-policy SFT or trajectory-level outcome rewards can reduce benign utility. To address both problems, we present 
+Pipette
+, a two-stage prompt injection purple-teaming framework. 
+Pipette
+-Red guides RL-based red-teaming with a rolling strategy dictionary to keep uncovering new attack strategies, and 
+Pipette
+-Blue then combines task-alignment reasoning with a contrastive token-level reward to help the agent ignore injections while completing user tasks. Across four open-weight models trained on AgentDyn, 
+Pipette
+ achieves lower average ASR on the unseen AgentDojo and ASB benchmarks than the training-based and non-training-based baselines while preserving benign utility.
+
+References
+
+[1]
+
+S. Yao, J. Zhao, D. Yu, N. Du, I. Shafran, K. Narasimhan, and Y. Cao, “ReAct: Synergizing reasoning and acting in language models,” in 
+International Conference on Learning Representations (ICLR)
+, 2023.
+
+[2]
+
+E. Debenedetti, J. Zhang, M. Balunović, L. Beurer-Kellner, M. Fischer, and F. Tramèr, “AgentDojo: A dynamic environment to evaluate prompt injection attacks and defenses for LLM agents,” in 
+Advances in Neural Information Processing Systems (NeurIPS)
+, 2024.
+
+[3]
+
+S. Chen, J. Piet, C. Sitawarin, and D. Wagner, “StruQ: Defending against prompt injection with structured queries,” in 
+USENIX Security Symposium (USENIX Security)
+, 2025.
+
+[4]
+
+Y. Liu, Y. Jia, R. Geng, J. Jia, and N. Z. Gong, “Formalizing and benchmarking prompt injection attacks and defenses,” in 
+USENIX Security Symposium (USENIX Security)
+, 2024.
+
+[5]
+
+J. Shi, Z. Yuan, G. Tie, P. Zhou, N. Z. Gong, and L. Sun, “Prompt injection attack to tool selection in LLM agents,” in 
+Network and Distributed System Security Symposium (NDSS)
+, 2026.
+
+[6]
+
+K. Greshake, S. Abdelnabi, S. Mishra, C. Endres, T. Holz, and M. Fritz, “Not what you’ve signed up for: Compromising real-world LLM-integrated applications with indirect prompt injection,” in 
+ACM Workshop on Artificial Intelligence and Security (AISec)
+, 2023.
+
+[7]
+
+C. Shi, S. Lin, S. Song, J. Hayes, I. Shumailov, I. Yona, J. Pluto, A. Pappu, C. A. Choquette-Choo, M. Nasr, C. Sitawarin, G. Gibson, A. Terzis, and J. Flynn, “Lessons from defending Gemini against indirect prompt injections,” 
+arXiv preprint arXiv:2505.14534
+, 2025.
+
+[8]
+
+OpenAI, “Continuously hardening ChatGPT Atlas against prompt injection attacks,” 
+https://openai.com/index/hardening-atlas-against-prompt-injection/
+, 2025.
+
+[9]
+
+M. Pavlova, E. Brinkman, K. Iyer, V. Albiero, J. Bitton, H. Nguyen, C. Canton Ferrer, I. Evtimov, and A. Grattafiori, “Automated red teaming with GOAT: The generative offensive agent tester,” in 
+International Conference on Machine Learning (ICML)
+, 2025.
+
+[10]
+
+M. Nasr, N. Carlini, C. Sitawarin, S. V. Schulhoff, J. Hayes, M. Ilie, J. Pluto, S. Song, H. Chaudhari, I. Shumailov, A. Guha Thakurta, K. Y. Xiao, A. Terzis, and F. Tramèr, “The attacker moves second: Stronger adaptive attacks bypass defenses against LLM jailbreaks and prompt injections,” in 
+USENIX Security Symposium (USENIX Security)
+, 2026.
+
+[11]
+
+Y. Wen, A. Zharmagambetov, I. Evtimov, N. Kokhlikyan, T. Goldstein, K. Chaudhuri, and C. Guo, “RL is a hammer and LLMs are nails: A simple reinforcement learning recipe for strong prompt injection,” 
+arXiv preprint arXiv:2510.04885
+, 2025.
+
+[12]
+
+C. Yin, R. Geng, Y. Wang, and J. Jia, “PISmith: Reinforcement learning-based red teaming for prompt injection defenses,” in 
+Conference on Language Modeling (COLM)
+, 2026.
+
+[13]
+
+J. Shi, Z. Yuan, Y. Liu, Y. Huang, P. Zhou, L. Sun, and N. Z. Gong, “Optimization-based prompt injection attack to LLM-as-a-Judge,” in 
+ACM SIGSAC Conference on Computer and Communications Security (CCS)
+, 2024.
+
+[14]
+
+R. Wang, Y. Jia, and N. Z. Gong, “ObliInjection: Order-oblivious prompt injection attack to LLM agents with multi-source data,” in 
+Network and Distributed System Security Symposium (NDSS)
+, 2026.
+
+[15]
+
+S. Chen, A. Zharmagambetov, D. Wagner, and C. Guo, “Meta-SecAlign: Training LLMs against prompt injection for robust agents,” 
+arXiv preprint arXiv:2507.02735
+, 2025.
+
+[16]
+
+S. Lee, M. Kim, L. Cherif, D. Dobre, J. Lee, S. J. Hwang, K. Kawaguchi, G. Gidel, Y. Bengio, E. S. Whitammer, and M. Jain, “Learning diverse attacks on large language models for robust red-teaming and safety tuning,” in 
+International Conference on Learning Representations (ICLR)
+, 2025.
+
+[17]
+
+M. Dabas, T. Huynh, N. R. Billa, J. T. Wang, P. Gao, C. Peris, Y. Ma, R. Gupta, M. Jin, P. Mittal, and R. Jia, “Adversarial Déjà Vu: Jailbreak dictionary learning for stronger generalization to unseen attacks,” in 
+International Conference on Learning Representations (ICLR)
+, 2026.
+
+[18]
+
+Z.-W. Hong, I. Shenfeld, T.-H. Wang, Y.-S. Chuang, A. Pareja, J. Glass, A. Srivastava, and P. Agrawal, “Curiosity-driven red-teaming for large language models,” in 
+International Conference on Learning Representations (ICLR)
+, 2024.
+
+[19]
+
+A. Zou, Z. Wang, N. Carlini, M. Nasr, J. Z. Kolter, and M. Fredrikson, “Universal and transferable adversarial attacks on aligned language models,” 
+arXiv preprint arXiv:2307.15043
+, 2023.
+
+[20]
+
+Z. Wang, D. Li, V. Keshava, P. Wallis, A. Balashankar, P. Stone, and L. Rutishauser, “Adversarial reinforcement learning for large language model agent safety,” 
+arXiv preprint arXiv:2510.05442
+, 2025.
+
+[21]
+
+Y. Peng, L. Lian, D. Wagner, and S. Chen, “SecOPD: Mitigating adaptive prompt injections by on-policy distillation,” in 
+Conference on Empirical Methods in Natural Language Processing (EMNLP)
+, 2026.
+
+[22]
+
+S. Zhao, Z. Xie, M. Liu, J. Huang, G. Pang, F. Chen, and A. Grover, “Self-distilled reasoner: On-policy self-distillation for large language models,” in 
+International Conference on Machine Learning (ICML)
+, 2026.
+
+[23]
+
+K. Zhu, X. Yang, J. Wang, W. Guo, and W. Y. Wang, “MELON: Provable defense against indirect prompt injection attacks in AI agents,” in 
+International Conference on Machine Learning (ICML)
+, 2025.
+
+[24]
+
+A. Madry, A. Makelov, L. Schmidt, D. Tsipras, and A. Vladu, “Towards deep learning models resistant to adversarial attacks,” in 
+International Conference on Learning Representations (ICLR)
+, 2018.
+
+[25]
+
+S. Chen, A. Zharmagambetov, S. Mahloujifar, K. Chaudhuri, D. Wagner, and C. Guo, “SecAlign: Defending against prompt injection with preference optimization,” in 
+ACM SIGSAC Conference on Computer and Communications Security (CCS)
+, 2025.
+
+[26]
+
+A. Grattafiori, A. Dubey, A. Jauhri, A. Pandey, A. Kadian, A. Al-Dahle, A. Letman, A. Mathur, A. Schelten, A. Vaughan 
+et al.
+, “The Llama 3 herd of models,” 
+arXiv preprint arXiv:2407.21783
+, 2024.
+
+[27]
+
+The Microsoft AI Team, “MAI-Thinking-1: Building a hill-climbing machine,” Microsoft AI, Tech. Rep., 2026.
+
+[28]
+
+M. Mazeika, L. Phan, X. Yin, A. Zou, Z. Wang, N. Mu, E. Sakhaee, N. Li, S. Basart, B. Li, D. Forsyth, and D. Hendrycks, “HarmBench: A standardized evaluation framework for automated red teaming and robust refusal,” in 
+International Conference on Machine Learning (ICML)
+, 2024.
+
+[29]
+
+M. Samvelyan, S. C. Raparthy, A. Lupu, E. Hambro, A. H. Markosyan, M. Bhatt, Y. Mao, M. Jiang, J. Parker-Holder, J. Foerster, T. Rocktäschel, and R. Raileanu, “Rainbow teaming: Open-ended generation of diverse adversarial prompts,” in 
+Advances in Neural Information Processing Systems (NeurIPS)
+, 2024.
+
+[30]
+
+Z. Shao, P. Wang, Q. Zhu, R. Xu, J. Song, X. Bi, H. Zhang, M. Zhang, Y. K. Li, Y. Wu, and D. Guo, “DeepSeekMath: Pushing the limits of mathematical reasoning in open language models,” 
+arXiv preprint arXiv:2402.03300
+, 2024.
+
+[31]
+
+N. Carlini, A. Athalye, N. Papernot, W. Brendel, J. Rauber, D. Tsipras, I. Goodfellow, A. Madry, and A. Kurakin, “On evaluating adversarial robustness,” 
+arXiv preprint arXiv:1902.06705
+, 2019.
+
+[32]
+
+F. Tramèr, N. Carlini, W. Brendel, and A. Madry, “On adaptive attacks to adversarial example defenses,” in 
+Advances in Neural Information Processing Systems (NeurIPS)
+, 2020.
+
+[33]
+
+H. Chang, Y. Jun, and H. Lee, “ChatInject: Abusing chat templates for prompt injection in LLM agents,” in 
+International Conference on Learning Representations (ICLR)
+, 2026.
+
+[34]
+
+A. Mehrotra, M. Zampetakis, P. Kassianik, B. Nelson, H. Anderson, Y. Singer, and A. Karbasi, “Tree of attacks: Jailbreaking black-box LLMs automatically,” in 
+Advances in Neural Information Processing Systems (NeurIPS)
+, 2024.
+
+[35]
+
+X. Chen, J. Zhang, and F. Tramèr, “Learning to inject: Automated prompt injection via reinforcement learning,” in 
+Advances in Neural Information Processing Systems (NeurIPS)
+, 2026.
+
+[36]
+
+R. Geng, C. Yin, Y. Wang, Y. Chen, and J. Jia, “PIArena: A platform for prompt injection evaluation,” in 
+Annual Meeting of the Association for Computational Linguistics (ACL)
+, 2026.
+
+[37]
+
+Meta, “Announcing Purple Llama: Towards open trust and safety in the new world of generative AI,” 
+https://ai.meta.com/blog/purple-llama-open-trust-safety-generative-ai/
+, 2023.
+
+[38]
+
+J. Zhou, K. Li, J. Li, J. Kang, M. Hu, X. Wu, and H. Meng, “Purple-teaming LLMs with adversarial defender training,” 
+arXiv preprint arXiv:2407.01850
+, 2024.
+
+[39]
+
+H. Li, R. Wen, S. Shi, N. Zhang, Y. Vorobeychik, and C. Xiao, “AgentDyn: Are your agent security defenses deployable in real-world dynamic environments?” 
+arXiv preprint arXiv:2602.03117
+, 2026.
+
+[40]
+
+A. Yang, A. Li, B. Yang, B. Zhang, B. Hui, B. Zheng, B. Yu, C. Gao, C. Huang, C. Lv 
+et al.
+, “Qwen3 technical report,” 
+arXiv preprint arXiv:2505.09388
+, 2025.
+
+[41]
+
+Qwen Team, “Qwen3-4B-Instruct-2507,” 
+https://huggingface.co/Qwen/Qwen3-4B-Instruct-2507
+, 2025.
+
+[42]
+
+H. Zhang, Y. Yu, J. Jiao, E. P. Xing, L. El Ghaoui, and M. I. Jordan, “Theoretically principled trade-off between robustness and accuracy,” in 
+International Conference on Machine Learning (ICML)
+, 2019.
+
+[43]
+
+A. Zou, L. Phan, J. Wang, D. Duenas, M. Lin, M. Andriushchenko, R. Wang, Z. Kolter, M. Fredrikson, and D. Hendrycks, “Improving alignment and robustness with circuit breakers,” in 
+Advances in Neural Information Processing Systems (NeurIPS)
+, 2024.
+
+[44]
+
+H. Li, X. Liu, N. Zhang, and C. Xiao, “PIGuard: Prompt injection guardrail via mitigating overdefense for free,” in 
+Annual Meeting of the Association for Computational Linguistics (ACL)
+, 2025.
+
+[45]
+
+M. Aharon, M. Elad, and A. Bruckstein, “K-SVD: An algorithm for designing overcomplete dictionaries for sparse representation,” 
+IEEE Transactions on Signal Processing
+, vol. 54, no. 11, pp. 4311–4322, 2006.
+
+[46]
+
+J. Mairal, F. Bach, J. Ponce, and G. Sapiro, “Online dictionary learning for sparse coding,” in 
+International Conference on Machine Learning (ICML)
+, 2009.
+
+[47]
+
+S. S. Chen, D. L. Donoho, and M. A. Saunders, “Atomic decomposition by basis pursuit,” 
+SIAM Journal on Scientific Computing
+, vol. 20, no. 1, pp. 33–61, 1998.
+
+[48]
+
+S.-Y. Liu, X. Dong, X. Lu, S. Diao, P. Belcak, M. Liu, M.-H. Chen, H. Yin, Y.-C. F. Wang, K.-T. Cheng, Y. Choi, J. Kautz, and P. Molchanov, “GDPO: Group reward-decoupled normalization policy optimization for multi-reward RL optimization,” in 
+International Conference on Machine Learning (ICML)
+, 2026.
+
+[49]
+
+M. Y. Guan, M. Joglekar, E. Wallace, S. Jain, B. Barak, A. Helyar, R. Dias, A. Vallone, H. Ren, J. Wei 
+et al.
+, “Deliberative alignment: Reasoning enables safer language models,” 
+arXiv preprint arXiv:2412.16339
+, 2024.
+
+[50]
+
+F. Jia, T. Wu, X. Qin, and A. Squicciarini, “The Task Shield: Enforcing task alignment to defend against indirect prompt injection in LLM agents,” in 
+Annual Meeting of the Association for Computational Linguistics (ACL)
+, 2025.
+
+[51]
+
+E. Penaloza, D. Vattikonda, N. Gontier, A. Lacoste, L. Charlin, and M. Caccia, “Privileged information distillation for language models,” in 
+International Conference on Machine Learning (ICML)
+, 2026.
+
+[52]
+
+OpenAI, “gpt-oss-120b & gpt-oss-20b model card,” 
+arXiv preprint arXiv:2508.10925
+, 2025.
+
+[53]
+
+Qwen Team, “Qwen3.6-27B: Flagship-level coding in a 27B dense model,” 
+https://qwen.ai/blog?id=qwen3.6-27b
+, 2026.
+
+[54]
+
+H. Zhang, J. Huang, K. Mei, Y. Yao, Z. Wang, C. Zhan, H. Wang, and Y. Zhang, “Agent Security Bench (ASB): Formalizing and benchmarking attacks and defenses in LLM-based agents,” in 
+International Conference on Learning Representations (ICLR)
+, 2025.
+
+[55]
+
+E. Wallace, K. Xiao, R. Leike, L. Weng, J. Heidecke, and A. Beutel, “The instruction hierarchy: Training LLMs to prioritize privileged instructions,” 
+arXiv preprint arXiv:2404.13208
+, 2024.
+
+[56]
+
+K. Hines, G. Lopez, M. Hall, F. Zarfati, Y. Zunger, and E. Kiciman, “Defending against indirect prompt injection attacks with spotlighting,” in 
+Conference on Applied Machine Learning in Information Security (CAMLIS)
+, 2024.
+
+[57]
+
+S. Schulhoff, “The sandwich defense: Strengthening AI prompt security,” 
+https://learnprompting.org/docs/prompt_hacking/defensive_measures/sandwich_defense
+, 2024.
+
+[58]
+
+S. Chennabasappa, C. Nikolaidis, D. Song, D. Molnar, S. Ding, S. Wan, S. Whitman, L. Deason, N. Doucette, A. Montilla 
+et al.
+, “LlamaFirewall: An open source guardrail system for building secure AI agents,” 
+arXiv preprint arXiv:2505.03574
+, 2025.
+
+[59]
+
+Y. Liu, Y. Jia, J. Jia, D. Song, and N. Z. Gong, “DataSentinel: A game-theoretic detection of prompt injection attacks,” in 
+IEEE Symposium on Security and Privacy (S&P)
+, 2025.
+
+[60]
+
+E. Debenedetti, I. Shumailov, T. Fan, J. Hayes, N. Carlini, D. Fabian, C. Kern, C. Shi, A. Terzis, and F. Tramèr, “Defeating prompt injections by design,” in 
+IEEE Conference on Secure and Trustworthy Machine Learning (SaTML)
+, 2026.
+
+[61]
+
+F. Perez and I. Ribeiro, “Ignore previous prompt: Attack techniques for language models,” in 
+NeurIPS ML Safety Workshop
+, 2022.
+
+[62]
+
+Q. Zhan, Z. Liang, Z. Ying, and D. Kang, “InjecAgent: Benchmarking indirect prompt injections in tool-integrated large language model agents,” in 
+Findings of the Association for Computational Linguistics (ACL)
+, 2024.
+
+Appendix A 
+Overhead of 
+Pipette
+
+Table 
+VIII
+ reports token usage per task (TK) and wall-clock time per rollout in seconds (TT) for Qwen3-4B on clean AgentDojo tasks. Relative to the base policy, 
+Pipette
+ adds the most tokens per task in Travel and Workspace, the two suites with the highest baseline token counts. We omit 
+CaMeL
+ from this comparison because its privileged policy can re-plan after interpreter errors and its quarantined policy can be called a variable number of times 
+[
+60
+]
+, making per-rollout token counts harder to compare.
+
+TABLE VIII: 
+Per-suite token usage per task (TK) and wall-clock time per rollout in seconds (TT) for Qwen3-4B on clean AgentDojo tasks. 
+Bold
+ marks the lowest value per column.
+
+Task Suite 
+
+Slack
+
+Banking
+
+Workspace
+
+Travel
+
+Defense 
+
+TK
+
+TT
+
+TK
+
+TT
+
+TK
+
+TT
+
+TK
+
+TT
+
+None
+
+12955
+
+3.50
+
+14042
+
+4.00
+
+18378
+
+4.40
+
+41728
+
+7.70
+
+Spotlighting
+
+13476
+
+5.00
+
+13199
+
+4.50
+
+17874
+
+4.70
+
+37503
+
+8.50
+
+Sandwiching
+
+11934
+
+3.90
+
+11523
+
+4.40
+
+18400
+
+5.20
+
+44337
+
+9.10
+
+PromptGuard
+
+11887
+
+4.20
+
+12399
+
+4.80
+
+18082
+
+5.10
+
+41370
+
+8.80
+
+PIGuard
+
+11708
+
+4.80
+
+12367
+
+5.00
+
+22010
+
+5.60
+
+42144
+
+9.20
+
+DataSentinel
+
+11584
+
+15.5
+
+13972
+
+21.5
+
+18078
+
+43.8
+
+42500
+
+22.3
+
+MELON
+
+18587
+
+12.2
+
+20085
+
+10.1
+
+25809
+
+8.90
+
+66040
+
+21.2
+
+Pipette
+
+14576
+
+3.90
+
+10154
+
+3.53
+
+21348
+
+4.63
+
+45046
+
+8.32
+
+Appendix B 
+Static Attacks against Training-based Defenses
+
+Tables 
+IX
