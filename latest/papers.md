@@ -1,7 +1,7 @@
-# Paper candidates — 2026-11-18 (IST)
+# Paper candidates — 2026-11-19 (IST)
 
-Generated 2026-11-18 09:01 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
-Totals: 27 new topic matches · 12 other new cs.IR · 69 seen in earlier runs.
+Generated 2026-11-19 01:11 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Totals: 27 new topic matches · 12 other new cs.IR · 52 seen in earlier runs.
 Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
 
 ## New papers matching your topics (27), highest score first
@@ -86,7 +86,7 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 ### Thinking Harder Doesn't Lead to Better Choices: Reasoning Effort Increases the Confidence but Not the Correctness of LLM Shopping Agents
 - arXiv 2611.22033v1 · v1 2026-11-17 00:55 UTC · cs.AI, cs.CL, cs.CY, cs.HC, econ.GN
 - Authors: Adi Krishnamoorthy, X. Y. Han
-- Topics: Brand/product recommendation · score 8 · found via cs.AI, cs.CL, cs.HC
+- Topics: Brand/product recommendation · score 8 · found via cs.AI, cs.CL, cs.CY, cs.HC
 - Link: https://arxiv.org/abs/2611.22033
 - Full text: not stored: license is by-nc-sa, which does not allow redistribution; read it on arXiv
 
@@ -283,18 +283,13 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - When the tail is earned by its companions: measuring label dependence in long-tailed multi-label classification — https://arxiv.org/abs/2611.22859
 - CARE: Conversational Affective Response Retrieval for Internet Memes — https://arxiv.org/abs/2611.23005
 
-## Already listed on an earlier day, still inside the look-back window (69)
+## Already listed on an earlier day, still inside the look-back window (52)
 - Security of Deep Research Agents: Attack Surface, Defenses, Benchmarks, and Agenda Seeding against Research Planning — https://arxiv.org/abs/2611.20045 (score 23)
 - User First Intelligence: Three Measurements of Search and AI-Answer Analytics (SEO and GEO/AEO), and a Knowledge-Graph Framework for Query Discovery Beyond Search Volume — https://arxiv.org/abs/2611.19655 (score 18)
 - Data Attribution Should Steer Pretraining — https://arxiv.org/abs/2611.19698 (score 13)
-- Beyond Bot Labels: Retrospective Consequence-Grounded Ranking of Attributed Cache Harm in E-Commerce Logs — https://arxiv.org/abs/2611.18027 (score 12)
 - Explainable Federated Learning via Global-Local Attribution Alignment — https://arxiv.org/abs/2611.20445 (score 11)
-- Can You Trust Your Finance Agent? Drift, Diagnosis and Auditable Intervention on One Shipped Financial Research Agent — https://arxiv.org/abs/2611.17939 (score 10)
 - DetouR: Plugging Association Routes into Search Agents for Multi-hop Question Answering — https://arxiv.org/abs/2611.19967 (score 10)
 - EchoSpec: Training Search Agents to Weigh Evidence Above Echoes — https://arxiv.org/abs/2611.20034 (score 10)
-- Towards Explainable Sleep Stage Classification using Single-Channel Electroencephalogram — https://arxiv.org/abs/2611.18434 (score 9)
-- WebArena-Pro: A Heterogeneous, Multimodal, Reproducible Benchmark for Web Agents — https://arxiv.org/abs/2611.17955 (score 8)
-- From Bytes to Behavior: Request-Level Attribution from Live GPU Hidden States — https://arxiv.org/abs/2611.18272 (score 8)
 - On Representational and Functional Alignment of Training Data Attribution Methods for Language Models — https://arxiv.org/abs/2611.19286 (score 8)
 - MathaMAGICal: Validating Trajectory Data Attribution During Capability Acquisition — https://arxiv.org/abs/2611.19692 (score 8)
 - IntentFlow: An Intent-Driven Real-Time Multimodal Search System with Image-Text Queries at Xiaohongshu — https://arxiv.org/abs/2611.20448 (score 8)
@@ -302,16 +297,10 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - UIAnchor: Anchoring UI Perception and Action Execution for Reliable Service-Composed Mobile Task Automation with GUI Agents — https://arxiv.org/abs/2611.20753 (score 8)
 - EDITORS Know Your Style! Editing LoRA Subspaces for Stylistic Attribution and Imitation — https://arxiv.org/abs/2611.20846 (score 8)
 - MemDoctor: Stage-wise Error Attribution and Repair for MLLM Agent Memory — https://arxiv.org/abs/2611.21019 (score 8)
+- Portrait Fitness as a Pretext: Probing Implicit Demographic Bias in VLMs — https://arxiv.org/abs/2611.21403 (score 8)
 - Optimistic Verifiers Get Hacked: Reward Hacking Under an Exact Process Oracle — https://arxiv.org/abs/2611.21538 (score 8)
 - ScenarioForge: Resource-Grounded Generation and Execution Validation of Cyber Exercises — https://arxiv.org/abs/2611.21579 (score 8)
 - Beyond Job Titles: Interpreting Early-Career Job Advertisements with Sparse Autoencoders and Semantic Clustering — https://arxiv.org/abs/2611.21586 (score 8)
-- Interactive deep-learning based interface for brain tumour segmentation — https://arxiv.org/abs/2611.17983 (score 7)
-- Contagious Fingerprints: When LLMs Inherit Another Model's Identity — https://arxiv.org/abs/2611.18104 (score 7)
-- Label-Free Detection of Structural Bias in LLM-Based Recommender Systems via Randomized Paraphrasing: The Case of Verbosity — https://arxiv.org/abs/2611.18878 (score 7)
-- SPILLWAY: Separating Target Admission from Sanitization to Defend Tool-Using Agents against Prompt Injection — https://arxiv.org/abs/2611.07222 (score 6)
-- An In-Silico Audit of Topographic Organization in a Multimodal Brain-Response Model — https://arxiv.org/abs/2611.18105 (score 6)
-- Toward On-Device Markerless 6DoF Tracking of a Physical Manipulative on a Mixed-Reality Headset: A Preliminary Study — https://arxiv.org/abs/2611.18438 (score 6)
-- Can Mechanistic Interpretability Help Explain LLM Agent Failures? A Case Study on Web Element Hallucination — https://arxiv.org/abs/2611.18514 (score 6)
 - NI-ACT: A Neural Intent Interface for Brain-Embodied Manipulation — https://arxiv.org/abs/2611.19332 (score 6)
 - VoiceGuard: An Audio-Native LLM-VLA Pipeline for Wheelchair-Mounted Assistive Manipulation — https://arxiv.org/abs/2611.19984 (score 6)
 - Can AI Judge You? An Empirical Audit of Deployment Readiness in LLM-assisted Hiring Systems — https://arxiv.org/abs/2611.20140 (score 6)
@@ -320,7 +309,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Language-model agents' beliefs can be manipulated via truthful evidence in open channel — https://arxiv.org/abs/2611.21235 (score 6)
 - Lazy-MOSAIC: Accelerating Skill-Centric Manipulation Planning with Learned Skill-Effect World Models — https://arxiv.org/abs/2611.21517 (score 6)
 - Attribute or Abstain: Evaluating Evidence-Grounded Retrieval on the Low-Resource African Business Web — https://arxiv.org/abs/2611.19900 (score 5)
-- StreamEmbed: Real-Time Indexing from Pixels for Screenshot Retrieval — https://arxiv.org/abs/2611.18516 (score 4)
 - TokenFormer V2: Breaking the Resolution-Complexity Dilemma in Unified Recommendation — https://arxiv.org/abs/2611.19074 (score 4)
 - CLEAR: Legible and Steerable Recommendation via Grounded Natural-Language Interests — https://arxiv.org/abs/2611.19110 (score 4)
 - Reflection Is Not Always Worth It: Budgeted Reflection Allocation for Recommendation Agents — https://arxiv.org/abs/2611.19847 (score 4)
