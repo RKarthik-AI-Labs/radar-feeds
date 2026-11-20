@@ -1,7 +1,7 @@
-# Paper candidates — 2026-11-19 (IST)
+# Paper candidates — 2026-11-20 (IST)
 
-Generated 2026-11-19 09:24 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
-Totals: 14 new topic matches · 9 other new cs.IR · 86 seen in earlier runs.
+Generated 2026-11-20 01:11 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Totals: 14 new topic matches · 9 other new cs.IR · 79 seen in earlier runs.
 Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
 
 ## New papers matching your topics (14), highest score first
@@ -154,12 +154,10 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Variance-Optimal Counterfactual Policy Design for Sample-Efficient Online A/B Testing — https://arxiv.org/abs/2611.24757
 - Can Programs Replace LLM Judges? Executable Program Judges for Scalable and Efficient Relevance Labeling — https://arxiv.org/abs/2611.24849
 
-## Already listed on an earlier day, still inside the look-back window (86)
+## Already listed on an earlier day, still inside the look-back window (79)
 - Security of Deep Research Agents: Attack Surface, Defenses, Benchmarks, and Agenda Seeding against Research Planning — https://arxiv.org/abs/2611.20045 (score 23)
-- User First Intelligence: Three Measurements of Search and AI-Answer Analytics (SEO and GEO/AEO), and a Knowledge-Graph Framework for Query Discovery Beyond Search Volume — https://arxiv.org/abs/2611.19655 (score 18)
 - GapLeak: When Privacy-Preserving LLM-based Web Agents Become a Privacy Risk — https://arxiv.org/abs/2611.22223 (score 15)
 - How Web Research Agents Interpret User Priorities — https://arxiv.org/abs/2611.22989 (score 14)
-- Data Attribution Should Steer Pretraining — https://arxiv.org/abs/2611.19698 (score 13)
 - The Fragility of Reasoning-Importance Attribution for Pruning Language Models — https://arxiv.org/abs/2611.22234 (score 13)
 - Explainable Federated Learning via Global-Local Attribution Alignment — https://arxiv.org/abs/2611.20445 (score 11)
 - DetouR: Plugging Association Routes into Search Agents for Multi-hop Question Answering — https://arxiv.org/abs/2611.19967 (score 10)
@@ -167,8 +165,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - TUSI: A Citation-Grounded Graph-Based Benchmark — https://arxiv.org/abs/2611.21823 (score 9)
 - IntentGR: Enhancing Intent for End-to-End Personalized Generative Retrieval in Search — https://arxiv.org/abs/2611.22788 (score 9)
 - Can Decision Models Replace LLMs in Real-World Contact Center Classification and Judging Tasks? — https://arxiv.org/abs/2611.22949 (score 9)
-- On Representational and Functional Alignment of Training Data Attribution Methods for Language Models — https://arxiv.org/abs/2611.19286 (score 8)
-- MathaMAGICal: Validating Trajectory Data Attribution During Capability Acquisition — https://arxiv.org/abs/2611.19692 (score 8)
 - IntentFlow: An Intent-Driven Real-Time Multimodal Search System with Image-Text Queries at Xiaohongshu — https://arxiv.org/abs/2611.20448 (score 8)
 - EVIDENT: Evaluating Evidence Grounding in GUI Agents — https://arxiv.org/abs/2611.20488 (score 8)
 - UIAnchor: Anchoring UI Perception and Action Execution for Reliable Service-Composed Mobile Task Automation with GUI Agents — https://arxiv.org/abs/2611.20753 (score 8)
@@ -187,7 +183,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Hidden-State Similarity Predicts Re-Elicitation After Inoculation Prompting — https://arxiv.org/abs/2611.23096 (score 8)
 - Attribution Through the Decoder: Prediction-Space Explanations for Structured Outputs — https://arxiv.org/abs/2611.23161 (score 8)
 - What Does a Bias Head Measure? Non-Identifiability in Head-Level Bias Attribution — https://arxiv.org/abs/2611.23218 (score 8)
-- NI-ACT: A Neural Intent Interface for Brain-Embodied Manipulation — https://arxiv.org/abs/2611.19332 (score 6)
 - VoiceGuard: An Audio-Native LLM-VLA Pipeline for Wheelchair-Mounted Assistive Manipulation — https://arxiv.org/abs/2611.19984 (score 6)
 - Can AI Judge You? An Empirical Audit of Deployment Readiness in LLM-assisted Hiring Systems — https://arxiv.org/abs/2611.20140 (score 6)
 - AsymEEF: Bimanual Manipulation with Asymmetric End Effectors — https://arxiv.org/abs/2611.20557 (score 6)
@@ -195,7 +190,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Language-model agents' beliefs can be manipulated via truthful evidence in open channel — https://arxiv.org/abs/2611.21235 (score 6)
 - Lazy-MOSAIC: Accelerating Skill-Centric Manipulation Planning with Learned Skill-Effect World Models — https://arxiv.org/abs/2611.21517 (score 6)
 - ALOHA Lightning: Learning Fast and Precise Manipulation — https://arxiv.org/abs/2611.21919 (score 6)
-- TCP4D: A Unified Tool-Center-Point Tracking and Generation Model for Robot Manipulation — https://arxiv.org/abs/2611.23143 (score 6)
 - RAG in a Trenchcoat: When Minimal Memory Is Enough for Agentic Systems, and When It Isn't — https://arxiv.org/abs/2611.22179 (score 6)
 - Where Does Hindsight Enter Clinical Agent Benchmarks? An Audit of Simulators and Case Construction — https://arxiv.org/abs/2611.22241 (score 6)
 - A Full-Ledger Counterfactual Audit of Adaptive Reasoning — https://arxiv.org/abs/2611.22778 (score 6)
