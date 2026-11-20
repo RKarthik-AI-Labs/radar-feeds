@@ -1,0 +1,1358 @@
+Retrieving Patristic References and Modelling Topics in Bullinger's Reformation Correspondence
+https://arxiv.org/abs/2611.25247
+License: CC by (redistribution permitted)
+(source: arXiv pdf)
+
+Anthology of Computers and the Humanities, Vol. 1
+Retrieving Patristic References and Modelling Topics in
+Bullinger’s Reformation Correspondence
+LenaPickartz1
+ ,PhilippSchaer 1
+ ,andPhillipB.Ströbel 2
+1 THKöln–UniversityofAppliedSciences,Cologne,Germany
+2 DepartmentofHistory,UniversityZurich,Switzerland
+Abstract
+The correspondence of Heinrich Bullinger (1504–1575), Swiss Reformer and Antistes of Zurich, docu-
+ments the political and religious debates of the Reformation, including extensive appeals to the Church
+Fathers as authoritative sources. Detecting such references computationally remains largely unexplored.
+We investigate dense and sparse retrieval for patristic reference detection, and metadata-informed topic
+modelling as a proxy for the topics and ideas discussed. Prior work on Latin intertextuality has fine-tuned
+denseretrieversfortheirrespectivetargetdomain,andwetesthowwellthesemodelstransfertoBullinger’s
+correspondence. We compare lexical (BM25), dense (bi-encoders), and hybrid methods on explicit and
+implicit references. A Latin encoder fine-tuned on biblical reuse performs best among the bi-encoders
+(82%Recall@20 onexplicitand16%onimplicitreferences),whileBM25outperformsdenseapproaches
+on explicit citations (94%,R@20). Because BM25 and dense retrieval recover disjoint sets of implicit
+references, fusing their rankings raises implicitR@20 to 22%, close to cross-encoder reranking of the
+same candidates (26%) but without its inference cost. For topic modelling, we extend FASTopic with a
+seed-guidedlossfunctionandeditorialabstractembeddings. Measurablecoherencegainsoverthebaseline
+remain minimal, but qualitative and temporal analysis shows that some topics track documented historical
+events. However, dominanttopicweightsbarelyexceedauniformdistribution, makingtopicsunusableto
+inform retrieval. A pilot application of LLM-based concept induction (LLooM) further points towards a
+morehuman-interpretablealternative. Together,theseresultspresentafirstapproachtoretrievingpatristic
+referencesandmodellingfine-grainedtopicsinBullinger’scorrespondence.
+Keywords: intertextualitydetection,hybridretrieval,topicmodelling,historicalNLP
+1 Introduction
+Forcenturies,letterswerethethreadsthatwovetogethertheintellectualworld,enablingscholars
+to debate, collaborate, and exchange ideas across cities and countries, leaving behind a network
+of connections that shaped the history of thought [22, p. 410]. One such record is the correspon-
+dence of Heinrich Bullinger (1504–1575), Swiss Reformer and Antistes of Zurich. TheHeinrich
+Bullinger Briefwechsel(HBBW), containing more than 13,000 surviving letters written predom-
+inantly in Latin and Early New High German (ENHG), documents religious, political, and in-
+tellectual exchanges in 16th-century Europe. Central to these exchanges are the negotiation and
+transmission of theological ideas in which Reformers frequently anchored their arguments in the
+authorityofScriptureortheChurchFathers[ 7;54]. OneexampleisaletterwrittenonNovember
+1, 1534, from Martin Bucer (1491–1551) to Bullinger. In it, Bucer paraphrases Martin Luther’s
+positionthatChrist’sbodyisgivenbodilywith,in,andunderthesacramentalsymbols:
+[...] cum se dominus symbolis offert, competere hic eas locutiones, quas scriptura et
+vulgatus usus in traditionibus vel commemoratione exhibitionumrerum invisibilium
+Lena Pickartz, PhilippSchaer, and PhillipB.Ströbel. “Retrieving Patristic References and Modelling Topics in
+Bullinger’s Reformation Correspondence.” In:Proceedings of Conference XXX, ed. by Editor1 Editor2. Vol. 1. An-
+thologyofComputersandtheHumanities. 2026,1–1. https://doi.org/00000/00000.
+©2026bytheauthors. Licensedunder CreativeCommonsAttribution4.0International(CCBY4.0).
+1
+arXiv:2611.25247v1  [cs.IR]  18 Nov 2026
+per visibilia signausurpat, nempe ut tribuamus corpori domini, quae symbolis propria
+sunt.1
+WhentheLordoffershimselfthroughthesymbols,thosemodesofexpressionarefitting
+herewhichScriptureandcommonusageemployinthehanding-downorcommemora-
+tionofexhibitionsofinvisiblerealitiesthroughvisiblesigns;namely,thatweattribute
+tothebodyoftheLordwhatproperlybelongstothesymbols.
+He uses close verbatim phrasing (see bolded words) from Augustine’sDe Catechizandis
+Rudibus in which the sacrament’s visible signs are described as symbols of the invisible reality
+theyrepresent:
+De sacramento [...] signacula quidem rerum divinarum essevisibilia, sed res ipsas
+invisibiles in eis honorari;[...]
+Concerning the sacrament [...] [he should be told] that visible things are indeed signs
+ofdivinerealities,butthattheinvisiblerealitiesthemselvesarehonouredinthem. 2
+BucermakesuseofAugustinianclaimstoreframeLuther’sreal-presencedoctrineintermsthe
+Zurich Reformers, who held an Augustinian-inflected symbolic view, might accept. Recovering
+referenceslikethisrequiresrecognisingcasesofintertextuality. Traditionally,detectingsuchcases
+reliesonmanualclosereading, ashasbeendoneintheHBBWeditions. Computationalmethods
+offeracomplementaryapproachforthesurfacingofpotentialintertextualrelationshipsatscale.
+Two research gaps frame this paper. First, existing computational intertextuality detection in
+Latinhasfocusedpredominantlyonbiblical[ 16;43;45;60]andclassical[ 8;15;50;52]sources.
+ThetransferofthesemethodstoReformation-eracorrespondencepresentsadistinctchallengeas
+theChurchFathers’texts(circa100–750AD)andtheir16th-centuryreuseareseparatedbyroughly
+amillennium. Second,computationalworkonlettercollectionshasemphasisedthereconstruction
+ofepistolaryandintellectualnetworksassystemsofactorsandmaterialexchange[ 1;22;42;46]
+withlessattentiontotheirdiscourse[ 49;51].
+Addressing both gaps, this paper treats patristic references as a traceable signal of the theo-
+logical arguments of the Reformers and topic structure as a proxy for the ideas they drew on or
+the context they were embedded in. It asks,how can computational methods be used to de-
+tect patristic references and model theologically specific topics in Heinrich Bullinger’s corre-
+spondence? To answer this question, we investigate (RQ 1) the extent to which domain-adapted
+transformer embeddings can detect explicit and implicit patristic references in Bullinger’s corre-
+spondence in comparison to a lexical baseline; and (RQ 2) the extent to which existing domain
+resources, i.e., thematic categories and letter abstracts fromBullinger Digital,3 can guide topic
+models toward more coherent and interpretable topic structures. Together, these two objectives
+addresscomplementaryaspectsofthesameproblem: theretrievalpipelineidentifies which patris-
+tic sources are referenced in a letter, while the topic model characteriseswhat is being discussed
+when they appear, thereby laying methodological groundwork for tracing how theological ideas
+propagatedthroughthecorrespondencenetwork.
+2 Related Work
+2.1 Computational Detection of Text Reuse in Historical Sources
+Text reuse detection in historical documents is commonly formulated as an information retrieval
+(IR) task, in which candidate source passages are retrieved for a given text passage [16; 40; 43;
+1 HBBW4,Nr.470,p.391.
+2 Aug. catech. rud. 26,50.
+3 Seehttps://www.bullinger-digital.ch,lastaccessed14.08.2026
+2
+52].4 Lexical retrieval methods retrieve passages based on shared terms, typically via inverted
+indicesandrankingfunctionssuchasbest-matching25(BM25)[ 29]. Suchmethodsperformwell
+forverbatimorlightlymodifiedreusebutdegradeinthepresenceofparaphraseandallusion[ 40].
+WorkingwithJerome’sletters,Schroppetal.[ 56]showthateventwo-wordoverlapscanconstitute
+intentionalcitationwhenvalidatedthroughsyntacticandcontextualfiltering.
+Indenseretrieval, textisrepresentedascontinuousembeddings, enablingsemanticmatching
+withsentenceencodersoptimisedforsentence-levelsimilarity[ 29]. ForLatinandAncientGreek,
+dedicatedtokenandsentenceencoderswerepretrained[ 6;47;48;58]andfine-tuned[ 16;43;48;
+52]. Riemenschneider and Frank [48] find token embeddings suboptimal for sentence similarity
+andthereforeintroduceSPhilBertaforcross-lingualretrieval. Similarly,Galatoloetal.[ 25]show
+that a multilingual sentence encoder outperforms a Latin-specialised token model on semantic
+search.
+First-stageretrieval,sparseordense,rarelysufficesaloneandistypicallyfollowedbyrerank-
+ingorfusionofresults[ 11;29;44]. Cross-encoderreranking,thoughcomputationallycostly,gen-
+erally improves ranking accuracy and generalisation over bi-encoders alone, including for Latin
+intertextuality[52].
+WherepriorworkinLatinintertextualityhasfine-tuneddenseretrieversforthetargetdomain
+[16; 48; 52], we test how well models pretrained or fine-tuned for related intertextuality tasks
+transfertoBullinger’scorrespondence.
+2.2 Topic Modelling in Historical Sources
+Topicmodellingaimstoidentifylatentthematicstructureindocumentcollections,surfacingtopics
+as ranked word sets or document clusters. A central challenge is interpretability, since without
+ground-truthlabelstopicsareonlyusefulinsofarastheyformhuman-coherentgroupings[ 18;19].
+Statistical approaches such as Latent Dirichlet Allocation (LDA) [10] remain the field’s
+baseline but struggle with multilingual, non-standardised historical sources [13].5 Bag-of-Words
+(BoW) models yield usable topic representations for historical (Latin) text but lack coherence
+[26; 41]. Neural topic models instead leverage pretrained embeddings. BERTopic [28] provides
+coherenceandyieldsusabletopicsonclassicalLatin[ 41]andBullinger-eracorrespondence[ 59],
+but approximates document-topic assignments via cluster membership [26] and suffers from
+hyperparameter sensitivity and topic collapse [63]. FASTopic [64] addresses this by embedding
+documents, topics, and vocabulary words in a shared semantic space, reducing the risk of topic
+collapsewhileretaininginterpretabletopic-worddistributions.
+To recover fine-grained domain-relevant themes that standard models dilute into dominant,
+coarse patterns [36], seed-guided approaches inject small sets of anchor keywords to bias topic
+discovery [35; 65], an approach shown to bridge computational output and domain-specific re-
+searchquestionsinhistoricalandsocial-sciencecorpora[ 34;55].
+Evaluation in the absence of ground truth relies primarily on coherence metrics [19], though
+these remain difficult to compare across methods [63] and must ultimately be validated through
+expertqualitativereview[ 41].
+Morerecently,approacheswithlargelanguagemodels(LLMs)generatehuman-readabletopic
+labelsandkeywordseitherdirectlyorfromstatisticallyorneurallyderivedworddistributions,such
+as TopicGPT [30]. LLooM [38] is a method that synthesises sampled text passages, generates
+concepts based on pipeline generated criteria, applies those concepts to the data, and iteratively
+developsbroader,higher-levelabstractionswithLLMs.
+4 One exception to this perspective is Burns et al. [15], who conceptualise text reuse detection as a form of anomaly
+detectionandclaimthatcitationscreatestylisticbreaks,vocabularyshifts,oradifferentsyntaxintexts.
+5 Moreover,theylackatemporaldimension,whichisaddressedbysubsequentvariants[ 9;62].
+3
+3 Data
+3.1 Bullinger Digital Corpus (BDC)
+Over 13,000 letters related to Bullinger survive, critically edited since 1973 as theHeinrich
+Bullinger Briefwechsel. The Bullinger Digital project [53] digitised this correspondence and
+published it in TEI-XML with structured metadata (i.e., sender, recipient, date, place, language
+proportions, named-entity tags, thematic categories) on GitHub6 and via an online database.7 Of
+the13,114cataloguedletters,1,256lackatranscription,leavingaworkingcorpusof11,858letters
+(hereafter“BDC”).
+3.2 Patristic Source Corpus (PSC)
+We collected works of 52 Church Fathers (700 files) from three digital repositories: theCorpus
+Corporum,8 the Open Greek & Latin Project,9 and thePatristic Text Archive.10 For a complete
+author and work list and the dataset itself, refer to the GitHub repository.11 Where available, we
+pooledLatintranslationsofGreekworksalongsideoriginals,asBullinger’scirclelikelyengaged
+with patristic texts in both languages or with Latin translations of Greek authors [7, p. 133]. We
+deduplicatedvarianteditionsmanually,preferringscholarlyeditions(e.g., Corpus Scriptorum Ec-
+clesiasticorum Latinorum)overthe Patrologia Latina(Migne12). Thepooleddatasetmaystillbe
+incomplete.13 Duetoinconsistentstructuralmarkupacrossrepositories,wetreatedallsourcesuni-
+formly by extracting all text nodes from<body> elements, which introduces editorial noise into
+someoftheembeddings. Table 1reportscorpusstatisticsforbothPSCandBDC.
+Files Segments (1s) Segments (3s)
+BDC
+Count 11,858 206,702 189,446
+Totaltokens 3,773,998 3,698,299 10,315,605
+Meantokens 318 18 54
+PSC
+Count 700 832,556 831,172
+Totaltokens 20,949,791 16,321,764 48,867,504
+Meantokens 29,928 20 59
+Table 1:CorpusstatisticsforBDCandPSC:fullsourcefiles,single-sentencesegments(1s),and3-
+sentenceoverlappingwindowsegments(3s). Segmentsshorterthan4tokensweredroppedduring
+chunking,whichisreflectedintotaltokensofsegments.
+3.3 Retrieval Evaluation Dataset
+We created a dataset of annotated patristic references to evaluate whether dense retrieval finds
+explicit (cf. Figure1) and implicit patristic references (cf. Figures2 and 3). We define explicit
+references as verbatim quotations, and implicit references as all other forms. The dataset com-
+prises 100 annotations, 50 explicit and 50 implicit, across 67 letters spanning 19 Church Fathers
+dominated by Augustine (54%), Jerome (12%), and Tertullian (9%). We identified these ground
+6 https://github.com/stazh/bullinger-korpus-tei ,lastaccessed14.08.2026
+7 https://www.bullinger-digital.ch/index.html,lastaccessed14.08.2026
+8 https://mlat.uzh.ch (CC),lastaccessed14.08.2026
+9 https://github.com/OpenGreekAndLatin (OGL),lastaccessed14.08.2026
+10 https://pta.bbaw.de/en/ (PTA),lastaccessed14.08.2026
+11 https://github.com/len-rtz/patristic-sources ,lastaccessed14.08.2026
+12 Jacques-PaulMigne,apriest,whopublishedtheworksoftheChurchFathersextensivelyduringthe19th-century
+13 Itreflectsrepositorystatesatthetimeofdatacollectionon9thMarch2026.
+4
+truth references by extracting scholarly edited footnotes from the HBBW in proximity to XML-
+TEI person-tags of Church Fathers, through string alignment detection using Passim [57] against
+a scraped CC dataset for explicit citations, and close reading of footnotes in digitally published
+HBBWlettereditions. 14 Becauseannotationreliedonestablishedscholarlyidentificationsforim-
+plicit references and direct textual correspondence for explicit ones, a single annotator annotated
+the letters using INCEpTION [37]. The full methodology for constructing this dataset and the
+datasetitselfcanbefoundonGitHub. 15 The67letterswerenotexhaustivelyannotated,meaning
+noteveryknownpatristicreferenceinaletterismarked. Thisdoesnotdirectlyaffectourretrieval
+evaluation,whichassesseswhetherthesystemretrievesthesourcetextassociatedwitheachanno-
+tatedreference,butlimitsthedataset’sreuseforotherpurposes,e.g. astrainingdata. Thedataset
+is predominantly Latin-to-Latin, with five Greek-to-Latin and four Latin-to-ENHG cross-lingual
+annotations,whichlimitsmultilingualgeneralisabilitywhilemirroringtheBDC’slanguagedistri-
+bution of roughly 80% Latin. A Jaccard analysis of lemmatised Latin annotations shows explicit
+referencesaverage70%lexicaloverlapwithsourcetexts,versus12%(max31%)forimplicitones.
+Explicit Verbatim
+Nolonobiscredatur,scripturęrecitentur.
+Bullinger Digital, HBBW 1, Nr. 16, p. 100
+Nolonobiscredatur,Scripturarecitetur.
+Ambr. incarn. 3,14
+Donotletitbebelievedonourauthority;lettheScripturesberecited.
+Figure 1:Exampleofanexplicitreferenceanditstranslation.
+Implicit Theological Allusion
+Rursus, cum sacramenta sint verba visibilia, quae docent
+sensibiliter, nomenque ipsum, quorum symbola sunt, sor-
+tiantur, nihil offendit nos, cum audimus panem dici corpus
+Christi.
+Bullinger Digital, HBBW 4, Nr. 482, p. 421
+Accedit verbum ad elementum, et fit Sacramentum, etiam
+ipsumtanquamvisibileverbum.
+Aug.in Joh. tract.80,3
+Again, sincesacraments are visible words, which teach
+throughthesenses, andsincetheytaketheirnamefromthe
+thingsofwhichtheyaresymbols, nothingshouldoffendus
+whenwehearbreadbeingcalledthebodyofChrist.
+Theword is added to the element, and it becomes a sacra-
+ment,itselfalsobeing,asitwere, a visible word.
+Figure 2:Exampleofanimplicittheologicalreferenceanditstranslation.
+14 https://www.tvz-verlag.ch/reihe/heinrich-bullinger-werke-8/?page_id=1 , last accessed
+14.08.2026
+15 https://github.com/len-rtz/bullinger-patristic-annotations ,lastaccessed14.08.2026
+5
+Implicit Metaphorical Allusion
+Scriberetamendistuli,neferventiadhucanimoetinopinata
+provocatione quorundam commoto nimium crederem;
+iacula etenim non provisa altius feriunt.
+Bullinger Digital, HBBW 10A, Nr. 372a, p. 46
+Minus enim jacula feriunt quae praevidentur; et nos
+tolerabilius mundi mala suscipimus, si contra haec per
+praescientiaeclypeummunimur.
+Greg.M. hom. in ev.35,1
+Nevertheless, I delayed writing, with my mind still heated
+andstirredbytheunexpectedprovocationofcertainpeople,
+Imightjudgetooharshly; for missiles that are not foreseen
+strike more deeply.
+For missiles that are foreseen wound less severely;andwe
+enduretheevilsoftheworldmoretolerablyifwearearmed
+againstthemwiththeshieldofforeknowledge.
+Figure 3:Exampleofanimplicitmetaphoricalreference.
+4 Methodology
+4.1 Dense Retrieval of Patristic References
+Following Allenbach et al. [2], we can define patristic text reuse as a textual unit within a letter
+in which the author “refers, explicitly or implicitly, through quotation, mention or reminiscence,
+to one or more parts” (p. 20) of patristic writings. Within such a unit, the writer’s argument and
+thepatristicmaterialcanbeinterwoven,withverbaloverlappotentiallybeingminimalorentirely
+absent. Atthesametime,evenasingletermmayconstituteapatristicreferenceandthereforeform
+areuseunit[ 33].
+When patristic text reuse detection is framed as an IR task [16; 40; 43; 52], we utilise text
+segments from the BDC as query documentsq and text segments from sources in the PSC as
+candidatedocuments d. TheIRtaskobjectiveisretrievingthemostsemanticallysimilardocuments
+foreachquery,rankedbyarelevancescore s(q,d).
+For both corpora, we combine sentence-level segments [16; 52] with 3-sentence overlapping
+windows to capture references spanning sentence boundaries (cf. Table1). Fixed windows were
+rejectedastheydonotalignwithsemanticunits[ 27;40].
+We evaluate three bi-encoders, one monolingual and two multilingual, each available as
+a base model and as a variant fine-tuned for (Latin) intertextuality. This lets us isolate how
+far task-specific fine-tuning transfers to a new domain. The base models areLaBERTa [47];
+SPhilBerta [48], a cross-lingual sentence encoder for Latin, Ancient Greek, and English; and
+modern multilingual text encodermultilingual-e5-large [61], previously applied to the
+Bullinger corpus [59]. Their fine-tuned variants are LaBERTa-W_VULG-S_VL [16] (hereafter
+LaBERTa-VL), chosen despite its monolingual scope because it was trained on the related task of
+biblicalreuseinpatristictexts,andtheLociSimilesmodels[ 52].
+Given the query setQ and candidate databaseD, the three models produce embeddings¯q =
+fθ(q) ∈ R768/1024 forq ∈ Q and ¯di = fθ(di) ∈ R768 fordi ∈ D where fθ represents the
+respectiveencoder. Cosinesimilarityquantifiesquery–candidaterelevance.
+Bi-encodersimilaritysearchusesFAISS; 16 theLociSimilespipelinehandlescandidategener-
+ation internally via ChromaDB. For cross-encoder reranking, we use the LociSimiles classifier
+PhilBerta-class-latin-intertext-v2 [52], which jointly encodes query-candidate pairs
+and classifies each as intertextually related or not, requiring one forward pass per candidate. In
+two-stage pipelines, the bi-encoder retrieves the top-100 candidates per query, which the cross-
+encoderthenreranks.
+16 https://faiss.ai/index.html,lastaccessed14.08.2026
+6
+BDC
+ PSC
+Q
+(query
+segments)
+D
+(candidate  
+segments)
+Shared Bi-
+Encoder
+Shared Bi-
+Encoder
+Pooled Vector / 
+Sentence Vector
+Pooled Vector / 
+Sentence Vector
+           D’ (ranked candidates)
+Cross-Encoder
+CLS + Q’ + SEP + D’ + SEP
+Binary Classifier (ref / no ref)
+→ Probability Score
+           D ʳʳ  (reranked candidates)
+s e g m e n t a t i o n
+cosine
+ 
+similarity
+t
+o
+p
+-
+1
+0
+0
+BM25
+term frequency
+rarity / commonness of term
+document length
+           D’ (ranked candidates)
+Q
+(query
+segments)
+D
+(candidate  
+segments)
+RRF
+t o p - 1 0 0
+           D ʳʳ  (reranked candidates)
+t o p - 1 0 0
+Figure 4:Patristicintertextualityretrievalpipeline. Left: Forbi-encoderretrieval,BDCqueryseg-
+mentsQ are encoded alongside PSC candidate segmentsD. Cosine similarity retrieval produces
+a ranked listD′; in a variation the top-100 candidate documents are reranked by a cross-encoder
+binaryclassifier. Right: BM25computesrelevancescoresbetween Q andD forranking. Inavari-
+ation, the top-100 candidates from both dense and sparse retrieval are fused using RRF. Dashed
+bordersindicatevariationalcomponentsofthepipeline.
+We evaluate on the evaluation dataset usingRecall@k and mean reciprocal rank (MRR),
+stratified by reference type (explicit / implicit), and compare against BM25 as a lexical baseline
+andahybridsetupusingRRF(cf.Figure 4).
+4.2 Topic Modelling
+For topic modelling, we use FASTopic [64], which derives topic-word and document-topic
+distributions from a shared embedding space while retaining an interpretable BoW represen-
+tation.17 We restrict BoW input to POS-tagged nouns and proper nouns [59; 64], lemmatised
+and lowercased with LatinCy (la_core_web_lg) [14] for Latin, spaCy (de_core_news_lg)
+for German (regests) and ENHGTagger18 for ENHG. We exclude tokens tagged<persName>
+or <placeName> during TEI-XML extraction and save them to a stopword list, extended
+by manually curated high-frequency terms identified through iterative inspection of topic
+outputs.19 We drop terms appearing in fewer than ten documents, yielding an effective vo-
+cabulary of 8,316 unique nouns. Document representations use the multilingual bi-encoder
+multilingual-e5-large-emb-lat-intertext-v1 .
+17 ItsadvantagesoverLDA(coherence)andBERTopic(stabledocument-topicassignments)werediscussedinSection
+2.2.
+18 https://www.cis.uni-muenchen.de/~schmid/tools/HistoricalGermanTools/,lastaccessed14.08.2026
+19 The stopword list is available in the topic modelling repository https://github.com/len-rtz/
+bullinger-topic-modelling/blob/main/data/stopwords_full.json ,lastaccessed14.08.2026
+7
+4.2.1 Category-Guided Topic Initialisation (Seeded-F ASTopic)
+Theexistingeleven Bullinger Digitalcategories20 flatteninternaldistinctions. Forexample,“Faith
+andDoctrineinTheory”conflatesbiblicalinterpretation,churchdiscipline,andtheEucharistcon-
+troversy. FASTopic normally initialisesk topic embeddings randomly. We inject the corpus’s
+knownthematicstructurebyexpandingthecategoriesinto16seedtopics,splittingheterogeneous
+categories into finer-grained distinctions and directly setting the minimumk (cf. AppendixA.1).
+Following Zhang et al. [65], we extract meaning-bearing terms from each category’s English de-
+scription (e.g., “martyrdom”, “Eucharist controversy”, “military action”), embed them with the
+multilingualencoder,andmatcheachtoitstop-10nearestneighboursinthevocabularybycosine
+similarity. Eachseed-assignedtopic k’sinitialtopicembeddingisthecentroid ¯eSk ofitsmatched
+vocabularyembeddings ew ∈ RH,with Sk beingtheinducedseedvocabulary. Weaddaregular-
+isationtermtotheobjectivetokeeptheseembeddingsinfluentialduringtraining:
+Lseed = 1
+|Ks|
+∑
+k∈Ks
+∥Tk − ¯eSk ∥2 (1)
+whereKs ⊆ {1, . . . , K } denotesthesetofseed-assignedtopics. Sincethecentroids ¯eSk andtopics
+Tk arebothoutputsofthesameencoder,theyaredirectlycomparable. Thelossfunctionpenalises
+trainingbytheaveragesquaredEuclideandistancebetweentheseededtopicembeddingatagiven
+trainingstepanditscentroid.
+ThefulltrainingobjectiveofthealteredFASTopicalgorithmbecomes L = LDSR+LETP+Lseed
+We refer to this approach as Seeded-FASTopic. SettingLseed = 0 recovers standard FASTopic.
+ThealteredalgorithmcanbefoundintheGitHubrepository 21.
+4.2.2 Regest Embeddings
+Regests(editorialabstractsfromtheHBBWcriticaleditions)areincorporatedintotheembedding
+process where available, following Ströbel, Aderhold, and Roller [59]’s proposal that this could
+provideastrongerthematicsignalthanthelettertextalone.
+Theletter-regestembedding di isconstructedasaweightedinterpolation: di = α·fdoc(xletter
+i )+
+(1 −α) ·fdoc(xregest
+i ) whereα ∈ [0, 1] controlstherelativeweightofletterversuseditorialcontent.
+For letters without abstracts,α = 1 . The German abstracts from the HBBW critical editions are
+currentlyavailablefor3,233letters(27.3%),coveringcorrespondenceuptothe1540s.
+FASTopicisappliedtothefullBDCcorpusacrosstheconfigurations baseline, Seeded, Regest,
+andSeeded+Regest. Allconfigurationsuse DT_alpha =15and min_df =1022. α,theinterpola-
+tion weight is set to 0.5, assigning equal weight to the original and regest representations. Since
+regestsareavailableforonly27.3%ofletters,thisintroducesastructuralasymmetry. Letterswith
+regests receive a blended representation while the remainder rely on letter text alone, a potential
+confound that future work should address through ablation overα values. Figure5 presents the
+method.
+Topic quality is assessed with topic diversity (proportion of unique words across the top-n
+words per topic) and topic coherence (measuring co-occurrence of top words against an external
+referencecorpus23),followingWuetal.[ 64]. Allconfigurationsareevaluatedacrossfiverandom
+initialisations; qualitative analysis is based on a single run per configuration. BERTopic with the
+sameencoderservesasanadditionalcomparison.
+20 The categories result from an annotation combining expert-defined category sets, manual annotation of a sam-
+ple,andLLMprompting, https://github.com/bullinger-digital/bullinger-auxiliary-scripts/tree/
+main,lastaccessed14.08.2026
+21 https://github.com/len-rtz/bullinger-topic-modelling ,lastaccessed14.08.2026
+22 RecommendedbyWuetal.[ 64];seealso https://pypi.org/project/fastopic/ (lastaccessed14.08.2026).
+23 TheTheologenbriefwechsel im Südwesten des Reichs in der Frühen Neuzeit(ThBW)[31].
+8
+BDC-document
+(TEI-XML)
+Preprocessing
+(POS +      words)
+BDC-NOUNs
+ Shared
+Encoder
+Shared
+Encoder
+D D_Regest
+D ᵢ 
+T
+BDC-Category
+Descriptions
+Shared
+Encoder
+Shared
+Encoder
+W
+Centroid from union of top-k 
+Sparse BoW-Matrix
+(n_docs x vocab)
+cleaned <summary> tags
+FASTopic Training
+k-topic 
+embeddings 
+β 
+topic-word 
+distributions
+θ 
+doc-topic 
+distributions
+cosine
+ 
+similarity
+letter text
+Figure 5: (Seeded-)FASTopic training pipeline (with regest augmentation). BDC documents are
+POS-tagged and reduced to noun-only (BDC-NOUNs), from which a BoW matrix and vocabu-
+lary embeddingsW are derived. In the seeded setup, category description nouns are embedded
+andmatchedto W viacosinesimilarity,withtop-10neighboursaveragedintoseedcentroidsini-
+tialising 16 topic embeddings. Document embeddingsD are optionally interpolated with regest
+embeddings. FASTopicproducestopicembeddings T,topic-worddistributions β,anddocument-
+topicdistributions θ. Dashedbordersindicatevariationalcomponents.
+5 Results and Evaluation
+5.1 Dense Retrieval of Patristic References
+Table 3 presents the performance of the selected bi-encoders, both standalone and with cross-
+encoderreranking,ontheevaluationdataset. Amongthestandalonebi-encoderretrievalconfigura-
+tions,LaBERTa-VL,withmean-poolingtokenembeddings,achievesthehighestoverall Recall@k
+(R@k) across all cutoffs (42–49%), outperforming its base model (35–40%), demonstrating that
+Caffagni et al. [16]’s biblical fine-tuning transfers moderately to patristic references in Reforma-
+tioncorrespondence. Table2showsaselectionofquery-candidatepairsandtheircosinescoring.
+Notably, it also achieves the strongest implicit recall among all standalone bi-encoders (6–16%
+R@k),whileeveryotherbi-encoderstrugglestoexceed2–6%implicitrecall. Thefine-tunedmod-
+elsbySchelbetal.[ 52]performbetterthantheirbasemodelsalmostateverycutoff,thoughgains
+concentrateinexplicitrecallratherthanimplicitdetection. Especially SPhilBerta initsoriginal
+formperformspoorlyasastandaloneretriever(overall12% R@k acrossallcutoffs);itsfine-tuned
+version[52]improvesonoverallrecall(25–34% R@k). AsthesecondsectionofTable 3shows,
+embeddedinthetwo-stageretrievalpipeline,itsperformanceimprovesrankingfrom34%to41%
+R@k20 , suggesting that the LociSimilesPhilBerta-class-latin-intertext-v2 classifier
+adds real signal on top of a weaker base retriever. CombiningLaBERTa-VL with the classifier
+also improves implicit metrics at higher rank cutoffs. The clearest gains are in implicit reference
+detection,as R@5 morethandoublesfrom6%to14%.
+The results should be by noting, that the evaluation dataset includes nine cross-lingual refer-
+ences which the Latin encoders are not designed for. Only one was retrieved bymE5-LS. The
+9
+reportedscoresthereforeprimarilyreflectLatin-to-Latinretrievalperformance.
+WesituateBM25asalexicalbaselineagainsttheneuralretrievalapproaches. Ascanbeseen
+in Table3, it outperforms all bi-encoder configurations on explicit references (88–94%R@k).
+Thisreflectsthestructuraladvantageofverbatimalignmentforexplicitquotation. Thecompetitive
+numbersforimplicitrecall(12–16%, R@k)ofthelexicalapproachwarrantcloserinspection. The
+implicitreferencesdetectedbyBM25arecaseswithshortshared-vocabularyparaphrasing. Thisis
+wherethebi-encoderfallsshortasitsembeddingsdiluteshortparaphraseamongthesurrounding
+words. Forexample,BM25correctlymatchesaqueryfromletterHBBW7,Nr.980,(p.121): “ Det
+illis Deusmentem saniorem et vobis in bonoperseverantiam”24 to the passage from Augustine’s
+De correptione et gratiawithlexicaloverlap,namely“ ...ejus qui nonperseveraverit...” and“...ne
+forte det illi Deuspoenitentiam...”25. OneexampleforamatchthatBM25missesbutbi-encoder
+retrievalfinds,isasegmentfromletterHBBW4,Nr.466(p. 377):
+Hinc vulgo illud pertritumc iactari: «Sacramentum est invisibilis gratiae visibile
+signum.» Visibilia ergo signa in coena esse panem et vinum, at invisibilia redemp-
+tionem per Christum partam, corpus et sanguinem domini, quae fidelibus a solo Christo
+divina offerantur sive exhibeantur virtute, a ministro autem ministerialiter et a sanctis
+mente, percipiantur spiritualiter.26
+whichLaBERTa-VL correctlylinkstoapassagefromAugustine’s De catechizandis rudibus:
+De sacramento sane quod accipit, cum ei bene commendatum fuerit, signacula qui-
+dem rerum divinarum esse visibilia, sed res ipsas invisibiles in eis honorari; nec sic
+habendam esse illam speciem benedictione sanctificatam, quemadmodum habetur in
+usu quolibet: dicendum etiam quid significet et sermo ille quem audivit, quid in illo
+condiat, cujus illa res similitudinem gerit.27
+Whilethepassagessharesomelexicalelementsrelatingtovisibilityandinvisibility, theyex-
+tend beyond vocabulary to a semantic parallel. Bullinger, author of the letter, engages with Au-
+gustine’s formulation by applying the visible sign/invisible reality distinction specifically to the
+Eucharist. Comparing the retrieval results, the dense and sparse approaches recover disjoint im-
+plicitreferencesets. Countingaqueryasretrievedifeithermethod,e.g., BM25 andLaBERTa-VL,
+findsit,couldthereforeachieveincreasedimplicitrecall,whichmotivatesadualretrievalstrategy
+forimplicitreferencedetection.
+Using reciprocal rank fusion RRF [20], which merges retrieval results with different scoring
+scalesbycombiningtheirrankings,wefuseretrievalrankingsfromthebest-performingbi-encoder
+LaBERTa-VL with the BM25 ranking. The last section in Table3 reports its results. The fusion
+improves overall recall relative to either method alone. For comparison we pass the same hy-
+bridcandidatepoolthroughthecross-encoderclassifier. At R@20,theclassifierpipelinereaches
+slightlyhigherimplicitrecall(26.0%vs. 22.0%forRRF-pipeline)butmatchestheRRFretrieval
+24 May God give them a sounder mind, and grant you perseverance in what is good.
+25 Full quote: “Sed non ideo est ejus qui non perseveraverit, negligenda correptio, ne forte det illi Deus poenitentiam,
+etresipiscatdediabolilaqueis.” Aug. corrept. 6,10. But for this reason the rebuke of one who has not persevered is not
+to be neglected — lest perhaps God give him repentance, and he come to his senses again, free from the snares of the
+devil.
+26 Hence that well-known and oft-repeated saying is commonly quoted: «A sacrament is a visible sign of invisible
+grace.» Accordingly, the visible signs in the Lord’ s Supper are bread and wine, whereas the invisible realities are the
+redemption obtained through Christ, and the body and blood of the Lord. These are offered or presented to the faithful
+by Christ alone through divine power, by the minister in a ministerial capacity, and are received spiritually by the saints
+through the mind.
+27 Aug. catech. rud.26,50. On the subject of the sacrament, indeed, which he receives, it is first to be well impressed
+upon his notice that the signs of divine things are, it is true, things visible, but that the invisible things themselves are
+also honoured in them, and that that species, which is then sanctified by the blessing, is therefore not to be regarded
+merely in the way in which it is regarded in any common use.
+10
+Query Text and ID Candidate Text and ID Score
+Quianonpotestisaudiresermonemmeum.
+12080_sent_277
+Quianonpotestisaudiresermonemmeum.
+035_Augustinus-Hipponensis_In-Joannis-evangelium-tractatus-
+CXXIV_sent_8501
+1.00
+128) apertissime hoc defendit et ita lo-
+quitur: Unus et unus deus, deus ingenitus,
+deus unigenitus. De patre et filio, non duo
+dii,inquit[...]
+5473_sent_51_53
+Ita in Deo patre et in Deo filio neque duos
+connumerabis deos, quia unum uterque
+sunt; neque singularem praedicabis, quia
+uterquenonunus[...]
+010_Hilarius-Pictaviensis_De-Trinitate_sent_2541_2543
+0.80
+Ut enim patri simpliciter nomen dei tribui
+videmus in scripturis, ita filio nunquam
+darinisiapertamentionenominiseius, vel
+verbi[...]
+5473_sent_26_28
+PropriumDeifilioest,nepraetereumDeus
+sit; proprium Deo patri est, ne absque eo
+Deus quisquam sit: verbis Dei de Deo
+utere.
+010_Hilarius-Pictaviensis_De-Trinitate_sent_1233
+0.72
+Quo magis miror, cum vestra lego, quid
+tam diserte affirmetis panem id, quod est,
+manere,cumidLutherusnunquamnegarit,
+imoprimusaffir[...]
+10506_sent_11_13
+Proinde quod non ita fit, quamvis sit
+panis et calix, alimentum est refectionis,
+non sacramentum religionis: nisi quod
+benedicimus,gratias[...]
+042_Augustinus-Hipponensis_Contra-Faustum-
+Manichaeum_sent_2381_2383
+0.67
+Quis tam scelestus, tam nepharius tamque
+impius? Quae lingua tam virulenta ac
+lȩtifera? Disperdatdominusuniversalabia
+dolosa!
+10015_sent_6_8
+Ream linguam non facit, nisi mens rea.
+Quis est autem qui non fallatur, etsi noluit
+fallere? Quis est homo cui non sub-
+repat fallacia? 038_Augustinus-Hipponensis_Sermones-de-
+Scripturis_sent_27997_27999
+0.56
+Oportet enim nos implere omnem iusti-
+tiam.
+12805_sent_144
+Dico enim vobis, quia nisi abundaverit
+justitia vestra plus quam Scribarum et
+Pharisaeorum, non intrabitis in regnum
+coelorum: idest,nisi[...]
+034_Augustinus-Hipponensis_De-sermone-Domini-in-
+monte_sent_142
+0.43
+Table 2: Exemplary LaBERTa-VL retrieval results across cosine similarity range, from an exact
+match(score=1.00)toalow-scoringpair(score=0.43).
+atsmallercutoffs. TheRRFpipelineachieveshigherexplicitrecallateverycutoff(90.0–94.0%vs.
+62.0–84.0%)suggestingthattheclassifierfavoursapparentsemanticsimilarityoverlexicalover-
+lap. Giventhattheclassifieraddscomputationalcostsforthehybridpoolatscale,RRFpositions
+itselfasamorefavourablecost-performanceoption.
+5.2 Topic Modelling
+AsTable 4shows,meancoherence( CV )peaksat k = 16 forthebaselineandseededapproachwith
+0.420 across all FASTopic configurations. Topic diversity (TD) remains between 0.937 and 1.0
+acrossallconfigurationsand k,indicatingdistincttopicvocabularies. Bothdegradeas k increases.
+An analysis of dominant topic weights across the letters (cf. Table5) shows that ask increases,
+mean dominant weights decrease monotonically. The numbers reflect simply a redistribution of
+probabilitymassacrossalargertopicinventory. Neitherseedingnortheinclusionofregestsalters
+theoveralldiffusenessofthedistributions. Weinitiallyhypothesisedthattopicdistributionscould
+enhance retrieval, assuming that shared references cluster within the same topics. The dominant
+11
+Bi-Encoder R@5 R@10 R@20 MRR@5
+LaBERTa
+35.0 38.0 40.0 0.23
+Explicit 68.0 72.0 76.0 0.46
+Implicit 2.0 4.0 4.0 0.01
+LaBERTa-W_VULG-S_VL
+(LaBERTA-VL)[16]
+42.0 45.0 49.0 0.31
+Explicit 78.0 80.0 82.0 0.58
+Implicit 6.0 10.0 16.0 0.03
+multilingual-e5-large
+27.0 30.0 32.0 0.20
+Explicit 52.0 58.0 62.0 0.40
+Implicit 2.0 2.0 2.0 0.01
+multilingual-e5-large-emb-lat-intertext-v1
+(m-e5-LS)[52]
+35.0 36.0 36.0 0.25
+Explicit 70.0 70.0 70.0 0.50
+Implicit 0.0 2.0 2.0 0.00
+SPhilBerta
+[48]
+12.0 12.0 12.0 0.11
+Explicit 22.0 22.0 22.0 0.20
+Implicit 2.0 2.0 2.0 0.02
+SPhilBerta-emb-lat-intertext-v1
+(SPhilBerta-LS)[52]
+25.0 30.0 34.0 0.20
+Explicit 48.0 58.0 62.0 0.36
+Implicit 2.0 2.0 6.0 0.02
+Retrieve-and-Rerank Pipeline
+LaBERTa-W_VULG-S_VL
++PhilBerta-class-latin-intertext-v2
+37.0 46.0 52.0 0.24
+Explicit 60.0 76.0 82.0 0.40
+Implicit 14.0 16.0 22.0 0.08
+LociSimilese5
+[52]
+35.0 41.0 43.0 0.29
+Explicit 70.0 78.0 80.0 0.58
+Implicit 0.0 4.0 6.0 0.00
+LociSimilesSPhilBerta
+[52]
+38.0 40.0 41.0 0.27
+Explicit 68.0 72.0 74.0 0.50
+Implicit 8.0 8.0 8.0 0.04
+Lexical
+BM25
+50.0 53.0 55.0 0.39
+Explicit 88.0 92.0 94.0 0.69
+Implicit 12.0 14.0 16.0 0.10
+Hybrid
+LaBERTa-W_VULG-S_VL
++BM25
+RRF-used
+52.0 56.0 58.0 0.37
+Explicit 90.0 94.0 94.0 0.64
+Implicit 14.0 18.0 22.0 0.09
+LaBERTa-W_VULG-S_VL
++BM25
++PhilBerta-class-latin-intertext-v2
+38.0 47.0 55.0 0.25
+Explicit 62.0 76.0 84.0 0.44
+Implicit 14.0 18.0 26.0 0.07
+Table 3:Performance comparison on evaluation dataset (n=100) in percentage.R@k=Recall at
+rankk andMRR@k=MeanReciprocalRankatrank k. Bestvalues,persetup,areshowninbold.
+12
+topic weights argue against this: atk = 20 , a uniform distribution would assign each topic 0.05,
+whilethemeandominantweightreaches0.062–0.066(Table 5). Sincethestrongesttopicofaletter
+isthusbarelydistinguishablefromtherest,wedidnotpursuetopic-basedfilteringorrerankingin
+thisstudy.
+Asafurthercomparison,BERTopicwithHDBSCANrunsyieldthehighestmean CV (0.475)
+butonlyameantopicdiversityof0.623. Itexhibitssevererun-to-runinstability,withdata-driven
+discoveredtopiccountvaryingfrom3to22acrossfiveUMAPseeds,suggestingthatdensity-based
+clusteringinthisembeddingspacedoesnotproduceareliableorreproducibletopicstructure.
+All FASTopic configurations recover semantically distinct clusters spanning topics such as
+theologicaldiscourse,militaryaffairs,domesticmatters,andprintculture. Increasingthenumber
+k comes at the cost of topic duplication and increased noise across all runs (cf.TD in Table4).
+Beyond this, topic vocabulary varies considerably across runs (see Table4). The same thematic
+space is partitioned differently depending onk and run, with words shifting between topics and
+appearing or disappearing across configurations. The minimal differences in quantitative metrics
+acrossconditionsatmatched k valuesmotivateaqualitativeinspection. Foralloutputsofthehere
+discussedruns,refertotherepository. 28
+Configuration k C V (mean ± std) TD (mean ± std) Jaccard
+FASTopicBaseline
+16 0.420 ± 0.058 1.000± 0.000 34.3%
+20 0.399 ± 0.019 1.000 ± 0.000 29.3%
+30 0.393 ± 0.015 0.999 ± 0.001 23.8%
+40 0.373 ± 0.013 0.997 ± 0.004 25.3%
+50 0.383 ± 0.011 0.990 ± 0.002 23.9%
+SeededFASTopic
+16 0.420 ± 0.018 1.000± 0.000 32.1%
+20 0.419 ± 0.016 0.992± 0.011 39.0%
+30 0.379 ± 0.015 0.937 ± 0.017 30.6%
+40 0.381 ± 0.008 0.975 ± 0.010 26.7%
+50 0.380 ± 0.014 0.982 ± 0.011 25.9%
+RegestFASTopic
+16 0.412 ± 0.032 1.000 ± 0.000 33.4%
+20 0.401 ± 0.023 1.000 ± 0.000 27.2%
+30 0.401 ± 0.019 1.000± 0.000 26.7%
+40 0.381 ± 0.027 0.999 ± 0.003 23.0%
+50 0.366 ± 0.017 0.994 ± 0.006 24.5%
+Seeded+RegestFASTopic
+16 0.411 ± 0.012 1.000 ± 0.000 42.7%
+20 0.404 ± 0.027 0.995 ± 0.006 37.8%
+30 0.391 ± 0.017 0.961 ± 0.017 25.9%
+40 0.413 ± 0.021 0.996± 0.005 27.1%
+50 0.389 ± 0.017 0.993± 0.006 24.3%
+BERTopic 3–22 0.475 ± 0.087 0.623 ± 0.136 39.1%
+Table 4:Meanandstandarddeviationof CV coherenceandtopicdiversity(TD)forFASTopicand
+BERTopicacrossfiverunswithdifferentrandominitialisations. BERTopic’s k isdata-drivenand
+variesperrun. Jaccardstabilityreportsthemeanbest-matchJaccardsimilarityacrossallfiveruns
+ineachconfiguration;highervaluesindicatemoreconsistenttopicrecoveryacrossinitialisations.
+BestvaluesamongFASTopicconfigurationsfor CV atmatched k areinbold.
+28 https://github.com/len-rtz/bullinger-topic-modelling ,lastaccessed14.08.2026
+13
+K Mean Dominant Weight Range
+16 0.0772–0.0805
+20 0.0620–0.0658
+30 0.0425–0.0441
+40 0.0331–0.0345
+50 0.0268–0.0274
+Table 5: Topic weights across all FASTopic runs (baseline, seeded, regest-augmented and
+seeded+regest-augmented)
+6 Discussion
+6.1 Dense Retrieval
+Overall,thedenseretrievalresultsfallbelowtheresultsreportedinotherintertextualitydetection
+studies [16; 52]. The performance gap is potentially attributable to several factors. First, the re-
+spectivefine-tuningofthemodelsfortheirtargetdomainandtask;second,thetemporallinguistic
+distance between early modern Latin used by the Reformers and late/vulgar Latin of the Church
+Fathers;andthird,thegenreshiftofepistolaryexchangeandpatristicsourcetexts. Cross-encoder
+rerankingoverthestrongestbi-encodertop-100improvesrecallforimplicitreferences,consistent
+with prior findings that reranking improves retrieval quality [44; 52]. However, cross-encoder
+inference is computationally expensive at full corpus scale. For explicit citations, dense retrieval
+falls ≈10-12% points behind BM25, which also recovers implicit paraphrases. Dense retrieval
+contributeswherevocabularydivergesasitfindsimplicitreferencesthataresemanticallycloseto
+theirsource. FusingbothrankingsviaRRFthereforeoffersacompetitiveandlesscostlyalterna-
+tive to cross-encoder reranking, although on our evaluation data the gain amounts to only a few
+references.
+6.2 Topic Modelling
+The extent to which domain resources fromBullinger Digital yield gains in topic coherence is
+difficulttoassess. Seedguidancebythecategoriesandregestaugmentationbothinformthetopic
+structure,whilecertainlimitationspersistacrossallconfigurations.
+Severaltopicsdiscoveredwiththeenhancedtopicmodelsexhibitadegreeoftheologicalspeci-
+ficitythatexceedsbroadthematiccategorisationandreflectsidentifiablesub-discourseswithinthe
+correspondence. One example is the anti-papal apocalyptic topic found by Seeded FASTopic at
+k = 20 (cf. Figure6) (T04:bestia, canis, antichristus, diabolus, papatus, persecutio, grex, ouis,
+monstrum, tentatio). ThesetermsmapontohowReformiststhoughtofthepapacyastheAntichrist
+ofRevelation[ 3,p. 217-218],with grex andouis (flockandsheep)invokingtheimageofthepop-
+ularShepherdimageofJohn10usedtoframethepersecutedReformists[ 12,p. 82-83]. Another
+one is T08 atk = 20 , a confessional conflict topic (ceso, incendiarius, abschaum, kanoniker,
+buceraner, indictio, catabaptistus, religionsfriede, vorfall, vorzeichen) that captures how the let-
+ters frame disturbances by classifying actors such as Anabaptists (catabaptistus), Catholic clergy
+(kanoniker), and Bucerian reformers (buceraner) – opponents often described with polemics in
+Bullinger’s network [17, p. 12] – within moralised categories (abschaum, incendiarius), while
+embeddingthesedisputesinthecontextofconfessionalconflicts( religionsfriede).
+Temporal topic distributions offer partial validation of thematic coherence. The clearest case
+isthemilitarytopics. AtrooptopicpeaksattheSchmalkaldicWar(1546–1547)bothwithregests
+(T07, Figure7) and without them (T13, Figure6). A naval topic (T12) rises in both configu-
+14
+rations towards the French Wars of Religion and the Dutch Revolt (around 1560–1570). In the
+Seeded+Regestconfiguration,theEucharisttopics(T00,T01)declinearound1549,whichwould
+fit theConsensus Tigurinus. However this also coincides with the end of regest coverage in the
+1540s. Theseshiftscouldthereforealsoreflectthechangeindocumentrepresentationratherthan
+historicaldevelopments. Thesameappliestothenear-identicalplotsoftopicswithunrelatedvo-
+cabulary(e.g.,T06,T08,T11,T16),whichwereadasnoise. Distributionsthatrecuracrossconfig-
+urationswithandwithoutregeststhusofferamorereliablecriterionforcoherent,evolvingtopics
+thancoherenceanddiversitymetricsalone.
+TheabsenceofseveralmajorReformationtopicsshouldalsobenoted. AnexperimentalLatin-
+onlyrun,encodingonlytheLatinportionofeachletterandconstructingtheBoWvocabularyex-
+clusivelyfromLatinnounlemmas,revealedfiner-graineddoctrinaltopicstructuresat k = 20 than
+any of the four multilingual configurations reported. Some examples are a sacrament-discussion
+cluster(glorificatio, signaculum, expiatio, sacrifitium, sumptio, ...),aTrinitytopic( trinitas, medi-
+ator, doctrina, persona, deus, consensio, substantia, coelum, natura, ...), an eschatological topic
+(ecclesiola, coelestis, immortalitas, letitia, ueneratio, ...),andanecclesiologicaltopic( excommu-
+nicatio, scandalum, aedificatio, uocatio,...). ThissuggeststhattheENHGadministrative,political,
+andeverydayvocabularywithinthejointtopicspacesuppressestopicsoftheologicaldiscourse.
+AnexperimentalconceptmodellingrunusingLLooMon50randomlettersshowsamoreinter-
+pretableapproachincomparisontotheFASTopicoutputs. 29 Appliedtothepilotsample,adistilla-
+tionstepcondensedthelettersinto177bullet-pointsummaries,whichwereclustered(HDBSCAN)
+intoeightthematicgroups. Fromtheseclusters,asynthesisstepproposed59candidateconcepts.
+Each is generated as an inclusion criterion, unlike other approaches that produce a keyword list.
+Forexample: “DoesthetextargueagainsttheauthorityofthePopeortheRomanpapacyinfavour
+ofnationalorgodlylaw?” for Anti-Papal Authority. OutputofacomparabletopicinaFASTopic
+run looks like this:bestia, ouis, antichristus, diabolus, papatus, persecutio, grex, exilium, mon-
+strum, tentatio. AnautomaticreviewpassinLLooMthenmergedeightoverlappingconceptpairs.
+Thisinternalconsistency-checkingcouldalsobeskippedanddonemanuallytoproceedwithcon-
+ceptscoring. Weselectedtentheologicalconceptsforconceptscoringacrossthepilotsample(e.g.,
+Justification by Faith,Scriptural Supremacy,Sacramental Integrity,Anti-Lutheran Polemics). For
+eachletter–conceptpair,LLooM’soutputisascoringcriterion(ageneratedprompt),ascore,and
+a rationale justifying the score, making it considerably more interpretable than, e.g., FASTopic.
+We illustrate this with the example of the letter HBBW 12, Nr. 1597 (p. 30), in which Kaspar
+Schwenckfeld, a German Reformer, is sending the Zurich reformers a copy of his treatise on the
+gloryofChrist,urgingthemtoweighitagainsttheScriptureandarguingthatfulldoctrinalunder-
+standingisrevealedincrementallyratherthanallatonce. LLooMgivestheconcept Sacramental
+Integrity (scoring prompt: “Does the text address the validity or meaning of the sacraments?”) a
+lowscoreof0.25,withtherationalecorrectlynotingthat“ThetextdiscussesthenatureofChrist’s
+glory,thesufficiencyofscripture,andtheprocessofspiritualrevelation,butitdoesnotspecifically
+addressthevalidityortheologicalmeaningofthesacraments.” –aplausiblerejection. Bycontrast,
+Spiritual Presence(scoring prompt: “Does the text argue for the presence of Christ through faith
+and the spirit rather than physical location?”) is scored 1.00, with the rationale identifying that
+theletter“arguesthatChrist’sgloryandknowledgearerevealedthroughtheHolySpiritandfaith
+ratherthanthroughhumancraftorphysicalpresence”. Here,thegeneratedrationaledivergesfrom
+theletter’scontentbecauseinit,SchwenckfeldneveraddresseswhereorhowChristispresentrel-
+ativetophysicallocation. Thelevelofinterpretabilityoftheresultscomesatacomputationalcost.
+InferenceranlocallyonaMacBook(M1)viaTurbofieldflareusing gemma-4-26b-a4b-it . Con-
+cept modelling the 50-letter sample took took 15 hours, a cost scaling linearly with corpus size.
+Wethereforereportthepilotasexploratorygroundworkforfuturework.
+29 https://github.com/len-rtz/bullinger-concept-modelling ,lastaccessed14.08.2026
+15
+1530 1540 1550 1560 1570
+0.048
+0.056
+T00: socer · fasciculus · chirurgus
+1530 1540 1550 1560 1570
+T01: authoritate · aries · evangelion
+1530 1540 1550 1560 1570
+0.048
+0.056
+T02: adiaphoros · haereseus · synoda
+1530 1540 1550 1560 1570
+T03: obses · admirallius · tormentarius
+1530 1540 1550 1560 1570
+0.048
+0.056
+T04: bestia · canis · genu
+1530 1540 1550 1560 1570
+T05: erbietung · graus · gesundheit
+1530 1540 1550 1560 1570
+0.048
+0.056
+T06: haut · ware · zusatz
+1530 1540 1550 1560 1570
+T07: kommentar · konkordie · theologe
+1530 1540 1550 1560 1570
+0.048
+0.056
+T08: ceso · incendiarius · abschaum
+1530 1540 1550 1560 1570
+T09: biblia · adulescens · musa
+1530 1540 1550 1560 1570
+0.048
+0.056
+T10: handes · seinis · cognus
+1530 1540 1550 1560 1570
+T11: fasciculus · batzius · landgrauius
+1530 1540 1550 1560 1570
+0.048
+0.056
+T12: prinz · admiral · schiff
+1530 1540 1550 1560 1570
+T13: truppe · heer · feind
+1530 1540 1550 1560 1570
+0.048
+0.056
+T14: gotteshaus · bundstag · bittag
+1530 1540 1550 1560 1570
+T15: gnade · handel · dienst
+1530 1540 1550 1560 1570
+0.048
+0.056
+T16: adolesco · commendatio · parens
+1530 1540 1550 1560 1570
+T17: exercitus · eques · miles
+1530 1540 1550 1560 1570
+0.048
+0.056
+T18: corpus · spiritus · sacramentum
+1530 1540 1550 1560 1570
+T19: senatus · concilium · conuentus
+Mean topic weight per year across letters (1530 1575)  Seeded
+1536: Wittenberg Concord 1547: Schmalkaldic War 1549: Consensus Tigurinus 1570: French Wars of Religion
+Figure 6:Meantopicweightper yearacrossBDCletters fortheseededconfiguration ( K = 20 )
+overthecorrespondenceperiod1530–1575. Verticaldashedlinesmarkfourhistoricallysignificant
+events: the Wittenberg Concord (1536), the Schmalkaldic War (1547), theConsensus Tigurinus
+(1549),andtheFrenchWarsofReligion(datedhereto1570).
+16
+1530 1540 1550 1560 1570
+0.040
+0.050
+0.060
+T00: paulusbriefen · authoritate · abendmahlsbekenntnis
+1530 1540 1550 1560 1570
+T01: abendmahl · schrift · gegner
+1530 1540 1550 1560 1570
+0.040
+0.050
+0.060
+T02: folium · fasciculus · pretium
+1530 1540 1550 1560 1570
+T03: communitas · suffragium · praeses
+1530 1540 1550 1560 1570
+0.040
+0.050
+0.060
+T04: parens · commendatio · beneuolentia
+1530 1540 1550 1560 1570
+T05: gesundheit · graus · erbietung
+1530 1540 1550 1560 1570
+0.040
+0.050
+0.060
+T06: genitor · uterum · ergastulum
+1530 1540 1550 1560 1570
+T07: truppe · heer · tagsatzung
+1530 1540 1550 1560 1570
+0.040
+0.050
+0.060
+T08: ehrwird · rachts · conzili
+1530 1540 1550 1560 1570
+T09: significium · seinis · acia
+1530 1540 1550 1560 1570
+0.040
+0.050
+0.060
+T10: admirallius · milliarus · praesidiarius
+1530 1540 1550 1560 1570
+T11: desyderius · impius · innouatio
+1530 1540 1550 1560 1570
+0.040
+0.050
+0.060
+T12: prinz · admiral · schiff
+1530 1540 1550 1560 1570
+T13: religionsfriede · ersatz · durchreise
+1530 1540 1550 1560 1570
+0.040
+0.050
+0.060
+T14: knabe · pfleger · jesheit
+1530 1540 1550 1560 1570
+T15: gnade · dienst · diener
+1530 1540 1550 1560 1570
+0.040
+0.050
+0.060
+T16: excellentia · obseruantia · ecclesiola
+1530 1540 1550 1560 1570
+T17: exercitus · eques · miles
+1530 1540 1550 1560 1570
+0.040
+0.050
+0.060
+T18: corpus · spiritus · coena
+1530 1540 1550 1560 1570
+T19: parlamentum · exequutio · tormentarius
+Mean topic weight per year across letters (1530 1575)  Seeded-Regest
+1536: Wittenberg Concord 1547: Schmalkaldic War 1549: Consensus Tigurinus 1570: French Wars of Religion
+Figure 7:Mean topic weight per year across BDC letters for the Seeded+Regest configuration
+(K = 20 )overthecorrespondenceperiod1530–1575. Verticaldashedlinesmarkfourhistorically
+significant events: the Wittenberg Concord (1536), the Schmalkaldic War (1547), theConsensus
+Tigurinus (1549),andtheFrenchWarsofReligion(datedhereto1570).
+17
+7 Limitations
+Regardingtextreuse,afirstlimitationconcernstheinterpretabilityoftheencoderrepresentations
+underlyingtheretrievalpipeline. AsD’Angelo,Taddei,andLenci[ 21]note,computationalmod-
+els “cannot distinguish between coincidental similarity, shared literary tradition, and intentional
+allusion” (p. 8); passages surfaced by the system require humanistic interpretation before any
+grounded claim of patristic influence can be sustained. Following Riemenschneider and Frank
+[48], the pipeline is best understood as a first-pass exploration tool. Ground truth evaluation is,
+furthertothelimitationsdiscussedinSection 3.3,constrainedbythesizeoftheevaluationdataset,
+withn = 100 limiting the statistical robustness of the reported retrieval metrics. The absence of
+afalsepositiveevaluation,anassessmentofhowoftenthepipelineretrievespassagesthataresu-
+perficiallysimilarbutphilologicallyunrelated, meansthatprecisionmetricscannotbeestimated.
+Itisalsoworthnotingthatmultilingualreferencesremainanopenquestion,asonlyoneoutofnine
+non-Latin-to-Latinevaluationreferencewasrecoveredbythemultilingualbi-encoder.
+Severallimitationsalsobearontheinterpretationofthetopicmodellingresults. Persistentjunk
+clusters appear across all four configurations with overlapping vocabulary. The degree to which
+seedingandregestaugmentationconstructoraltertopicstructurecannotbecleanlydisentangled.
+The regest interpolation weight of 0.5 was set for practical reasons without systematic tuning,
+and the direction of the bias it introduces, whether it over- or under-weights scholarly context, is
+unknown.
+8 Future Work
+Several directions present themselves for future work. Fine-tuning the language models used for
+retrievalondomain-specificannotationsfollowingCaffagnietal.[ 16];Schelbetal.[ 52]andoth-
+ers represents a natural next step for enhancing dense retrieval. Training data for that could be
+readily constructed from the numerous references annotated in the HBBW. Further, the role of
+named-entityinformationfromthelettersandfurtherintegrationoffeature/metadatadeservesys-
+tematic investigation [50] as direct patristic references are frequently mediated through person
+mentions. Segmentation strategy equally warrants empirical scrutiny, as does the introduction
+of metadata-enriched segmentation [39], such as citation markers or discourse cues, which may
+improveretrievalperformanceoverthecurrentsegmentation. Thoughcostly,LLM-assistedrefer-
+encedetectionorinterpretation[ 23;60]offersanalternativeorcomplementaryapproach,provided
+hallucinationrisksaremanaged.
+Asalreadybroughtupinthediscussion,topicmodellingcouldbeexploredfurtheralongsev-
+eral axes. One option would be to incorporate the per-letterBullinger Digitalcategory tags as a
+signal instead of using them only as topic seeds. The effect of restricting the vocabulary to Latin
+onlyversusENHGonlycouldlikewisebeinvestigatedfurther. Adirectionworthexploringisalso
+a finer-grained application of LLooM to the corpus. Our pilot applied concept induction at the
+letter level, where documents often exceed several hundred words and address multiple topics at
+once (reflected in the 177 bullet points generated from only 50 letters). Lam et al. [38]’s original
+validation was done on short, self-contained, topically coherent social media posts. Feeding full
+letters into the pipeline may therefore understate LLooM’s capacity for specific, idea-level con-
+cepts. Since a subset of letters includes scholarly regest annotations in which regest paragraphs
+alignwithspecificparagraph-levelspansintheletterbody(markedvia div/@corresp intheTEI
+encoding), segmentingalongtheseboundarieswouldyieldshorter,moretopicallycoherentinput
+closertoLLooM’sintendedgranularity. Followingthesamelogicbehindusingregestembeddings
+inFASTopic,futureworkshouldcompareconceptinductiononregest-segmentedtextagainstthe
+same segments augmented with their corresponding regest text, to isolate whether segmentation,
+regestaugmentation,ortheircombinationimprovesconceptspecificityandinterpretability.
+18
+Beyond detection at the level of individual letters, a natural extension is tracing whether
+patristic references and the ideas they carry propagate through Bullinger’s correspondence
+network. For example, one could examine whether a shared citation coincides with specific
+topics/correspondentsorreadingrecommendations. Suchnetwork-leveldiffusionanalysiswould
+require linking detected references to sender–recipient metadata and modelling their spread over
+time[49].
+Moregenerally,across-corpusevaluationontheThBWcouldassessthemethodologicalgener-
+alisabilitybeyondtheBullingercorpus. Mostimportantly,futureworkshouldinvolvetheologians
+andreligiousscholarswhocanprovidequalitativefeedback.
+9 Conclusion
+We investigated the degree to which computational methods can detect patristic references and
+modeltopicsasproxiestotheologicalideasinHeinrichBullinger’s16th-centurycorrespondence.
+The best-performing domain-adapted Latin encoder,LaBERTa-W_VULG-S_VL , performs better
+than other bi-encoders, while BM25 beats all dense approaches on explicit citations. The hy-
+brid RRF improves implicit recall over either method alone at minimal additional cost. Topic
+modellingoverthe Bullinger DigitalcorpuswithFASTopicrecoversthematicallydistinctand,in
+some cases, historically coherent patterns. Neither metadata-informed configuration is reliably
+superior to unmodified FASTopic. Gains remain difficult to assess. Although we aimed to use
+topic-letter distributions to potentially inform reference retrieval, dominant topic weights barely
+exceed a uniform distribution, suggesting that the current topic representations are too diffuse to
+informretrieval. Nevertheless,connectingretrievalwithtopicsremainstheintendedroadmapfor
+futureworkoncetightertopicmodellingapproachesareestablished. ApilotapplicationofLLooM
+suggests a more interpretable, criterion-based alternative to keyword topics at additional compu-
+tational cost. Together, these results position patristic reference detection as tractable for explicit
+citationbutharderforimplicitreferences,withhybriddenseandsparseretrievalandfuturedomain
+fine-tuning as promising paths to narrow that gap. Topic modelling offers a productive but still
+coarse-grainedproxyfortheideasdiscussedduringtheReformation. Bothpointtothepotentialof
+computational methods to facilitate large-scale exploration of Bullinger’s correspondence, while
+highlightingtheneedforfurthermethodologicalrefinement,morerobustevaluationandphilolog-
+icalvalidationtoestablishmorereliableconnectionsbetweenpatristicreferencesandtheological
+ideas.
+19
+References
+[1] Ahnert, Ruth and Ahnert, Sebastian E. “Protestant Letter Networks in the Reign of Mary
+I:AQuantitativeApproach”.In: ELH 82,no.1(2015),pp.1–33.ISSN:1080-6547.URL:
+http://www.jstor.org/stable/24477807.
+[2] Allenbach,Jean,Benoit,André,Bertrand,DanielA.,Hanriot-Coustet,A.,Maraval,Pierre,
+Pautler,A.,andPrigent,Pierre. Biblia Patristica: Index des citations et allusions bibliques
+dans la littérature patristique.Paris: Éditions du Centre National de la Recherche Scien-
+tifique,1975,pp.20–21.
+[3] Almond, Philip C. “The Antichrist Divided”. In:The Antichrist: A New Biography. Cam-
+bridgeUniversityPress,2020,pp.201–235.
+[4] Hans Ulrich Bächtold and Rainer Henrich, edited by.Heinrich Bullinger Briefwechsel.
+Vol.7.TheologischerVereinZürich,1998.
+[5] Hans Ulrich Bächtold and Rainer Henrich, edited by.Heinrich Bullinger Briefwechsel.
+Vol.10a.TheologischerVereinZürich,2004.
+[6] Bamman, David and Burns, Patrick J. “Latin BERT: A Contextual Language Model for
+ClassicalPhilology”.arXivpreprint.2020.URL: http://arxiv.org/abs/2009.10053.
+[7] Bergjan, Silke-Petra. “Bullinger und die griechischen Kirchenväter in der konfessionellen
+Auseinandersetzung”.In: Zwingliana 31(2004),pp.133–160.DOI: 10.69871/senffw86.
+[8] Berti,Monica.“DigitalPracticeforStudyingtheIndirectTransmissionofClassicalAuthors
+andWorks”.In: Anthologies, Lexica, Scholia and the Indirect Tradition of Classical Texts in
+the Greek World,ed.byFedericoFaviandVirginiaMastellari.Berlin,Boston:DeGruyter,
+2024, pp. 189–206. ISBN: 9783111386010. DOI:doi:10.1515/9783111386010- 010 .
+URL:https://doi.org/10.1515/9783111386010-010.
+[9] Blei, David and Lafferty, John. “Dynamic topic models”. In:Proceedings of the 23rd in-
+ternational conference on Machine learning. ICML ’06. New York, NY, USA: Associa-
+tion for Computing Machinery, June 2006, pp. 113–120. ISBN: 978-1-59593-383-6. DOI:
+10.1145/1143844.1143859.
+[10] Blei,David,Ng,Andrew,andJordan,Michael.“Latentdirichletallocation”.In: Journal of
+machine Learning research 3, no. Jan (2003), pp. 993–1022. URL:https://www.jmlr.
+org/papers/volume3/blei03a/blei03a.pdf.
+[11] Bruch,Sebastian,Gai,Siyu,andIngber,Amir.“AnAnalysisofFusionFunctionsforHybrid
+Retrieval”.In: ACM Transactions on Information Systems 42,no.1(Aug.2023),pp.1–35.
+ISSN:1558-2868.DOI: 10.1145/3596512.
+[12] Bullinger,Heinrich. Das zweite helvetische Bekenntnis.ger.Zürich:Zwingli-Verlag,1966,
+174S.
+[13] Buning, Robin, McGillivray, Barbara, and Hengchen, Simon. “Topic Modelling: Hartlib’s
+Correspondence before and after 1650”. In:Reassembling the Republic of Letters in the
+Digital Age,ed.byHowardHotsonandThomasWallnig.Göttingen:GöttingenUniversity
+Press,2019,pp.426–428.ISBN:978-3-86395-403-1.DOI: 10.17875/gup2019-1146.
+[14] Burns,PatrickJ.“Latincy:SynthetictrainedpipelinesforLatinNLP”.arXivpreprint.2023.
+URL:https://arxiv.org/abs/2305.04365.
+20
+[15] Burns,PatrickJ.,Brofos,JamesA.,Li,Kyle,Chaudhuri,Pramit,andDexter,JosephP.“Pro-
+filingofIntertextualityinLatinLiteratureUsingWordEmbeddings”.In: Proceedings of the
+2021 Conference of the North American Chapter of the Association for Computational Lin-
+guistics: Human Language Technologies. NAACL-HLT 2021, ed. by Kristina Toutanova,
+AnnaRumshisky,LukeZettlemoyer,DilekHakkani-Tur,IzBeltagy,StevenBethard,Ryan
+Cotterell,TanmoyChakraborty,andYichaoZhou.AssociationforComputationalLinguis-
+tics,June2021,pp.4900–4907.DOI: 10.18653/v1/2021.naacl-main.389.
+[16] Caffagni,Davide,Cocchi,Federico,Mambelli,Anna,Tutrone,Fabio,Zanella,Marco,Cor-
+nia,Marcella,Cucchiara,Rita,etal.“BenchmarkingBERT-basedModelsforLatin:ACase
+Study on Biblical References in Ancient Christian Literature”. In:Proceedings of the 21st
+Conference on Information and Research Science Connecting to Digital and Library Sci-
+ence.IT.2025.URL: https://ceur-ws.org/Vol-3937/short11.pdf .
+[17] Campi, Emidio. “Heinrich Bullinger und seine Zeit”. deu. In:Zwingliana , no. 31 (2004),
+pp.7–35.ISSN:0254-4407.DOI: 10.5167/uzh-66571.
+[18] Chang, Jonathan, Gerrish, Sean, Wang, Chong, Boyd-graber, Jordan, and Blei, David.
+“Reading Tea Leaves: How Humans Interpret Topic Models”. In:Advances in Neural In-
+formation Processing Systems, ed. by Y. Bengio, D. Schuurmans, J. Lafferty, C. Williams,
+and A. Culotta. Vol. 22. Curran Associates, Inc., 2009. URL:https : / / proceedings .
+neurips.cc/paper_files/paper/2009/file/f92586a25bb3145facd64ab20fd554ff-
+Paper.pdf.
+[19] Churchill,RobandSingh,Lisa.“TheEvolutionofTopicModeling”.In: ACM Comput. Surv.
+54,no.10s(Nov.2022),215:1–215:35.ISSN:0360-0300.DOI: 10.1145/3507900.
+[20] Cormack, Gordon V., Clarke, Charles L A, and Buettcher, Stefan. “Reciprocal rank fu-
+sion outperforms condorcet and individual rank learning methods”. In:Proceedings of the
+32nd International ACM SIGIR Conference on Research and Development in Information
+Retrieval. SIGIR ’09. Boston, MA, USA: Association for Computing Machinery, 2009,
+pp.758–759.ISBN:9781605584836.DOI: 10.1145/1571941.1572114.
+[21] D’Angelo, Caterina, Taddei, Andrea, and Lenci, Alessandro. “Detecting Semantic Reuse
+inAncientGreekLiterature:AComputationalApproach”.In: Proceedings of the Eleventh
+Italian Conference on Computational Linguistics (CLiC-it 2025), ed. by Cristina Bosco,
+ElisabettaJezek,MarcoPolignano,andManuelaSanguinetti.Cagliari,Italy:CEURWork-
+shop Proceedings, Sept. 2025, pp. 327–336. ISBN: 979-12-243-0587-3. URL:https://
+aclanthology.org/2025.clicit-1.34/.
+[22] Edelstein, Dan, Findlen, Paula, Ceserani, Giovanna, Winterer, Caroline, and Coleman,
+Nicole. “Historical Research in a Digital Age: Reflections from the Mapping the Republic
+of Letters Project”. In:The American Historical Review 122(Apr. 2017), pp. 400–424.
+DOI:10.1093/ahr/122.2.400.
+[23] Fu,BinghaoandWang,Jun.“AncientTRD:ANovelTextReuseDetectionMethodforAn-
+cientChineseLiterature”.en.In: Applied Sciences 15,no.19(Sept.2025).ISSN:2076-3417.
+DOI:10.3390/app151910475.
+[24] UlrichGäblerandEndreZsindely,editedby. Heinrich Bullinger Briefwechsel.Vol.1.The-
+ologischerVereinZürich,1973.
+21
+[25] Galatolo,Federico,Martino,Gabriele,Cimino,Mario,andTommasi,Chiara.“DenseInfor-
+mation Retrieval on a Latin Digital Library via LaBSE and LatinBERT Embeddings”. In:
+Proceedings of the 12th International Conference on Data Science, Technology and Applica-
+tions.12thInternationalConferenceonDataScience,TechnologyandApplications.Rome,
+Italy:SCITEPRESS-ScienceandTechnologyPublications,2023,pp.518–523.ISBN:978-
+989-758-664-4.DOI: 10.5220/0012134700003541.
+[26] Ginn, Michael and Hulden, Mans. “Historia Magistra Vitae: Dynamic Topic Modeling of
+RomanLiteratureusingNeuralEmbeddings”.arXivpreprint.2024.URL: http://arxiv.
+org/abs/2406.18907.
+[27] Gorovaia, Svetlana, Schmidt, Gleb, and Yamshchikov, Ivan P. “Sui Generis: Large Lan-
+guage Models for Authorship Attribution and Verification in Latin”. In:Proceedings of
+the 4th International Conference on Natural Language Processing for Digital Humanities,
+ed.byMikaHämäläinen,EmilyÖhman,SoMiyagawa,KhalidAlnajjar,andYuriBizzoni.
+Miami, USA: Association for Computational Linguistics, Nov. 2024, pp. 398–412. DOI:
+10.18653/v1/2024.nlp4dh-1.39.
+[28] Grootendorst,Maarten.“BERTopic:Neuraltopicmodelingwithaclass-basedTF-IDFpro-
+cedure”.arXivpreprint.2022.arXiv: 2203.05794 [cs.CL].URL: https://arxiv.org/
+abs/2203.05794.
+[29] Hambarde, Kailash A. and Proença, Hugo. “Information Retrieval: Recent Advances and
+Beyond”. In:IEEE Access 11(2023), pp. 76581–76604. DOI:10.1109/ACCESS.2023.
+3295776.
+[30] Hankar, Mustapha, Kasri, Mohammed, and Beni-Hssane, Abderrahim. “A comprehensive
+overview of topic modeling: Techniques, applications and challenges”. en. In:Neurocom-
+puting 628(May 2025), p. 129638. ISSN: 09252312. DOI:10.1016/j.neucom.2025.
+129638.
+[31] Heidelberger Akademie der Wissenschaften. “Theologenbriefwechsel im Südwesten des
+ReichsinderFrühenNeuzeit(1550–1620)”.2020.
+[32] Rainer Henrich, Alexandra Kess, and Christian Moser, edited by.Heinrich Bullinger
+Briefwechsel.Vol.12.TheologischerVereinZürich,2006.
+[33] Hue-Gay,Elysabeth,Mellerin,Laurence,andMorlock,Emmanuelle.“TEI-encodingoftext
+reusesintheBIBLINDEXProject”.In: Journal of Data Mining & Digital Humanities Spe-
+cial Issue on Computer-Aided Processing of Intertextuality in Ancient Languages(Oct.21,
+2017),p.3989.ISSN:2416-5999.DOI: 10.46298/jdmdh.3989.
+[34] Hurtado Bodell, Miriam, Magnusson, Måns, and Keuschnigg, Marc. “Seeded Topic Mod-
+elsinDigitalArchives:AnalyzingInterpretationsofImmigrationinSwedishNewspapers,
+1945–2019”. In:Sociological Methods & Research 55, no. 1 (Feb. 2026), pp. 120–156.
+ISSN:0049-1241.DOI: 10.1177/00491241241268453.
+[35] Jagarlamudi,Jagadeesh,Daumé,Hal,andUdupa,Raghavendra.“Incorporatinglexicalpri-
+ors into topic models”. In:Proceedings of the 13th Conference of the European Chapter
+of the Association for Computational Linguistics.EACL’12.Avignon,France:Association
+forComputationalLinguistics,2012,pp.204–213.ISBN:9781937284190.
+[36] Jeong, Dahyun, Hwang, Jeongin, Choi, Yunjin, and Kim, Yoon-Yeong. “Automatic Seed
+WordSelectionforTopicModeling”.In: IEEE Access 13(2025),pp.31269–31285.ISSN:
+2169-3536.DOI: 10.1109/ACCESS.2025.3540410.
+22
+[37] Klie, Jan-Christoph, Bugert, Michael, Boullosa, Beto, Eckart de Castilho, Richard, and
+Gurevych,Iryna.“TheINCEpTIONPlatform:Machine-AssistedandKnowledge-Oriented
+Interactive Annotation”. In:Proceedings of the 27th International Conference on Compu-
+tational Linguistics: System Demonstrations, ed. by Dongyan Zhao. Santa Fe, New Mex-
+ico: Association for Computational Linguistics, Aug. 2018, pp. 5–9. URL:https : / /
+aclanthology.org/C18-2002/.
+[38] Lam, Michelle S., Teoh, Janice, Landay, James, Heer, Jeffrey, and Bernstein, Michael
+S. “Concept Induction: Analyzing Unstructured Text with High-Level Concepts Using
+LLooM”. In:Proceedings of the 2024 CHI Conference on Human Factors in Computing
+Systems.CHI’24.Honolulu,HI,USA:AssociationforComputingMachinery,2024.ISBN:
+9798400703300.DOI: 10.1145/3613904.3642830.
+[39] Lau, Pak Kin and McManus, Stuart Michael. “Mining Asymmetric Intertextuality”. arXiv
+preprint.2024.URL: https://arxiv.org/abs/2410.15145.
+[40] Manjavacas,Enrique,Long,Brian,andKestemont,Mike.“OntheFeasibilityofAutomated
+Detection of Allusive Text Reuse”. In:Proceedings of the 3rd Joint SIGHUM Workshop
+on Computational Linguistics for Cultural Heritage, Social Sciences, Humanities and Lit-
+erature, ed. by Beatrice Alex, Stefania Degaetano-Ortlieb, Anna Kazantseva, Nils Reiter,
+andStanSzpakowicz.Minneapolis,USA:AssociationforComputationalLinguistics,June
+2019,pp.104–114.DOI: 10.18653/v1/W19-2514.
+[41] Martinelli, Ginevra, Impicciché, Paola, Fersini, Elisabetta, Mambrini, Francesco, and Pas-
+sarotti, Marco. “Exploring Neural Topic Modeling on a Classical Latin Corpus”. In:Pro-
+ceedings of the 2024 Joint International Conference on Computational Linguistics, Lan-
+guage Resources and Evaluation (LREC-COLING 2024). LREC-COLING 2024, ed. by
+NicolettaCalzolari,Min-YenKan,VeroniqueHoste,AlessandroLenci,SakrianiSakti,and
+Nianwen Xue. Torino, Italia: ELRA and ICCL, May 2024, pp. 6929–6934. URL:https:
+//aclanthology.org/2024.lrec-main.606/.
+[42] McShane,BronaghAnn.“VisualisingtheReceptionandCirculationofEarlyModernNuns’
+Letters”.In: Journal of Historical Network Research 2(Dec.3,2018),pp.1–25.DOI: 10.
+25517/JHNR.V2I1.32.
+[43] Moritz, Maria, Wiederhold, Andreas, Pavlek, Barbara, Bizzoni, Yuri, and Büchler, Marco.
+“Non-Literal Text Reuse in Historical Texts: An Approach to Identify Reuse Transforma-
+tions and its Application to Bible Reuse”. In:Proceedings of the 2016 Conference on Em-
+pirical Methods in Natural Language Processing.EMNLP2016,ed.byJianSu,KevinDuh,
+andXavierCarreras.Austin,Texas:AssociationforComputationalLinguistics,Nov.2016,
+pp.1849–1859.DOI: 10.18653/v1/D16-1190.
+[44] Nogueira,Rodrigo,Yang,Wei,Cho,Kyunghyun,andLin,Jimmy.“Multi-StageDocument
+Ranking with BERT”. arXiv preprint. 2019. URL:https : / / arxiv . org / abs / 1910 .
+14424.
+[45] Periti,Francesco,Cassotti,Pierluigi,Montanelli,Stefano,Tahmasebi,Nina,andSchlechtweg,
+Dominik.“TRoTR:AFrameworkforEvaluatingtheRe-contextualizationofTextReuse”.
+In: Proceedings of the 2024 Conference on Empirical Methods in Natural Language
+Processing,ed.byYaserAl-Onaizan,MohitBansal,andYun-NungChen.Miami,Florida,
+USA: Association for Computational Linguistics, Nov. 2024, pp. 13972–13990. DOI:
+10.18653/v1/2024.emnlp-main.774.
+[46] Poustie,Sarah. Letters and networks: analysing Olive Schreiner’ s epistolary networks.PhD
+thesis. The University of Edinburgh, 2014. URL:https : / / era . ed . ac . uk / handle /
+1842/9842.
+23
+[47] Riemenschneider, Frederick and Frank, Anette. “Exploring Large Language Models for
+Classical Philology”. In:Proceedings of the 61st Annual Meeting of the Association for
+Computational Linguistics (Volume 1: Long Papers), ed. by Anna Rogers, Jordan Boyd-
+Graber,andNaoakiOkazaki.Toronto,Canada:AssociationforComputationalLinguistics,
+July2023,pp.15181–15199.DOI: 10.18653/v1/2023.acl-long.846.
+[48] Riemenschneider, Frederick and Frank, Anette. “Graecia capta ferum victorem cepit. De-
+tecting Latin Allusions to Ancient Greek Literature”. In:Proceedings of the Ancient Lan-
+guage Processing Workshop, ed. by Adam Anderson, Shai Gordin, Bin Li, Yudong Liu,
+and Marco C. Passarotti. Varna, Bulgaria: INCOMA Ltd., Shoumen, Bulgaria, Sept. 2023,
+pp.30–38.URL: https://aclanthology.org/2023.alp-1.4/.
+[49] Roller, Ramona. “Tracing the Footsteps of Ideas: Time-respecting Paths Reveal Key Re-
+formersandCommunicationPathwaysinProtestantLetterNetworks”.SocArXivpreprint.
+May2023.DOI: 10.31235/osf.io/cfqry.
+[50] Romanello, Matteo. “Exploring Citation Networks to Study Intertextuality in Clas-
+sics”. In: Digital Humanities Quarterly 10, no. 2 (2016). URL: https : / / www .
+proquest . com / scholarly - journals / exploring - citation - networks - study -
+intertextuality/docview/2555208992/se-2.
+[51] Rossini,Paolo.“ThenetworkedoriginsofCartesianphilosophyandscience”.In: HOPOS:
+The Journal of the International Society for the History of Philosophy of Science 12, no. 1
+(2022),pp.97–120.DOI: 10.1086/718994.
+[52] Schelb, Julian, Wittweiler, Michael, Revellio, Marie, Feichtinger, Barbara, and Spitz, An-
+dreas. “Loci Similes: A Benchmark for Extracting Intertextualities in Latin Literature”.
+arXivpreprint.2026.URL: http://arxiv.org/abs/2601.07533.
+[53] Scheurer,Patricia,Müller,Raphael,Schroffenegger,Bernard,Ströbel,PhillipB.,andVolk,
+Martin. “Bullinger Digital Briefkorpus. Briefe von und an Heinrich Bullinger 1523 bis
+1575”. deu. Digitale Edition. May 2025. URL:https : / / github . com / bullinger -
+digital/bullinger-korpus-tei (visitedon05/25/2026).
+[54] Schindler,Alfred.“BullingerunddielateinischenKirchenväter”.In: Zwingliana 31(2004),
+pp.161–177.DOI: 10.69871/vy2b2z89.
+[55] Schnober,CarstenandGurevych,Iryna.“CombiningTopicModelsforCorpusExploration:
+Applying LDA for Complex Corpus Research Tasks in a Digital Humanities Project”. en.
+In:Proceedings of the 2015 Workshop on Topic Models: Post-Processing and Applications.
+Melbourne Australia: ACM, Oct. 2015, pp. 11–20. ISBN: 978-1-4503-3784-7. DOI:10 .
+1145/2809936.2809939.
+[56] Schropp, Franziska, Konrad, Thomas E., Revellio, Marie, and Feichtinger, Barbara. “To-
+wardsadifferentiateddigital-hermeneuticanalysistoolforthedetectionofshortquotations
+usingtheexampleoftheChurchFatherJerome”.In: Digital Humanities Quarterly 18,no.3
+(2024).ISSN:1938-4122.URL: http://nbn-resolving.de/urn:nbn:de:bsz:352-
+2-1ezx2eva7qrmf8.
+[57] Smith, David A. “passim: Detect and Align Similar Passages”. 2023. (Visited on
+05/25/2026).
+[58] Ströbel, Phillip Benjamin. “RoBERTa Base Latin Cased V2”. 2022. URL:https :
+//huggingface.co/pstroe/roberta-base-latin-cased3 (visitedon05/25/2026).
+24
+[59] Ströbel,PhillipBenjamin,Aderhold,Stefan,andRoller,Ramona.“Decoding16th-Century
+Letters:FromTopicModelstoGPT-BasedKeywordMapping”.In: Proceedings of the 20th
+Conference on Natural Language Processing (KONVENS 2024), ed. by Pedro Henrique
+LuzdeAraujo,AndreasBaumann,DagmarGromann,BrigitteKrenn,BenjaminRoth,and
+MichaelWiegand.Vienna,Austria:AssociationforComputationalLinguistics,Sept.2024,
+pp.209–221.URL: https://aclanthology.org/2024.konvens-main.23/.
+[60] Umphrey, Ray, Roberts, Jesse, and Roberts, Lindsey. “Investigating Expert-in-the-Loop
+LLMDiscoursePatternsforAncientIntertextualAnalysis”.In: Proceedings of the 4th Inter-
+national Conference on Natural Language Processing for Digital Humanities,ed.byMika
+Hämäläinen,EmilyÖhman,SoMiyagawa,KhalidAlnajjar,andYuriBizzoni.Miami,USA:
+Association for Computational Linguistics, Nov. 2024, pp. 31–40. DOI:10 . 18653 / v1 /
+2024.nlp4dh-1.4.
+[61] Wang, Liang, Yang, Nan, Huang, Xiaolong, Yang, Linjun, Majumder, Rangan, and Wei,
+Furu.“MultilingualE5TextEmbeddings:ATechnicalReport”.arXivpreprint.2024.DOI:
+10.48550/arXiv.2402.05672.URL: https://arxiv.org/abs/2402.05672.
+[62] Wang, Xuerui and McCallum, Andrew. “Topics over time: a non-Markov continuous-time
+modeloftopicaltrends”.In: Proceedings of the 12th ACM SIGKDD International Confer-
+ence on Knowledge Discovery and Data Mining.KDD’06.Philadelphia,PA,USA:Associ-
+ation for Computing Machinery, 2006, pp. 424–433. ISBN: 1595933395. DOI:10.1145/
+1150402.1150450.
+[63] Wu,Xiaobao,Nguyen,Thong,andLuu,AnhTuan.“Asurveyonneuraltopicmodels:meth-
+ods,applications,andchallenges”.en.In: Artificial Intelligence Review 57,no.2(Jan.2024),
+p.18.ISSN:1573-7462.DOI: 10.1007/s10462-023-10661-7 .
+[64] Wu, Xiaobao, Nguyen, Thong, Zhang, Delvin Ce, Wang, William Yang, and Luu, Anh
+Tuan. “FASTopic: Pretrained Transformer is a Fast, Adaptive, Stable, and Transferable
+Topic Model”. In:Advances in Neural Information Processing Systems, ed. by A. Glober-
+son, L. Mackey, D. Belgrave, A. Fan, U. Paquet, J. Tomczak, and C. Zhang. Vol. 37.
+Curran Associates, Inc., 2024, pp. 84447–84481. DOI:10 . 52202 / 079017 - 2683 .
+URL: https : / / proceedings . neurips . cc / paper _ files / paper / 2024 / file /
+998f8d8ff2697da2eae5f87143668754-Paper-Conference.pdf .
+[65] Zhang, Yu, Zhang, Yunyi, Michalski, Martin, Jiang, Yucheng, Meng, Yu, and Han, Jiawei.
+“Effective Seed-Guided Topic Discovery by Integrating Multiple Types of Contexts”. In:
+Proceedings of the Sixteenth ACM International Conference on Web Search and Data Min-
+ing. WSDM ’23. New York, NY, USA: Association for Computing Machinery, Feb. 2023,
+pp.429–437.ISBN:978-1-4503-9407-9.DOI: 10.1145/3539597.3570475.
+[66] EndreZsindely,MatthiasSenn,KurtJakobRüetschi,andHansUlrichBächtold,editedby.
+Heinrich Bullinger Briefwechsel.Vol.4.TheologischerVereinZürich,1989.
+AI Statement
+During the preparation of this work, the authors used Claude Sonnet 4.5 in VS-Code in order to
+assistincoding. Theauthorsreviewedandeditedthescriptsasneededandtakefullresponsibility
+forthecontentofthepublishedarticle.
+25
+A Appendix Section
+A.1 Initialised Seed Topics
+During the projectBullinger Digital, the correspondence was thematically annotated combining
+expert-definedtopicsets,manualannotationofasmallsample,andLLMpromptingwiththeeleven
+categories30 displayed in Table6. The seed phrases used to initialise each topic embedding were
+derived from these. Load-bearing phrases were extracted manually from each description and
+supplemented with thematically aligned terminology. Some categories were split into multiple
+topicslotstoaccountfortheirgreaterinternaldiversityandimportanceinthecontextoftheological
+discourse,asdetailedinTable 7.
+30 https://github.com/bullinger-digital/bullinger-auxiliary-scripts/blob/main/
+Verschlagwortung/topics/topics4_en.json,lastaccessed25.05.2026
+26
+Category Description
+FaithandDoctrineinTheory Theological and doctrinal discussions defining Reformed beliefs,bib-
+lical interpretation, predestination, church discipline, and disputes
+such as theEucharist controversy. Focuses on belief systems rather
+thanpractice.
+FaithandDoctrineinPractice Application of religious doctrine in daily life andchurch governance,
+including worship practices, rituals, clergy roles, sacraments, and
+ceremonies. Focuses on institutional and behavioral consequences of
+doctrine.
+MilitaryandPoliticalAffairs Reports and analyses ofwars,military actions,diplomatic alliances,
+political strategies,and governmental decisions.
+Religious Persecution and Martyr-
+dom
+Discussions of Protestant persecution, includingexile, imprisonment,
+execution,martyrdom,massacres, and fears or experiences of perse-
+cution.
+EducationSystem Covers discussions on educational institutions, recruitment and
+placement of scholars, theological and humanist teaching, curricu-
+lum of schools and academies, funding and establishment of schools,
+exchangesbetweenscholars,and university organization.
+Books,Printing,andPublishing Discussionsabout printing books,interactionswith printers,availabil-
+ity ofprinted volumes, and thecirculation and influence ofprinted
+works.
+RequestsandPetitions Explicit or implicit requests for action,support, guidance, assistance,
+or favors directed at specific individuals or groups. This includesap-
+peals for help, efforts to exert influence, or attempts to activateper-
+sonal or political networks. Excludes prayers, hopes for divine inter-
+vention,andgeneralcommunication.
+EverydayLife Daily life events, routines, and mundane activities, including food,
+cooking,buying and selling,goingto the market,doingthingsaround
+the house,etc.
+DisastersandNaturalPhenomena Extraordinary natural events, disasters, and phenomena such ashar-
+vest failures,meteorological observations,celestial events,fires,and
+floods.
+Illness,Death,andRecoveryinSo-
+ciety
+Societal descriptions ofplague or other illnesses,recovery, andnon-
+violent deathduetoillness,oldage,orchildbirth. Excludesviolentor
+war-relateddeaths.
+Illness,Death,andRecoveryamong
+FamilyandCloseFriends
+Personalaccountsof suffering,mourning,illness,or death withinthe
+household or
