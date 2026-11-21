@@ -1,6 +1,6 @@
 # News candidates — 2026-11-21 (IST)
 
-Generated 2026-11-21 08:19 UTC. Showing 183 items first seen in the last 18 h or published in the last 30 h; 261 older items from the 3-day window are only in news.json.
+Generated 2026-11-21 08:43 UTC. Showing 185 items first seen in the last 18 h or published in the last 30 h; 259 older items from the 3-day window are only in news.json.
 Each item appears once, in the first section it matches. Dates are as reported by the source ("date unknown" = page with no date).
 
 ## By priority topic
@@ -32,12 +32,11 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-20 03:01 UTC] Who gets credit for the sale? ChatGPT ads pose new attribution challenge for Indian brands — Storyboard18 — https://www.storyboard18.com/digital/who-gets-credit-for-the-sale-chatgpt-ads-pose-new-attribution-challenge-for-indian-brands-115053.htm · (already listed on an earlier day) · Ads, Brand/product recommendation, Citation & source selection · +1 other hits
 - [2026-11-19 21:17 UTC] OpenAI Expands ChatGPT Ads to 44 Countries — Wisevoter — (Google News link; search the headline) · Ads
 
-### Search / AEO / GEO (28)
+### Search / AEO / GEO (27)
 - [2026-11-21 08:12 UTC] Google adds a sidebar for recent AI Mode searches — Mezha.net — (Google News link; search the headline) · GEO/AEO
 - [2026-11-21 08:05 UTC] Google homepage adds a sidebar with your recent AI Mode searches — Notebookcheck — (Google News link; search the headline) · GEO/AEO
 - [2026-11-20 21:57 UTC] Perplexity Computer can now work inside Chrome, Edge, Brave and Arc — Crypto Briefing — (Google News link; search the headline) · GEO/AEO
-- [2026-11-20 20:09 UTC] Can AI Be Manipulated? Peer-Reviewed Paper Examines the Ethics of Answer-Engine Optimization (AEO) — Bergen Record — https://www.freep.com/press-release/story/275775/can-ai-be-manipulated-peer-reviewed-paper-examines-the-ethics-of-answer-engine-optimization-aeo/ · Manipulation · +1 other hits
-- [2026-11-20 19:59 UTC] Google AI Mode temporary chats: what they change — NeoTeo — (Google News link; search the headline) · GEO/AEO
+- [2026-11-20 20:03 UTC] Can AI Be Manipulated? Peer-Reviewed Paper Examines the Ethics of Answer-Engine Optimization (AEO) — Cincinnati Enquirer — https://www.freep.com/press-release/story/275775/can-ai-be-manipulated-peer-reviewed-paper-examines-the-ethics-of-answer-engine-optimization-aeo/ · Manipulation · +1 other hits
 - [2026-11-20 18:34 UTC] Local Dominator AI Visibility Software Rebuilds Its Google Business Profile Tool — WBOC TV — https://newsroom.submitmypressrelease.com/2026/11/20/local-dominator-ai-visibility-software-rebuilds-its-google-business-profile-tool_2770201.html · +1 other hits
 - [2026-11-20 17:30 UTC] I tried replacing NotebookLM and Perplexity with one open-source research app, and it does more than just answer questions — XDA — (Google News link; search the headline) · GEO/AEO
 - [2026-11-20 16:32 UTC] Google AI Overviews: Not safe for Your Money or Your Life — Search Engine Land — https://searchengineland.com/google-ai-overviews-not-safe-ymy-502653 · GEO/AEO · +2 other hits
@@ -62,9 +61,11 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-19 14:00 UTC] AI Is Transforming Holiday Shopping: Google AI Overviews — GlobeNewswire — (Google News link; search the headline) · Brand/product recommendation, GEO/AEO
 - [2026-11-19 05:51 UTC] Is SEO Dead Due to AI Search? Thinking About the Future of SEO Based on How AI Overviews Work and Real-World Data｜okaと申します — note — https://note.com/okaproject/n/nc851303868d3?hl=en · GEO/AEO
 
-### Model & lab launches (news search) (55)
+### Model & lab launches (news search) (57)
+- [2026-11-21 08:33 UTC] Google launches Gemini 4 Neon taking on Claude Opus 5.5 and GPT-6.2 Sol — The Hindu — (Google News link; search the headline)
 - [2026-11-21 06:22 UTC] House Committees Flag Chinese Open-Weight AI Models as Cursor Weighs Phasing Out Kimi K2.5 — CASRAI — (Google News link; search the headline) · GEO/AEO
 - [2026-11-21 06:08 UTC] Llama 5: Is There Even a Llama 5? Release Date Rumors, Checked — Fello AI — (Google News link; search the headline)
+- [2026-11-21 04:36 UTC] Mistral launches S’pore science hub, to double Asia-Pacific workforce | The Straits Times - newspaper — Magzter — (Google News link; search the headline)
 - [2026-11-21 04:22 UTC] Grok Imagine Video Generation: Prompts, 1080p & Pricing — Fello AI — (Google News link; search the headline)
 - [2026-11-21 03:45 UTC] Anthropic researcher says Claude solved maths’ greatest riddle — Bangkok Post — (Google News link; search the headline)
 - [2026-11-21 01:54 UTC] Google unveils Gemini 4 Hydrogen, its new AI model built for speed — Mashable — (Google News link; search the headline) · (already listed on an earlier day) · GEO/AEO
@@ -73,19 +74,23 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-20 23:23 UTC] OpenAI launches GPT-6.2 Astra after scrapping predecessor — The Daily Star — (Google News link; search the headline)
 - [2026-11-20 21:13 UTC] Zscaler Collaborates With Anthropic and Mistral to Advance Secure Enterprise AI Adoption — Quiver Quantitative — https://www.quiverquant.com/news/Zscaler+Collaborates+With+Anthropic+and+Mistral+to+Advance+Secure+Enterprise+AI+Adoption · +1 other hits
 - [2026-11-20 20:56 UTC] Anthropic worker claims to have solved a Holy Grail of math problems with the help of AI — Associated Press News — https://apnews.com/article/anthropic-claude-math-solution-ai-4fe8b69a891f160f9e7f0c85af8c55c8
+- [2026-11-20 20:46 UTC] Anthropic: A Surprisingly Sane Valuation For A World Hooked On Claude — Seeking Alpha — https://seekingalpha.com/article/4970772-anthropic-surprisingly-sane-valuation-for-a-world-hooked-on-claude
 - [2026-11-20 19:25 UTC] OpenAI releases chemistry benchmark showing AI’s uneven drug-research skills — Superpower Daily — (Google News link; search the headline)
 - [2026-11-20 19:20 UTC] OpenAI Introduces MedChemBench for Medicinal-Chemistry Reasoning — Unite.AI — (Google News link; search the headline)
 - [2026-11-20 19:07 UTC] OpenAI introduces MedChemBench to test AI on medicinal chemistry — Crypto Briefing — (Google News link; search the headline)
 - [2026-11-20 18:29 UTC] Google Gemini 4 Neon Launches With Lower AI Coding Costs — eWeek — (Google News link; search the headline)
 - [2026-11-20 17:42 UTC] Alibaba's Taobao and Tmall merchant revenue drops 5% as cloud jumps 53% — PPC Land — https://ppc.land/alibabas-taobao-and-tmall-merchant-revenue-drops-5-as-cloud-jumps-53/ · +1 other hits
 - [2026-11-20 17:21 UTC] Google Cloud latest news and announcements — Google Cloud — (Google News link; search the headline)
-- [2026-11-20 17:00 UTC] Newsom Touts an AI Kill Switch to Halt Dangerous OpenAI, Anthropic Releases — KQED — (Google News link; search the headline) · (already listed on an earlier day) · +1 other hits
+- [2026-11-20 17:00 UTC] Newsom Touts an AI Kill Switch to Halt Dangerous OpenAI, Anthropic Releases — KQED — (Google News link; search the headline) · (already listed on an earlier day) · +2 other hits
 - [2026-11-20 16:16 UTC] Ninth Circuit Weighs xAI Challenge to California AI Disclosure Law — Reclaim The Net — (Google News link; search the headline)
+- [2026-11-20 16:00 UTC] Download Google Gemini 4 Update: Expands to Android Go, Direct Open PDF with Gemini 4 — Android Sage — https://www.androidsage.com/2026/11/21/google-gemini-4-update-apk-download/
 - [2026-11-20 15:16 UTC] Anthropic Launches 'Claude For Manufacturing' — Canadian Plastics — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-11-20 14:49 UTC] Bringing 327 Genspark Tools to DeepSeek Harness: Introducing dsh-genspark and the Trick for Porting to Muse — note — https://note.com/kagami_kami/n/n8445e7971940?hl=en
 - [2026-11-20 14:42 UTC] Mistral AI makes Singapore its Asia-Pacific HQ and research hub — ActuIA — (Google News link; search the headline)
 - [2026-11-20 14:14 UTC] Alibaba uses its own chips to train next-generation Qwen model — TechNode — (Google News link; search the headline)
 - [2026-11-20 14:00 UTC] Gemini 4 Neon cuts Google's coding to $3 per input — Observatorio Blockchain — (Google News link; search the headline)
+- [2026-11-20 13:31 UTC] STARTRADER Launches Anthropic Stock CFDs Following Nasdaq Debut — markets.businessinsider.com — (Google News link; search the headline)
+- [2026-11-20 13:06 UTC] Anthropic researcher claims Claude cracked legendary $1M math problem — and left him struggling to keep up — New York Post — https://nypost.com/2026/11/20/business/anthropic-researcher-claims-claude-cracked-legendary-1m-math-problem-and-left-him-struggling-to-keep-up/
 - [2026-11-20 12:56 UTC] Tencent Hy4 vs DeepSeek V4.1 Pro: Only One Has an Endpoint — OrcaRouter — (Google News link; search the headline)
 - [2026-11-20 12:55 UTC] UK Lawmaker Sues Musk's SpaceXSI Over Grok Deepfakes as Company Denies Privacy Liability — BigGo Finance — (Google News link; search the headline)
 - [2026-11-20 12:42 UTC] Google launches Gemini 4 Neon AI model, balanced for performance, speed, and affordability — ET CIO — (Google News link; search the headline) · GEO/AEO
@@ -101,23 +106,19 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-20 10:50 UTC] DeepSeek's first founder has been publicly unveiled. — eu.36kr — https://eu.36kr.com/en/p/4078868729599110
 - [2026-11-20 08:16 UTC] Former DeepSeek member Zhang Bo open-sources personal agent Linger with zero token fee. — KuCoin — (Google News link; search the headline)
 - [2026-11-20 08:05 UTC] Zscaler Partners with Frontier Model Providers to Help Enterprises Safely Embrace AI and Stop AI-Driven Attacks — Markets Insider — https://markets.businessinsider.com/news/stocks/zscaler-partners-with-frontier-model-providers-to-help-enterprises-safely-embrace-ai-and-stop-ai-driven-attacks-1036789292
-- [2026-11-20 06:01 UTC] Anthropic opens 34% above IPO price after $81.34bn offering — Gulf Business — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-11-20 05:16 UTC] Mistral opens Asia Pacific headquarters in Singapore to build sovereign AI — The Next Web — https://thenextweb.com/news/mistral-opens-asia-pacific-headquarters-in-singapore-to-build-sovereign-ai
 - [2026-11-20 03:57 UTC] DeepSeek’s computing crunch pushes China’s AI developers beyond models — ThinkChina — (Google News link; search the headline)
-- [2026-11-20 03:53 UTC] Telecom news: Ericsson, Altair Semiconductor, Deutsche Telekom, T.Capital, Mistral AI — TelecomLead — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-11-20 02:14 UTC] Mistral opens Asia-Pacific headquarters in Singapore, plans to double regional headcount by 2027 — Crypto Briefing — https://cryptobriefing.com/mistral-asia-pacific-headquarters-singapore/
 - [2026-11-20 02:00 UTC] After its blockbuster IPO, Anthropic's next challenge is finding a hit bigger than Claude Code — Insider — https://www.businessinsider.com/anthropic-ipo-ai-coding-claude-biotech-cybersecurity-robotics-2026-11
 - [2026-11-20 02:00 UTC] Mistral AI opens regional HQ in Singapore, seeks to fill 200 roles in Apac — The Business Times — (Google News link; search the headline)
-- [2026-11-20 01:51 UTC] French AI company Mistral picks Singapore for its Asia-Pacific headquarters, bringing Europe’s sovereign AI pitch to China’s backyard — Fortune on MSN — https://www.msn.com/en-us/money/general/french-ai-company-mistral-picks-singapore-for-its-asia-pacific-headquarters-bringing-europe-s-sovereign-ai-pitch-to-china-s-backyard/ar-AA2hPVFP
 - [2026-11-20 01:40 UTC] Google Launches Gemini 4 Neon With a 1M-Token Context Window for Coding and Research — Technology Org — (Google News link; search the headline)
 - [2026-11-19 19:00 UTC] Anthropic claims Claude solved 2 enduring mysteries about black holes — Mashable — https://mashable.com/tech/anthropic-claude-fable-black-hole-mystery
 - [2026-11-19 16:21 UTC] Anthropic launches IPO at $83 per share, opens at $111.50 — Data Center Dynamics — (Google News link; search the headline)
 - [2026-11-19 16:00 UTC] Cursor Plans to Explore Phasing Out Chinese AI Models; We Expect Kimi Exit by June 2027 — ctol.digital — https://ctol.digital/news/cursor-weighs-chinese-model-phase-out-kimi-2027/ · GEO/AEO
 - [2026-11-19 15:12 UTC] Microsoft Unveils MAI Code 2 and a Cyber Model to Rival OpenAI and Anthropic — Technology Org — (Google News link; search the headline)
 - [2026-11-19 13:50 UTC] Maximum Acceleration: Anthropic’s Claude speeds up its own development — ForkLog — (Google News link; search the headline)
-- [2026-11-19 13:32 UTC] Anthropic IPO Live: The Claude Maker Debuts as a $1.5 Trillion Company — CNET — https://www.cnet.com/news-live/anthropic-ipo-live-blog-2026-updates/ · GEO/AEO
-- [2026-11-19 11:00 UTC] OpenAI Launches ChatGPT for Sales With 30+ Partner Plugins — TechRepublic — (Google News link; search the headline)
-- [2026-11-18 08:28 UTC] Amid AI Industry Chaos, Microsoft and OpenAI Drop New Models for Coding and Work — CNET — https://www.cnet.com/tech/services-and-software/openai-chatgpt-astra-6-2-microsoft-ignite-news/
+- [2026-11-19 11:10 UTC] Alibaba's Revenue Beats Estimates During China's AI Boom — Yahoo Finance — (Google News link; search the headline)
+- [2026-11-19 05:02 UTC] Google's new model Gemini 4 Neon: Coding performance on par with Claude Fable 5.2 at less than half the cost — note — https://note.com/allegro_ai/n/n3000ff71d9d0?hl=en
 
 ### B2B buyer AI / adoption (12)
 - [2026-11-20 21:13 UTC] Optimizely-ing For Trouble: When A Marketing Tool Becomes A Software Supply Chain Attack — Forrester — (Google News link; search the headline)
@@ -182,7 +183,8 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [date unknown] Check what your AI agents do before they do it, with Semantic governance policies — Google Developers Blog — https://developers.googleblog.com/check-what-your-ai-agents-do-before-they-do-it-with-semantic-governance-policies/ · Manipulation
 - [date unknown] How to handle user, connector, and agent auth in Gemini Enterprise with a custom UI — Google Developers Blog — https://developers.googleblog.com/how-to-handle-user-connector-and-agent-auth-in-gemini-enterprise-with-a-custom-ui/
 
-### SEO / search press (21)
+### SEO / search press (22)
+- [2026-11-21 08:43 UTC] Spotify opens a Grand Theft Auto VI music hub in 33 markets — PPC Land — https://ppc.land/spotify-opens-a-grand-theft-auto-vi-music-hub-in-33-markets/ · Brand/product recommendation
 - [2026-11-21 07:15 UTC] Game: Ask five clients what risk means and you get five answers — PPC Land — https://ppc.land/game-ask-five-clients-what-risk-means-and-you-get-five-answers/
 - [2026-11-21 06:53 UTC] Alibaba and Temu cut marketing as AI engines start handing out coupons — PPC Land — https://ppc.land/alibaba-and-temu-cut-marketing-as-ai-engines-start-handing-out-coupons/
 - [2026-11-20 22:02 UTC] Month — PPC Land — https://ppc.land/month/
