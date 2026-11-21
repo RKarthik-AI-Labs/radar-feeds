@@ -1,7 +1,7 @@
 # Paper candidates — 2026-11-21 (IST)
 
-Generated 2026-11-21 07:46 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
-Totals: 1 new topic matches · 0 other new cs.IR · 121 seen in earlier runs.
+Generated 2026-11-21 08:19 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Totals: 1 new topic matches · 0 other new cs.IR · 120 seen in earlier runs.
 Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
 
 ## New papers matching your topics (1), highest score first
@@ -17,7 +17,7 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 
 ## Other new cs.IR papers, title only (0)
 
-## Already listed on an earlier day, still inside the look-back window (121)
+## Already listed on an earlier day, still inside the look-back window (120)
 - GapLeak: When Privacy-Preserving LLM-based Web Agents Become a Privacy Risk — https://arxiv.org/abs/2611.22223 (score 15)
 - How Web Research Agents Interpret User Priorities — https://arxiv.org/abs/2611.22989 (score 14)
 - FinVeriQA: Financial Research Agents for Question Answering: Routing, Retrieval, MCP Tool Use, and Provenance-Aware Evidence Verification — https://arxiv.org/abs/2611.25071 (score 14)
