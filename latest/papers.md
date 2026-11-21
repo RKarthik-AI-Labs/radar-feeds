@@ -1,10 +1,10 @@
-# Paper candidates — 2026-11-20 (IST)
+# Paper candidates — 2026-11-21 (IST)
 
-Generated 2026-11-20 09:05 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
-Totals: 28 new topic matches · 13 other new cs.IR · 98 seen in earlier runs.
+Generated 2026-11-21 01:10 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Totals: 29 new topic matches · 13 other new cs.IR · 87 seen in earlier runs.
 Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
 
-## New papers matching your topics (28), highest score first
+## New papers matching your topics (29), highest score first
 
 ### FinVeriQA: Financial Research Agents for Question Answering: Routing, Retrieval, MCP Tool Use, and Provenance-Aware Evidence Verification
 - arXiv 2611.25071v1 · v1 2026-11-18 19:13 UTC · cs.AI, cs.CL, cs.IR, cs.MA
@@ -119,6 +119,15 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Full text: not stored: license is by-nc-sa, which does not allow redistribution; read it on arXiv
 
 > Arm-free quadrupeds can perform loco-manipulation, walking on three legs while manipulating with a front leg, yet no existing policy for it follows language instructions. World action models (WAMs) have emerged as effective language-conditioned manipulation policies, but are pretrained for robot arms and sample slowly. WAM-Policy turns one WAM into a quadrupedal loco-manipulation policy via two stages. The first, Cross-Morphology Policy Adaptation and Acceleration, adapts the arm-centric WAM to quadrupeds and distills the transferred policy into a student with one video and two action steps by on-policy self-distillation (OPSD). This student, however, is bounded by its teacher, which only imitates demonstrations. The second stage, Task-Specific Improvement and Merging, therefore tunes the teacher by reinforcement learning (RL) and merges the slow specialists into one few-step student by multi-teacher on-policy distillation (M-OPD). On QLM-Bench, ten simulated tasks with 1,000 demonstrations synthesized without teleoperation, the transferred policy reaches 77.0%, and the OPSD student keeps 76.7% while sampling 14 times faster. Task-specific RL and M-OPD lift it to 85.0%. We also deploy the OPSD student on a real Unitree Go2 Air. WAM-Policy thus achieves a stronger quadrupedal policy at a fraction of the inference cost.
+
+### Phantom Success, Silent Failure: Auditing the Success Checkers of Simulated Manipulation Benchmarks
+- arXiv 2611.25179 · v1 2026-11-18 00:00 UTC · 
+- Authors: Zirui Song, Jiadong Zhang, Zheng Lu, Xiaosong Ma et al.
+- Topics: Manipulation · score 6 · found via HF daily papers
+- Link: https://arxiv.org/abs/2611.25179
+- Full text: data/fulltext/2611.25179.txt
+
+> Simulated manipulation benchmarks measure policy performance using hand-written success checkers that label each episode as a success or failure. Passing an expert demonstration shows that a checker accepts one way of completing the task. Learned policies, however, may stop after partial progress or complete the task in a different way. A checker may then accept an incomplete execution (phantom success) or reject an execution that satisfies the instruction (silent failure). In this paper, we introduce SimAudit, an LLM-based pipeline that audits success checkers against task instructions. SimAudit analyzes the instruction and checker code to identify scenarios where the two may disagree, recreates those scenarios in simulation, and runs the original checker. Multi-view renderings are then used to verify whether the observed behavior satisfies the instruction. Across RoboTwin 2.0, RoboCasa365, and RoboDojo, 183 simulated test cases produced the predicted checker verdict. Visual verification and deduplication yielded 61 distinct defects across 49 tasks, including 40 phantom successes and 21 silent failures. Most defects in RoboCasa365 accepted incomplete executions, most in RoboDojo rejected valid executions, and both error types were common in RoboTwin 2.0. These findings suggest that validating success checkers requires testing both incomplete executions and valid alternatives to expert demonstrations, and motivate more rigorous evaluation protocols for future benchmarks.
 
 ### On the Impact of Feature Reduction Techniques on Adversarial Attacks
 - arXiv 2611.25004v1 · v1 2026-11-18 18:12 UTC · cs.LG, cs.AI
@@ -286,14 +295,11 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Cost-Aware Agentic Feature Optimization System for Fleet-Scale Ranking Models — https://arxiv.org/abs/2611.26531
 - Variants of Beam Search for DiskANN — https://arxiv.org/abs/2611.26609
 
-## Already listed on an earlier day, still inside the look-back window (98)
-- Security of Deep Research Agents: Attack Surface, Defenses, Benchmarks, and Agenda Seeding against Research Planning — https://arxiv.org/abs/2611.20045 (score 23)
+## Already listed on an earlier day, still inside the look-back window (87)
 - GapLeak: When Privacy-Preserving LLM-based Web Agents Become a Privacy Risk — https://arxiv.org/abs/2611.22223 (score 15)
 - How Web Research Agents Interpret User Priorities — https://arxiv.org/abs/2611.22989 (score 14)
 - The Fragility of Reasoning-Importance Attribution for Pruning Language Models — https://arxiv.org/abs/2611.22234 (score 13)
 - Explainable Federated Learning via Global-Local Attribution Alignment — https://arxiv.org/abs/2611.20445 (score 11)
-- DetouR: Plugging Association Routes into Search Agents for Multi-hop Question Answering — https://arxiv.org/abs/2611.19967 (score 10)
-- EchoSpec: Training Search Agents to Weigh Evidence Above Echoes — https://arxiv.org/abs/2611.20034 (score 10)
 - Dreaming Up Authors: Factual Prevalence and LLM Hallucinations in Academic Authorship Attribution — https://arxiv.org/abs/2611.23530 (score 10)
 - X-split Argus: Learning Reusable History Tokens for Efficient CTR Prediction — https://arxiv.org/abs/2611.24283 (score 10)
 - TUSI: A Citation-Grounded Graph-Based Benchmark — https://arxiv.org/abs/2611.21823 (score 9)
@@ -318,11 +324,8 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Attribution Through the Decoder: Prediction-Space Explanations for Structured Outputs — https://arxiv.org/abs/2611.23161 (score 8)
 - What Does a Bias Head Measure? Non-Identifiability in Head-Level Bias Attribution — https://arxiv.org/abs/2611.23218 (score 8)
 - Entropy-Regularized Integrated Gradients for Stable Feature Attribution — https://arxiv.org/abs/2611.23600 (score 8)
-- IDEA: Intent-Dominance Evidence Audit for Inference-Time Backdoor Detection in GUI Agents — https://arxiv.org/abs/2611.24102 (score 8)
 - How Complete Must an Environment Be to Train a Capable GUI Agent? — https://arxiv.org/abs/2611.23946 (score 8)
 - Securing and Auditing Long-Horizon LLM Agents: State-Transfer Auditing and Controls in the Agent Harness — https://arxiv.org/abs/2611.23346 (score 7)
-- VoiceGuard: An Audio-Native LLM-VLA Pipeline for Wheelchair-Mounted Assistive Manipulation — https://arxiv.org/abs/2611.19984 (score 6)
-- Can AI Judge You? An Empirical Audit of Deployment Readiness in LLM-assisted Hiring Systems — https://arxiv.org/abs/2611.20140 (score 6)
 - AsymEEF: Bimanual Manipulation with Asymmetric End Effectors — https://arxiv.org/abs/2611.20557 (score 6)
 - Auditing a Moving Target: Evidence Anchoring and the Expiry of Fairness Audits of Provider-Served Language Models — https://arxiv.org/abs/2611.20901 (score 6)
 - Language-model agents' beliefs can be manipulated via truthful evidence in open channel — https://arxiv.org/abs/2611.21235 (score 6)
@@ -338,11 +341,8 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - PIPETTE: Prompt Injection Purple-Teaming for Robust LLM Agents — https://arxiv.org/abs/2611.24362 (score 6)
 - SCR: Detecting Backdoor-Poisoned Samples through Clean-Reference Residuals — https://arxiv.org/abs/2611.24558 (score 6)
 - Gradient-Based Defensive Poisoning Against System Identification Attacks on Cyber-Physical Systems — https://arxiv.org/abs/2611.24662 (score 6)
-- Attribute or Abstain: Evaluating Evidence-Grounded Retrieval on the Low-Resource African Business Web — https://arxiv.org/abs/2611.19900 (score 5)
 - From Relevance to Utility: Rubric Alignment in Yuanbao Search — https://arxiv.org/abs/2611.22503 (score 5)
 - KnowMe Paper Radar: Lightweight Discovery of Promising Papers in the Age of Autoresearch — https://arxiv.org/abs/2611.23702 (score 5)
-- How did data sharing evolve in the decade since the FAIR Principles? — https://arxiv.org/abs/2611.20319 (score 4)
-- Straight to the Product: What Online Retailers Miss When Shoppers Ask AI First — https://arxiv.org/abs/2611.20378 (score 4)
 - What Unlinked Aggregates Still Prove: Ranker Comparisons from Exact and Differentially Private Item Counts — https://arxiv.org/abs/2611.20388 (score 4)
 - Evidence Diet: When Graph Evidence Helps LLMs Rank Competing Candidates — https://arxiv.org/abs/2611.20837 (score 4)
 - When Tool Names Are Not Identities: Measuring Provider Misbinding in MCP-Based AI Agents — https://arxiv.org/abs/2611.21577 (score 4)
