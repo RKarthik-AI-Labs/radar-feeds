@@ -1,99 +1,29 @@
-# Paper candidates — 2026-11-21 (IST)
+# Paper candidates — 2026-11-22 (IST)
 
-Generated 2026-11-21 08:43 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
-Totals: 1 new topic matches · 0 other new cs.IR · 119 seen in earlier runs.
+Generated 2026-11-22 01:11 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Totals: 0 new topic matches · 0 other new cs.IR · 18 seen in earlier runs.
 Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
 
-## New papers matching your topics (1), highest score first
-
-### Phantom Success, Silent Failure: Auditing the Success Checkers of Simulated Manipulation Benchmarks
-- arXiv 2611.25179 · v1 2026-11-18 00:00 UTC · 
-- Authors: Zirui Song, Jiadong Zhang, Zheng Lu, Xiaosong Ma et al.
-- Topics: Manipulation · score 6 · found via HF daily papers
-- Link: https://arxiv.org/abs/2611.25179
-- Full text: data/fulltext/2611.25179.txt
-
-> Simulated manipulation benchmarks measure policy performance using hand-written success checkers that label each episode as a success or failure. Passing an expert demonstration shows that a checker accepts one way of completing the task. Learned policies, however, may stop after partial progress or complete the task in a different way. A checker may then accept an incomplete execution (phantom success) or reject an execution that satisfies the instruction (silent failure). In this paper, we introduce SimAudit, an LLM-based pipeline that audits success checkers against task instructions. SimAudit analyzes the instruction and checker code to identify scenarios where the two may disagree, recreates those scenarios in simulation, and runs the original checker. Multi-view renderings are then used to verify whether the observed behavior satisfies the instruction. Across RoboTwin 2.0, RoboCasa365, and RoboDojo, 183 simulated test cases produced the predicted checker verdict. Visual verification and deduplication yielded 61 distinct defects across 49 tasks, including 40 phantom successes and 21 silent failures. Most defects in RoboCasa365 accepted incomplete executions, most in RoboDojo rejected valid executions, and both error types were common in RoboTwin 2.0. These findings suggest that validating success checkers requires testing both incomplete executions and valid alternatives to expert demonstrations, and motivate more rigorous evaluation protocols for future benchmarks.
+## New papers matching your topics (0), highest score first
 
 ## Other new cs.IR papers, title only (0)
 
-## Already listed on an earlier day, still inside the look-back window (119)
+## Already listed on an earlier day, still inside the look-back window (18)
 - GapLeak: When Privacy-Preserving LLM-based Web Agents Become a Privacy Risk — https://arxiv.org/abs/2611.22223 (score 15)
 - How Web Research Agents Interpret User Priorities — https://arxiv.org/abs/2611.22989 (score 14)
-- FinVeriQA: Financial Research Agents for Question Answering: Routing, Retrieval, MCP Tool Use, and Provenance-Aware Evidence Verification — https://arxiv.org/abs/2611.25071 (score 14)
 - GEOHunter: Mapping a Generative Engine Optimization Network in the Wild — https://arxiv.org/abs/2611.26564 (score 14)
-- The Fragility of Reasoning-Importance Attribution for Pruning Language Models — https://arxiv.org/abs/2611.22234 (score 13)
-- DriftGuard: Online Memory-Drift Detection via Causal Attribution for LLM Agents — https://arxiv.org/abs/2611.25583 (score 13)
-- Dreaming Up Authors: Factual Prevalence and LLM Hallucinations in Academic Authorship Attribution — https://arxiv.org/abs/2611.23530 (score 10)
-- X-split Argus: Learning Reusable History Tokens for Efficient CTR Prediction — https://arxiv.org/abs/2611.24283 (score 10)
-- Seer: Guiding Small Deep-Research Agents with Shared Decision Models — https://arxiv.org/abs/2611.26423 (score 10)
-- TUSI: A Citation-Grounded Graph-Based Benchmark — https://arxiv.org/abs/2611.21823 (score 9)
-- IntentGR: Enhancing Intent for End-to-End Personalized Generative Retrieval in Search — https://arxiv.org/abs/2611.22788 (score 9)
-- Can Decision Models Replace LLMs in Real-World Contact Center Classification and Judging Tasks? — https://arxiv.org/abs/2611.22949 (score 9)
-- MambaLIFT: Reference-Based Mechanism-Aware Attribution for VMamba — https://arxiv.org/abs/2611.25644 (score 9)
-- LINEAGE: A Benchmark for Empirical Lineage Retrieval in AI Scientific Literature — https://arxiv.org/abs/2611.25845 (score 9)
-- UIAnchor: Anchoring UI Perception and Action Execution for Reliable Service-Composed Mobile Task Automation with GUI Agents — https://arxiv.org/abs/2611.20753 (score 8)
-- EDITORS Know Your Style! Editing LoRA Subspaces for Stylistic Attribution and Imitation — https://arxiv.org/abs/2611.20846 (score 8)
-- MemDoctor: Stage-wise Error Attribution and Repair for MLLM Agent Memory — https://arxiv.org/abs/2611.21019 (score 8)
-- Portrait Fitness as a Pretext: Probing Implicit Demographic Bias in VLMs — https://arxiv.org/abs/2611.21403 (score 8)
-- Optimistic Verifiers Get Hacked: Reward Hacking Under an Exact Process Oracle — https://arxiv.org/abs/2611.21538 (score 8)
-- ScenarioForge: Resource-Grounded Generation and Execution Validation of Cyber Exercises — https://arxiv.org/abs/2611.21579 (score 8)
-- Beyond Job Titles: Interpreting Early-Career Job Advertisements with Sparse Autoencoders and Semantic Clustering — https://arxiv.org/abs/2611.21586 (score 8)
-- Threat Landscape of Vibe Coding and the Road to Secure Autonomy — https://arxiv.org/abs/2611.21822 (score 8)
-- Does the Model Use What It Cites? Counterfactual Tests of Grounded Reasoning Chains in Small Video-Language Models — https://arxiv.org/abs/2611.21940 (score 8)
-- Thinking Harder Doesn't Lead to Better Choices: Reasoning Effort Increases the Confidence but Not the Correctness of LLM Shopping Agents — https://arxiv.org/abs/2611.22033 (score 8)
-- Right Labels, Wrong Reasons: Signed Feature Attribution for Multi-Label Explainability — https://arxiv.org/abs/2611.22515 (score 8)
-- PACT: Plan-Action Consistency Training by Preserving Correct Plans and Repairing Actions in GUI Agents — https://arxiv.org/abs/2611.22591 (score 8)
-- CANDID: Candidate-Driven Intervention for Disciplined Execution in Local Computer-Use Agents — https://arxiv.org/abs/2611.24977 (score 8)
 - SEAM: Computer-Use Agents Know the Harm Between Screens, and Commit It Anyway — https://arxiv.org/abs/2611.22971 (score 8)
-- Hidden-State Similarity Predicts Re-Elicitation After Inoculation Prompting — https://arxiv.org/abs/2611.23096 (score 8)
-- Attribution Through the Decoder: Prediction-Space Explanations for Structured Outputs — https://arxiv.org/abs/2611.23161 (score 8)
-- What Does a Bias Head Measure? Non-Identifiability in Head-Level Bias Attribution — https://arxiv.org/abs/2611.23218 (score 8)
-- Entropy-Regularized Integrated Gradients for Stable Feature Attribution — https://arxiv.org/abs/2611.23600 (score 8)
-- How Complete Must an Environment Be to Train a Capable GUI Agent? — https://arxiv.org/abs/2611.23946 (score 8)
 - RouterWeave: A Unified Observation Layer for Cross-Platform Activity Analysis via Home Routers — https://arxiv.org/abs/2611.26134 (score 8)
 - Visual Attribution Limits and Graded Provenance Auditing in Commercial Video-Generation APIs — https://arxiv.org/abs/2611.26508 (score 8)
 - Securing and Auditing Long-Horizon LLM Agents: State-Transfer Auditing and Controls in the Agent Harness — https://arxiv.org/abs/2611.23346 (score 7)
 - User Perceptions of Deceptive In-Vehicle Infotainment User Interfaces — https://arxiv.org/abs/2611.25195 (score 7)
 - Replication of Agentic Security Events: Audit and Investigation (ROGUE-AI) — https://arxiv.org/abs/2611.26553 (score 7)
-- Auditing a Moving Target: Evidence Anchoring and the Expiry of Fairness Audits of Provider-Served Language Models — https://arxiv.org/abs/2611.20901 (score 6)
-- Language-model agents' beliefs can be manipulated via truthful evidence in open channel — https://arxiv.org/abs/2611.21235 (score 6)
-- Lazy-MOSAIC: Accelerating Skill-Centric Manipulation Planning with Learned Skill-Effect World Models — https://arxiv.org/abs/2611.21517 (score 6)
-- ALOHA Lightning: Learning Fast and Precise Manipulation — https://arxiv.org/abs/2611.21919 (score 6)
-- RAG in a Trenchcoat: When Minimal Memory Is Enough for Agentic Systems, and When It Isn't — https://arxiv.org/abs/2611.22179 (score 6)
-- Where Does Hindsight Enter Clinical Agent Benchmarks? An Audit of Simulators and Case Construction — https://arxiv.org/abs/2611.22241 (score 6)
-- A Full-Ledger Counterfactual Audit of Adaptive Reasoning — https://arxiv.org/abs/2611.22778 (score 6)
 - Who Pays for Byzantine Robustness? Validity, Data-Share Dictatorships, and Fairness When Only a Few Hospitals Collaborate — https://arxiv.org/abs/2611.22904 (score 6)
-- WAM-Policy: World Action Models with On-Policy Distillation for Quadrupedal Loco-Manipulation — https://arxiv.org/abs/2611.24011 (score 6)
 - Data Poisoning Attacks to Locally Differentially Private Triangle Counting Protocols — https://arxiv.org/abs/2611.23701 (score 6)
 - What Survives the Shift from Text to Pixels? Conditional Protection against Prompt Injection in Image-Rendered Documents — https://arxiv.org/abs/2611.24231 (score 6)
 - AutoPI: Taxonomy-Guided Adaptive Red Teaming for Prompt Injection in LLM Agents — https://arxiv.org/abs/2611.24313 (score 6)
 - PIPETTE: Prompt Injection Purple-Teaming for Robust LLM Agents — https://arxiv.org/abs/2611.24362 (score 6)
 - SCR: Detecting Backdoor-Poisoned Samples through Clean-Reference Residuals — https://arxiv.org/abs/2611.24558 (score 6)
 - Gradient-Based Defensive Poisoning Against System Identification Attacks on Cyber-Physical Systems — https://arxiv.org/abs/2611.24662 (score 6)
-- On the Impact of Feature Reduction Techniques on Adversarial Attacks — https://arxiv.org/abs/2611.25004 (score 6)
-- MAWAM: A Multi-Agent World-Action Model for Coordinated Manipulation — https://arxiv.org/abs/2611.25105 (score 6)
-- Demonstration-Free Skill Composition for Navigation and Manipulation — https://arxiv.org/abs/2611.25462 (score 6)
 - Passing NPCR Without Diffusion: Exact Signatures, a Detection Benchmark and an Audit of Published Image Ciphers — https://arxiv.org/abs/2611.25561 (score 6)
-- Diagnosis is not a policy: a state-transition audit of caoability-conditioned test-time inference — https://arxiv.org/abs/2611.25566 (score 6)
 - MetaScanner: An Empirical Study and Proactive Defense against Deceptive UI Attacks in Social VR — https://arxiv.org/abs/2611.25608 (score 6)
-- DNA: Unlocking Depth Scaling in CTR Models — https://arxiv.org/abs/2611.25659 (score 6)
-- TipDex-VTLA: Learning When to Refine Actions with Touch for Dexterous Manipulation — https://arxiv.org/abs/2611.25683 (score 6)
-- When Safety Rationales Hallucinate: Diagnosing and Grounding Multimodal Safety Guards — https://arxiv.org/abs/2611.25793 (score 6)
-- Mind2Act World: A Diagnostic Benchmark for Embodied Mind, Physical Action, and Mind-Action Composition in Robotic Manipulation — https://arxiv.org/abs/2611.26444 (score 6)
-- PGX: Physically Grounded Execution for Long-Horizon Humanoid Loco-Manipulation — https://arxiv.org/abs/2611.26596 (score 6)
-- From Relevance to Utility: Rubric Alignment in Yuanbao Search — https://arxiv.org/abs/2611.22503 (score 5)
-- KnowMe Paper Radar: Lightweight Discovery of Promising Papers in the Age of Autoresearch — https://arxiv.org/abs/2611.23702 (score 5)
-- Evidence Diet: When Graph Evidence Helps LLMs Rank Competing Candidates — https://arxiv.org/abs/2611.20837 (score 4)
-- When Tool Names Are Not Identities: Measuring Provider Misbinding in MCP-Based AI Agents — https://arxiv.org/abs/2611.21577 (score 4)
-- Teaching Language Models to Narrow Boolean Patent Searches from Search Feedback — https://arxiv.org/abs/2611.22270 (score 4)
-- MIPR: A Benchmark for Reasoning-Intensive Multimodal Intent-to-Product Retrieval with Multi-Category Solutions — https://arxiv.org/abs/2611.22509 (score 4)
-- Learning Cross-Domain Media Similarity from Amazon Reviews — https://arxiv.org/abs/2611.22756 (score 4)
-- Retrieving Patristic References and Modelling Topics in Bullinger's Reformation Correspondence — https://arxiv.org/abs/2611.25247 (score 4)
-- GuardAgent: A Memory-Augmented Agentic Framework for Adaptive Detection of Adversarial Promotions in LLM-Based Recommendation — https://arxiv.org/abs/2611.22274 (score 3)
-- MARS Technical Report — https://arxiv.org/abs/2611.24006 (score 3)
-- VideoTrail: Interactive Video Foraging Through Hierarchical Visualization — https://arxiv.org/abs/2611.25377 (score 3)
-- LSP-RAG: Latent Scoring Perspectives for Knowledge Graph Retrieval-Augmented Generation — https://arxiv.org/abs/2611.25229 (score 2)
-- AutoRAGBench: A Benchmark for LLM Agents Automating RAG System Development — https://arxiv.org/abs/2611.25582 (score 2)
-- NONSENSE: Non-Semantic Strings Expose Semanticity Gaps in Dense Retrieval — https://arxiv.org/abs/2611.22353 (score 1)
-- Democratizing Cross-Project Knowledge for Transforming Water Governance and Climate Resilience: an Agentic AI Ecosystem — https://arxiv.org/abs/2611.26398 (score 1)
