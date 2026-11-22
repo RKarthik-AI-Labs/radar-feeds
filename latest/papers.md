@@ -1,14 +1,14 @@
 # Paper candidates — 2026-11-22 (IST)
 
-Generated 2026-11-22 08:03 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
-Totals: 0 new topic matches · 0 other new cs.IR · 84 seen in earlier runs.
+Generated 2026-11-22 08:42 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Totals: 0 new topic matches · 0 other new cs.IR · 81 seen in earlier runs.
 Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
 
 ## New papers matching your topics (0), highest score first
 
 ## Other new cs.IR papers, title only (0)
 
-## Already listed on an earlier day, still inside the look-back window (84)
+## Already listed on an earlier day, still inside the look-back window (81)
 - How Web Research Agents Interpret User Priorities — https://arxiv.org/abs/2611.22989 (score 14)
 - FinVeriQA: Financial Research Agents for Question Answering: Routing, Retrieval, MCP Tool Use, and Provenance-Aware Evidence Verification — https://arxiv.org/abs/2611.25071 (score 14)
 - GEOHunter: Mapping a Generative Engine Optimization Network in the Wild — https://arxiv.org/abs/2611.26564 (score 14)
@@ -62,5 +62,4 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - VideoTrail: Interactive Video Foraging Through Hierarchical Visualization — https://arxiv.org/abs/2611.25377 (score 3)
 - LSP-RAG: Latent Scoring Perspectives for Knowledge Graph Retrieval-Augmented Generation — https://arxiv.org/abs/2611.25229 (score 2)
 - AutoRAGBench: A Benchmark for LLM Agents Automating RAG System Development — https://arxiv.org/abs/2611.25582 (score 2)
-- NONSENSE: Non-Semantic Strings Expose Semanticity Gaps in Dense Retrieval — https://arxiv.org/abs/2611.22353 (score 1)
 - Democratizing Cross-Project Knowledge for Transforming Water Governance and Climate Resilience: an Agentic AI Ecosystem — https://arxiv.org/abs/2611.26398 (score 1)
