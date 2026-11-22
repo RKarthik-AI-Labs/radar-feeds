@@ -1,6 +1,6 @@
 # News candidates — 2026-11-22 (IST)
 
-Generated 2026-11-22 07:22 UTC. Showing 127 items first seen in the last 18 h or published in the last 30 h; 241 older items from the 3-day window are only in news.json.
+Generated 2026-11-22 07:32 UTC. Showing 127 items first seen in the last 18 h or published in the last 30 h; 238 older items from the 3-day window are only in news.json.
 Each item appears once, in the first section it matches. Dates are as reported by the source ("date unknown" = page with no date).
 
 ## By priority topic
@@ -28,11 +28,10 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-21 12:39 UTC] Microsoft Expands Bing AI Search and Advertising Features — cwibc.co.id — (Google News link; search the headline) · Ads, GEO/AEO · +1 other hits
 - [2026-11-21 08:55 UTC] Amazon's live shopping beta asks brands for 50 Mbps and 1080p video — PPC Land — https://ppc.land/amazons-live-shopping-beta-asks-brands-for-50-mbps-and-1080p-video/ · Brand/product recommendation, Ads
 
-### Search / AEO / GEO (16)
+### Search / AEO / GEO (15)
 - [2026-11-22 01:55 UTC] Google Puts AI Mode History on Search Homepage, Letting PC Users Resume Interrupted Research — BigGo Finance — (Google News link; search the headline) · GEO/AEO
 - [2026-11-21 22:39 UTC] A fake blog post was published on a little-known website and within a day three major AI tools, including ChatGPT and Gemini, were treating it as fact — Moneycontrol — https://www.moneycontrol.com/technology/a-fake-blog-post-was-published-on-a-little-known-website-and-within-a-day-three-major-ai-tools-including-chatgpt-and-gemini-were-treating-it-as-fact-article-14086458.html · GEO/AEO
 - [2026-11-21 18:34 UTC] Google Adds Sidebar for Recent AI Mode Searches to Homepage — hi-Tech.ua — (Google News link; search the headline) · GEO/AEO
-- [2026-11-21 17:38 UTC] Finally.. Perplexity Personal Computer is now available to everyone on Mac — آي-فون إسلام — (Google News link; search the headline) · (already listed on an earlier day) · GEO/AEO
 - [2026-11-21 12:07 UTC] Google ties US schools’ access to search to AI Overviews — Fortune — UA.NEWS — https://ua.news/en/dovkolo-svitu/google-priviazala-dostup-shkil-ssha-do-poshuku-z-shi-ogliadami-fortune · GEO/AEO · +1 other hits
 - [2026-11-21 11:57 UTC] Google ties Search access to AI Overviews, and big school districts are pushing back — Crypto Briefing — https://cryptobriefing.com/google-search-ai-overviews-school-districts/ · GEO/AEO · +1 other hits
 - [2026-11-21 11:01 UTC] LAUSD disables Google AI overviews, reviews Google search — NBC Los Angeles on MSN — https://www.msn.com/en-us/news/other/lausd-disables-google-ai-overviews-reviews-google-search/ar-AA2hJjRh · (already listed on an earlier day) · GEO/AEO
@@ -46,13 +45,14 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-19 16:00 UTC] Google Adds a Sidebar for Your AI Mode Chats to Its Desktop Homepage — TalkAndroid — https://www.talkandroid.com/536008-google-homepage-ai-mode-sidebar/ · GEO/AEO
 - [2026-11-19 12:47 UTC] Reports to check first and the order to view them when using Search Console after launching a blog — note — https://note.com/charm_ibis130/n/n0ffe405fb978?hl=en
 
-### Model & lab launches (news search) (41)
+### Model & lab launches (news search) (42)
 - [2026-11-22 05:46 UTC] Google launches Gemini 4 Neon with faster performance and lower costs — YugaTech — (Google News link; search the headline)
 - [2026-11-22 05:16 UTC] Google releases Gemini 4 Neon AI model, rivals Claude Opus 5.5 and GPT-6.2 Sol — Yahoo Tech — https://www.msn.com/en-us/technology/software/google-releases-gemini-4-neon-ai-model-rivals-claude-opus-5-5-and-gpt-6-2-sol/ar-AA2hXf3c · (already listed on an earlier day) · GEO/AEO · +1 other hits
 - [2026-11-22 03:34 UTC] Moonshot Launches Kimi K3, an Open-Weight AI Model with 2.8 Trillion Parameters — VOI.ID — (Google News link; search the headline) · GEO/AEO
 - [2026-11-22 02:26 UTC] OpenAI launches ChatGPT Wallet, claiming it's a safe way to have AI shop for you — Mashable — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-11-22 02:18 UTC] OpenAI launches ChatGPT Wallet, AI capable of making purchases automatically. — Vietnam.vn — (Google News link; search the headline)
 - [2026-11-21 23:57 UTC] Google unveils Gemini 4 Hydrogen, its new AI model built for speed — Mashable — (Google News link; search the headline) · (already listed on an earlier day) · GEO/AEO
+- [2026-11-21 23:35 UTC] Gemini 4 Neon Arrives: A Model with an Excellent Balance of Cost and Speed — note — https://note.com/drmagicianearl/n/nb34393f98785?hl=en
 - [2026-11-21 18:06 UTC] CertiK and Columbia University Researchers Formally Verify Production AI Kernels From DeepSeek and FlashAttention — CoinDesk — (Google News link; search the headline)
 - [2026-11-21 16:23 UTC] OpenAI bans using its models to train rival AI, even just to sort the data — Pasquale Pillitteri — (Google News link; search the headline)
 - [2026-11-21 15:59 UTC] Alibaba Trains Next Qwen Model on In-House Semiconductors — briefasia.com — https://www.briefasia.com/en/article/alibaba-trains-next-qwen-model-in-house-semiconductors
@@ -73,9 +73,9 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-21 04:00 UTC] Homelabber’s second-gen Optane build uses two RTX 3090s to run 2.8-trillion-parameter Kimi AI model — Tom's Hardware on MSN — https://www.msn.com/en-us/technology/hardware-and-devices/homelabber-s-second-gen-optane-build-uses-two-rtx-3090s-to-run-2-8-trillion-parameter-kimi-ai-model/ar-AA2hV4K3 · GEO/AEO
 - [2026-11-21 03:43 UTC] Alphabet shares rise 2.20% as Google launches Gemini 4 Argon — scanx.trade — (Google News link; search the headline)
 - [2026-11-21 03:30 UTC] 3-4 Separation of Development and Production Environments in DeepSeek API — note — https://note.com/masa_cloud/n/n7b58d60a3676?hl=en
-- [2026-11-21 02:50 UTC] DeepSeek's first founder has been publicly unveiled. — eu.36kr — http://eu.36kr.com/en/p/4078868729599110 · (already listed on an earlier day)
 - [2026-11-21 02:28 UTC] CertiK and Columbia University Researchers Release TensorLean Results, Completing the World's First Formal Verification of Production-Grade AI Operators in DeepSeek and FlashAttention — PANews — (Google News link; search the headline)
 - [2026-11-21 01:11 UTC] Two NVIDIA GeForce RTX 3090 GPUs and Intel Optane run 2.8-trillion-parameter Kimi K3 at 3.11 tokens/sec — TweakTown — https://www.tweaktown.com/news/114812/two-nvidia-geforce-rtx-3090-gpus-and-intel-optane-run-2-8-trillion-parameter-kimi-k3-at-3-11-tokens-sec/index.html
+- [2026-11-21 00:00 UTC] Google adds Tool Retrieval to let AI agents manage hundreds of tools — GCN — https://gcn.com/google-adds-tool-retrieval-let-agents/23414/
 - [2026-11-20 23:08 UTC] Anthropic may have solved major maths problem Reimann hypothesis — BBC — (Google News link; search the headline)
 - [2026-11-20 22:10 UTC] Mistral targets Asia Pacific's demand for sovereign AI with Singapore hub — Yahoo Finance Singapore — (Google News link; search the headline)
 - [2026-11-20 19:09 UTC] Newsom Proposes AI ‘Kill Switch’ to Block Dangerous OpenAI, Anthropic Releases — San Jose Inside — (Google News link; search the headline)
@@ -89,26 +89,26 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-20 08:20 UTC] Tesla update 2026.44.1: hacker discovers transition from AI Computer to Super Intelligence, Grok sync, and more — Tesla Oracle — (Google News link; search the headline)
 - [2026-11-19 17:59 UTC] Google's new model 'Gemini 4 Neon': How to use the perfect middle ground? — note — https://note.com/ali_archive/n/n4794b547442c?hl=en
 
-### B2B buyer AI / adoption (5)
+### B2B buyer AI / adoption (4)
 - [2026-11-21 02:00 UTC] Before you use AI to hunt Black Friday deals, keep 5 things in mind — The Washington Post — https://www.washingtonpost.com/business/2026/11/21/heres-how-use-ai-black-friday-shopping/ · Brand/product recommendation
 - [2026-11-20 21:00 UTC] AI Agents Shift B2B Negotiation From Haggling To Judgment — Forbes — https://www.forbes.com/sites/stephenwunker/2026/11/21/ai-agents-shift-b2b-negotiation-from-haggling-to-judgment/
 - [2026-11-20 14:38 UTC] AI Raises The Bar For B2B Personalization, Again — Forrester — (Google News link; search the headline) · +1 other hits
 - [2026-11-20 05:16 UTC] What are Guardian Agents? After realizing it's impossible for humans to check every AI agent, who stops them? — note — https://note.com/aipath_pr/n/nf22b9f961a12?hl=en
-- [2026-11-19 07:30 UTC] AI Agents Will Need A Credit Score For Companies: How Contradictory Records Get Suppliers Dropped From AI Shortlists — Forbes — https://www.forbes.com/councils/forbestechcouncil/2026/11/19/ai-agents-will-need-a-credit-score-for-companies-how-contradictory-records-get-suppliers-dropped-from-ai-shortlists/ · Brand/product recommendation · +1 other hits
 
-### Sites with no usable feed (via Google News site: search) (12)
+### Sites with no usable feed (via Google News site: search) (13)
+- [2026-11-22 06:44 UTC] Why Is SMCI Stock Trading Higher on Thursday? — Perplexity — (Google News link; search the headline) · GEO/AEO
 - [2026-11-21 23:24 UTC] Teammates work for you — Perplexity — (Google News link; search the headline) · (already listed on an earlier day) · GEO/AEO
 - [2026-11-21 18:48 UTC] Perplexity for Data Science — Perplexity — (Google News link; search the headline) · GEO/AEO
+- [2026-11-21 17:56 UTC] UBS Adjusts RenaissanceRe Price Target to $366 From $349, Maintains Neutral Rating — Perplexity — (Google News link; search the headline) · GEO/AEO
+- [2026-11-21 09:08 UTC] - Perplexity — Perplexity — (Google News link; search the headline) · (already listed on an earlier day) · GEO/AEO
 - [2026-11-20 23:57 UTC] Perplexity for Product — Perplexity — (Google News link; search the headline) · GEO/AEO
 - [2026-11-20 23:57 UTC] Perplexity for IT — Perplexity — (Google News link; search the headline) · GEO/AEO
-- [2026-11-20 23:45 UTC] Natera, Inc. Stock Price: Quote, Forecast, Splits & News (NTRA) — Perplexity — (Google News link; search the headline) · GEO/AEO
-- [2026-11-20 21:45 UTC] Fermi Inc. Common Stock Stock Price: Quote, Forecast, Splits & News (FRMI) — Perplexity — (Google News link; search the headline) · GEO/AEO
-- [2026-11-20 21:45 UTC] Applied Materials, Inc. Stock Price: Quote, Forecast, Splits & News (AMAT) — Perplexity — (Google News link; search the headline) · GEO/AEO
 - [2026-11-20 17:21 UTC] Google Ads automation drift: Why better performance numbers don't always mean better results — Search Engine Land — (Google News link; search the headline)
 - [2026-11-20 16:57 UTC] How to measure SEO performance and results — Search Engine Land — (Google News link; search the headline) · GEO/AEO
 - [2026-11-20 16:00 UTC] Digital PR campaigns should start with your money pages — Search Engine Land — (Google News link; search the headline)
 - [2026-11-20 15:00 UTC] The true cost of Google Local Services Ads leads — Search Engine Land — (Google News link; search the headline)
 - [2026-11-20 14:00 UTC] Google’s November Knowledge Graph update dropped 10% of person entities overnight. Here’s who survived — Search Engine Land — (Google News link; search the headline)
+- [2026-11-20 09:45 UTC] Jensen Huang divorce by...? — Perplexity — (Google News link; search the headline) · GEO/AEO
 
 ## Other items from source feeds
 
