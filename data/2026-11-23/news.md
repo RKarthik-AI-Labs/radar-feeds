@@ -1,6 +1,6 @@
 # News candidates — 2026-11-23 (IST)
 
-Generated 2026-11-23 01:11 UTC. Showing 144 items first seen in the last 18 h or published in the last 30 h; 125 older items from the 3-day window are only in news.json.
+Generated 2026-11-23 08:06 UTC. Showing 159 items first seen in the last 18 h or published in the last 30 h; 112 older items from the 3-day window are only in news.json.
 Each item appears once, in the first section it matches. Dates are as reported by the source ("date unknown" = page with no date).
 
 ## By priority topic
@@ -21,10 +21,12 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-22 18:03 UTC] Site exits Google AI Overviews and AI Mode, clicks barely move — PPC Land — https://ppc.land/site-exits-google-ai-overviews-and-ai-mode-clicks-barely-move/ · Crawl, GEO/AEO · +2 other hits
 - [2026-11-22 09:24 UTC] Google AI Mode ads appear as deep as the fourth follow-up question — PPC Land — https://ppc.land/google-ai-mode-ads-appear-as-deep-as-the-fourth-follow-up-question/ · Ads, Crawl, GEO/AEO · +2 other hits
 - [2026-11-22 09:10 UTC] Texas says Character.ai's $10m sale can't move minors' data without parents — PPC Land — https://ppc.land/texas-says-character-ais-10m-sale-cant-move-minors-data-without-parents/ · Crawl
-- [2026-11-22 06:51 UTC] Turkey forces Google to let news sites exit AI Overviews but stay in search — PPC Land — https://ppc.land/turkey-forces-google-to-let-news-sites-exit-ai-overviews-but-stay-in-search/ · Crawl, GEO/AEO · +1 other hits
+- [2026-11-22 06:51 UTC] Turkey forces Google to let news sites exit AI Overviews but stay in search — PPC Land — https://ppc.land/turkey-forces-google-to-let-news-sites-exit-ai-overviews-but-stay-in-search/ · (already listed on an earlier day) · Crawl, GEO/AEO · +1 other hits
 - [2026-11-21 01:38 UTC] It's not the company you should stop. 3 metrics to identify malicious AI crawlers — note — https://note.com/domo_nishizawa/n/n8cdd5354ddb6?hl=en · Crawl
 
-### Ads (13)
+### Ads (15)
+- [2026-11-23 06:04 UTC] OpenAI brings ChatGPT Ads to Kenya, Nigeria and South Africa through Aleph deal — Africa Business Communities — (Google News link; search the headline) · Ads
+- [2026-11-23 02:28 UTC] Why Hong Kong’s ChatGPT Ads question is really about audience, not availability — marketech apac — (Google News link; search the headline) · Ads
 - [2026-11-22 18:54 UTC] Campaign bid strategy — PPC Land — https://ppc.land/campaign-bid-strategy/ · Ads
 - [2026-11-22 18:31 UTC] Adding ASINs to an Amazon brand restates the previous 28 days of data — PPC Land — https://ppc.land/adding-asins-to-an-amazon-brand-restates-the-previous-28-days-of-data/ · Brand/product recommendation, Ads
 - [2026-11-22 18:17 UTC] Ad group optimization type — PPC Land — https://ppc.land/ad-group-optimization-type/ · Ads
@@ -36,70 +38,94 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-22 09:15 UTC] Google lets a like stand in for 5 seconds of viewing in Shorts conversions — PPC Land — https://ppc.land/google-lets-a-like-stand-in-for-5-seconds-of-viewing-in-shorts-conversions/ · Ads
 - [2026-11-22 09:07 UTC] Google Analytics adds two alerts for missing or malformed customer data — PPC Land — https://ppc.land/google-analytics-adds-two-alerts-for-missing-or-malformed-customer-data/ · Ads
 - [2026-11-22 08:45 UTC] OpenAI expands ChatGPT ads to 44 new markets through exclusive Aleph partnership — HapaKenya - — (Google News link; search the headline) · Ads
-- [2026-11-22 06:36 UTC] Bending Spoons buys growth by the billion, grows 3% on its own — PPC Land — https://ppc.land/bending-spoons-buys-growth-by-the-billion-grows-3-on-its-own/ · Ads
-- [2026-11-22 06:29 UTC] Meta's website-crawling terms stay shelved into 2027 as publisher talks run — PPC Land — https://ppc.land/metas-website-crawling-terms-stay-shelved-into-2027-as-publisher-talks-run/ · Ads
+- [2026-11-22 06:36 UTC] Bending Spoons buys growth by the billion, grows 3% on its own — PPC Land — https://ppc.land/bending-spoons-buys-growth-by-the-billion-grows-3-on-its-own/ · (already listed on an earlier day) · Ads
+- [2026-11-22 06:29 UTC] Meta's website-crawling terms stay shelved into 2027 as publisher talks run — PPC Land — https://ppc.land/metas-website-crawling-terms-stay-shelved-into-2027-as-publisher-talks-run/ · (already listed on an earlier day) · Ads
 
-### Search / AEO / GEO (11)
-- [2026-11-22 17:22 UTC] Summary of AI Announcements on November 22 | OpenAI publishes internal metrics, full details of outage revealed — note — https://note.com/kling_lab/n/n32846252fe53?hl=en · GEO/AEO
+### Search / AEO / GEO (16)
+- [2026-11-23 07:58 UTC] Perplexity: Gemini 4 Neon Agent Use Grew 15% a Day in 3 Days — FourWeekMBA — (Google News link; search the headline) · GEO/AEO
+- [2026-11-23 07:49 UTC] No Cure Without Evidence? AI Overviews Cut Clicks 40% and Give Users Nothing — Digital Information World — (Google News link; search the headline) · (already listed on an earlier day) · GEO/AEO
+- [2026-11-23 07:41 UTC] ShipCargo Becomes First Car Shipping Company Available in Perplexity — EIN Presswire — (Google News link; search the headline) · GEO/AEO
+- [2026-11-23 05:51 UTC] Google’s desktop homepage now keeps your AI Mode chats on the left — Yahoo Tech — https://www.msn.com/en-us/technology/software/google-s-desktop-homepage-now-keeps-your-ai-mode-chats-on-the-left/ar-AA2i0LNx · (already listed on an earlier day) · GEO/AEO · +1 other hits
+- [2026-11-23 05:33 UTC] Google AI overviews are here to stay: Why search is shifting and how you can still bypass them — IOL — (Google News link; search the headline) · (already listed on an earlier day) · GEO/AEO
+- [2026-11-23 05:15 UTC] Industry Should Cap AI Progress on Perplexity: OpenAI’s Pachocki — UrduPoint — (Google News link; search the headline) · GEO/AEO
+- [2026-11-22 22:11 UTC] Perplexity Launches Monitor, Its Web Monitoring Tool for AI Agents — Brief IA — (Google News link; search the headline) · GEO/AEO
+- [2026-11-22 21:17 UTC] OpenAI’s chief scientist wants perplexity to be AI’s speedometer — Crypto Briefing — https://cryptobriefing.com/openai-pachocki-perplexity-ai-benchmark/ · GEO/AEO · +1 other hits
+- [2026-11-22 21:09 UTC] Summary of AI Announcements on November 22 | OpenAI publishes internal metrics, full details of outage revealed — note — https://note.com/kling_lab/n/n32846252fe53?hl=en · GEO/AEO
+- [2026-11-22 16:00 UTC] Liferay launches tool for AI search visibility — Express Computer — https://www.expresscomputer.in/news/liferay-launches-tool-for-ai-search-visibility/141569/ · GEO/AEO
 - [2026-11-22 14:20 UTC] Perplexity's new Monitor API turns web search from a one-off query into a nonstop watchdog — The Decoder — (Google News link; search the headline) · GEO/AEO
 - [2026-11-22 12:33 UTC] Google rolls out collapsible sidebar in desktop search AI mode — NewsBytes — (Google News link; search the headline) · GEO/AEO
 - [2026-11-22 06:42 UTC] Perplexity launches Monitor API for scheduled web and page change alerts — letsdatascience — https://letsdatascience.com/news/perplexity-launches-monitor-api-for-scheduled-web-and-page-c-401927ee · GEO/AEO
 - [2026-11-22 02:47 UTC] LAUSD disables Google AI overviews, reviews Google search — NBC Los Angeles on MSN — https://www.msn.com/en-us/news/other/lausd-disables-google-ai-overviews-reviews-google-search/ar-AA2hJjRh · (already listed on an earlier day) · GEO/AEO
-- [2026-11-22 01:55 UTC] Google Puts AI Mode History on Search Homepage, Letting PC Users Resume Interrupted Research — BigGo Finance — (Google News link; search the headline) · GEO/AEO
-- [2026-11-21 06:58 UTC] Google Homepage Drops the Search Button, Adds an AI Mode Sidebar — ShiftDelete.Net — (Google News link; search the headline) · GEO/AEO
 - [2026-11-21 06:51 UTC] Record of SEO improvements for a self-developed web game. How search traffic increased by about 4 times — note — https://note.com/okushiro/n/n34a8549d1ba6?hl=en · GEO/AEO
-- [2026-11-21 03:40 UTC] Google told schools to accept AI or lose Search. Now 3 of America’s 4 largest districts are pushing back — Yahoo — https://www.yahoo.com/news/us/articles/google-told-schools-accept-ai-114000908.html · GEO/AEO
 - [2026-11-21 02:53 UTC] Google's AI mode now allows you to resume 'where you left off' in your research. 3 ways to pick up investigations you paused midway — note — https://note.com/dreamy_daphne846/n/ne1ebcea89aa7?hl=en · GEO/AEO
-- [2026-11-20 16:00 UTC] Yotpo vs Semrush AI Visibility Toolkit: Which Is Better for Ecommerce Brands? — Newsroom Panama — https://newsroompanama.com/2026/11/21/yotpo-vs-semrush-ai-visibility-toolkit-which-is-better-for-ecommerce-brands/ · Brand/product recommendation, GEO/AEO
 
-### Model & lab launches (news search) (34)
+### Model & lab launches (news search) (44)
+- [2026-11-23 07:47 UTC] OpenAI reveals its perplexity numbers and calls for shared training limits — Pasquale Pillitteri — (Google News link; search the headline) · GEO/AEO
+- [2026-11-23 07:23 UTC] Google is killing off the Nest app and Google Assistant on Home devices - GSMArena.com news — GSMArena.com — (Google News link; search the headline)
+- [2026-11-23 07:01 UTC] GLM-5.4 vs Kimi K3.1 Pro: Open Weights vs a Paid Seat — OrcaRouter — (Google News link; search the headline)
+- [2026-11-23 06:59 UTC] Google Launches Gemini 4 Neon With Faster Reasoning for Complex Work — Kingy AI — (Google News link; search the headline)
+- [2026-11-23 06:58 UTC] GLM-5.4 vs Grok 4.7: Token Price vs the Real Task Cost — OrcaRouter — (Google News link; search the headline)
+- [2026-11-23 06:54 UTC] GLM-5.4 vs DeepSeek V4.1 Pro: Neither Has a Price Row Yet — OrcaRouter — (Google News link; search the headline)
+- [2026-11-23 06:12 UTC] Qwen Walkout Rumor: 7 of 11 Claims on Record, Deadline Isn’t — FourWeekMBA — (Google News link; search the headline)
+- [2026-11-23 06:10 UTC] Mistral Opens Asia-Pacific Hub in Singapore — Wisevoter — (Google News link; search the headline)
+- [2026-11-23 05:06 UTC] Ultimate Gemini Model Comparison 2026: 2.5 to Gemini 4 — Fello AI — (Google News link; search the headline) · (already listed on an earlier day)
+- [2026-11-23 05:00 UTC] Weekly Recap: Mistral AI investment and share buyback — TradingView — (Google News link; search the headline)
+- [2026-11-23 03:13 UTC] Kalshi reports pre-IPO Claude traffic high; Techmeme cites Dario Amodei's reported OpenAI-era comment on immersive games — Digg — (Google News link; search the headline) · Citation & source selection
+- [2026-11-23 03:05 UTC] SemiAnalysis Disputes Cerebras 2,000 Tok/s on Kimi K3.1 — FourWeekMBA — (Google News link; search the headline)
+- [2026-11-23 03:02 UTC] Alibaba’s new Qwen4-Max AI promises better coding and reasoning at lower cost — SoyaCincau — (Google News link; search the headline)
+- [2026-11-23 02:30 UTC] Deutsche Telekom Puts EUR 100 Million Behind Mistral AI While Its Munich Compute Hub Signs First Ind — ad-hoc-news.de — (Google News link; search the headline)
+- [2026-11-23 02:15 UTC] Alibaba widely releases its Qwen4-Max AI model with 2.4 trillion parameters. — Vietnam.vn — (Google News link; search the headline) · GEO/AEO
+- [2026-11-23 00:38 UTC] What Is Grok Bot? 1.0 Price, Mac App and Safety — Fello AI — (Google News link; search the headline)
+- [2026-11-22 23:26 UTC] Claude Without Login: Can You Use It Free With No Account? — Fello AI — (Google News link; search the headline)
 - [2026-11-22 22:50 UTC] Is DeepSeek Free? Why There Is No Paid Plan to Upgrade To — Fello AI — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-11-22 21:55 UTC] OpenAI Introduces 'Standby Discount' for Voice AI, Cutting Fees 60% During Silent Periods on Calls — BigGo Finance — (Google News link; search the headline)
 - [2026-11-22 21:07 UTC] Anthropic launches Claude for Manufacturing to automate administrative and engineering workflows — Robotics & Automation News — (Google News link; search the headline)
 - [2026-11-22 19:14 UTC] Kimi K3.5 Leak: Why the Next Kimi Thinks Less, Not More — OrcaRouter — (Google News link; search the headline)
 - [2026-11-22 19:11 UTC] LingSante-3.1-flash vs DeepSeek V4.1 Flash: Who Wins? — OrcaRouter — (Google News link; search the headline)
 - [2026-11-22 18:13 UTC] OpenAI Releases Perplexity Measures to Regulate AI — Brief IA — (Google News link; search the headline) · GEO/AEO
-- [2026-11-22 15:02 UTC] What Is Grok Bot? 1.0 Price, Mac App and Safety — Fello AI — (Google News link; search the headline)
-- [2026-11-22 13:54 UTC] Interpreting Black Box Reward Models — OpenAI — (Google News link; search the headline)
-- [2026-11-22 11:53 UTC] Gemini subscriptions may reach Hermes Agent on December 2 — TestingCatalog AI News — (Google News link; search the headline)
+- [2026-11-22 18:07 UTC] Anthropic (ANT) Puts Claude Into Enterprise Security As Its AI Builds Successors — Yahoo Finance — (Google News link; search the headline)
+- [2026-11-22 13:54 UTC] Alibaba Unveils Qwen4-Max: New AI Teammate for Work, Creativity, and Discovery — RYT9 — https://www.ryt9.com/en/prg/12858604 · (already listed on an earlier day)
+- [2026-11-22 13:38 UTC] Anthropic mathematician Levent Alpöge posts a claimed proof of the Riemann hypothesis made with Claude — MLQ.ai — (Google News link; search the headline)
 - [2026-11-22 11:26 UTC] AI Market Shocks, Anthropic’s Stock Slide, Gemini Releases, and Elon’s $435M Bet | #314｜Peter Diamandis — BigGo Finance — (Google News link; search the headline)
+- [2026-11-22 10:38 UTC] What Is Muse Spark? Meta’s New AI Strategy — TechJuice — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-11-22 10:03 UTC] Google AI Previews Tool Retrieval in the Gemini API for Large Tool Libraries — MarkTechPost — (Google News link; search the headline)
-- [2026-11-22 05:46 UTC] Google launches Gemini 4 Neon with faster performance and lower costs — YugaTech — (Google News link; search the headline)
+- [2026-11-22 05:46 UTC] Google launches Gemini 4 Neon with faster performance and lower costs — YugaTech — (Google News link; search the headline) · (already listed on an earlier day)
 - [2026-11-22 05:16 UTC] Google releases Gemini 4 Neon AI model, rivals Claude Opus 5.5 and GPT-6.2 Sol — Yahoo Tech — https://www.msn.com/en-us/technology/software/google-releases-gemini-4-neon-ai-model-rivals-claude-opus-5-5-and-gpt-6-2-sol/ar-AA2hXf3c · (already listed on an earlier day) · GEO/AEO · +1 other hits
-- [2026-11-22 03:34 UTC] Moonshot Launches Kimi K3, an Open-Weight AI Model with 2.8 Trillion Parameters — VOI.ID — (Google News link; search the headline) · GEO/AEO
+- [2026-11-22 03:34 UTC] Moonshot Launches Kimi K3, an Open-Weight AI Model with 2.8 Trillion Parameters — VOI.ID — (Google News link; search the headline) · (already listed on an earlier day) · GEO/AEO
 - [2026-11-22 02:20 UTC] Google releases example of creating Google Slides from videos and templates using Antigravity on November 12; Orchestrator (Neon), which works with the Hydrogen model, is ... — note — https://note.com/techno_news/n/nc2f48eeba154?hl=en
-- [2026-11-22 02:18 UTC] OpenAI launches ChatGPT Wallet, AI capable of making purchases automatically. — Vietnam.vn — (Google News link; search the headline)
-- [2026-11-22 02:05 UTC] Google Launches Gemini 4 Neon, Priced at $3 per Million Tokens — Brief IA — (Google News link; search the headline)
+- [2026-11-22 02:18 UTC] OpenAI launches ChatGPT Wallet, AI capable of making purchases automatically. — Vietnam.vn — (Google News link; search the headline) · (already listed on an earlier day)
+- [2026-11-22 00:00 UTC] Perplexity and Intelligence — OpenAI News — https://openai.com/index/perplexity-and-intelligence · GEO/AEO · +1 other hits
 - [2026-11-21 20:52 UTC] Gemini app rolls out very slick camera redesign on Android — 9to5Google — (Google News link; search the headline)
 - [2026-11-21 20:35 UTC] Forget searching for GIFs, Gemini can now make its own — Digital Trends — (Google News link; search the headline)
 - [2026-11-21 16:39 UTC] Two groups verify mathematician’s claim that Claude helped prove mathematics problem — The Guardian — (Google News link; search the headline)
-- [2026-11-21 16:23 UTC] OpenAI bans using its models to train rival AI, even just to sort the data — Pasquale Pillitteri — (Google News link; search the headline)
 - [2026-11-21 16:13 UTC] OpenAI Releases Guidelines for GPT-6.2 Astra and Sol — Brief IA — (Google News link; search the headline)
-- [2026-11-21 15:59 UTC] Alibaba Trains Next Qwen Model on In-House Semiconductors — briefasia.com — https://www.briefasia.com/en/article/alibaba-trains-next-qwen-model-in-house-semiconductors
-- [2026-11-21 15:21 UTC] OpenAI reportedly stops pressing for new AI-chip export controls on China — Digg — (Google News link; search the headline)
+- [2026-11-21 15:22 UTC] Anthropic Claude AI Predicts a Wild Chainlink Crash for 2027 — TradingView — (Google News link; search the headline)
 - [2026-11-21 12:00 UTC] Homelabber’s second-gen Optane build uses two RTX 3090s to run 2.8-trillion-parameter Kimi AI model at 3.11 tokens per second — moving nearly half the model into a RAM drive boosted performance by 41% — Tom's Hardware — (Google News link; search the headline) · GEO/AEO
 - [2026-11-21 11:46 UTC] OpenAI Ships GPT-Live-1.1 for Voice Agents, Cuts Idle Cost to $0.02/Min — MarkTechPost — (Google News link; search the headline)
-- [2026-11-21 04:10 UTC] Anthropic mathematician claims Claude helped produce proof of Riemann hypothesis — news.lavx.hu — (Google News link; search the headline)
-- [2026-11-21 03:49 UTC] Oracle says its OpenAI deal is fully funded. That’s not the finish line. — Digg — (Google News link; search the headline)
-- [2026-11-21 03:43 UTC] Alphabet shares rise 2.20% as Google launches Gemini 4 Argon — scanx.trade — (Google News link; search the headline)
-- [2026-11-21 03:34 UTC] Anthropic mathematician Levent Alpöge posts a claimed proof of the Riemann hypothesis made with Claude — MLQ.ai — (Google News link; search the headline)
-- [2026-11-21 02:59 UTC] Anthropic (ANT.US) nearly broke its issue price, while Claude tackled the "Mount Everest of mathematics"! A candidate proof for the Riemann Hypothesis written in 17 million lines of Lean code. — Moomoo — (Google News link; search the headline)
 - [2026-11-21 02:04 UTC] Global AI News: OpenAI Releases Countermeasures for 'Adversarial Distillation' (November 20, 2026). A Mechanism to Protect the 'Intermediate Steps of Thinking' in Models — note — https://note.com/excavation_koho/n/nd16cec7c3e68?hl=en
-- [2026-11-20 17:07 UTC] The weights for Kimi K3.1 Pro have been released, so I read the license — note — https://note.com/claude678/n/n4dc734c545af?hl=en
 - [2026-11-20 10:14 UTC] Anthropic Mathematician Says Claude Helped Prove the Riemann Hypothesis: What We Know — Thetechhacker — https://thetechhacker.com/news/claude-riemann-hypothesis-proof-claim-anthropic/
 
-### B2B buyer AI / adoption (1)
+### B2B buyer AI / adoption (2)
 - [2026-11-22 17:10 UTC] Gartner: Your AI Strategy Now Runs Through the Server Room — CDOTrends — https://www.cdotrends.com/story/5183/gartner-your-ai-strategy-now-runs-through-server-room · +1 other hits
+- [2026-11-22 16:00 UTC] AI to Define to Banking Sector’s Agenda in 2027 — FintechNews CH — https://fintechnews.ch/aifintech/ai-to-define-to-banking-sectors-agenda-in-2027/87142/
 
-### Sites with no usable feed (via Google News site: search) (4)
-- [2026-11-22 20:59 UTC] Strategy Inc Stock Price: Quote, Forecast, Splits & News (MSTR) — Perplexity — (Google News link; search the headline) · (already listed on an earlier day) · GEO/AEO
-- [2026-11-22 13:00 UTC] Broadcom Inc. Stock Price: Quote, Forecast, Splits & News (AVGO) — Perplexity — (Google News link; search the headline) · (already listed on an earlier day) · GEO/AEO
-- [2026-11-22 05:13 UTC] Perplexity AI Business Fellow — Perplexity — (Google News link; search the headline) · (already listed on an earlier day) · GEO/AEO
-- [2026-11-22 02:41 UTC] - Perplexity — Perplexity — (Google News link; search the headline) · (already listed on an earlier day) · GEO/AEO · +1 other hits
+### Sites with no usable feed (via Google News site: search) (3)
+- [2026-11-22 19:41 UTC] GitLab Inc. Stock Price: Quote, Forecast, Splits & News (GTLB) — Perplexity — (Google News link; search the headline) · GEO/AEO
+- [2026-11-22 09:56 UTC] - Perplexity — Perplexity — (Google News link; search the headline) · (already listed on an earlier day) · GEO/AEO
+- [2026-11-22 06:26 UTC] Teammates work for you — Perplexity — (Google News link; search the headline) · (already listed on an earlier day) · GEO/AEO
 
 ## Other items from source feeds
 
-### Labs (official feeds + trackers) (18)
+### Labs (official feeds + trackers) (16)
+- [2026-11-23 07:01 UTC] Chinese physical AI startup Simplexity Robotics raised a $100M pre-Series A led by Ant Group, with Alibaba, Tencent, and others joining, at a $1.6B valuation (Saritha Rai/Bloomberg) — Techmeme — https://www.techmeme.com/261123/p4#a261123p4
+- [2026-11-23 06:40 UTC] Compute Desk, which is building capital markets infrastructure to price, trade, hedge, and clear compute, raised a $45M seed round led by Lightspeed (Lucinda Shen/Axios) — Techmeme — https://www.techmeme.com/261123/p3#a261123p3
+- [2026-11-23 06:02 UTC] New US chip export rules threaten SEA's data center boom, risking incomplete and abandoned projects and forcing neoclouds to replace their Chinese customers (Bloomberg) — Techmeme — https://www.techmeme.com/261123/p2#a261123p2
+- [2026-11-23 05:30 UTC] London-based Alecto, which uses AI and legal experts to help consumers understand UK property law, raised $20M in seed funding led by Insight Partners (Kyt Dotson/SiliconANGLE) — Techmeme — https://www.techmeme.com/261123/p1#a261123p1
+- [2026-11-23 04:40 UTC] South Korean PE firm MBK Partners agrees to take Japan's Wacom private, in a deal valuing the digital pen tech company at ~$860M, with Samsung participating (Kim Woo-young/CHOSUNBIZ) — Techmeme — https://www.techmeme.com/261122/p20#a261122p20
+- [2026-11-23 04:00 UTC] Alexandr Wang says the Riemann Hypothesis proof shows AI will surpass humans in every field, including AI research, and calls for AI safety and alignment (Alexandr Wang/@alexandr_wang) — Techmeme — https://www.techmeme.com/261122/p19#a261122p19
+- [2026-11-23 03:25 UTC] Arva AI, which builds AI agents for banks' financial-crime compliance teams and counts Wise as a customer, raised a $20M Series A led by Arthur Ventures (Ryan Lawler/Axios) — Techmeme — https://www.techmeme.com/261122/p18#a261122p18
+- [2026-11-23 02:35 UTC] TPG and Corpay agree to acquire and take private BILL Holdings, whose cloud-based software lets SMBs automate financial operations, in a deal valued at ~$6B (Pritam Biswas/Reuters) — Techmeme — https://www.techmeme.com/261122/p17#a261122p17
+- [2026-11-23 01:45 UTC] GPT-6.2 Astra vs. Claude Fable 5.2 hands-on: nearly tied on three custom accounting, coding, and data tasks, but Fable used far more tokens and cost 5x+ as much (Jessica Wachtel/The New Stack) — Techmeme — https://www.techmeme.com/261122/p16#a261122p16
 - [2026-11-23 00:55 UTC] Sources: Jay Clayton, director of national intelligence and AI czar, will also be acting national cyber director pending Kirsten A. Davies' Senate confirmation (Axios) — Techmeme — https://www.techmeme.com/261122/p15#a261122p15
 - [2026-11-23 00:45 UTC] A profile of siblings Dario and Daniela Amodei; while at OpenAI, Dario suggested immersive videogames might ease political strife from AI-induced joblessness (Wall Street Journal) — Techmeme — https://www.techmeme.com/261122/p14#a261122p14
 - [2026-11-23 00:30 UTC] Sources: Alice Huang was in touch with an officer of China's spy agency MSS from spring 2025 until this fall; her business partner Kang Wei also worked with MSS (New York Times) — Techmeme — https://www.techmeme.com/261122/p13#a261122p13
@@ -107,19 +133,10 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-22 20:35 UTC] After FAA, Microsoft, and bank outages, DNI Jay Clayton says Americans should prepare for "bumps in the road" as systems are upgraded to adapt to the AI age (Garrett Downs/CNBC) — Techmeme — https://www.techmeme.com/261122/p11#a261122p11
 - [2026-11-22 19:50 UTC] A week after urging an Nvidia shake-up, Scott Bessent says Jensen Huang's return should depend on probes of its China chip sales and presses Nvidia for answers (Alan Rappeport/New York Times) — Techmeme — https://www.techmeme.com/261122/p10#a261122p10
 - [2026-11-22 19:45 UTC] Select Styling Specimens — Simon Willison — https://simonwillison.net/2026/Nov/22/select-styling/
-- [2026-11-22 18:25 UTC] OpenAI shares its models' perplexity, or how well they predict data, and urges pacing limits based on such metrics, citing a possible 2027 avalanche of AI gains (Jakub Pachocki/OpenAI) — Techmeme — https://www.techmeme.com/261122/p9#a261122p9 · GEO/AEO, Citation & source selection
-- [2026-11-22 17:15 UTC] Sources: amid leak fears, Anthropic limited some IPO banks to four-person teams, used a view-logging file platform, and sought six-month bans on advising rivals (Reuters) — Techmeme — https://www.techmeme.com/261122/p8#a261122p8
-- [2026-11-22 15:00 UTC] Jony Ive, ex-OpenAI product designer Joey Flynn, and others on Silicon Valley's obsession with "taste" as a moat against AI slop and whether AI can learn it (Jonah Weiner/New York Times) — Techmeme — https://www.techmeme.com/261122/p7#a261122p7
-- [2026-11-22 11:01 UTC] Experts say AI has made planning cyberattacks on industrial equipment faster by helping attackers read manuals and research past accidents more quickly (Tom Wilson/Financial Times) — Techmeme — https://www.techmeme.com/261122/p6#a261122p6
-- [2026-11-22 07:00 UTC] Current and former officials from the US and other countries describe the Chinese spy agency MSS' campaign to help Chinese companies acquire advanced AI chips (New York Times) — Techmeme — https://www.techmeme.com/261122/p5#a261122p5
-- [2026-11-22 06:40 UTC] Tesla rolls out FSD v15, featuring a photorealistic rendering of car surroundings; Elon Musk says it is real-time AI video generation without using game engines (Mike Pearl/Gizmodo) — Techmeme — https://www.techmeme.com/261122/p4#a261122p4
-- [2026-11-22 06:00 UTC] A joint statement by the Lean and Mathlib communities says "we have full confidence that Alpöge's proof of the Riemann Hypothesis is correct" (Lean community blog) — Techmeme — https://www.techmeme.com/261122/p3#a261122p3
-- [2026-11-22 05:50 UTC] Sources: AI server suppliers like Dell, HPE, Lenovo, and Supermicro are demanding substantially higher prices from buyers, months after contracts were signed (Financial Times) — Techmeme — https://www.techmeme.com/261122/p2#a261122p2
-- [2026-11-22 05:45 UTC] Sources: Alice Huang associate Li Ming, whom Singapore charged with fraud in 2025, was central to smuggling restricted AI chips from Southeast Asia to China (Stu Woo/Wall Street Journal) — Techmeme — https://www.techmeme.com/261122/p1#a261122p1
-- [2026-11-22 00:00 UTC] Perplexity and Intelligence — OpenAI News — https://openai.com/index/perplexity-and-intelligence · GEO/AEO
-- [2026-11-21 23:56 UTC] Muru — Simon Willison — https://simonwillison.net/2026/Nov/21/muru/ · (already listed on an earlier day)
 
-### SEO / search press (49)
+### SEO / search press (50)
+- [2026-11-23 06:07 UTC] OpenAI's agents finish 46% of long tasks as Ireland logs 9 halted AI launches — PPC Land — https://ppc.land/openais-agents-finish-46-of-long-tasks-as-ireland-logs-9-halted-ai-launches/
+- [2026-11-23 00:30 UTC] Google StarSearch, AIGC, Zero-History Discovery, Feed Ranking & More — Search Engine Roundtable — https://www.seroundtable.com/google-starsearch-42594.html
 - [2026-11-22 23:24 UTC] You Can Connect ChatGPT Business Hub With ChatGPT Ad Account — Search Engine Roundtable — https://www.seroundtable.com/chatgpt-business-hub-ad-account-42592.html
 - [2026-11-22 22:33 UTC] Google Search Profiles Is Rolling Out Globally — Search Engine Roundtable — https://www.seroundtable.com/google-search-profiles-global-42591.html
 - [2026-11-22 19:30 UTC] Google Ads surcharges hit 3% in France and Italy from January 2027 — PPC Land — https://ppc.land/google-ads-surcharges-hit-3-in-france-and-italy-from-january-2027/
@@ -159,19 +176,17 @@ Each item appears once, in the first section it matches. Dates are as reported b
 - [2026-11-22 09:19 UTC] 42 states and DC ask court to keep chats out of Character.ai's $10m sale — PPC Land — https://ppc.land/42-states-and-dc-ask-court-to-keep-chats-out-of-character-ais-10m-sale/
 - [2026-11-22 09:13 UTC] AppLovin blocks new ad lines in Google Ad Manager too, MonetizeMore CEO says — PPC Land — https://ppc.land/applovin-blocks-new-ad-lines-in-google-ad-manager-too-monetizemore-ceo-says/ · Brand/product recommendation
 - [2026-11-22 09:06 UTC] Firms under 1,000 staff win GDPR records exemption in EU deal — PPC Land — https://ppc.land/firms-under-1-000-staff-win-gdpr-records-exemption-in-eu-deal/
-- [2026-11-22 07:10 UTC] Game: Your favourite marketing tool now answers to a new owner — PPC Land — https://ppc.land/game-your-favourite-marketing-tool-now-answers-to-a-new-owner/
-- [2026-11-22 06:54 UTC] EU court adviser says "free" Facebook costs users their data — PPC Land — https://ppc.land/eu-court-adviser-says-free-facebook-costs-users-their-data/ · Brand/product recommendation
-- [2026-11-22 06:52 UTC] OpenAI patent describes earbuds that read silently mouthed words — PPC Land — https://ppc.land/openai-patent-describes-earbuds-that-read-silently-mouthed-words/
-- [2026-11-22 06:48 UTC] Most Prime Air drone orders arrive in under 90 minutes, Amazon says — PPC Land — https://ppc.land/most-prime-air-drone-orders-arrive-in-under-90-minutes-amazon-says/
-- [2026-11-22 06:46 UTC] German top court halts Künast's fake quote case against Meta for EU ruling — PPC Land — https://ppc.land/german-top-court-halts-kunasts-fake-quote-case-against-meta-for-eu-ruling/
-- [2026-11-22 06:43 UTC] MGM+ brings ITV spy drama Secret Service to the US on November 22 — PPC Land — https://ppc.land/mgm-brings-itv-spy-drama-secret-service-to-the-us-on-november-22/
-- [2026-11-22 06:40 UTC] PayPal faces possible clawback in Germany over its no-surcharge rule — PPC Land — https://ppc.land/paypal-faces-possible-clawback-in-germany-over-its-no-surcharge-rule/
-- [2026-11-22 06:38 UTC] LinkedIn wants the business card to outlive the job — PPC Land — https://ppc.land/linkedin-wants-the-business-card-to-outlive-the-job/
-- [2026-11-22 06:31 UTC] Colorado bans ID-only age checks for AI chatbots in adopted rules — PPC Land — https://ppc.land/colorado-bans-id-only-age-checks-for-ai-chatbots-in-adopted-rules/
-- [2026-11-21 23:21 UTC] Free, at a price: EU court adviser says Facebook users pay in data — PPC Land — https://ppc.land/free-at-a-price-eu-court-adviser-says-facebook-users-pay-in-data/ · (already listed on an earlier day)
+- [2026-11-22 07:10 UTC] Game: Your favourite marketing tool now answers to a new owner — PPC Land — https://ppc.land/game-your-favourite-marketing-tool-now-answers-to-a-new-owner/ · (already listed on an earlier day)
+- [2026-11-22 06:54 UTC] EU court adviser says "free" Facebook costs users their data — PPC Land — https://ppc.land/eu-court-adviser-says-free-facebook-costs-users-their-data/ · (already listed on an earlier day) · Brand/product recommendation
+- [2026-11-22 06:52 UTC] OpenAI patent describes earbuds that read silently mouthed words — PPC Land — https://ppc.land/openai-patent-describes-earbuds-that-read-silently-mouthed-words/ · (already listed on an earlier day)
+- [2026-11-22 06:48 UTC] Most Prime Air drone orders arrive in under 90 minutes, Amazon says — PPC Land — https://ppc.land/most-prime-air-drone-orders-arrive-in-under-90-minutes-amazon-says/ · (already listed on an earlier day)
+- [2026-11-22 06:46 UTC] German top court halts Künast's fake quote case against Meta for EU ruling — PPC Land — https://ppc.land/german-top-court-halts-kunasts-fake-quote-case-against-meta-for-eu-ruling/ · (already listed on an earlier day)
+- [2026-11-22 06:43 UTC] MGM+ brings ITV spy drama Secret Service to the US on November 22 — PPC Land — https://ppc.land/mgm-brings-itv-spy-drama-secret-service-to-the-us-on-november-22/ · (already listed on an earlier day)
+- [2026-11-22 06:40 UTC] PayPal faces possible clawback in Germany over its no-surcharge rule — PPC Land — https://ppc.land/paypal-faces-possible-clawback-in-germany-over-its-no-surcharge-rule/ · (already listed on an earlier day)
+- [2026-11-22 06:38 UTC] LinkedIn wants the business card to outlive the job — PPC Land — https://ppc.land/linkedin-wants-the-business-card-to-outlive-the-job/ · (already listed on an earlier day)
+- [2026-11-22 06:31 UTC] Colorado bans ID-only age checks for AI chatbots in adopted rules — PPC Land — https://ppc.land/colorado-bans-id-only-age-checks-for-ai-chatbots-in-adopted-rules/ · (already listed on an earlier day)
 
-### Tools (4)
+### Tools (3)
+- [2026-11-23 01:25 UTC] How Notable Capital, GIC, and Baillie Gifford bet big on Anthropic before its IPO — TechCrunch AI — https://techcrunch.com/2026/11/22/how-notable-capital-gic-and-baillie-gifford-bet-big-on-anthropic-before-its-ipo/
 - [2026-11-22 21:14 UTC] OpenAI’s chief scientist has thoughts on how to limit AI development — TechCrunch AI — https://techcrunch.com/2026/11/22/openais-chief-scientist-has-thoughts-on-how-to-limit-ai-development/
 - [2026-11-22 18:08 UTC] Why data centers are at the center of the Big Tech backlash — TechCrunch AI — https://techcrunch.com/2026/11/22/why-data-centers-are-at-the-center-of-the-big-tech-backlash/
-- [2026-11-21 21:37 UTC] Signal restricts mobile screenshots as it confronts ‘existential threat’ of AI surveillance — TechCrunch AI — https://techcrunch.com/2026/11/21/signal-restricts-mobile-screenshots-as-it-confronts-existential-threat-of-ai-surveillance/ · (already listed on an earlier day)
-- [2026-11-21 21:07 UTC] A tale of two Nvidias — TechCrunch AI — https://techcrunch.com/2026/11/21/a-tale-of-two-nvidias/ · (already listed on an earlier day)

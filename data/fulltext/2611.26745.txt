@@ -1,0 +1,2913 @@
+MomentMem: Memorizing Key Moments for Robot Manipulation
+https://arxiv.org/abs/2611.26745
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+MomentMem: Memorizing Key Moments for Robot Manipulation
+
+Guangyu Zhao
+
+  
+
+Yongchang Zhang
+
+  
+
+Ruizhang Jiang
+
+  
+
+Zhihong Yu
+
+Affiliation: 
+State Key Laboratory of General Artificial Intelligence, Peking University  Li Auto Inc.  Tsinghua University
+
+  
+
+Yuhao Zhang
+
+  
+
+Tao Wu
+
+  
+
+Qimin Zhou
+
+Affiliation: 
+Nanyang Technological University  Beijing University of Posts and Telecommunications
+
+  
+
+Kunsong Shi
+
+  
+
+Haoran Wen
+
+  
+
+Zeyu Zhang
+
+  
+
+Yin Li
+
+Affiliation: 
+Beijing Institute for General Artificial Intelligence  University of Wisconsin - Madison
+*
+Equal contribution
+
+  
+
+Kun Zhan
+
+  
+
+Yiwu Zhong
+
+Abstract
+
+Robotic manipulation often requires remembering visual information that is no longer observable, such as the original location of an object.
+Existing approaches typically rely on full observation histories, which become redundant over long horizons, or text summaries, which may omit precise visual details.
+We study 
+visual moment memory
+, the ability to retain such details from key moments for subsequent manipulation.
+To support this study, we introduce VMBench, a suite of long-horizon manipulation tasks requiring memory of spatial locations, visual appearances, and their associations.
+We further propose MomentMem, a hierarchical architecture in which a VLM-based memorizer selects keyframes and an executor predicts actions conditioned on the selected memories.
+This separation enables us to evaluate memory selection alongside closed-loop task success and to study memorizer generalization independently of the executor.
+On VMBench, MomentMem achieves 49.9% average success, outperforming the strongest evaluated baseline by 
+31.7 percentage points
+.
+Moreover, we find that the memorizer 
+transfers well
+ to unseen appearances zero-shot. It can also adapt to an unseen task with only a few memory annotations, reaching 43.7% success, 
+close to
+ the 44.3% obtained with full memory supervision.
+Further experiments show competitive performance on RMBench and improvements in real-robot manipulation. These results highlight the value of retaining sparse visual evidence for memory-dependent manipulation.
+Our code is available at 
+https://github.com/PKU-VaLuE-Lab/MomentMem
+.
+
+1 
+Introduction
+
+Recently, memory has increasingly become a key capability of multi-modal models 
+[
+30
+, 
+18
+, 
+41
+, 
+37
+]
+ and embodied models 
+[
+28
+, 
+19
+, 
+31
+, 
+29
+]
+. Despite advances in embodied models 
+[
+21
+, 
+4
+, 
+12
+]
+, memory for robot manipulation remains challenging. As shown in Figure 
+(a), existing approaches often focus on full observation histories 
+[
+35
+]
+ or text descriptions 
+[
+5
+, 
+34
+]
+.
+Full observation histories are complete yet redundant, thus falling short when facing long-horizon tasks 
+[
+38
+, 
+37
+]
+.
+Text captures abstract events, yet can omit visual details, or cannot fully describe certain information (e.g., “move the cube back to where it was”).
+To this end, we study 
+visual moment memory
+ for robotic manipulation. It requires models to remember precise visual information at a key moment, such as texture patterns, spatial relations, and spatial locations. This type of memory is difficult to preserve in text.
+
+As a first step, we propose VMBench, a benchmark of long-horizon manipulation tasks that require visual moment memory.
+Its key design principle is to make successful manipulation depend on remembering precise visual information.
+Different from existing benchmarks 
+[
+7
+, 
+10
+, 
+5
+, 
+22
+]
+, our benchmark emphasizes tasks that cannot be well addressed by concise text memory.
+Specifically, these tasks require remembering exact positions and visual patterns, rather than only object identities or task progress.
+Concise text summaries may omit these details, as illustrated in Figure 
+(b).
+We organize the tasks around spatial locations, visual appearances, and appearance-location bindings.
+For example, returning a cube to its original position requires remembering exactly where it was, rather than just knowing that it was moved.
+Across these tasks, the key visual moment is only visible across a short period of time and the model has to capture such moments for successful task completion.
+Together, these tasks provide a testbed for studying how robots memorize precise visual information for manipulation tasks.
+
+Going further, we consider the modeling of visual moment memory for robot manipulation.
+Task success alone does not reveal whether a failure comes from memory or execution 
+[
+32
+]
+.
+Beyond overall task performance, we seek to examine two key capabilities: memory selection and action prediction.
+To this end, we propose MomentMem, a hierarchical architecture that separates memory from action prediction.
+This separation allows us to examine memory selection and action execution independently.
+As shown in Figure 
+(c) (top), a VLM memorizer selects keyframes, and then the executor predicts actions.
+We observe that the key event often spans across several frames that show the same visual cue.
+We annotate this span as a temporal segment.
+We aim for the memorizer to select a keyframe in the segment as early as possible.
+Also, if it misses an earlier frame, it should still try to capture the later frame in the same segment.
+During inference, the executor predicts actions from the selected keyframes together with the current observation.
+Details are provided in Section 
+4
+.
+
+With our benchmark tasks and hierarchical model, we design metrics and protocols to evaluate end-to-end success rate and the generalization of memory capability, as shown in Figure 
+(c).
+As in most existing benchmarks, we test the models on our benchmark tasks and measure the success rate over closed-loop rollouts.
+We evaluate how well the memorizer captures the relevant evidence.
+We also test its transfer to unseen appearances and adaptation to new tasks.
+As shown in Figure 
+(c) (bottom), we vary the visual appearance and directly test the overall model, with the memorizer trained only on the original visual appearances.
+Besides, we test the overall model for unseen tasks, allowing the memorizer to adapt to new tasks with a few memory annotations.
+In both protocols, we train the executor on target-domain action demonstrations using memories predicted by the memorizer.
+In other words, our protocols measure the generalization of the memorizer rather than the executor.
+
+On VMBench, MomentMem achieves 
+49.9% average success
+, exceeding the strongest evaluated baseline by 
+31.7 percentage points
+.
+In addition, the memorizer transfers 
+zero-shot
+ to unseen appearances.
+With only 
+a few memory annotations
+, it adapts to an unseen task.
+The resulting policy reaches 
+43.7% success
+, close to 44.3% with full memory supervision.
+Beyond VMBench, MomentMem remains competitive on RMBench and improves task success in real-robot manipulation.
+These results demonstrate the effectiveness and generalization of MomentMem.
+
+Our contributions are as follows:
+
+•
+
+We identify visual moment memory as a key research problem for robotic manipulation, focusing on remembering transient, precise visual information.
+
+•
+
+We introduce VMBench to evaluate and study this problem in closed-loop manipulation tasks. We also propose MomentMem, a hierarchical model that supports separate diagnosis of memory and action prediction.
+
+•
+
+Extensive experiments show that MomentMem exceeds the strongest baseline on our VMBench by 31.7 percentage points. Our analysis demonstrates that the memorizer can transfer to unseen appearance and task. Further, MomentMem performs well on RMBench and real-robot tasks.
+
+2 
+Related Work
+
+2.1 
+Vision-Language-Action Models
+
+Vision-Language-Action (VLA) models leverage pretrained vision-language representations to generate robot actions. RT-2 
+[
+42
+]
+ transferred web-scale semantic knowledge to robotic control, while OpenVLA 
+[
+21
+]
+ and Octo 
+[
+13
+]
+ developed open generalist policies trained on diverse robot data. Recent models, including 
+ 
+[
+3
+]
+, 
+ 
+[
+4
+]
+, GR00T series 
+[
+25
+]
+, GigaBrain series 
+[
+14
+, 
+15
+, 
+16
+]
+, and Gemini Robotics 
+[
+12
+]
+, improve action generation and cross-task generalization.
+
+Despite these advances, most VLAs condition on the current observation or a short context window. They therefore struggle when relevant evidence has disappeared from view 
+[
+3
+, 
+28
+, 
+6
+, 
+8
+]
+. Our work addresses this limitation by providing VLA models with task-relevant keyframes identified from earlier observations.
+
+2.2 
+Robotic Manipulation Policies with Memory
+
+Some robotic manipulation tasks require evidence from earlier observations, motivating policies that use interaction history 
+[
+11
+, 
+28
+, 
+5
+]
+.
+Available information includes the task instruction, visual observations, actions, and proprioceptive states.
+Existing memory methods differ in how they store and use historical information.
+Some methods maintain recurrent states, memory banks, or compressed tokens to retain information from long histories 
+[
+28
+, 
+27
+, 
+8
+, 
+23
+, 
+1
+, 
+35
+, 
+20
+, 
+19
+]
+.
+Compressing long histories may discard visual details needed for later actions.
+Other methods summarize the history with language or use textual plans as memory 
+[
+5
+, 
+31
+, 
+34
+]
+.
+Such representations are compact, but concise text summaries may omit task-relevant visual details, such as fine-grained appearances.
+Another line of work directly selects observations from the visual history 
+[
+29
+]
+.
+This preserves raw visual evidence, though several methods select with predefined rules or heuristics 
+[
+6
+, 
+40
+, 
+39
+, 
+22
+]
+.
+Such rules may need adjustment when memory requirements change.
+
+Our method learns when to save observations that contain evidence needed for later actions.
+It uses a hierarchical architecture with separate memorizer and executor modules.
+The most closely related method is EventVLA 
+[
+38
+]
+, which predicts keyframes from predicted future actions within a single model.
+Our memorizer instead selects keyframes from visual observations independently of action prediction.
+
+2.3 
+Robotic Memory Benchmarks
+
+Several benchmarks evaluate memory in robotic manipulation.
+RMBench 
+[
+5
+]
+ supports systematic evaluation of memory in robotic imitation learning.
+MIKASA-Robo 
+[
+7
+]
+ and RoboMME 
+[
+10
+]
+ evaluate multiple dimensions of memory, while MemoryBench 
+[
+11
+]
+ focuses on spatial memory and action recall.
+Other benchmarks focus on memory in long-horizon tasks, which involve extended trajectories and require precise manipulation 
+[
+22
+, 
+38
+, 
+9
+, 
+26
+]
+.
+Complementing these benchmarks, VMBench focuses on visual moment memory: recalling precise visual evidence that is visible only for a short period of time.
+We study memorizer transfer using visual OOD variants and few-shot adaptation on a held-out task.
+
+3 
+VMBench: Evaluating Visual Moment Memory
+
+We introduce VMBench that necessitates visual moment memory during robot manipulation.
+It contains nine closed-loop manipulation tasks, requiring the model to recall precise visual details which text summaries are hard to describe.
+This evidence is briefly presented by the environment or revealed through interaction.
+In some tasks, the environment presents the evidence before execution.
+In others, the robot must act to reveal it, such as opening drawers or scanning with a detector.
+These settings test memory during both observation and active manipulation.
+Appendix 
+A
+ describes the key evidence in each task, and appendix 
+B
+ provides complete task instructions for all tasks in VMBench.
+
+Table 1
+: 
+Overview of the tasks in VMBench.
+ Tasks are grouped by the visual information they require: spatial locations, appearances, or their associations. Image sequences illustrate how evidence is acquired and used after it is no longer visible. The final column shows each task’s visual OOD variant.
+
+Category
+
+Task
+
+Description
+
+Task sequence
+
+Visual
+
+OOD
+
+Spring
+
+Compression
+
+Compress the spring back to its deepest previously reached position.
+
+ 
+ 
+
+Spatial
+
+Flash
+
+Beacon
+
+Move the cube to the location where the beacon briefly appeared.
+
+ 
+ 
+ 
+
+Explore
+
+Cube
+
+Search all the cups and retrieve the hidden cube.
+
+ 
+ 
+ 
+
+Hidden
+
+Pattern
+
+Push the box whose hidden pattern matches the pattern on the card.
+
+ 
+ 
+
+Appearance
+
+Drawer
+
+Match
+
+Open the upper or middle drawer whose pattern matches that of the bottom drawer.
+
+ 
+ 
+ 
+
+Scroll
+
+Discovery
+
+Reveal the scroll patterns, then stack the two matching scrolls.
+
+ 
+ 
+ 
+
+Placement
+
+Imitation
+
+Move each cube to its position shown in the demonstration.
+
+ 
+ 
+
+Spatial &
+
+Appearance
+
+Mine
+
+Sweeper
+
+Place each cube where the detector briefly showed the same color.
+
+ 
+ 
+ 
+
+Seal
+
+Checking
+
+Lift the stamps, then place each cube on the matching revealed color.
+
+ 
+ 
+ 
+
+3.1 
+Types of Visual Evidence
+
+We categorize the tasks by their visual information requirements. Table 
+1
+ provides an overview.
+
+Spatial locations.
+
+These tasks require recalling precise spatial locations.
+The policy must retain a spatial reference for later movement or search.
+For example, Flash Beacon requires the robot to place the cube where the beacon appeared.
+
+Visual appearance.
+
+These tasks require retaining detailed visual patterns.
+The policy must compare appearances observed at different times, even when object categories alone cannot distinguish them.
+For example, Scroll Discovery requires the robot to retract scrolls, remembering the revealed patterns, and then stack the two scrolls with matching patterns after they roll back up.
+
+Appearance-location bindings.
+
+These tasks require retaining associations between appearances and locations.
+Remembering the appearances or locations separately is insufficient; the policy must preserve their correspondence.
+For example, in Mine Sweeper, the robot scans the “minefield” with a detector.
+The detector briefly changes color at each target location. After scanning, the robot places colored blocks at these locations, so it must remember where each color appeared.
+
+3.2 
+Demonstrations and Memory Annotations
+
+We collect 100 successful demonstrations per task.
+Each demonstration contains annotated key segments.
+We obtain these segments from simulator events and task state.
+Each segment marks when one piece of task-relevant evidence is visible.
+It allows multiple valid frames rather than prescribing a single representative.
+The annotations support both training and evaluation of keyframe selection.
+
+VMBench is built on SAPIEN 
+[
+36
+]
+ and ManiSkill3 
+[
+24
+, 
+17
+, 
+33
+]
+. We collect demonstrations using a Franka Panda manipulator and scripted closed-loop experts. Trajectories record RGB images from overview and wrist cameras at 
+ resolution, with a control frequency of 20 Hz. Privileged state is not included in policy observations. Appendix 
+C
+ details data collection, randomization, and annotation.
+
+3.3 
+Visual OOD Setting
+
+To test memory transfer across visual appearances, we provide a visual out-of-distribution (OOD) variant of each task.
+We change room and table appearance, lighting, and distractors outside the manipulation area.
+Task mechanics, memory events, and success conditions remain unchanged.
+
+This setting tests whether a memorizer trained on standard appearances can directly generate useful memories under unseen appearances. The executor is trained on target-domain action demonstrations.
+
+3.4 
+Memory Evaluation
+
+We evaluate complete policies by closed-loop task success.
+For methods that explicitly select keyframes, the interval annotations also support a separate evaluation of memory selection.
+We replay recorded demonstrations, using each model’s previous selections as its memory context.
+Segment hit rate measures the fraction of intervals with at least one selected frame.
+Segment accuracy requires exactly one selection per interval.
+Non-keyframe accuracy measures the fraction of demonstrations with no selections outside the annotated intervals.
+These metrics distinguish missed evidence, duplicate selections, and selections outside the intervals.
+Appendix 
+E
+ gives the details and results.
+
+4 
+MomentMem
+
+4.1 
+Overview
+
+As shown in Figure 
+2
+, MomentMem uses a hierarchical architecture that decouples memory from action execution. A VLM memorizer processes streaming visual observations and selects keyframes. A VLA executor uses these keyframes and the current observation to predict actions.
+
+This design addresses two challenges of visual moment memory.
+We use sparse keyframes as the interface between memory and execution.
+Keyframes preserve raw images to retain visual details needed for later actions.
+The memorizer uses recent observations and existing memory to decide when to save a frame. It captures transient evidence while avoiding duplicate storage.
+
+Online interaction.
+ At time 
+, the robot receives an observation 
+, a proprioceptive state 
+, and a task instruction 
+. The memorizer 
+ decides whether to store the current frame using the existing memory 
+, a buffer 
+ of recent subsampled observations including 
+, and the instruction. The executor 
+ predicts an action chunk 
+ from the updated memory 
+ and the current input:
+
+(1)
+
+The executor receives the selected keyframes in temporal order rather than the full observation history.
+
+Training pipeline.
+ We first train the memorizer with key segment annotations. We then freeze it to generate memories for action demonstrations. The executor takes the memorized keyframes as input and learns to predict the demonstration actions. The details are elaborated in the following subsections.
+
+Figure 2
+: 
+Overview of MomentMem.
+ 
+(a)
+ The memorizer uses recent observations and existing memory to decide whether to store the current frame. The executor predicts actions from the updated memory and current input. 
+(b)
+ Each epoch, we sample an anchor from each key segment. Under a teacher-forced history, the anchor is positive. Earlier frames in the segment remain in the observation context but are excluded from the loss. Later frames are negative because the event has been stored.
+
+4.2 
+The Memorizer of MomentMem
+
+We fine-tune a VLM to output “Yes” or “No” given the context in Equation 
+1
+, indicating whether to store the current frame. Training must allow multiple valid frames for each event and account for how earlier selections affect the current decision.
+
+Segment-level supervision.
+
+Visual evidence often remains visible across several frames.
+Labeling only one fixed frame as correct would penalize other valid selections.
+Our supervision instead allows different representatives of the same evidence across training epochs.
+For each piece of visual evidence, we annotate an interval 
+ during which it is visible.
+Each epoch, we select one representative frame, called an anchor, from each interval.
+The memorizer is trained to identify the anchors and reject others.
+We generate intervals automatically in simulation, and annotate them manually for real-world experiments.
+
+Anchor sampling.
+ At the start of each epoch, we sample one anchor 
+ per interval. Under a teacher-forced history, the anchor receives a positive label and enters memory. Earlier frames in the same interval are excluded from the loss but remain in the recent observation context. Later frames and frames outside all intervals receive negative labels.
+Resampling across epochs teaches the model to select different valid representatives of the same event.
+The memorizer is encouraged to capture visual evidence when it appears. If it misses an opportunity, it can select a later valid frame.
+We use focal loss to address the imbalance between positive and negative samples.
+
+Scheduled sampling.
+
+Whether a frame should be stored depends on what is already in memory.
+The same evidence may need to be saved after a missed selection, but becomes redundant once a representative is stored.
+Missed or extra selections during execution therefore change later inputs and decisions.
+Training only with teacher-forced histories does not expose the memorizer to these cases.
+We use sequence-level scheduled sampling to train with histories that include model predictions.
+At the start of each epoch, the current model replays the training trajectories. We then mix teacher decisions and model predictions to construct memory histories. The probability of using model predictions increases during training. Supervision follows the history provided: after a missed anchor, later valid frames in the same interval remain positive. Once a representative is stored, subsequent frames become negative. Appendix 
+D
+ details label construction.
+
+4.3 
+The Executor of MomentMem
+
+The executor learns to act on the memories that the memorizer actually provides.
+We therefore freeze the trained memorizer and replay action demonstrations in temporal order.
+Its selections form the memory context for executor training.
+The memorizer may select frames at different times, miss relevant evidence, or store extra frames.
+Training with these predicted memories exposes the executor to the memorizer’s outputs rather than only to frames sampled from annotated intervals.
+
+For a training sample at time 
+, the executor receives predicted keyframes from before 
+, the current observation 
+, the state 
+, and the instruction 
+. We supervise it with the demonstration action chunk using the original learning objective of the action policy.
+
+This interface supports separate adaptation of memory and execution. In the visual OOD experiments, we reuse the memorizer directly. For a new task, we first adapt it with a few memory annotations. In both settings, the executor is trained on target-domain action demonstrations. So, this hierarchical design allows us to evaluate the two modules separately.
+
+5 
+Experiments and Results
+
+We first evaluate overall task success on VMBench. We then test the memorizer’s transfer to unseen appearances and adaptation to a new task. We find that MomentMem improves closed-loop success on tasks that require visual moment memory. The memorizer also generalizes to unseen appearance and task to some extent. Beyond VMBench, we test MomentMem on RMBench and real-robot tasks. The results suggest that MomentMem is broadly applicable to memory-dependent manipulation.
+
+5.1 
+Experimental Setup
+
+Implementation and Evaluation.
+
+We initialize the memorizer from Qwen3-VL-4B and the executor from 
+.
+We use 100 demonstrations per task provided by VMBench and jointly train all nine tasks.
+We first train the memorizer with annotated key segments and then freeze it.
+We use its predicted keyframes to train the executor on action demonstrations.
+At test time, the executor receives online-selected keyframes, the current observation, the robot state, and the task instruction.
+Appendix 
+D
+ provides the detailed training configuration.
+
+Baselines.
+
+We compare MomentMem against 
+ 
+[
+4
+]
+ and three memory-augmented policies.
+Mem-0 
+[
+5
+]
+ uses explicit memory and high-level planning to guide action execution.
+NativeMEM 
+[
+35
+]
+ compresses past observations into memory tokens.
+EventVLA 
+[
+38
+]
+ learns sparse visual evidence memory jointly with action prediction.
+All methods use the same demonstrations and joint training as MomentMem.
+Each task is evaluated on 100 rollouts with unseen initial configurations.
+
+5.2 
+MomentMem Improves Success on Visual Moment Memory Tasks
+
+Table 2
+: 
+Performance comparison on VMBench.
+ We compare MomentMem with several baselines on VMBench. All methods are trained on the same dataset, with 100 trajectories per task. We evaluate all methods under 100 unseen initialization conditions per task. For each method, the models are jointly trained and evaluated across all tasks.
+
+Explore
+
+Mine
+
+Hidden
+
+Seal
+
+Spring
+
+Drawer
+
+Flash
+
+Scroll
+
+Placement
+
+Avg.
+
+Cube
+
+Sweeper
+
+Pattern
+
+Checking
+
+Compression
+
+Match
+
+Beacon
+
+Discovery
+
+Imitation
+
+0%
+
+1%
+
+24%
+
+0%
+
+0%
+
+21%
+
+0%
+
+16%
+
+1%
+
+7.0%
+
+Mem-0
+
+0%
+
+0%
+
+34%
+
+0%
+
+25%
+
+58%
+
+0%
+
+17%
+
+2%
+
+15.1%
+
+EventVLA
+
+2%
+
+1%
+
+24%
+
+2%
+
+34%
+
+51%
+
+15%
+
+29%
+
+6%
+
+18.2%
+
+NativeMEM
+
+0%
+
+0%
+
+25%
+
+0%
+
+44%
+
+44%
+
+9%
+
+19%
+
+1%
+
+15.8%
+
+Ours
+
+2%
+
+93%
+
+32%
+
+64%
+
+52%
+
+47%
+
+38%
+
+22%
+
+99%
+
+49.9%
+
+MomentMem substantially improves closed-loop success.
+
+As shown in Table 
+2
+, MomentMem achieves 49.9% average success, 31.7% above the strongest baseline. It performs best on five tasks and ties for best on one more.
+The largest gains occur on Placement Imitation, Mine Sweeper, and Seal Checking, which require retaining precise visual evidence after it disappears from view.
+
+Memory-free execution struggles on these tasks.
+
+ reaches only 7.0% average success, and scores 0% on four of the nine tasks.
+On Mine Sweeper, we observe that 
+ often places a block inside the candidate region, but not at the location specified by the earlier visual cue.
+This suggests that learning how to pick and place a block is not enough. The policy must also remember where to place it.
+
+Texture matching remains difficult for the executor.
+
+MomentMem gains most on tasks requiring appearance–location bindings.
+In contrast, MomentMem does not outperform the strongest baseline on the Appearance tasks.
+To understand this, we run a diagnosis on Hidden Pattern.
+Linear probes of the executor’s final-layer features predict “what the texture is” with 99% accuracy, but predict the matching box with only 40% accuracy, just slightly higher than the 33% level of random guessing.
+The features retain information about each texture, but do not capture well which textures match.
+Appendix 
+G
+ gives the setup and additional readouts.
+These results suggest that the executor struggles to match textures across memory images, even when the relevant evidence is available.
+
+5.3 
+Memory Selection Transfers to Unseen Visual Appearances
+
+We test whether the memorizer continues to select relevant frames when the scene appearance changes.
+We train it on the standard appearance and apply it directly to visual OOD demonstrations.
+We then train an executor on target-appearance action demonstrations using these predicted keyframes, without new memory annotations.
+For Mem-0 and EventVLA, we likewise use source-trained models to generate target-domain memory annotations for action training (Table 
+3
+).
+NativeMEM has no separate memory module, so we retrain it on the target-appearance data.
+
+Table 3
+: 
+VMBench with unseen appearances.
+ Methods are grouped by whether training requires explicit memory annotations. For Mem-0, EventVLA, and MomentMem, we reuse memory-related components trained on the standard appearance to annotate target-appearance demonstrations. We then train the action components on these demonstrations and generated annotations, without new human memory annotations. NativeMEM is retrained end-to-end on target-appearance data.
+
+Explore
+
+Mine
+
+Hidden
+
+Seal
+
+Spring
+
+Drawer
+
+Flash
+
+Scroll
+
+Placement
+
+Avg.
+
+Cube
+
+Sweeper
+
+Pattern
+
+Checking
+
+Compression
+
+Match
+
+Beacon
+
+Discovery
+
+Imitation
+
+No memory annotations required
+
+NativeMEM
+
+0%
+
+0%
+
+31%
+
+0%
+
+31%
+
+49%
+
+8%
+
+25%
+
+3%
+
+16.3%
+
+Requires memory annotations
+
+Mem-0
+
+0%
+
+0%
+
+24%
+
+0%
+
+28%
+
+21%
+
+0%
+
+1%
+
+0%
+
+8.2%
+
+EventVLA
+
+0%
+
+1%
+
+40%
+
+0%
+
+30%
+
+48%
+
+6%
+
+4%
+
+4%
+
+14.8%
+
+Ours
+
+12%
+
+79%
+
+35%
+
+55%
+
+79%
+
+51%
+
+59%
+
+28%
+
+99%
+
+55.2%
+
+Memory selection transfers to unseen appearances without new annotations.
+
+As shown in Table 
+3
+, MomentMem reaches 55.2% average success under appearance changes, while the strongest baseline reaches 16.3%.
+It achieves the best performance on eight of the nine tasks.
+
+In the visual OOD setting, the 55.2% average success is higher than the 49.9% under the standard appearance.
+This may seem counterintuitive, but only the memorizer runs inference on an unseen appearance in this setting.
+The executor is still trained on target-appearance action demonstrations, so this setting is not OOD for the executor.
+On recorded demonstrations, the memorizer selects at least one frame in 95.8% of the annotated key segments under the standard appearance, and still in 87.2% under unseen appearances (Appendix 
+E
+).
+We can see that its selections remain useful for execution under unseen appearances.
+
+Table 4
+: 
+Performance comparison on RMBench.
+ For Mem-0 and EventVLA, we directly use the results reported in their original papers 
+[
+5
+, 
+38
+]
+. We train NativeMEM ourselves. The reported Mem-0 results are obtained by training a separate model for each task, while the other methods are trained jointly across all tasks.
+
+Observe
+
+Rearrange
+
+Put Back
+
+Swap
+
+Swap
+
+Battery
+
+Blocks
+
+Cover
+
+Press
+
+Avg.
+
+and Pick Up
+
+Blocks
+
+Block
+
+Blocks
+
+T
+
+Try
+
+Ranking Try
+
+Blocks
+
+Button
+
+9%
+
+13%
+
+11%
+
+24%
+
+15%
+
+16%
+
+6%
+
+0%
+
+0%
+
+10.4%
+
+Mem-0
+
+4%
+
+89%
+
+90%
+
+67%
+
+14%
+
+28%
+
+18%
+
+68%
+
+0%
+
+42.0%
+
+EventVLA
+
+21%
+
+96%
+
+95%
+
+96%
+
+87%
+
+35%
+
+81%
+
+97%
+
+3%
+
+67.9%
+
+NativeMEM
+
+0%
+
+3%
+
+0%
+
+62%
+
+0%
+
+13%
+
+0%
+
+0%
+
+0%
+
+8.7%
+
+Ours
+
+82%
+
+78%
+
+100%
+
+99%
+
+97%
+
+56%
+
+22%
+
+84%
+
+10%
+
+69.8%
+
+Table 5
+: 
+Real-world evaluation of MomentMem.
+ We report successful trials out of 30 per task.
+
+Task
+
+EventVLA
+
+MomentMem
+
+Placement Imitation
+
+3/30
+
+6/30
+
+14/30
+
+Explore Cube
+
+11/30
+
+10/30
+
+17/30
+
+Table 6
+: 
+
+Ablation of memorizer training on VMBench.
+
+We report closed-loop success rates under the standard appearance. Point Annotation replaces each key segment with one fixed positive frame. The w/o SS variant removes scheduled sampling and uses only teacher-forced memory histories. Full MomentMem uses both segment-level annotations and scheduled sampling.
+
+Explore
+
+Mine
+
+Hidden
+
+Seal
+
+Spring
+
+Drawer
+
+Flash
+
+Scroll
+
+Placement
+
+Avg.
+
+Cube
+
+Sweeper
+
+Pattern
+
+Checking
+
+Compression
+
+Match
+
+Beacon
+
+Discovery
+
+Imitation
+
+Point Annotation
+
+0%
+
+0%
+
+25%
+
+0%
+
+30%
+
+1%
+
+0%
+
+1%
+
+5%
+
+6.9%
+
+w/o SS
+
+0%
+
+0%
+
+29%
+
+2%
+
+87%
+
+27%
+
+0%
+
+23%
+
+3%
+
+19.0%
+
+Full MomentMem
+
+2%
+
+93%
+
+32%
+
+64%
+
+52%
+
+47%
+
+38%
+
+22%
+
+99%
+
+49.9%
+
+5.4 
+The Memorizer Adapts to an Unseen Task with Few Annotations
+
+We test whether the memorizer can adapt to Flash Beacon after training on the other eight tasks.
+We adapt the memorizer with five memory-annotated Flash Beacon demonstrations.
+We then use it to generate memories for all 100 target demonstrations and train the executor.
+
+Figure 3
+: 
+
+Few-shot memorizer transfer on VMBench.
+
+After training on the other VMBench tasks, the memorizer adapts to Flash Beacon from five annotated demonstrations. It reaches 43.7% closed-loop success. This is close to 44.3% with full memory supervision and above 29.0% when adapting pretrained Qwen3-VL with the same data.
+
+For comparison, the “From Qwen” group adapts directly from pretrained Qwen3-VL using the same five memory-annotated demonstrations, testing whether Qwen’s prior knowledge alone explains the result.
+The “Full Memory Supervision” group trains on Flash Beacon with memory annotations for all of the 100 demonstrations, serving as a positive control.
+All settings use the same 100 action demonstrations and differ only in memory supervision.
+
+Training the memorizer on the source tasks improves few-shot adaptation to Flash Beacon.
+With the same five annotated demonstrations, MomentMem reaches 43.7% success, 14.7 percentage points above the “From Qwen” group at 29.0% (Figure 
+3
+).
+This is close to the 44.3% achieved with Full Memory Supervision.
+Appendix 
+H
+ provides the full protocol and baseline comparison.
+
+Figure 4
+: 
+Real-world experiments.
+
+Top:
+ Similar to Placement Imitation. A human places the cube at a target and then moves it back. The robot must place the cube at that target.
+
+Bottom:
+ Similar to Explore Cube. The robot must find the cube under one of three cups without revisiting any cup.
+
+5.5 
+MomentMem Is Applicable Across Benchmarks and Real-World Tasks
+
+MomentMem remains competitive on an existing memory benchmark.
+
+We evaluate MomentMem on RMBench 
+[
+5
+]
+ without changing its architecture.
+As shown in Table 
+4
+, MomentMem reaches 69.8% average success, 1.9 percentage points above EventVLA at 67.9%.
+It obtains the best result on six of the nine tasks, including a 61% gain over the strongest baseline on Observe and Pick Up.
+The architecture thus remains effective on memory tasks beyond VMBench.
+
+MomentMem also improves task success on a real robot.
+
+We evaluate MomentMem on a Franka Panda robot using real-world counterparts of Placement Imitation and Explore Cube, as illustrated in Figure 
+4
+.
+We collect 51 and 54 demonstrations respectively, and manually annotate their key segments.
+As shown in Table 
+5
+, MomentMem completes 17 more episodes than 
+ and 15 more than EventVLA across the 60 trials.
+The larger gain occurs on Placement Imitation, where the robot must remember the demonstrated location after the cube is moved away.
+
+5.6 
+Ablation Studies
+
+Segment supervision allows multiple valid frames per event.
+
+We test whether the memorizer benefits from learning to capture an event segment rather than one exact frame.
+We replace each annotated segment with a single positive frame, following the point annotation used by prior work.
+As shown in Table 
+6
+, this change reduces average success by 43.0 percentage points.
+Point supervision treats neighboring frames as negatives simply because they are not the selected anchor frame.
+However, nearby frames may show the same evidence.
+Labeling them as negative penalizes valid selections. Segment supervision avoids this problem.
+
+Scheduled sampling improves success on multi-event tasks.
+
+We test whether the memorizer needs to learn from its own imperfect memory histories.
+We remove scheduled sampling and train it only with teacher-forced memory histories.
+As shown in Table 
+6
+, average success drops by 30.9 percentage points.
+An early mistake changes the memory context used for every later decision.
+Training with the memorizer’s own predictions helps it handle earlier selection errors, especially in tasks with multiple memory events.
+
+5.7 
+Discussion on Memory Capability
+
+The memorizer can capture most key segments.
+
+Our method adopts a hierarchical architecture. This design lets us evaluate memory selection separately from execution.
+We use the simulator to verify whether the memorizer selects a frame in the key moment segment.
+On the validation set, it captures 95.8% of key segments, while it avoids selecting a frame outside the key moment segment in 84.4% of demonstrations.
+These results validate the training of our memorizer and show how memory selection can be evaluated directly.
+Appendix 
+E
+ gives the full setup and per-task results.
+
+Our memorizer works better than a stronger frozen VLM.
+
+Our memorizer is trained with the key segment annotations from humans or the simulator.
+A natural question is whether a stronger VLM can select keyframes without post-training, as in BPP 
+[
+29
+]
+.
+To test this hypothesis, we follow BPP and exploit a frozen GPT-6-Astra to identify when a key event occurs.
+However, querying such a VLM is costly, and thus we do not run the closed-loop evaluation.
+Instead, we compare the keyframe selection on the same validation split using the same memory metrics.
+It turns out that GPT-6-Astra captures only 69.5% of key segments. The results demonstrate that our memorizer works clearly better than the stronger frozen VLM, which we attribute to memory training and annotations.
+Therefore, general visual understanding is not strong enough for memory capability and memory modeling deserves more attention from the community.
+Appendix 
+J
+ provides the full setup and per-task results.
+
+6 
+Conclusion
+
+We study visual moment memory, which requires robots to retain precise visual details for later execution.
+We introduce VMBench, whose tasks require remembering briefly visible locations, appearances, and their associations.
+We propose MomentMem, which decouples memory from execution: a VLM memorizer stores sparse keyframes as raw images, and an executor predicts actions from them.
+MomentMem improves task success on VMBench and a real robot, and remains competitive on RMBench.
+Its memorizer transfers zero-shot to unseen appearances and adapts to a held-out task with a few memory annotations.
+Future work can investigate whether broader memory training enables transfer to new tasks without memory annotations.
+
+Limitations.
+
+MomentMem runs a VLM memorizer, which adds inference cost compared with a single-model policy.
+On RMBench, MomentMem improves average success by 1.9 percentage points over the strongest evaluated baseline, but gains vary across tasks.
+The executor still struggles to use retained texture information for target selection, even when the relevant evidence is available (Appendix 
+F.1
+).
+VMBench also uses a single embodiment and a fixed camera configuration, so the effect of viewpoint changes remains untested.
+
+References
+
+[1]
+
+Vaidehi Bagaria, Bijo Sebastian, and Nirav Kumar Patel.
+
+Recursive belief vision language action models.
+
+arXiv preprint arXiv:2602.20659
+, 2026.
+
+[2]
+
+Shuai Bai, Yuxuan Cai, Ruizhe Chen, Keqin Chen, Xionghui Chen, Zesen Cheng,
+Lianghao Deng, Wei Ding, Chang Gao, Chunjiang Ge, et al.
+
+Qwen3-VL technical report.
+
+arXiv preprint arXiv:2511.21631
+, 2025.
+
+[3]
+
+Kevin Black, Noah Brown, Danny Driess, Adnan Esmail, Michael Equi, Chelsea
+Finn, Niccolo Fusai, Lachy Groom, Karol Hausman, Brian Ichter, et al.
+
+: A vision-language-action flow model for general robot
+control.
+
+arXiv preprint arXiv:2410.24164
+, 2024.
+
+[4]
+
+Kevin Black, Noah Brown, James Darpinian, Karan Dhabalia, Danny Driess, Adnan
+Esmail, Michael Robert Equi, Chelsea Finn, Niccolo Fusai, Manuel Y. Galliker,
+et al.
+
+: A vision-language-action model with open-world
+generalization.
+
+In 
+Proceedings of the Conference on Robot Learning
+, pages
+17–40, 2025.
+
+[5]
+
+Tianxing Chen, Yuran Wang, Mingleyang Li, Yan Qin, Hao Shi, Zixuan Li, Yifan
+Hu, Yingsheng Zhang, Kaixuan Wang, Yue Chen, Hongcheng Wang, Renjing Xu,
+Ruihai Wu, Yao Mu, Yaodong Yang, Hao Dong, and Ping Luo.
+
+RMBench: Memory-dependent robotic manipulation benchmark with
+insights into policy design.
+
+arXiv preprint arXiv:2603.01229v2
+, 2026a.
+
+[6]
+
+Yipeng Chen, Wentao Tan, Lei Zhu, Fengling Li, Jingjing Li, Guoli Yang, and
+Heng Tao Shen.
+
+Non-markovian long-horizon robot manipulation via keyframe chaining.
+
+arXiv preprint arXiv:2603.01465
+, 2026b.
+
+[7]
+
+Egor Cherepanov, Nikita Kachaev, Alexey K. Kovalev, and Aleksandr I. Panov.
+
+Memory, benchmark & robots: A benchmark for solving complex tasks
+with reinforcement learning.
+
+In 
+International Conference on Learning Representations
+,
+2026a.
+
+[8]
+
+Egor Cherepanov, Nikita Kachaev, Daniil Zelezetsky, Aydar Bulatov, Artem
+Pshenitsyn, Yuri Kuratov, Alexey Skrynnik, Aleksandr I. Panov, and Alexey K.
+Kovalev.
+
+VLA: On recurrent memory for partially observable manipulation
+in VLA models.
+
+arXiv preprint arXiv:2606.12497
+, 2026b.
+
+[9]
+
+Nhat Chung, Taisei Hanyu, Toan Nguyen, Huy Le, Frederick Bumgarner, Duy Minh Ho
+Nguyen, Khoa Vo, Kashu Yamazaki, Chase Rainwater, Tung Kieu, Anh Nguyen, and
+Ngan Le.
+
+Rethinking progression of memory state in robotic manipulation: An
+object-centric perspective.
+
+In 
+Proceedings of the AAAI Conference on Artificial
+Intelligence
+, pages 3407–3415, 2026.
+
+[10]
+
+Yinpei Dai, Hongze Fu, Jayjun Lee, Yuejiang Liu, Haoran Zhang, Jianing Yang,
+Chelsea Finn, Nima Fazeli, and Joyce Chai.
+
+RoboMME: Benchmarking and understanding memory for robotic
+generalist policies.
+
+In 
+International Conference on Machine Learning
+, 2026.
+
+[11]
+
+Haoquan Fang, Markus Grotz, Wilbert Pumacay, Yi Ru Wang, Dieter Fox, Ranjay
+Krishna, and Jiafei Duan.
+
+SAM2Act: Integrating visual foundation model with a memory
+architecture for robotic manipulation.
+
+arXiv preprint arXiv:2501.18564
+, 2025.
+
+[12]
+
+Gemini Robotics Team, Saminda Abeyruwan, Joshua Ainslie, Jean-Baptiste
+Alayrac, Montserrat Gonzalez Arenas, Travis Armstrong, Ashwin Balakrishna,
+Robert Baruch, Maria Bauza, Michiel Blokzijl, et al.
+
+Gemini Robotics: Bringing AI into the physical world.
+
+arXiv preprint arXiv:2503.20020
+, 2025.
+
+[13]
+
+Dibya Ghosh, Homer Rich Walke, Karl Pertsch, Kevin Black, Oier Mees, Sudeep
+Dasari, Joey Hejna, Tobias Kreiman, Charles Xu, Jianlan Luo, et al.
+
+Octo: An open-source generalist robot policy.
+
+In 
+Proceedings of Robotics: Science and Systems
+, 2024.
+
+[14]
+
+GigaBrain Team, Angen Ye, Boyuan Wang, Chaojun Ni, Guan Huang, Guosheng Zhao,
+Haoyun Li, Jie Li, Jiagang Zhu, Lv Feng, et al.
+
+GigaBrain-0: A world model-powered vision-language-action model.
+
+arXiv preprint arXiv:2510.19430
+, 2025.
+
+[15]
+
+GigaBrain Team, Boyuan Wang, Bohan Li, Chaojun Ni, Guan Huang, Guosheng Zhao,
+Hao Li, Jie Li, Jindi Lv, Jingyu Liu, et al.
+
+GigaBrain-0.5M*: a VLA that learns from world model-based
+reinforcement learning.
+
+arXiv preprint arXiv:2602.12099
+, 2026a.
+
+[16]
+
+GigaBrain Team, Angen Ye, Axiang Sun, Can Jin, Chenxi Cheng, Chong Shi,
+Dengke Shang, Dingqian Zhang, Guan Huang, Guangqiang Wang, et al.
+
+GigaBrain-0.7: Scaling embodied foundation models to emergent
+capabilities with a three-system architecture.
+
+arXiv preprint arXiv:2608.15875
+, 2026b.
+
+[17]
+
+Jiayuan Gu, Fanbo Xiang, Xuanlin Li, Zhan Ling, Xiqiang Liu, Tongzhou Mu, Yihe
+Tang, Stone Tao, Xinyue Wei, Yunchao Yao, et al.
+
+ManiSkill2: A unified benchmark for generalizable manipulation
+skills.
+
+arXiv preprint arXiv:2302.04659
+, 2023.
+
+[18]
+
+Bo He, Hengduo Li, Young Kyun Jang, Menglin Jia, Xuefei Cao, Ashish Shah,
+Abhinav Shrivastava, and Ser-Nam Lim.
+
+MA-LMM: Memory-augmented large multimodal model for long-term video
+understanding.
+
+In 
+Proceedings of the IEEE/CVF Conference on Computer Vision
+and Pattern Recognition
+, pages 13504–13514, 2024.
+
+[19]
+
+Qingda Hu, Ziheng Qiu, Zijun Xu, Kaizhao Zhang, Xizhou Bu, Zuolei Sun, Bo
+Zhang, Jieru Zhao, Zhongxue Gan, and Wenchao Ding.
+
+Resolving state ambiguity in robot manipulation via adaptive working
+memory recoding.
+
+IEEE Robotics and Automation Letters
+, 11(7):8439–8446, 2026a.
+
+[20]
+
+Yanbin Hu, Jin Cui, Jiayi Lu, Ruixuan Yang, Jun Ye, Boran Zhao, Xingyu Chen,
+Xuguang Lan, and Pengju Ren.
+
+ECHO: Continuous hierarchical memory for vision-language-action
+models.
+
+arXiv preprint arXiv:2605.10993
+, 2026b.
+
+[21]
+
+Moo Jin Kim, Karl Pertsch, Siddharth Karamcheti, Ted Xiao, Ashwin Balakrishna,
+Suraj Nair, Rafael Rafailov, Ethan P. Foster, Pannag R. Sanketi, Quan Vuong,
+et al.
+
+OpenVLA: An open-source vision-language-action model.
+
+In 
+Proceedings of the Conference on Robot Learning
+, pages
+2679–2713, 2025.
+
+[22]
+
+Huashuo Lei, Wenxuan Song, Huarui Zhang, Jieyuan Pei, Jiayi Chen, Haodong Yan,
+Han Zhao, Pengxiang Ding, Zhipeng Zhang, Lida Huang, Donglin Wang, Yan Wang,
+and Haoang Li.
+
+RoboMemArena: A comprehensive and challenging robotic memory
+benchmark.
+
+arXiv preprint arXiv:2605.10921
+, 2026.
+
+[23]
+
+Hang Li, Fengyi Shen, Dong Chen, Liudi Yang, Xudong Wang, Jinkui Shi, Zhenshan
+Bing, Ziyuan Liu, and Alois Knoll.
+
+ReMem-VLA: Empowering vision-language-action model with memory via
+dual-level recurrent queries.
+
+arXiv preprint arXiv:2603.12942
+, 2026.
+
+[24]
+
+Tongzhou Mu, Zhan Ling, Fanbo Xiang, Derek Yang, Xuanlin Li, Stone Tao, Zhiao
+Huang, Zhiwei Jia, and Hao Su.
+
+ManiSkill: Generalizable manipulation skill benchmark with
+large-scale demonstrations.
+
+arXiv preprint arXiv:2107.14483
+, 2021.
+
+[25]
+
+NVIDIA, Johan Bjorck, Fernando Castañeda, Nikita Cherniadev, Xingye Da,
+Runyu Ding, Linxi Fan, Yu Fang, Dieter Fox, Fengyuan Hu, et al.
+
+GR00T N1: An open foundation model for generalist humanoid robots.
+
+arXiv preprint arXiv:2503.14734
+, 2025.
+
+[26]
+
+Rutav Shah, Rajat Kumar Jenamani, Xiaohan Zhang, Lingfeng Sun, Roberto
+Martín-Martín, Yuke Zhu, Deva Ramanan, and Karl Schmeckpeper.
+
+Scaling short-term memory of visuomotor policies for long-horizon
+tasks.
+
+arXiv preprint arXiv:2606.16178
+, 2026.
+
+[27]
+
+Hao Shi, Weiye Li, Bin Xie, Yulin Wang, Renping Zhou, Tiancai Wang, Xiangyu
+Zhang, Ping Luo, and Gao Huang.
+
+MemoryVLA++: Temporal modeling via memory and imagination in
+vision-language-action models.
+
+arXiv preprint arXiv:2606.09827
+, 2026a.
+
+[28]
+
+Hao Shi, Bin Xie, Yingfei Liu, Lin Sun, Fengrong Liu, Tiancai Wang, Erjin Zhou,
+Haoqiang Fan, Xiangyu Zhang, and Gao Huang.
+
+MemoryVLA: Perceptual-cognitive memory in vision-language-action
+models for robotic manipulation.
+
+In 
+International Conference on Learning Representations
+,
+2026b.
+
+[29]
+
+Max Sobol Mark, Jacky Liang, Maria Attarian, Chuyuan Fu, Debidatta Dwibedi,
+Dhruv Shah, and Aviral Kumar.
+
+BPP: Long-context robot imitation learning by focusing on key
+history frames.
+
+arXiv preprint arXiv:2602.15010
+, 2026.
+
+[30]
+
+Enxin Song, Wenhao Chai, Guanhong Wang, Yucheng Zhang, Haoyang Zhou, Feiyang
+Wu, Haozhe Chi, Xun Guo, Tian Ye, Yanting Zhang, Yan Lu, Jenq-Neng Hwang, and
+Gaoang Wang.
+
+MovieChat: From dense token to sparse memory for long video
+understanding.
+
+In 
+Proceedings of the IEEE/CVF Conference on Computer Vision
+and Pattern Recognition
+, pages 18221–18232, 2024.
+
+[31]
+
+Ajay Sridhar, Jennifer Pan, Satvik Sharma, and Chelsea Finn.
+
+Scaling up memory for robotic control via experience retrieval.
+
+In 
+International Conference on Learning Representations
+, 2026.
+
+[32]
+
+Haiyang Sun, Haoxiao Wang, Junming Chen, Weicheng Fang, Zihao Su, Jingkun Yi,
+Wenyou Yi, Hao Chen, and Zhou Zhao.
+
+MEMOBench: A process level memory benchmark for robotic
+manipulation.
+
+arXiv preprint arXiv:2609.07047
+, 2026.
+
+[33]
+
+Stone Tao, Fanbo Xiang, Arth Shukla, Yuzhe Qin, Xander Hinrichsen, Xiaodi Yuan,
+Chen Bao, Xinsong Lin, Yulin Liu, Tse-kai Chan, et al.
+
+ManiSkill3: GPU parallelized robotics simulation and rendering
+for generalizable embodied AI.
+
+arXiv preprint arXiv:2410.00425
+, 2024.
+
+[34]
+
+Marcel Torne, Karl Pertsch, Homer Walke, Kyle Vedder, Suraj Nair, Brian Ichter,
+Allen Z. Ren, Haohuan Wang, Jiaming Tang, Kyle Stachowicz, Karan Dhabalia,
+Michael Equi, Quan Vuong, Jost Tobias Springenberg, Sergey Levine, Chelsea
+Finn, and Danny Driess.
+
+MEM: Multi-scale embodied memory for vision language action models.
+
+arXiv preprint arXiv:2603.03596
+, 2026.
+
+[35]
+
+Ziye Wang, Modi Shi, Chaojun Ni, Jiazhi Yang, Mengdi Li, Zhizhong Su, Tianwei
+Lin, and Hongyang Li.
+
+NativeMEM: Native memory compression for long-horizon robotic
+manipulation.
+
+arXiv preprint arXiv:2607.06678
+, 2026.
+
+[36]
+
+Fanbo Xiang, Yuzhe Qin, Kaichun Mo, Yikuan Xia, Hao Zhu, Fangchen Liu, Minghua
+Liu, Hanxiao Jiang, Yifu Yuan, He Wang, et al.
+
+SAPIEN: A simulated part-based interactive environment.
+
+In 
+2020 IEEE/CVF Conference on Computer Vision and Pattern
+Recognition (CVPR)
+, pages 11094–11104. IEEE, 2020.
+
+[37]
+
+Yiweng Xie, Bo He, Junke Wang, Xiangyu Zheng, Ziyi Ye, and Zuxuan Wu.
+
+FluxMem: Adaptive hierarchical memory for streaming video
+understanding.
+
+In 
+Proceedings of the IEEE/CVF Conference on Computer Vision
+and Pattern Recognition
+, 2026.
+
+[38]
+
+Ganlin Yang, Zhangzheng Tu, Yuqiang Yang, Sitong Mao, Junyi Dong, Tianxing
+Chen, Jiaqi Peng, Jing Xiong, Jiafei Cao, Jifeng Dai, Wengang Zhou, Yao Mu,
+and Tai Wang.
+
+EventVLA: Event-driven visual evidence memory for long-horizon
+vision-language-action policies.
+
+arXiv preprint arXiv:2606.20092
+, 2026.
+
+[39]
+
+Yihan Zeng, Minghao Ye, Yiyuan Chen, Yide Shentu, Philipp Wu, Zike Yan, and
+Zhongyu Li.
+
+KEMO: Event-driven keyframe memory for long-horizon robot
+manipulation with VLA policies.
+
+arXiv preprint arXiv:2606.23589
+, 2026a.
+
+[40]
+
+Zijian Zeng, Fei Ding, Huiming Yang, and Xianwei Li.
+
+HELM: Harness-enhanced long-horizon memory for
+vision-language-action manipulation.
+
+arXiv preprint arXiv:2604.18791
+, 2026b.
+
+[41]
+
+Haoji Zhang, Yiqin Wang, Yansong Tang, Yong Liu, Jiashi Feng, and Xiaojie Jin.
+
+Flash-VStream: Efficient real-time understanding for long video
+streams.
+
+In 
+Proceedings of the IEEE/CVF International Conference on
+Computer Vision
+, pages 21059–21069, 2025.
+
+[42]
+
+Brianna Zitkovich, Tianhe Yu, Sichun Xu, Peng Xu, Ted Xiao, Fei Xia, Jialin Wu,
+Paul Wohlhart, Stefan Welker, Ayzaan Wahid, et al.
+
+RT-2: Vision-language-action models transfer web knowledge to
+robotic control.
+
+In 
+Proceedings of the Conference on Robot Learning
+, pages
+2165–2183, 2023.
+
+Supplementary Material
+
+Appendix A 
+Task-Relevant Visual Evidence
+
+Table 
+7
+ summarizes the evidence that each task in VMBench requires the robot to retain and use after it becomes unavailable. Each key segment marks a period when one piece of evidence is visible. We annotate the key segments with privileged simulator information in place of human annotation.
+
+Table 7: 
+Visual evidence and its later use in the nine tasks of VMBench.
+ The final column gives the number of key segments per demonstration.
+
+Task
+
+Evidence to remember
+
+Later use
+
+Segments
+
+Explore Cube
+
+Contents beneath the three covers
+
+Retrieve the hidden cube
+
+3
+
+Mine Sweeper
+
+Detector colors and their locations
+
+Place blocks at matching locations
+
+2
+
+Hidden Pattern
+
+Box–pattern associations and a target pattern
+
+Select the matching box
+
+2
+
+Seal Checking
+
+Colors revealed beneath the seals
+
+Place blocks at the corresponding locations
+
+2
+
+Spring Compression
+
+A demonstrated compression position
+
+Reproduce the compression
+
+1
+
+Drawer Match
+
+Patterns inside the three drawers
+
+Reopen the matching drawer
+
+3
+
+Flash Beacon
+
+Two transient target locations
+
+Move the cube to both locations in order
+
+2
+
+Scroll Discovery
+
+Patterns revealed by unrolling the scrolls
+
+Stack the matching scrolls
+
+3
+
+Placement Imitation
+
+Demonstrated object–position associations
+
+Reproduce the placements
+
+2
+
+Appendix B 
+Task Instructions
+
+The following boxes list the task instructions for the nine tasks in VMBench. The instructions are reproduced verbatim from the environment definitions and describe the task procedure and objective. The instance-specific patterns, colors, and target locations must be inferred from visual observations. The memorizer and executor receive the task instruction. The separate memory-instruction field stored in the dataset is not supplied to the memorizer in our experiments.
+
+Spring Compression
+
+A white cube sits on a long horizontal rail connected to a spring. Before the robot moves, the cube slides to a compressed position, pauses, and returns to its starting position. As soon as it returns, close the gripper and push the cube at a steady speed to the same compressed position, then lift the closed gripper while the cube stays there.
+
+Flash Beacon
+
+A white cube and two beacons are on the table. Lift the cube. When the first beacon appears, start moving toward it at a moderate speed so that it disappears before you arrive. Keep moving without returning the arm to its starting pose, and place the cube at that spot. The second beacon appears as soon as the cube touches the table. Keep holding the cube and continue directly toward the second beacon, then place and release the cube at that spot.
+
+Explore Cube
+
+Three identical opaque cups are spread across the table, and one cup hides a green cube. Inspect all three cups in any order. Each time, lift a cup high enough to see under it, then put it back upside down in the same place before checking the next. Once all three cups have been checked, move the cup hiding the cube aside, then grasp and lift the cube. Leave the other cups in place and leave every cup upside down on the table.
+
+Hidden Pattern
+
+Three boxes open together to show three different patterns, then close. A target card appears briefly with one of those patterns and then disappears. Then push forward the box that showed the same pattern as the target card.
+
+Drawer Match
+
+A three-level cabinet hides a pattern in each drawer. Press the upper, middle, and bottom drawer buttons in that order; each drawer opens once and then closes. Then press the upper or middle button for the drawer whose pattern matches the bottom drawer. Finish when the selected drawer is fully open.
+
+Scroll Discovery
+
+Three narrow scrolls hide patterned strips. From left to right, pull each strip until the whole pattern is visible, then release it so it rolls back up. After the third strip rolls up, immediately grasp one of the two scrolls that showed the same pattern and stack it on top of the other, without touching the scroll with the different pattern.
+
+Placement Imitation
+
+Two cubes of different colors start at separate positions on the table. One at a time, each cube moves to an unmarked target position, pauses, and returns. Once both demonstrations are complete, place each cube at the position where it paused, then release it on the table.
+
+Mine Sweeper
+
+Two parallel black lines, a white probe, and two cubes of different colors are on the table. Move the probe directly to one end of the nearer line and scan once to the other end. Move directly to the farther line and scan it once in the opposite direction. The probe briefly changes color at one point on each line. Then put the probe back, return the arm to its starting pose, and place each cube where the probe showed the same color. Release each cube on the table.
+
+Seal Checking
+
+Two white stamps cover two colored spots. A tray and two cubes of different colors are also on the table. Lift each stamp by its square handle, place it fully inside the tray, and watch the spot underneath fade away. After both stamps have been checked, return the arm to its starting pose. Then place each cube where the spot showed the same color and release it on the table.
+
+Appendix C 
+Dataset Construction
+
+C.1 
+Simulation and Demonstration Collection
+
+We construct VMBench in ManiSkill3 with SAPIEN physics, using a Panda manipulator, an overview camera, and a wrist camera. The data-generation pipeline records both RGB streams at 
+ resolution and a control frequency of 20 Hz. Each task implements a scripted, closed-loop expert that computes actions from the simulator state and executes them through the robot controller. Demonstrations therefore contain the actions actually applied to the environment and the resulting observations.
+
+Each rollout starts from a seeded initialization, with the scene rebuilt at reset. Task-specific randomization varies object positions, target locations, and the associations between visual cues and their required responses. For example, Hidden Pattern samples distinct patterns and assigns them to boxes. Drawer Match and Scroll Discovery randomize the matching patterns. Placement Imitation, Mine Sweeper, and Seal Checking randomize color–location associations. Color pairs are sampled without replacement from a palette of eight colors, excluding pairs that are too similar under the implemented color-distance criterion. Spatial sampling also enforces task-specific separation and reachability constraints. These variations produce different memory contents while retaining the same task instruction.
+
+The expert rolls out until success, failure, termination, or the step limit. Only successful episodes are retained. Failed attempts are discarded, and generation continues with new seeds. For tasks that expose a separate evaluation-success flag, a retained demonstration must satisfy that flag as well as the expert’s success condition. Our main experiment uses 100 demonstrations per task, giving 900 demonstrations across the nine tasks.
+
+C.2 
+Automatic Memory Annotations
+
+Each environment records the key segments during which task-relevant evidence is available, using simulator events and task state. Each segment is stored as an inclusive pair of frame indices 
+ at the original recording rate. The metadata also records the event identity, the information to retain, and the corresponding timestamps. These segments mark valid ranges rather than fixed representative frames.
+
+Each demonstration has one to three annotated segments, as summarized in Table 
+7
+. For Seal Checking, each segment ends before the revealed color becomes too faint to identify. Privileged event metadata supplies supervision for memory selection and is not included in the memorizer’s or executor’s observation input.
+
+C.3 
+Observation and Action Alignment
+
+Raw trajectories are saved in HDF5, with accompanying JSON metadata containing the episode seed, task instruction, phase intervals, and memory annotations. A rollout with 
+ actions contains observations from 
+ through 
+. Conversion creates 
+ training records, pairing each action 
+ with its preceding observation 
+ and timestamp. The terminal observation is not assigned an additional action. Both camera streams and the key segment boundaries use this frame indexing.
+
+Hidden Pattern, Spring Compression, and Placement Imitation begin with an observation phase in which the environment presents a visual demonstration without requesting policy actions. These observations remain available for memory selection. For MomentMem, the recorded stationary actions during these observation phases are excluded from action supervision, and the executor is trained only on the execution phase. The remaining tasks require robot actions to acquire the evidence, so their recorded actions remain eligible for supervision throughout the trajectory.
+
+Our EventVLA implementation instead retains supervision on these stationary actions, because its keyframe predictions are derived from action hidden states. It therefore learns these actions even though the environment does not request them during observation.
+
+C.4 
+Training-Data Conversion
+
+We convert the recordings into LeRobot-format datasets with per-episode videos, tabular state–action records, task metadata, and a separate file of key-segment annotations. The converter checks camera streams, temporal alignment, and segment bounds, and rejects missing or malformed segments. It reconstructs the controller’s commanded targets from recorded simulator states to express end-effector actions in the overview-camera coordinate system. For the executor used in this paper, actions comprise relative end-effector translation, relative rotation represented in Rot6D, and a gripper command. Dataset conversion preserves the annotated key segments. Anchor sampling is performed during training, as described in Section 
+4
+.
+
+C.5 
+Visual OOD Data
+
+Visual OOD environments use the same task implementations and expert procedures, with altered room and table appearance, lighting, and additional background or tabletop distractors outside the manipulation area. Appearance randomization uses a separate seed-derived random-number stream, preserving the task randomization for a given seed. Task mechanics, memory events, and success conditions are shared with the standard setting, and OOD trajectories pass through the same recording and conversion pipeline. In the appearance-transfer experiment, target-domain executor training uses keyframes predicted by the transferred memorizer rather than the simulator’s target-domain memory annotations.
+
+Appendix D 
+Implementation and Training Details
+
+We implement the memorizer with Qwen3-VL-4B 
+[
+2
+]
+ and the executor with 
+ 
+[
+4
+]
+. On VMBench, the memorizer receives only overview images. The executor receives current overview and wrist images, while its keyframe stack contains only overview images. The memorizer receives neither privileged memory instructions nor absolute historical frame indices. VMBench operates at 20 Hz, and the memorizer samples observations at 5 Hz. Table 
+8
+ lists the standard-appearance configuration.
+
+For the main experiments on VMBench and RMBench, we reserve 20% of the demonstrations with key segment annotations for memorizer validation and use the remaining 80% for training. On VMBench, this gives the memorizer 80 training and 20 validation demonstrations per task. The executor uses all 100 demonstrations. We select the memorizer checkpoint with the highest mean of segment accuracy and non-keyframe accuracy on the validation set. These metrics are defined in Appendix 
+E
+.
+
+Table 8: 
+Configuration of MomentMem on VMBench under the standard appearance.
+
+Setting
+
+Value
+
+Control frequency
+
+20 Hz
+
+Maximum memorizer training steps
+
+10,000
+
+Selected memorizer checkpoint
+
+Step 10,000
+
+Memorizer sampling rate (validation/inference)
+
+5 Hz
+
+Recent observation buffer
+
+10 images
+
+Positive decision threshold
+
+0.5
+
+Maximum model-feedback probability
+
+0.4
+
+Memorizer focal loss 
+
+Executor training steps
+
+60,000
+
+Executor action chunk size (training)
+
+10 actions
+
+Executor action chunk size (execution)
+
+10 actions
+
+Table 
+9
+ lists the RMBench configuration. Actions are executed at 16.67 Hz. For memorizer validation and inference, we select one frame out of every three, giving a sampling rate of 5.56 Hz. Training uses temporal sampling augmentation, with frame intervals of 1, 2, or 3 sampled with probabilities 0.1, 0.1, and 0.8, respectively. During evaluation, the executor executes the first 40 actions of each predicted chunk before predicting the next chunk. For the RMBench tasks, we manually annotate key segments for MomentMem. We do not use the subtask annotations provided by RMBench.
+
+Table 9: 
+Configuration of MomentMem on RMBench.
+ The memorizer checkpoint is selected using the validation criterion above.
+
+Setting
+
+Value
+
+Control frequency
+
+16.67 Hz
+
+Maximum memorizer training steps
+
+20,000
+
+Selected memorizer checkpoint
+
+Step 18,000
+
+Memorizer sampling rate (validation/inference)
+
+5.56 Hz
+
+Recent observation buffer
+
+10 images
+
+Positive decision threshold
+
+0.5
+
+Maximum model-feedback probability
+
+0.9
+
+Memorizer focal loss 
+
+Executor training steps
+
+90,000
+
+Executor action chunk size (training)
+
+50 actions
+
+Executor action chunk size (execution)
+
+40 actions
+
+The anchor labels described in Section 
+4.2
+ and Figure 
+2
+(b) assume a teacher-forced history in which the anchor is stored. Scheduled sampling instead requires labels to reflect the memory history shown to the memorizer. Within a key segment, frames before the sampled anchor are masked from the loss until a representative is stored. From the anchor onward, the target is Yes until the visible history contains a representative of that segment. It then becomes No. Frames outside all segments receive No. For example, if the memorizer misses an anchor, a later frame in the same segment remains a positive example. This history-dependent supervision allows recovery from missed selections.
+
+During training, the executor retains only keyframes selected by the trained memorizer before the current frame and masks unused memory slots. On VMBench, actions follow the representation in Appendix 
+C
+. State and action normalization use training-data statistics. On RMBench, the executor instead uses dual-arm absolute joint-position and gripper actions.
+
+For executor training, each frame selected offline by the memorizer is stored as a single-frame key segment. The executor training pipeline then uses these predicted selections in the same way as annotated segments. We use this procedure in both the main and transfer experiments. The images, actions, and task instructions in the data are not modified.
+
+Appendix E 
+Keyframe Selection Quality
+
+When a task fails, the outcome alone cannot tell us whether the memorizer missed a visual cue.
+We check which cues it captures, how often it saves the same cue more than once, and whether it saves unrelated frames.
+
+On VMBench, the 20% validation split contains 20 demonstrations per task, or 180 in total. This is the checkpoint-selection set, not an independent test set. Evaluation replays each demonstration autoregressively, so the memorizer’s previous decisions determine its later memory context.
+
+Segment hit rate measures the fraction of key segments containing at least one selected frame. Segment accuracy requires exactly one selection per segment. To measure selections outside the key segments, we also report the fraction of demonstrations with no such selection, termed non-keyframe accuracy. Any such selection stays in memory for the rest of the demonstration, so this metric reflects how often the memory remains free of irrelevant frames.
+
+Table 10: 
+Memorizer validation on VMBench under the standard appearance.
+ Hit rate and segment accuracy are computed over key segments. Non-keyframe accuracy is computed over demonstrations. The pooled row aggregates counts across tasks.
+
+Task
+
+Segment hit rate (%)
+
+Segment accuracy (%)
+
+Non-keyframe accuracy (%)
+
+Explore Cube
+
+98.3
+
+96.7
+
+90.0
+
+Mine Sweeper
+
+100.0
+
+100.0
+
+100.0
+
+Hidden Pattern
+
+100.0
+
+100.0
+
+100.0
+
+Seal Checking
+
+97.5
+
+95.0
+
+80.0
+
+Spring Compression
+
+100.0
+
+90.0
+
+100.0
+
+Drawer Match
+
+100.0
+
+100.0
+
+100.0
+
+Flash Beacon
+
+97.5
+
+87.5
+
+80.0
+
+Scroll Discovery
+
+86.7
+
+83.3
+
+65.0
+
+Placement Imitation
+
+85.0
+
+82.5
+
+45.0
+
+Pooled
+
+95.8
+
+93.0
+
+84.4
+
+As shown in Table 
+10
+, the memorizer selects at least one frame in 383 of 400 key segments and exactly one in 372. It makes no selection outside the key segments in 152 of 180 demonstrations.
+
+We also evaluate the same memorizer on unseen appearances without further fine-tuning. Table 
+11
+ reports autoregressive evaluation on all 100 demonstrations per task, or 900 in total, with the decision threshold fixed at 0.5. Unlike the standard-appearance validation split, these demonstrations are not used to select the memorizer checkpoint.
+
+Table 11: 
+Memorizer validation on VMBench under unseen appearances.
+ The memorizer is unchanged from Table 
+10
+. Results cover 100 demonstrations per task and use the same strict segment criteria. The pooled row aggregates counts across tasks.
+
+Task
+
+Segment hit rate (%)
+
+Segment accuracy (%)
+
+Non-keyframe accuracy (%)
+
+Explore Cube
+
+91.7
+
+88.3
+
+54.0
+
+Mine Sweeper
+
+99.5
+
+99.5
+
+100.0
+
+Hidden Pattern
+
+97.5
+
+97.5
+
+97.0
+
+Seal Checking
+
+98.0
+
+98.0
+
+88.0
+
+Spring Compression
+
+10.0
+
+10.0
+
+4.0
+
+Drawer Match
+
+95.7
+
+94.3
+
+89.0
+
+Flash Beacon
+
+90.0
+
+79.0
+
+61.0
+
+Scroll Discovery
+
+84.7
+
+80.3
+
+37.0
+
+Placement Imitation
+
+74.0
+
+73.0
+
+47.0
+
+Pooled
+
+87.2
+
+84.7
+
+64.1
+
+Spring Compression has low strict segment scores, but 88 of its 90 missed demonstrations contain a selected frame only 0.10 s before the annotated start, less than the memorizer’s 0.20 s sampling period. Across all 90 misses, the selected frame nearest the segment differs from the segment’s mean spring position by less than 0.4 mm. This is far below the task’s 45 mm compression-position tolerance for successful execution. These keyframes therefore retain the relevant compression information despite falling outside the annotated key segment, consistent with the high task success rate.
+
+Appendix F 
+Analysis of Memory Selection, Use, and Execution
+
+In Table 
+2
+, MomentMem achieves its largest gains on tasks requiring appearance–location bindings, while tasks in the Appearance category remain challenging for all evaluated methods. We study Hidden Pattern, Flash Beacon, and Seal Checking as examples of the Appearance, Spatial, and Spatial & Appearance categories, respectively. We compare MomentMem with EventVLA, the baseline with the highest average success in the standard setting.
+
+We examine whether relevant evidence is retained, whether it influences subsequent actions, and whether the required physical operations are completed. We also evaluate whether keyframe selection remains effective under visual appearance changes. All analyses use the final checkpoints on ten fixed test scenes per task, without further training.
+
+F.1 
+Counterfactual Keyframe Content
+
+If a stored cue guides the robot’s choice, changing the cue should change which target it chooses.
+
+Protocol.
+
+We use the same scene seeds for both methods.
+Each scene is assigned original and counterfactual conditions.
+The counterfactual branch runs only when the intervention point is reached. It then edits the cue content in eligible keyframes selected by the method itself.
+Scenes without an intervention point or an eligible selected frame remain in the counts.
+For Seal Checking, we exchange the two colors of the seal in the stored keyframes.
+For Flash Beacon, we move the remembered first beacon to the scene’s second target location, and evaluate only the response to the first beacon.
+For Hidden Pattern, we replace the remembered target-card pattern with the pattern in another box.
+
+In Table 
+12
+, 
+Reached
+ counts scenes that reach the intervention point, and 
+Modified
+ counts scenes whose selected keyframes are changed, both out of ten scenes.
+
+Original
+ reports successful completion under the original condition out of all ten scenes.
+
+Changed
+ counts modified scenes in which the observed target choice changes to the target specified by the counterfactual cue.
+For Seal Checking, we count scenes where at least one cube switches to its counterfactual placement target.
+For Flash Beacon, we use the nearest target at first contact or first-cue completion as a spatial proxy for target choice.
+For Hidden Pattern, we compare the selected boxes.
+Reached scenes remain unmodified if no selected keyframe falls within the cue interval eligible for editing.
+
+Table 12: 
+Target changes after keyframe interventions.
+ 
+Reached
+, 
+Modified
+, and 
+Original
+ use all ten scenes as the denominator. 
+Changed
+ counts switches to the counterfactual target among modified scenes, without requiring successful task completion.
+
+Task
+
+Method
+
+Reached
+
+Modified
+
+Original
+
+Changed
+
+Seal Checking
+
+MomentMem
+
+7/10
+
+7/10
+
+6/10
+
+7/7
+
+EventVLA
+
+0/10
+
+0/10
+
+0/10
+
+–
+
+Flash Beacon
+
+MomentMem
+
+10/10
+
+8/10
+
+4/10
+
+6/8
+
+EventVLA
+
+10/10
+
+7/10
+
+2/10
+
+3/7
+
+Hidden Pattern
+
+MomentMem
+
+10/10
+
+10/10
+
+3/10
+
+0/10
+
+EventVLA
+
+10/10
+
+10/10
+
+0/10
+
+1/10
+
+Color and spatial evidence.
+
+On Seal Checking, exchanging the stored colors changes MomentMem’s placements to match the new associations (Table 
+12
+).
+Six scene pairs succeed under both their original and counterfactual conditions.
+This shows that the remembered color–location bindings influence placement decisions.
+EventVLA does not reach the intervention point in these runs, so we examine it separately below.
+
+On Flash Beacon, both methods change the approached target in some pairs.
+All observed MomentMem switches follow the counterfactual cue, while EventVLA also exhibits a switch in the opposite direction.
+MomentMem additionally shows a larger shift toward the alternative target at matched post-intervention times, measured by the cube’s relative distance to the two targets.
+These responses indicate sensitivity to stored spatial cues, even when the subsequent manipulation fails.
+
+Texture matching.
+
+On Hidden Pattern, selected keyframes cover both the box-pattern and target-card events in all ten MomentMem scenes and eight EventVLA scenes.
+Among these scenes, MomentMem never switches to the counterfactual target.
+EventVLA does so only once, without completing the push.
+The failures therefore do not come from missing frames.
+Both methods struggle to use retained texture information for target selection.
+
+F.2 
+Evidence Acquisition and Physical Execution
+
+Seal Checking.
+
+Most EventVLA runs reveal both cues but fail to return to the required home position before placement.
+MomentMem also fails at this stage in some runs.
+
+To examine placement after successful evidence acquisition, we give both methods the same expert acquisition trajectory.
+Each method selects its own keyframes and resumes control with a fresh plan after the cues disappear.
+MomentMem completes both the original and counterfactual placements in seven of the ten scene pairs.
+EventVLA completes neither condition even after successful evidence acquisition.
+Its failures include unsuccessful grasps, drops, and releases at incorrect locations.
+
+Flash Beacon.
+
+Some MomentMem runs reach the correct target region but fail to satisfy the grasp requirement.
+Both methods also make contacts away from the targets.
+Thus, a response to the remembered cue does not always lead to successful execution.
+
+F.3 
+Memory Selection Transfer under Unseen Appearances
+
+Table 13: 
+Memory selection transfer under unseen appearances.
+ Scenes covering both cue events, out of ten per condition.
+
+Method
+
+Standard
+
+OOD
+
+Seal Checking
+
+MomentMem
+
+8/10
+
+8/10
+
+EventVLA
+
+6/10
+
+7/10
+
+Flash Beacon
+
+MomentMem
+
+8/10
+
+9/10
+
+EventVLA
+
+7/10
+
+3/10
+
+To test whether unseen appearances disrupt memory selection, we freeze both methods and evaluate their keyframe selection on matched expert demonstrations under the standard and unseen appearances.
+Actions and physical states are held fixed, and each method selects keyframes in its own way.
+We measure whether the selected frames cover both annotated cue events in each scene.
+This comparison evaluates memory selection independently of action execution.
+
+MomentMem maintains coverage under unseen appearances (Table 
+13
+).
+EventVLA remains effective on Seal Checking but loses coverage on Flash Beacon.
+
+Discussion.
+
+MomentMem adjusts its actions to edited color and spatial cues, and its memorizer maintains cue coverage under unseen appearances.
+EventVLA misses some cue events, responds less consistently to edited spatial cues, and also fails in evidence acquisition and manipulation.
+On Hidden Pattern, both methods rarely follow the edited texture even when keyframes cover both relevant events. This suggests a shared difficulty in using retained texture information.
+
+Appendix G 
+Probing Texture Recognition and Matching
+
+In Hidden Pattern, the memorizer captures both the box patterns and the target card in all ten scenes examined in Appendix 
+F.1
+.
+Yet when we change the pattern on the stored card, the robot never switches to the box with the new pattern.
+We use linear probes to test two properties of the executor’s features. The first is whether they encode which texture appears in each region. The second is whether they encode which box matches the card.
+We fit the probes on Hidden Pattern’s 100 training demonstrations and test them on 50 independent evaluation scenes.
+
+Table 14: 
+Linear probing on Hidden Pattern.
+ We score one texture prediction per region, giving four predictions per test scene. Target-box prediction has three classes, with a uniform-chance accuracy of 33.3%.
+
+Probe
+
+Correct
+
+Accuracy
+
+Recognition: region features
+
+198 / 200
+
+99.0%
+
+Matching: region features
+
+20 / 50
+
+40.0%
+
+Matching: text features
+
+22 / 50
+
+44.0%
+
+Features.
+
+Each input contains the current overview and wrist images, robot state, task instruction, and two memory images.
+One memory image shows the textures on the three candidate boxes. The other shows the target texture on the query card.
+We use the model’s native preprocessing, prefix embeddings, and attention mask.
+We extract contextualized visual tokens from the final layer of the PaliGemma language backbone, rather than from the vision encoder alone.
+Each image has a 
+ token grid.
+Using privileged region locations, we take a 
+ window near the center of each of the three candidate textures and the query texture.
+We flatten each window into a feature vector. The privileged locations give the probes a location prior.
+
+Linear probes.
+
+For each region, we train a separate classifier to predict which of the eight textures appears there.
+For target selection, we concatenate the four region features and train a three-class classifier to predict the target box.
+This probe uses only target-box labels.
+As a control, we predict the target box from the mean feature across non-padding text tokens.
+
+Results.
+
+As shown in Table 
+14
+, the probes identify individual textures with 99.0% accuracy.
+The probe using the four region features selects the matching box with 40.0% accuracy, slightly above the chance level of 33.3%.
+The control reaches 44.0%.
+Thus, the model represents individual textures but not whether two textures match.
+
+Appendix H 
+Few-Shot Cross-Task Memory Transfer
+
+We ask whether training on other tasks helps the memorizer learn what to save in a new task with few annotations.
+Flash Beacon is the target task and is excluded from the eight source tasks.
+The target task provides 100 action demonstrations, but only five provide memory annotations in the few-shot settings.
+We compare source-to-target adaptation with two controls, full target memory supervision and target-only adaptation from the pretrained backbone.
+All six variants of MomentMem and EventVLA share 300 evaluation seeds.
+
+Training settings.
+
+For MomentMem, source-to-target adaptation first trains the memorizer on the other eight tasks, then fine-tunes it using five annotated Flash Beacon demonstrations (Ours in Figure 
+3
+).
+The adapted memorizer labels all 100 target demonstrations offline, including the five used for adaptation.
+The executor is trained on these demonstrations using the predicted keyframes.
+
+Full Memory Supervision is the positive control. We train the memorizer with all available target memory annotations, then freeze it to generate keyframes for the target demonstrations. The executor is trained on these predicted memories and demonstration actions, following the same procedure as the other settings.
+Both components are trained only on Flash Beacon, without source-task training.
+This setting gives the success rate under full memory supervision on Flash Beacon.
+
+From Qwen is the target-only control.
+It fine-tunes the memorizer from pretrained Qwen3-VL on the same five annotated demonstrations, without source-task training.
+It then uses the same automatic-labeling and executor-training procedure as Ours.
+This control tests whether few-shot success comes from the pretrained backbone alone or from memory selection learned on source tasks.
+
+Table 15
+: 
+Few-shot cross-task transfer of memory selection.
+ Flash Beacon success rates (%) on 300 shared evaluation seeds. Full Memory Supervision uses all target memory annotations. Target only adapts from the pretrained backbone without source-task training. Source
+Target first trains on the eight source tasks. For MomentMem, these two few-shot settings are From Qwen and Ours in Figure 
+3
+. Both few-shot settings use five annotated target demonstrations. All settings use 100 target action demonstrations.
+
+Memory supervision
+
+MomentMem
+
+EventVLA
+
+Target only
+
+29.0
+
+5.7
+
+Source
+Target
+
+43.7
+
+5.0
+
+Full Memory Supervision
+
+44.3
+
+7.7
+
+We apply the same three settings to EventVLA.
+Each method keeps its own architecture, and all settings use the same target action demonstrations.
+
+Results.
+
+With five annotated target demonstrations, MomentMem with source-to-target adaptation reaches 43.7% success, close to 44.3% under Full Memory Supervision (Table 
+15
+).
+From Qwen reaches 29.0%, 14.7 percentage points lower.
+The first comparison shows that few-shot transfer nearly matches full supervision. The second shows that the gain comes from memory training on the source tasks rather than from the pretrained backbone.
+
+EventVLA reaches 5.0% with source-to-target adaptation, compared with 5.7% for target-only adaptation and 7.7% under full memory supervision.
+EventVLA shows no transfer benefit.
+Its low positive-control success also shows that EventVLA struggles on Flash Beacon even with full memory supervision.
+
+Appendix I 
+Real-World Experiments
+
+I.1 
+Experimental Setup
+
+We evaluate MomentMem, 
+, and EventVLA on a Franka Panda robot in two tasks adapted from VMBench. We keep their simulation names, Placement Imitation and Explore Cube. All methods use only a single overview camera, with no wrist camera. We collect 51 and 54 demonstrations, respectively, and manually annotate their key segments because privileged simulator information is unavailable in real-world experiments. Each method is evaluated over 30 trials per task.
+
+In Placement Imitation, seven cards are scattered across the tabletop. A human first places a cube on one card, then moves it in front of the robot. The robot must remember this location and return the cube to the correct card within 60 seconds.
+
+In Explore Cube, a cube is hidden under one of three inverted cups. The robot must inspect the cups, locate the cube, and grasp and lift it within 120 seconds. Revisiting a previously inspected cup or knocking over any cup counts as a failure.
+
+For both tasks, a force-triggered protective stop also counts as a failure. We stop the robot when the Euclidean norm of the three external-force components at the end effector, estimated by the Franka controller, exceeds 100 N. This can occur when the robot presses into the tabletop or an object.
+
+To reduce slippage, we wrap the cube in sandpaper and attach sandpaper-covered blocks to the cups as grasping surfaces. These modifications improve grasp stability. They do not change what the robot mu
