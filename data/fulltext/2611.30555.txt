@@ -1,0 +1,3110 @@
+RoboInF: A Benchmark for Instruction Fidelity in Robotic Manipulation
+https://arxiv.org/abs/2611.30555
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+RoboInF: A Benchmark for Instruction Fidelity in Robotic Manipulation
+
+Jiawei Guo
+
+  
+
+Yu Huang
+
+  
+
+Dijiang Dong
+
+  
+
+Yue Liu
+
+Affiliation: 
+Tongji University
+
+  
+
+Peiran Ren
+
+  
+
+Wei Shen
+
+Affiliation: 
+Shanghai Jiao Tong University
+
+Abstract
+
+Precise language control requires embodied models to follow instructions governing both task outcomes and execution.
+Although recent methods train policies to follow increasingly detailed commands, existing benchmarks often assess instruction following alongside perception, planning, and generalization to unfamiliar scenes.
+Higher task success therefore offers limited evidence of closer adherence to instructions.
+We introduce 
+RoboInF
+, a benchmark measuring how reliably manipulation policies adapt their behavior to changes in an instruction.
+For each of eight tasks, six to twelve expert-validated instruction branches vary the requested goal, procedure, or manipulation detail while holding the initial scene and robot state fixed.
+Task-specific checkers verify the terminal goal and use recorded trajectories, contacts, and event sequences to assess compliance throughout execution.
+The accompanying 
+RoboInF-4K
+ dataset pairs 4,242 expert demonstrations with simulator-derived annotations of motion and contact.
+We evaluate leading manipulation policies (
+ and OpenWAM) and inference-only agents (GPT-6 Astra and Qwen3.8-Flash).
+All four models exhibit a gap between task completion and faithful execution, indicating substantial room for fine-grained instruction following.
+
+1
+1
+footnotetext: 
+Equal Contribution. 
+†
+Corresponding authors.
+
+1 
+Introduction
+
+Embodied manipulation benchmarks such as LIBERO 
+[
+34
+]
+, RoboTwin 
+[
+39
+, 
+6
+]
+, and RoboCasa 
+[
+40
+]
+ have helped establish a common evaluation ecosystem for language-conditioned robot manipulation. They provide diverse tasks and environments for measuring capabilities such as task execution, generalization, and object interaction, and have become important testbeds for evaluating vision–language–action (VLA) models 
+[
+62
+, 
+29
+]
+ and emerging world-action models 
+[
+51
+, 
+54
+]
+. Recent benchmark audits also caution that high aggregate scores can reflect shortcuts rather than the intended capabilities 
+[
+24
+]
+. Yet a successful task outcome does not necessarily mean that a policy has followed the instruction faithfully. A policy may reach the required final configuration while performing operations in the wrong order, taking an unintended route, contacting a region other than the one requested, or stopping at an imprecise target angle. Such executions may satisfy a coarse task-success criterion while violating the behavior explicitly requested by the instruction. This raises a complementary question for embodied evaluation: beyond whether a robot completes a task, can we measure whether it completes the task in the way it was instructed to?
+
+Recent work has increasingly explored how to make robot manipulation policies more controllable through fine-grained language instructions, allowing users to specify not only what the robot should achieve, but also how it should execute the task 
+[
+7
+, 
+16
+, 
+8
+]
+. However, evaluating this capability remains challenging, as existing benchmarks often entangle instruction following with other capabilities, including object generalization, visual recognition, and multi-step planning. For example, InstructVLA 
+[
+53
+]
+ evaluates instruction tuning on SimplerEnv-Instruct, where performance is also affected by unfamiliar objects and visual distractors, while VLABench 
+[
+58
+]
+ includes tasks requiring implicit goal inference and multi-step planning. Consequently, improvements in task success may arise from better perception or planning, rather than a stronger ability to execute instructions faithfully. This makes it difficult to isolate whether a policy actually responds to the specific behavioral constraints expressed in language. We therefore need a dedicated benchmark that isolates instruction fidelity by testing whether, under otherwise identical conditions, a robot adjusts its actions as a revised instruction requires.
+
+To make such an evaluation possible, we argue that a benchmark for instruction fidelity should meet two requirements. First, it should compare different instructions from the same initial scene and robot state. If the scene or initial conditions change together with the instruction, differences in execution may reflect changes in perception, object configuration, or task difficulty rather than the policy’s response to language. We therefore require each initial state to admit multiple feasible instruction branches that vary the requested goal, procedure, or manipulation details. Second, evaluation should check the parts of execution that the instruction actually constrains, rather than relying only on final-state success. This is essential when different procedures lead to the same final configuration, or when a task is considered complete despite imprecise execution. Figure 
+ illustrates both cases: different switch orders yield the same final state, while a laptop can reach the requested angle even if the robot contacts the wrong part of the lid. Together, these requirements let us assess whether a policy’s behavior changes appropriately with the instruction and whether the resulting execution satisfies its constraints.
+
+Following these principles, we introduce 
+RoboInF
+, a benchmark for evaluating instruction fidelity in language-conditioned manipulation, built on RoboTwin 
+[
+39
+, 
+6
+]
+. RoboInF contains eight base tasks, each with six to twelve instruction branches from shared initial states. To generate demonstrations that satisfy these branch-specific requirements, we extend RoboTwin’s vision–language model (VLM)-based expert policy generator to synthesize a multi-branch expert policy for each task. Each policy program takes a branch specification as input and executes the corresponding goal, procedure, and fine-grained requirements from the same initial state. We refine these programs iteratively using execution videos and structured simulator logs, together with task-specific compliance checks. During data collection, a structured intermediate representation (IR) collector extracts task and interaction annotations directly from simulator states and execution records, avoiding video-based estimation and manual label verification. The resulting 
+RoboInF-4K
+ dataset contains post-training demonstrations with detailed IR annotations, supporting evaluation of task-only policies and policies trained with IR-derived commands using the same branches and checks.
+
+With the benchmark and dataset in place, we study instruction fidelity across different policy settings. We evaluate VLA policies in terms of both task completion and compliance with instruction-specific requirements, and examine post-training and an IR-supported hierarchical control configuration. We also evaluate inference-only agents separately, accounting for their different action interfaces. By distinguishing final task outcomes from the goals, procedures, and manipulation details specified by an instruction, RoboInF provides a common testbed for studying how reliably embodied policies can be controlled through language.
+
+2 
+Related Work
+
+Manipulation Benchmarks and Datasets.
+
+SAPIEN, RLBench, and ManiSkill2 provide simulation environments for robotic manipulation 
+[
+52
+, 
+22
+, 
+15
+]
+. CALVIN 
+[
+38
+]
+ evaluates long-horizon language control, and LIBERO 
+[
+34
+]
+ tests knowledge transfer across tasks. RoboDojo 
+[
+5
+]
+ evaluates instruction following alongside precision and memory in simulation and on real robots. Real-world datasets broaden scene and task coverage 
+[
+27
+, 
+48
+]
+, while Open X-Embodiment aggregates demonstrations across robot embodiments 
+[
+41
+]
+. Trajectory adaptation 
+[
+36
+]
+, household simulation 
+[
+40
+]
+, and generative digital twins 
+[
+39
+, 
+6
+]
+ have expanded the range of available demonstrations. GenSim and GenSim2 generate simulation tasks and demonstrations through language-model-generated programs 
+[
+49
+, 
+17
+]
+, while RoboGen automates task, scene, and supervision generation 
+[
+50
+]
+. Complementing these efforts to scale robotic experience, we build on RoboTwin’s expert generator to validate multiple feasible instructions for each initial scene.
+
+Evaluating Instruction Fidelity.
+
+GENMANIP 
+[
+13
+]
+ tests generalization across scenes, VLABench 
+[
+58
+]
+ evaluates long-horizon reasoning, and InstructVLA 
+[
+53
+]
+ trains policies to generalize to new instructions. Even when policies complete a task, their actions can remain insensitive to changes in the instruction 
+[
+57
+, 
+23
+]
+. Perturbation-based evaluations further expose sensitivity to scene configurations and weak dependence on language instructions 
+[
+12
+, 
+61
+]
+. LIBERO-Para evaluates robustness to meaning-preserving paraphrases 
+[
+28
+]
+. LIBERO-CF 
+[
+11
+]
+ tests alternative instructions in shared layouts, while InstructMove 
+[
+59
+]
+ uses semantic distractors to make target selection depend on language. Other evaluations probe implicit references 
+[
+1
+]
+, exclusions 
+[
+30
+]
+, sensitivity at individual steps 
+[
+9
+]
+, and responses to mid-execution instruction changes 
+[
+8
+]
+. SIMPLER-IN 
+[
+43
+]
+ measures whether successful executions satisfy path, grasp, or placement requirements. RoboInF pairs expert-validated branches with execution checks for arm use, contact, and operation order, including cases where different procedures yield the same final state.
+
+Structured Representations for Manipulation.
+
+Prior work represents geometric objectives with keypoints 
+[
+37
+]
+, spatial affordances 
+[
+55
+, 
+10
+]
+, and value maps 
+[
+19
+]
+, or encodes spatial structure in policy inputs and actions 
+[
+45
+]
+. Programs 
+[
+33
+]
+ and relational constraints 
+[
+18
+]
+ guide execution, while visual monitors check constraints during manipulation 
+[
+60
+]
+. VIMA expresses manipulation tasks through interleaved textual and
+visual prompts 
+[
+25
+]
+. Goal sketches specify desired configurations 
+[
+47
+]
+, whereas trajectory sketches and predicted end-effector paths provide motion guidance 
+[
+14
+, 
+32
+]
+. Other policies use language motions 
+[
+3
+]
+, reasoning traces 
+[
+56
+]
+, or commands at multiple levels of detail 
+[
+7
+]
+. RoboInter provides intermediate annotations for manipulation videos 
+[
+31
+]
+, and FineVLA constructs human-verified, fine-grained instruction supervision 
+[
+16
+]
+. Complementing these representations and annotation pipelines, RoboInF records geometry, motion, and contact directly from the simulator and evaluates the resulting systems against explicit instruction constraints.
+
+3 
+Method
+
+We first define instruction fidelity through the requirements governing an execution and the controlled comparisons used to assess it. We then describe the data engine that constructs multi-branch experts, collects structured intermediate annotations, and assembles expert-validated demonstrations for RoboInF. Detailed task designs, canonical instructions, and task-specific evaluation criteria are provided in Appendix 
+B
+.
+
+3.1 
+Definition of Instruction Fidelity
+
+Figure 2
+: 
+Data collection engine.
+
+A VLM iteratively refines a multi-branch expert using execution videos and structured feedback.
+Scene-level validation retains only complete, successful branch sets, with 
+ denoting the task-specific number of branches (6–12).
+Replay synchronizes demonstrations with simulator-ground-truth IR.
+The bottle examples contrast a toppled non-target bottle with a successful placement; the IR visualizations show object bounds, pose and contacts, and recorded object motion.
+
+Problem formulation.
+
+Let 
+ denote a base manipulation task, 
+ the complete initial simulator state, and 
+ a specification of instruction conditions. The corresponding natural-language instruction is 
+. At step 
+, a policy 
+ receives visual and proprioceptive observations 
+ and selects an action 
+ conditioned on the instruction and observation history. An execution with at most 
+ action steps is
+
+(1)
+
+The task instruction remains fixed throughout the episode. We define 
+instruction fidelity
+ as satisfaction of the conditions specified by that instruction, including requirements on the final configuration and the execution leading to it. For example, placing a bottle at its destination does not establish compliance with an instruction to use the left arm and pass around the left side of a divider.
+
+Factorized instruction constraints.
+
+We organize instruction conditions around the three aspects introduced above: 
+goal selection
+, 
+procedural adherence
+, and 
+fine-grained specifications
+. Goal selection identifies the object, destination, or articulated component to operate. Procedural conditions specify arm assignment, routes, motion patterns, repetition counts, or operation orders. Fine-grained specifications constrain quantities such as object orientation, holding pose, joint angle, and contact region. These aspects can coexist within one instruction. Figure 
+3
+ shows which instruction variables change across branches and how many branches each task admits. These variables specify the requested behavior.
+
+Task success and faithful execution.
+
+For each task and branch, let 
+ be a binary terminal-goal predicate. We define task success by
+
+(2)
+
+The terminal goal depends on the branch, such as the selected object or destination; task-specific predicates are listed in Appendix 
+B
+.
+
+Let 
+ index the applicable instruction constraints, and let 
+ indicate whether execution satisfies constraint 
+. Each 
+ evaluates a requirement expressed in the instruction using terminal geometry, contact or activation events, or trajectory statistics. We define
+
+(3)
+
+(4)
+
+Here, 
+ denotes constraint satisfaction, while 
+ requires both task completion and faithful execution. An execution that reaches the destination using the wrong arm can satisfy 
+ while failing 
+ and 
+.
+
+Figure 3
+: 
+RoboInF-4K dataset overview.
+
+Top: eight tasks with six to twelve branches per scene.
+Middle: demonstrations follow different instructions from a shared initial state, varying the target goal, object orientation, or execution order; dashed arrows indicate requested table-frame directions.
+Bottom: simulator-grounded intermediate representations (IR), including visible boxes, measured 3D traces with 2D projections,
+6D poses, actual contact points/times, and arm information with gripper commands.
+Requested conditions and observed outcomes are distinguished.
+
+Feasible same-state interventions.
+
+Let 
+ denote the finite set of instruction branches associated with task 
+ and initial state 
+. Each branch specifies a distinct combination of instruction conditions and is evaluated in a separate rollout initialized from the same 
+. Across branches, the initial scene, object states, and robot state remain fixed, while the requested goals, procedures, or fine-grained requirements vary.
+
+Every retained scene has an expert execution witnessing feasibility for each branch:
+
+(5)
+
+where 
+ starts from 
+ and obeys the execution budget. These branches enable instruction-conditioned comparisons from identical initial states, including procedures that share the same terminal configuration.
+
+3.2 
+Data Collection Engine
+
+Figure 
+2
+ summarizes the data collection engine, from expert program refinement to validated demonstrations with structured IR annotations.
+
+Task contracts and branch enumeration.
+
+Each task contract defines the independent instruction variables, their admissible combinations, and the predicates used to check terminal outcomes and execution constraints. Scene construction is separated from branch execution so that changing an instruction does not alter the initial physical state. From a shared branch specification, we derive a canonical instruction, a branch identifier, and the requested-condition fields of the structured IR. Execution-dependent annotations are populated during collection. Enumerating valid combinations yields six to twelve branches per task, with fixed or expert-resolved attributes distinguished from independently varied conditions. We specify the task contracts and checkers before refinement. The VLM iteratively updates the expert policy against these fixed predicates, thresholds, and acceptance criteria.
+
+VLM-based agentic expert policy generation.
+
+Language-model-generated programs provide an executable interface to robot control 
+[
+33
+, 
+17
+]
+, while execution feedback can support closed-loop task planning 
+[
+20
+]
+. Here, feedback is used offline to revise a reusable expert program before dataset collection. We extend RoboTwin’s VLM-based expert policy generator 
+[
+39
+, 
+6
+]
+ to synthesize one 
+multi-branch expert policy
+ per task. The VLM receives the task description, instruction conditions, scene information, and robot manipulation interfaces, and produces an executable policy program conditioned on the branch specification. Executing a candidate in simulation returns two complementary feedback channels: execution videos and structured JSON logs. Videos expose the observed motion and interactions, while structured logs report states, events, checker outcomes, and associated errors. The VLM uses this feedback to diagnose failures and revise the program’s action stages, contact choices, motion paths, or control parameters.
+
+Candidate programs are assessed on ten development scenes, each evaluated over its complete branch set. A scene passes only if every branch satisfies 
+. Refinement runs for at most ten rounds. A program is accepted once at least eight of the ten scenes pass, corresponding to a scene success rate of at least 
+. We retain validated programs with their versions and refinement records for subsequent demonstration collection.
+
+Table 1: 
+Dataset statistics and expert-policy generation. Candidate scenes count attempted initial states; eligible scenes pass every instruction branch. Expert success is the scene eligible rate. Split sizes count episodes, although partitioning is by scene. Iterations exclude the initial program generation.
+
+Scenes
+
+Episodes
+
+Task
+
+Candidate
+
+Eligible
+
+Branches / scene
+
+Eligible rate (%)
+
+Train
+
+Val
+
+Test
+
+Iterations
+
+Place bottle
+
+287
+
+63
+
+8
+
+21.9
+
+296
+
+104
+
+104
+
+10
+
+Shake bottle
+
+75
+
+63
+
+8
+
+84.0
+
+296
+
+104
+
+104
+
+8
+
+Orient fan
+
+72
+
+63
+
+8
+
+87.5
+
+296
+
+104
+
+104
+
+5
+
+Select switch
+
+109
+
+84
+
+6
+
+77.1
+
+300
+
+102
+
+102
+
+2
+
+Transport via divider
+
+210
+
+94
+
+6
+
+44.8
+
+336
+
+114
+
+114
+
+10
+
+Open laptop
+
+87
+
+64
+
+9
+
+73.6
+
+342
+
+117
+
+117
+
+2
+
+Sort blocks in order
+
+100
+
+89
+
+6
+
+89.0
+
+318
+
+108
+
+108
+
+5
+
+Press buttons in order
+
+66
+
+46
+
+12
+
+69.7
+
+336
+
+108
+
+108
+
+10
+
+Total
+
+1006
+
+566
+
+–
+
+56.3
+
+2520
+
+861
+
+861
+
+–
+
+The total eligible rate pools scene counts across tasks; branch counts and refinement iterations are task-specific.
+
+Table 2: 
+Supported annotation types across IR acquisition pipelines. 
+: supported; 
+: partially supported; 
+: unsupported by the specified pipeline. Manual labeling refers to per-episode annotation. Video methods infer annotations from observations; ours accesses simulator states and execution records.
+
+Pipeline
+
+2D target
+
+localization
+
+2D point
+
+trajectories
+
+3D point
+
+trajectories
+
+Contact position
+
+and time
+
+Metric
+
+6D poses
+
+No manual
+
+labeling
+
+GPT-6 Astra video prompting
+d
+
+Grounded-SAM-2
+
+Grounded-SAM-2 + CoTracker3
+
+a
+
+RoboInter-Tools
+
+b
+
+Ours
+
+c
+
+a
+Tracking is automatic after query-point initialization, which may require manual selection. CoTracker3 
+[
+26
+]
+ outputs 2D image coordinates; 3D reconstruction requires additional depth or multiview information. Mask tracking alone 
+[
+21
+]
+ does not provide fixed-keypoint trajectories.
+
+b
+RoboInter-Tools 
+[
+31
+]
+ includes human contact-frame annotation, which partially covers contact position and time. The RoboInter row refers only to its public Tools workflow.
+
+c
+Our 2D trajectories are obtained by projecting recorded 3D keypoints using camera calibration.
+
+d
+Point trajectories comprise sampled 2D landmarks; contact positions are image-plane estimates.
+
+IR acquisition module.
+
+During execution and replay, a dedicated collector extracts ground-truth annotations of object geometry, robot motion, contacts, and task events directly from simulator states and execution records. The IR includes object and destination bounding boxes, object and end-effector poses, contacts, keypoint traces, arm identities, and task events. It stores branch targets alongside measured poses, contacts, and trajectories. Coordinate frames, units, frame indices, simulation steps, and timestamps support alignment with images, robot states, and actions. Validity masks identify missing or inapplicable annotations.
+
+We store the annotations as structured metadata and trajectory arrays indexed by scene, branch, and episode, and synchronize them with observations and actions. Direct simulator access provides these geometric and interaction fields without video-based estimation or manual label verification, as shown in Table 
+2
+.
+
+Large-scale collection and quality assurance.
+
+Validated experts are applied to sampled scenes and their instruction branches through a scan–replay pipeline. The scan stage records expert trajectories that pass the task and instruction checks. We apply a scene-level fail-fast rule: once any branch fails, the entire scene is discarded, its remaining branches are skipped, and that scene is not retried. Scenes that pass the full branch set are reconstructed for trajectory replay and synchronized recording of RGB observations, robot states, actions, camera information, and IR annotations. Initial states are verified across branches and before replay, and execution checks are repeated after replay. Scenes failing replay checks are excluded.
+
+Final quality assurance checks behavioral compliance, branch completeness, initial-state consistency, agreement between instructions and conditions, and temporal alignment of videos, actions, and IR. Complete validated scene groups form RoboInF-4K, with all sibling branches assigned to the same dataset split.
+
+4 
+Experiments
+
+We evaluate instruction fidelity in learned manipulation policies and inference-only agents on our RoboInF benchmark. Additional evaluation results are provided in Appendix 
+.
+
+4.1 
+Experimental Setup
+
+Place bottle
+
+Shake bottle
+
+Orient fan
+
+Select switch
+
+Transport via
+
+divider
+
+Open laptop
+
+Sort blocks
+
+in order
+
+Press buttons
+
+in order
+
+Figure 4
+: 
+Appearance conditions across the eight evaluation tasks. The top row shows clear appearance (
+test_clear
+); the bottom row shows randomized appearance (
+test_random
+). Each column pairs corresponding frames with the same instruction and physical state.
+
+Data and evaluation conditions.
+
+We evaluate the eight tasks and instruction branches shown in Figure 
+3
+. Dataset partitions are assigned by scene, with all sibling branches kept in the same split. Split sizes count 
+episodes
+: each episode is a demonstration of one instruction branch in one scene. We evaluate the same held-out episodes under clear appearance (
+test_clear
+) and randomized appearance (
+test_random
+). Motivated by evaluations of visual robustness under environmental perturbations 
+[
+44
+]
+, the latter reuses RoboTwin’s appearance randomization 
+[
+6
+]
+ for textures, backgrounds, and lighting, with physical conditions fixed. Initial appearance and its sampling seed are shared across sibling branches. Appendix 
+C
+ details the paired scenes and evaluation protocol.
+
+Metrics.
+
+We report joint success and task success, corresponding to 
+ and 
+ in Sec. 
+3.1
+. For 
+ evaluated episodes, their rates are
+
+(6)
+
+Each result cell presents 
+ as two percentages. Their difference, 
+, measures task completion without satisfying all applicable instruction requirements. We report results per task and average the eight task rates with equal weight. Both policy categories use the same task predicates and instruction checks; comparisons between methods are made within each category.
+
+4.2 
+Dataset Statistics and Expert Policy Generation
+
+Figure 
+3
+ shows the task coverage, same-state instruction branches, and simulator-grounded annotations.
+
+The expert passed every instruction branch in 566 of 1,006 candidate scenes (56.3%), yielding 4,242 demonstrations. The training, validation, and test splits contain 2,520, 861, and 861 demonstrations from 336, 115, and 115 scenes, respectively. Table 
+1
+ reports per-task collection statistics and expert refinement iterations.
+
+4.3 
+Qualitative Comparison of IR Acquisition
+
+Table 
+2
+ compares the annotation fields available from the simulator and video-based pipelines. Our pipeline provides richer annotations, including ground-truth 3D point trajectories, contact positions and times, and metric 6D poses recorded directly from the simulator. Appendix 
+A
+ provides further qualitative and quantitative analysis.
+
+4.4 
+Learning-based Policy Evaluation
+
+Table 3: 
+Learning-based policy evaluation. Cells report JR/TR (%); averages weight tasks equally. The evaluation protocol pairs clear and randomized episodes. 
+c2c
+ and 
+c2r
+ denote training on clear demonstrations and testing under clear and randomized appearance, respectively; 
+_ir
+ denotes IR-derived command supervision with online VLM steering.
+
+test_clear
+
+test_random
+
+Zero-shot transfer
+
+OpenWAM
+
+OpenWAM
+
+Task
+
+OpenWAM
+
+c2c
+
+c2c_ir
+
+c2c
+
+c2c_ir
+
+c2r
+
+c2r_ir
+
+c2r
+
+c2r_ir
+
+Place bottle
+
+0.0/1.0
+
+0.0/0.0
+
+76.9/87.5
+
+53.8/53.8
+
+100.0/100.0
+
+29.8/30.8
+
+64.4/64.4
+
+37.5/42.3
+
+67.3/74.0
+
+31.7/35.6
+
+Shake bottle
+
+0.0/0.0
+
+0.0/45.2
+
+1.9/99.0
+
+1.9/89.4
+
+0.0/100.0
+
+0.0/70.2
+
+0.0/87.5
+
+0.0/89.4
+
+0.0/95.2
+
+0.0/69.2
+
+Orient fan
+
+0.0/0.0
+
+5.8/5.8
+
+50.0/50.0
+
+10.6/10.6
+
+13.5/13.5
+
+3.8/3.8
+
+36.5/36.5
+
+7.7/7.7
+
+1.9/1.9
+
+1.0/1.0
+
+Select switch
+
+0.0/1.0
+
+0.0/1.0
+
+69.6/88.2
+
+2.9/94.1
+
+8.8/88.2
+
+2.0/86.3
+
+61.8/80.4
+
+0.0/83.3
+
+1.0/90.2
+
+0.0/87.3
+
+Transport via divider
+
+0.0/0.0
+
+0.0/0.0
+
+45.6/100.0
+
+51.8/100.0
+
+62.3/92.1
+
+39.5/99.1
+
+57.9/94.7
+
+36.0/94.7
+
+44.7/83.3
+
+28.9/75.4
+
+Open laptop
+
+2.6/2.6
+
+10.3/18.8
+
+16.2/17.9
+
+10.3/13.7
+
+11.1/12.0
+
+6.0/8.5
+
+12.0/16.2
+
+17.1/21.4
+
+7.7/13.7
+
+8.5/12.8
+
+Sort blocks in order
+
+0.0/0.0
+
+0.9/0.9
+
+97.2/99.1
+
+78.7/92.6
+
+74.1/83.3
+
+65.7/75.0
+
+87.0/88.0
+
+69.4/83.3
+
+31.5/43.5
+
+25.0/38.9
+
+Press buttons in order
+
+0.0/0.0
+
+0.0/0.0
+
+62.0/92.6
+
+25.0/91.7
+
+1.9/71.3
+
+0.9/65.7
+
+17.6/80.6
+
+10.2/89.8
+
+0.0/71.3
+
+0.9/75.9
+
+Average
+
+0.3/0.6
+
+2.1/9.0
+
+52.4/79.3
+
+29.4/68.2
+
+34.0/70.0
+
+18.5/54.9
+
+42.2/68.5
+
+22.2/64.0
+
+19.3/59.1
+
+12.0/49.5
+
+Settings.
+
+We evaluate two learning-based robot policies: the vision-language-action model 
+ 
+[
+4
+]
+ and the world-action model OpenWAM 
+[
+51
+]
+. For experiments without IR, we follow the RoboTwin training and deployment setup 
+[
+39
+, 
+6
+]
+, conditioning each policy on the task instruction. We evaluate both zero-shot transfer from RoboTwin-post-trained checkpoints and post-training on RoboInF’s clear training split. Zero-shot transfer uses no additional training on RoboInF. Appendix 
+D
+ provides the training and inference details.
+
+For experiments with IR, we follow Steerable Policies 
+[
+7
+]
+, using demonstration relabeling and online language steering. During training, simulator-grounded IR from RoboInF demonstrations is converted into diverse textual commands that condition each policy through its native text interface. During evaluation, an online Qwen3.8-Flash controller generates commands from the original task instruction, current visual observations, and episode history. Appendix 
+E
+ describes command annotation, policy training, and online steering.
+
+Table 4: 
+Inference-only agents on 
+test_clear
+: JR/TR (%) over 861 episodes each. Averages weight tasks equally.
+
+Task
+
+GPT-6 Astra
+
+Qwen3.8-Flash
+
+Place bottle
+
+57.7/57.7
+
+59.6/59.6
+
+Shake bottle
+
+0.0/64.4
+
+0.0/39.4
+
+Orient fan
+
+0.0/0.0
+
+1.0/1.0
+
+Select switch
+
+33.3/49.0
+
+0.0/0.0
+
+Transport via divider
+
+10.5/11.4
+
+3.5/15.8
+
+Open laptop
+
+26.5/26.5
+
+1.7/1.7
+
+Sort blocks in order
+
+5.6/5.6
+
+0.0/0.0
+
+Press buttons in order
+
+7.4/16.7
+
+0.0/0.0
+
+Average
+
+17.6/28.9
+
+8.2/14.7
+
+In Table 
+3
+, 
+c2c
+ and 
+c2r
+ both use clear demonstrations for training and differ only in test appearance (clear or randomized, respectively); 
+_ir
+ denotes Steerable Policies. Figure 
+4
+ shows paired demonstrations under both conditions. For zero-shot transfer, we use 
+test_clear
+; for each post-trained checkpoint, we use all 861 episodes in both conditions.
+
+Results.
+
+Table 
+3
+ shows that post-training on RoboInF improves average task success and joint success over zero-shot transfer. However, joint success remains below task success across both models and training configurations. This gap is especially evident in tasks such as Transport via divider and Shake bottle, where reaching the terminal goal does not establish whether the robot followed the requested route or motion pattern. The Steerable configurations also achieve lower average joint success than the task-instruction configurations under both appearance conditions, indicating that reliable execution of detailed instructions remains challenging with online language steering.
+
+4.5 
+Inference-only Agent Evaluation
+
+Settings.
+
+We evaluate GPT-6 Astra 
+[
+42
+]
+ and Qwen3.8-Flash 
+[
+2
+]
+ without parameter updates on all 861 test episodes of RoboInF. Both agents use the same decision interface and fixed RGB-D geometric skill executor, with the high-level model selected through its API. The model selects semantic skills, image targets, and skill parameters; the executor grounds these decisions and carries out robot motions. Appendix 
+F
+ describes the implementation.
+
+Results.
+
+Under the shared skill interface (Table 
+4
+), GPT-6 Astra achieves 28.9% average task success but only 17.6% joint success; for Qwen3.8-Flash the rates are 14.7% and 8.2%, respectively. The gap depends on the task: for Place bottle the two rates coincide for each agent, whereas for Shake bottle neither agent achieves joint success.
+
+5 
+Conclusion
+
+We introduced RoboInF, a benchmark for evaluating instruction fidelity in robotic manipulation. By pairing multiple expert-validated instruction branches from the same initial state with checks of both terminal outcomes and execution constraints, RoboInF supports controlled evaluation of goal selection, procedural adherence, and fine-grained specifications. Our multi-branch expert generation and simulator-grounded annotation pipeline produces RoboInF-4K, pairing 4,242 demonstrations with structured intermediate representations of geometry, motion, and contact. Evaluations of learned manipulation policies and inference-only agents reveal persistent gaps between task completion and faithful execution. Post-training improves performance, but requirements on how a task is executed remain challenging. These findings motivate evaluating instruction fidelity alongside task success and developing policies that respond more reliably to detailed behavioral requirements. Extending the benchmark to broader task families and real-world settings is a promising direction for future work.
+
+Limitations.
+
+Due to equipment and time constraints, RoboInF-4K is limited to 4,242 demonstrations across eight tasks; collecting more demonstrations across a wider range of tasks would broaden its coverage.
+
+References
+
+[1]
+
+A. Akelijiang, J. Li, Z. Chen, J. Chen, and B. Zhu
+ (2026)
+
+RoboIRGBench: Benchmarking Implicit Referential Grounding in Vision-Language-Action Models
+.
+
+arXiv preprint arXiv:2609.34384
+.
+
+Cited by: 
+§2
+.
+
+[2]
+
+Alibaba Cloud
+ (2026)
+
+Qwen3.8-Flash
+.
+
+Note: 
+Official model documentation.
+
+https://help.aliyun.com/en/model-studio/qwen3-8-flash
+Accessed: November 17, 2026
+
+Cited by: 
+§4.5
+.
+
+[3]
+
+S. Belkhale, T. Ding, T. Xiao, P. Sermanet, Q. Vuong, J. Tompson, Y. Chebotar, D. Dwibedi, and D. Sadigh
+ (2024)
+
+RT-H: Action Hierarchies using Language
+.
+
+In 
+RSS
+,
+
+Cited by: 
+§2
+.
+
+[4]
+
+K. Black, N. Brown, J. Darpinian, K. Dhabalia, D. Driess, A. Esmail, M. R. Equi, C. Finn, N. Fusai, M. Y. Galliker, D. Ghosh, L. Groom, K. Hausman, B. Ichter, S. Jakubczak, T. Jones, L. Ke, D. LeBlanc, S. Levine, A. Li-Bell, M. Mothukuri, S. Nair, K. Pertsch, A. Z. Ren, L. X. Shi, L. Smith, J. T. Springenberg, K. Stachowicz, J. Tanner, Q. Vuong, H. Walke, A. Walling, H. Wang, L. Yu, and U. Zhilinsky
+ (2025)
+
+: a Vision-Language-Action Model with Open-World Generalization
+.
+
+In 
+CoRL
+,
+
+Cited by: 
+§4.4
+.
+
+[5]
+
+T. Chen, Y. Chen, Z. Li, J. Tang, K. Su, H. Lu, W. Wan, B. Chen, S. Liu, H. Yan, H. Su, Z. Dou, K. Wang, D. Zhang, Y. Liu, Y. Qin, Q. Liang, Q. Wu, Z. Lin, W. Lin, Y. Wang, M. He, T. Wu, R. Wu, J. Zhou, K. Lei, H. Yu, Y. Ji, W. Jin, G. Lin, X. Li, Q. Xiong, R. Xu, Z. Li, W. Chai, E. Xie, Z. Wang, Y. Mu, H. Dong, W. Matusik, M. Ding, W. Ding, P. Luo, and M. Tomizuka
+ (2026)
+
+RoboDojo: A Unified Sim-and-Real Benchmark for Comprehensive Evaluation of Generalist Robot Manipulation Policies
+.
+
+arXiv preprint arXiv:2607.04434
+.
+
+Cited by: 
+§2
+.
+
+[6]
+
+T. Chen, Z. Chen, B. Chen, Z. Cai, Y. Liu, Z. Li, Q. Liang, X. Lin, Y. Ge, Z. Gu, W. Deng, Y. Guo, T. Nian, X. Xie, Q. Chen, K. Su, T. Xu, G. Liu, M. Hu, H. Gao, K. Wang, Z. Liang, Y. Qin, X. Yang, P. Luo, and Y. Mu
+ (2026)
+
+RoboTwin 2.0: A Scalable Data Generator and Benchmark with Strong Domain Randomization for Robust Bimanual Robotic Manipulation
+.
+
+In 
+ICML
+,
+
+Cited by: 
+§C.2
+,
+
+§1
+,
+
+§1
+,
+
+§2
+,
+
+§3.2
+,
+
+§4.1
+,
+
+§4.4
+.
+
+[7]
+
+W. Chen, J. S. Bhatia, C. Glossop, N. Mathihalli, A. Tang, R. Doshi, D. Driess, K. Pertsch, and S. Levine
+ (2026)
+
+Steerable Vision-Language-Action Policies for Embodied Reasoning and Hierarchical Control
+.
+
+In 
+RSS
+,
+
+Cited by: 
+Appendix E
+,
+
+§1
+,
+
+§2
+,
+
+§4.4
+.
+
+[8]
+
+Z. Chen, A. Tian, L. Wang, B. Joffe, Y. C. Lin, Y. Chen, S. Karamcheti, and D. Xu
+ (2026)
+
+ReSteer: Quantifying and Refining the Steerability of Multitask Robot Policies
+.
+
+In 
+RSS
+,
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+[9]
+
+X. Dong, Z. Han, T. Niu, Q. Zhu, and W. Che
+ (2026)
+
+When Does Language Matter? Multilingual Instructions Reveal Step-wise Language Sensitivity in Vision-Language-Action Models
+.
+
+In 
+ACL
+,
+
+Cited by: 
+§2
+.
+
+[10]
+
+K. Fang, F. Liu, P. Abbeel, and S. Levine
+ (2024)
+
+MOKA: Open-World Robotic Manipulation through Mark-Based Visual Prompting
+.
+
+In 
+RSS
+,
+
+Cited by: 
+§2
+.
+
+[11]
+
+Y. Fang, Y. Feng, D. Jing, J. Liu, Y. Yang, Z. Wei, D. Szafir, and M. Ding
+ (2026)
+
+When Vision Overrides Language: Evaluating and Mitigating Counterfactual Failures in VLAs
+.
+
+In 
+CoRL
+,
+
+Cited by: 
+§2
+.
+
+[12]
+
+S. Fei, S. Wang, J. Shi, Z. Dai, J. Cai, P. Qian, L. Ji, X. He, S. Zhang, Z. Fei, J. Fu, J. Gong, and X. Qiu
+ (2026)
+
+LIBERO-Plus: A Progressive Robustness Benchmark for Visual-Language-Action Models
+.
+
+In 
+CVPR
+,
+
+Cited by: 
+§2
+.
+
+[13]
+
+N. Gao, Y. Chen, S. Yang, X. Chen, Y. Tian, H. Li, H. Huang, H. Wang, T. Wang, and J. Pang
+ (2025)
+
+GENMANIP: LLM-driven Simulation for Generalizable Instruction-Following Manipulation
+.
+
+In 
+CVPR
+,
+
+Cited by: 
+§2
+.
+
+[14]
+
+J. Gu, S. Kirmani, P. Wohlhart, Y. Lu, M. G. Arenas, K. Rao, W. Yu, C. Fu, K. Gopalakrishnan, Z. Xu, P. Sundaresan, P. Xu, H. Su, K. Hausman, C. Finn, Q. Vuong, and T. Xiao
+ (2024)
+
+RT-Trajectory: Robotic Task Generalization via Hindsight Trajectory Sketches
+.
+
+In 
+ICLR
+,
+
+Cited by: 
+§2
+.
+
+[15]
+
+J. Gu, F. Xiang, X. Li, Z. Ling, X. Liu, T. Mu, Y. Tang, S. Tao, X. Wei, Y. Yao, X. Yuan, P. Xie, Z. Huang, R. Chen, and H. Su
+ (2023)
+
+ManiSkill2: A Unified Benchmark for Generalizable Manipulation Skills
+.
+
+In 
+ICLR
+,
+
+Cited by: 
+§2
+.
+
+[16]
+
+X. Hu, X. Huang, J. Zhang, Y. Yao, Y. Sun, Q. Wang, M. Li, Y. Liu, Y. Chen, Y. Zheng, S. Bai, and T. Yu
+ (2026)
+
+FineVLA: Fine-Grained Instruction Alignment for Steerable Vision-Language-Action Policies
+.
+
+In 
+NeurIPS
+,
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+[17]
+
+P. Hua, M. Liu, A. Macaluso, Y. Lin, W. Zhang, H. Xu, and L. Wang
+ (2025)
+
+GenSim2: Scaling Robot Data Generation with Multi-modal and Reasoning LLMs
+.
+
+In 
+CoRL
+,
+
+Cited by: 
+§2
+,
+
+§3.2
+.
+
+[18]
+
+W. Huang, C. Wang, Y. Li, R. Zhang, and L. Fei-Fei
+ (2025)
+
+ReKep: Spatio-Temporal Reasoning of Relational Keypoint Constraints for Robotic Manipulation
+.
+
+In 
+CoRL
+,
+
+Cited by: 
+§2
+.
+
+[19]
+
+W. Huang, C. Wang, R. Zhang, Y. Li, J. Wu, and L. Fei-Fei
+ (2023)
+
+VoxPoser: Composable 3D Value Maps for Robotic Manipulation with Language Models
+.
+
+In 
+CoRL
+,
+
+Cited by: 
+§2
+.
+
+[20]
+
+W. Huang, F. Xia, T. Xiao, H. Chan, J. Liang, P. Florence, A. Zeng, J. Tompson, I. Mordatch, Y. Chebotar, P. Sermanet, T. Jackson, N. Brown, L. Luu, S. Levine, K. Hausman, and B. Ichter
+ (2023)
+
+Inner Monologue: Embodied Reasoning through Planning with Language Models
+.
+
+In 
+CoRL
+,
+
+Cited by: 
+§3.2
+.
+
+[21]
+
+IDEA Research
+ (2024)
+
+Grounded SAM 2: Ground and Track Anything in Videos
+.
+
+Note: 
+Project repository. 
+https://github.com/IDEA-Research/Grounded-SAM-2
+Accessed: November 2, 2026
+
+Cited by: 
+§A.1
+,
+
+Table 2
+.
+
+[22]
+
+S. James, Z. Ma, D. R. Arrojo, and A. J. Davison
+ (2020)
+
+RLBench: The Robot Learning Benchmark & Learning Environment
+.
+
+IEEE Robotics and Automation Letters
+ 
+5
+ (
+2
+), 
+pp. 3019–3026
+.
+
+Cited by: 
+§2
+.
+
+[23]
+
+S. Jiang, J. Cao, Q. He, F. Deng, K. Wu, J. Sun, J. Wang, Q. Zhang, Q. Zheng, C. Song, P. Luo, and A. F. Luo
+ (2026)
+
+Encoded but Not in Control: Revealing the Grounding Gap in Vision-Language Robot Policies
+.
+
+arXiv preprint arXiv:2610.06235
+.
+
+Cited by: 
+§2
+.
+
+[24]
+
+T. Jiang, X. Tan, S. Wheeler, L. Sun, T. W. Ayalew, and M. Walter
+ (2026)
+
+What Are We Actually Benchmarking in Robot Manipulation?
+.
+
+In 
+CoRL
+,
+
+Cited by: 
+§1
+.
+
+[25]
+
+Y. Jiang, A. Gupta, Z. Zhang, G. Wang, Y. Dou, Y. Chen, L. Fei-Fei, A. Anandkumar, Y. Zhu, and L. Fan
+ (2023)
+
+VIMA: Robot Manipulation with Multimodal Prompts
+.
+
+In 
+ICML
+,
+
+Cited by: 
+§2
+.
+
+[26]
+
+N. Karaev, Y. Makarov, J. Wang, N. Neverova, A. Vedaldi, and C. Rupprecht
+ (2025)
+
+CoTracker3: Simpler and Better Point Tracking by Pseudo-Labelling Real Videos
+.
+
+In 
+ICCV
+,
+
+Cited by: 
+§A.1
+,
+
+Table 2
+.
+
+[27]
+
+A. Khazatsky, K. Pertsch, S. Nair, A. Balakrishna, S. Dasari, S. Karamcheti, S. Nasiriany, M. K. Srirama, L. Y. Chen, K. Ellis, P. D. Fagan, J. Hejna, M. Itkina, M. Lepert, Y. J. Ma, P. T. Miller, J. Wu, S. Belkhale, S. Dass, H. Ha, A. Jain, A. Lee, Y. Lee, M. Memmel, S. Park, I. Radosavovic, K. Wang, A. Zhan, K. Black, C. Chi, K. B. Hatch, S. Lin, J. Lu, J. Mercat, A. Rehman, P. R. Sanketi, A. Sharma, C. Simpson, Q. Vuong, H. R. Walke, B. Wulfe, T. Xiao, J. H. Yang, A. Yavary, T. Z. Zhao, C. Agia, R. Baijal, M. G. Castro, D. Chen, Q. Chen, T. Chung, J. Drake, E. P. Foster, J. Gao, D. A. Herrera, M. Heo, K. Hsu, J. Hu, D. Jackson, C. Le, Y. Li, R. Lin, Z. Ma, A. Maddukuri, S. Mirchandani, D. Morton, T. Nguyen, A. O’Neill, R. Scalise, D. Seale, V. Son, S. Tian, E. Tran, A. E. Wang, Y. Wu, A. Xie, J. Yang, P. Yin, Y. Zhang, O. Bastani, G. Berseth, J. Bohg, K. Goldberg, A. Gupta, A. Gupta, D. Jayaraman, J. J. Lim, J. Malik, R. Martín-Martín, S. Ramamoorthy, D. Sadigh, S. Song, J. Wu, M. C. Yip, Y. Zhu, T. Kollar, S. Levine, and C. Finn
+ (2024)
+
+DROID: A Large-Scale In-The-Wild Robot Manipulation Dataset
+.
+
+In 
+RSS
+,
+
+Cited by: 
+§2
+.
+
+[28]
+
+C. Kim, M. Kim, M. Kang, H. Kim, and D. Jung
+ (2026)
+
+LIBERO-Para: A Diagnostic Benchmark and Metrics for Paraphrase Robustness in VLA Models
+.
+
+In 
+EMNLP
+,
+
+Cited by: 
+§2
+.
+
+[29]
+
+M. J. Kim, K. Pertsch, S. Karamcheti, T. Xiao, A. Balakrishna, S. Nair, R. Rafailov, E. P. Foster, P. R. Sanketi, Q. Vuong, T. Kollar, B. Burchfiel, R. Tedrake, D. Sadigh, S. Levine, P. Liang, and C. Finn
+ (2025)
+
+OpenVLA: an open-source vision-language-action model
+.
+
+In 
+CoRL
+,
+
+Cited by: 
+§1
+.
+
+[30]
+
+F. Li, G. Sun, H. Cheng, W. Ren, and Y. Cong
+ (2026)
+
+Tell Robot What Not to Do: A Negation Understanding Perspective
+.
+
+arXiv preprint arXiv:2610.11952
+.
+
+Cited by: 
+§2
+.
+
+[31]
+
+H. Li, Z. Wang, Z. Ding, S. Yang, Y. Chen, Y. Tian, X. Hu, T. Wang, D. Lin, F. Zhao, S. Liu, and J. Pang
+ (2026)
+
+RoboInter: A Holistic Intermediate Representation Suite Towards Robotic Manipulation
+.
+
+In 
+ICLR
+,
+
+Cited by: 
+§A.1
+,
+
+§2
+,
+
+Table 2
+.
+
+[32]
+
+Y. Li, Y. Deng, J. Zhang, J. Jang, M. Memmel, C. R. Garrett, F. Ramos, D. Fox, A. Li, A. Gupta, and A. Goyal
+ (2025)
+
+HAMSTER: Hierarchical Action Models for Open-World Robot Manipulation
+.
+
+In 
+ICLR
+,
+
+Cited by: 
+§2
+.
+
+[33]
+
+J. Liang, W. Huang, F. Xia, P. Xu, K. Hausman, B. Ichter, P. Florence, and A. Zeng
+ (2023)
+
+Code as Policies: Language Model Programs for Embodied Control
+.
+
+In 
+ICRA
+,
+
+Cited by: 
+§2
+,
+
+§3.2
+.
+
+[34]
+
+B. Liu, Y. Zhu, C. Gao, Y. Feng, Q. Liu, Y. Zhu, and P. Stone
+ (2023)
+
+LIBERO: Benchmarking Knowledge Transfer for Lifelong Robot Learning
+.
+
+In 
+NeurIPS
+,
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+[35]
+
+S. Liu, Z. Zeng, T. Ren, F. Li, H. Zhang, J. Yang, Q. Jiang, C. Li, J. Yang, H. Su, J. Zhu, and L. Zhang
+ (2025)
+
+Grounding DINO: Marrying DINO with Grounded Pre-training for Open-Set Object Detection
+.
+
+In 
+ECCV
+,
+
+Cited by: 
+§A.1
+.
+
+[36]
+
+A. Mandlekar, S. Nasiriany, B. Wen, I. Akinola, Y. Narang, L. Fan, Y. Zhu, and D. Fox
+ (2023)
+
+MimicGen: A Data Generation System for Scalable Robot Learning using Human Demonstrations
+.
+
+In 
+CoRL
+,
+
+Cited by: 
+§2
+.
+
+[37]
+
+L. Manuelli, W. Gao, P. Florence, and R. Tedrake
+ (2022)
+
+KPAM: KeyPoint Affordances for Category-Level Robotic Manipulation
+.
+
+In 
+ISRR
+,
+
+Cited by: 
+§2
+.
+
+[38]
+
+O. Mees, L. Hermann, E. Rosete-Beas, and W. Burgard
+ (2022)
+
+CALVIN: A Benchmark for Language-Conditioned Policy Learning for Long-Horizon Robot Manipulation Tasks
+.
+
+IEEE Robotics and Automation Letters
+ 
+7
+ (
+3
+), 
+pp. 7327–7334
+.
+
+Cited by: 
+§2
+.
+
+[39]
+
+Y. Mu, T. Chen, Z. Chen, S. Peng, Z. Lan, Z. Gao, Z. Liang, Q. Yu, Y. Zou, M. Xu, L. Lin, Z. Xie, M. Ding, and P. Luo
+ (2025)
+
+RoboTwin: Dual-Arm Robot Benchmark with Generative Digital Twins
+.
+
+In 
+CVPR
+,
+
+Cited by: 
+§1
+,
+
+§1
+,
+
+§2
+,
+
+§3.2
+,
+
+§4.4
+.
+
+[40]
+
+S. Nasiriany, A. Maddukuri, L. Zhang, A. Parikh, A. Lo, A. Joshi, A. Mandlekar, and Y. Zhu
+ (2024)
+
+RoboCasa: Large-Scale Simulation of Household Tasks for Generalist Robots
+.
+
+In 
+RSS
+,
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+[41]
+
+Open X-Embodiment Collaboration
+ (2024)
+
+Open X-Embodiment: Robotic Learning Datasets and RT-X Models
+.
+
+In 
+ICRA
+,
+
+Cited by: 
+§2
+.
+
+[42]
+
+OpenAI
+ (2026)
+
+GPT-6 Astra: A New Generation of Intelligence
+.
+
+Note: 
+https://openai.com/index/gpt-6-astra
+
+Cited by: 
+§A.1
+,
+
+§4.5
+.
+
+[43]
+
+S. Park, W. Kim, Y. In, and C. Park
+ (2026)
+
+Do VLAs Really Follow Instructions? Diagnosing How-Level Instruction Following in Vision-Language-Action Models
+.
+
+arXiv preprint arXiv:2610.21251
+.
+
+Cited by: 
+§2
+.
+
+[44]
+
+W. Pumacay, I. Singh, J. Duan, R. Krishna, J. Thomason, and D. Fox
+ (2024)
+
+THE COLOSSEUM: A Benchmark for Evaluating Generalization for Robotic Manipulation
+.
+
+In 
+RSS
+,
+
+Cited by: 
+§4.1
+.
+
+[45]
+
+D. Qu, H. Song, Q. Chen, Y. Yao, X. Ye, J. Gu, Z. Wang, Y. Ding, B. Zhao, D. Wang, and X. Li
+ (2025)
+
+SpatialVLA: Exploring Spatial Representations for Visual-Language-Action Models
+.
+
+In 
+RSS
+,
+
+Cited by: 
+§2
+.
+
+[46]
+
+N. Ravi, V. Gabeur, Y. Hu, R. Hu, C. Ryali, T. Ma, H. Khedr, R. Rädle, C. Rolland, L. Gustafson, E. Mintun, J. Pan, K. V. Alwala, N. Carion, C. Wu, R. Girshick, P. Dollar, and C. Feichtenhofer
+ (2025)
+
+SAM 2: Segment Anything in Images and Videos
+.
+
+In 
+ICLR
+,
+
+Cited by: 
+§A.1
+.
+
+[47]
+
+P. Sundaresan, Q. Vuong, J. Gu, P. Xu, T. Xiao, S. Kirmani, T. Yu, M. Stark, A. Jain, K. Hausman, D. Sadigh, J. Bohg, and S. Schaal
+ (2025)
+
+RT-Sketch: Goal-Conditioned Imitation Learning from Hand-Drawn Sketches
+.
+
+In 
+CoRL
+,
+
+Cited by: 
+§2
+.
+
+[48]
+
+H. R. Walke, K. Black, T. Z. Zhao, Q. Vuong, C. Zheng, P. Hansen-Estruch, A. W. He, V. Myers, M. J. Kim, M. Du, A. Lee, K. Fang, C. Finn, and S. Levine
+ (2023)
+
+BridgeData V2: A Dataset for Robot Learning at Scale
+.
+
+In 
+CoRL
+,
+
+Cited by: 
+§2
+.
+
+[49]
+
+L. Wang, Y. Ling, Z. Yuan, M. Shridhar, C. Bao, Y. Qin, B. Wang, H. Xu, and X. Wang
+ (2024)
+
+GenSim: Generating Robotic Simulation Tasks via Large Language Models
+.
+
+In 
+ICLR
+,
+
+Cited by: 
+§2
+.
+
+[50]
+
+Y. Wang, Z. Xian, F. Chen, T. Wang, Y. Wang, K. Fragkiadaki, Z. Erickson, D. Held, and C. Gan
+ (2024)
+
+RoboGen: Towards Unleashing Infinite Data for Automated Robot Learning via Generative Simulation
+.
+
+In 
+ICML
+,
+
+Cited by: 
+§2
+.
+
+[51]
+
+Y. Wang, S. Huang, M. Li, C. Zhang, J. Liang, W. Jin, Y. Chen, X. Chi, D. Zhou, Q. Yu, Y. Wang, Y. Rui, S. Yao, Z. Yuan, Z. Shen, K. Zhu, Z. Zhu, N. Gao, X. Chi, G. He, S. Zhang, H. Dong, L. Shao, and H. Zhao
+ (2026)
+
+OpenWAM: An Open, Modular Exploration Towards Systematic World–Action Model Pretraining
+.
+
+In 
+CoRL TAG Workshop
+,
+
+Cited by: 
+§1
+,
+
+§4.4
+.
+
+[52]
+
+F. Xiang, Y. Qin, K. Mo, Y. Xia, H. Zhu, F. Liu, M. Liu, H. Jiang, Y. Yuan, H. Wang, L. Yi, A. X. Chang, L. J. Guibas, and H. Su
+ (2020)
+
+SAPIEN: A SimulAted Part-Based Interactive ENvironment
+.
+
+In 
+CVPR
+,
+
+Cited by: 
+§2
+.
+
+[53]
+
+S. Yang, H. Li, B. Wang, Y. Chen, Y. Tian, T. Wang, H. Wang, F. Zhao, Y. Liao, and J. Pang
+ (2026)
+
+Vision-Language-Action Instruction Tuning: From Understanding to Manipulation
+.
+
+In 
+ICLR
+,
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+[54]
+
+H. Yu, D. D. Yuan, J. Zhang, C. Chen, Y. Feng, M. Baldonado, S. Cousins, L. Fei-Fei, J. Wu, and E. Adeli
+ (2026)
+
+OpenWAM: An Open Framework for Composable World-Action Models
+.
+
+arXiv preprint arXiv:2610.07922
+.
+
+Cited by: 
+§1
+.
+
+[55]
+
+W. Yuan, J. Duan, V. Blukis, W. Pumacay, R. Krishna, A. Murali, A. Mousavian, and D. Fox
+ (2025)
+
+RoboPoint: A Vision-Language Model for Spatial Affordance Prediction in Robotics
+.
+
+In 
+CoRL
+,
+
+Cited by: 
+§2
+.
+
+[56]
+
+M. Zawalski, W. Chen, K. Pertsch, O. Mees, C. Finn, and S. Levine
+ (2025)
+
+Robotic Control via Embodied Chain-of-Thought Reasoning
+.
+
+In 
+CoRL
+,
+
+Cited by: 
+§2
+.
+
+[57]
+
+N. Zhang, B. Zhu, S. Zhou, and J. Chen
+ (2026)
+
+Restoring Linguistic Grounding in VLA Models via Train-Free Attention Recalibration
+.
+
+In 
+ECCV
+,
+
+Cited by: 
+§2
+.
+
+[58]
+
+S. Zhang, Z. Xu, P. Liu, X. Yu, Y. Li, Q. Gao, Z. Fei, Z. Yin, Z. Wu, Y. Jiang, and X. Qiu
+ (2025)
+
+VLABench: A Large-Scale Benchmark for Language-Conditioned Robotics Manipulation with Long-Horizon Reasoning Tasks
+.
+
+In 
+ICCV
+,
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+[59]
+
+M. Zhao, Z. Li, C. Huang, M. Ma, H. Jiang, Y. Jin, X. Wang, Y. Du, X. Lin, T. Ding, H. Xie, J. Jiang, C. Yu, K. Zhang, L. Huang, L. Liu, T. Lin, and Z. Su
+ (2026)
+
+InstructMove: A Text-Indispensable Benchmark for Instruction-Following Manipulation
+.
+
+arXiv preprint arXiv:2608.22990
+.
+
+Cited by: 
+§2
+.
+
+[60]
+
+E. Zhou, Q. Su, C. Chi, Z. Zhang, Z. Wang, T. Huang, L. Sheng, and H. Wang
+ (2025)
+
+Code-as-Monitor: Constraint-aware Visual Programming for Reactive and Proactive Robotic Failure Detection
+.
+
+In 
+CVPR
+,
+
+Cited by: 
+§2
+.
+
+[61]
+
+X. Zhou, Y. Xu, G. Tie, Y. Chen, G. Zhang, D. Chu, P. Zhou, and L. Sun
+ (2026)
+
+LIBERO-PRO: Towards Robust and Fair Evaluation of Vision-Language-Action Models Beyond Memorization
+.
+
+arXiv preprint arXiv:2510.03827v2
+.
+
+Cited by: 
+§2
+.
+
+[62]
+
+B. Zitkovich, T. Yu, S. Xu, P. Xu, T. Xiao, F. Xia, J. Wu, P. Wohlhart, S. Welker, A. Wahid, Q. Vuong, V. Vanhoucke, H. Tran, R. Soricut, A. Singh, J. Singh, P. Sermanet, P. R. Sanketi, G. Salazar, M. S. Ryoo, K. Reymann, K. Rao, K. Pertsch, I. Mordatch, H. Michalewski, Y. Lu, S. Levine, L. Lee, T. E. Lee, I. Leal, Y. Kuang, D. Kalashnikov, R. Julian, N. J. Joshi, A. Irpan, B. Ichter, J. Hsu, A. Herzog, K. Hausman, K. Gopalakrishnan, C. Fu, P. Florence, C. Finn, K. A. Dubey, D. Driess, T. Ding, K. M. Choromanski, X. Chen, Y. Chebotar, J. Carbajal, N. Brown, A. Brohan, M. G. Arenas, and K. Han
+ (2023)
+
+RT-2: vision-language-action models transfer web knowledge to robotic control
+.
+
+In 
+CoRL
+,
+
+Cited by: 
+§1
+.
+
+Appendix
+
+Contents
+
+Appendix A 
+Qualitative and Quantitative Analysis of IR Annotation Methods
+
+A.1 
+IR fields provided by the evaluated video pipelines
+
+We evaluate the four RGB annotation pipelines in Table 
+2
+ of the main paper on one complete test scene per task. The eight scenes contain 63 branch executions. We score 32 uniformly sampled frames per video (2,016 frames total) against simulator references. All four pipelines operate without branch targets, simulator labels, depth, or camera calibration.
+
+GPT-6 Astra 
+[
+42
+]
+ receives the 32 sampled RGB frames in temporal order. A fixed prompt names the task objects and landmarks and allows the model to abstain. The remaining pipelines process the full head-camera video.
+
+Following the Grounded-SAM-2 (GSAM) tracking demo 
+[
+21
+]
+, we detect objects in the first frame with Grounding DINO 
+[
+35
+]
+ and propagate their masks with SAM 2 
+[
+46
+]
+. For repeated categories, we retain the expected number of highest-scoring detections and assign object identities from left to right. If the first frame yields too few detections, we omit that category for the video.
+
+CoTracker3 
+[
+26
+]
+ adds point trajectories to the GSAM boxes and masks. An annotator initializes each landmark in the earliest frame where it can be identified and marks uncertain landmarks as such. CoTracker3 then tracks the points forward and backward without manual correction.
+
+For RoboInter-Tools 
+[
+31
+]
+, the same annotator supplies foreground and background clicks, reviews the propagated masks, and revises the prompts as needed. For each manipulated object, the annotator also marks the first visible contact during its manipulation stage.
+
+Figure 5
+: 
+RGB observations, pipeline outputs and simulator references for the same frames. (a) Both automatic methods localize the laptop lid. (b) Grounding DINO detects the panel as a whole. (c) The simulator records physical contact (orange diamonds), but Astra supplies no contact coordinate. (d) Human-selected cube landmarks (squares) initialize CoTracker; circles show its later estimates. Crosses mark Astra landmarks, plus signs mark reference landmarks, tints show masks, and rectangles show boxes. Frame IoUs average over returned objects with valid references.
+
+Figure 6
+: 
+The left gripper carries a bottle around the left side of the divider. Left: trajectories of the bottle center (solid blue) and the gripper tool center (dashed orange) in world coordinates. Right: the same points’ 
+, 
+ and 
+ coordinates over time, in meters.
+
+A.2 
+Localization and physical correspondence
+
+The simulator supplies 4,881 nonempty reference masks and 4,861 positive-area reference boxes across the sampled frames. We compute mean intersection over union (IoU) on returned annotations. Coverage and the fraction reaching IoU
+ use all eligible references as the denominator. We average scores within each execution, then across branches within each scene, and finally across tasks with equal weight.
+
+Table 5: 
+Object localization and human annotation time. GSAM returns no identified buttons: its mean IoU covers seven tasks, whereas coverage and threshold scores include all eight. Time is approximate active time per video from browser logs; sessions can overlap, and model waits are excluded. A dash marks an unsupported field.
+
+Pipeline
+
+Mean IoU
+
+(returned)
+
+Coverage
+
+(%)
+
+IoU
+.5
+
+(% eligible)
+
+Human time
+
+(s/episode)
+
+Boxes
+
+Astra
+
+.840
+
+98.9
+
+97.1
+
+0
+
+GSAM
+
+.665
+
+84.4
+
+58.5
+
+0
+
++ CoTracker3
+
+.665
+
+84.4
+
+58.5
+
+26
+
+RoboInter
+
+.909
+
+98.5
+
+95.2
+
+150
+
+Masks
+
+Astra
+
+–
+
+–
+
+–
+
+0
+
+GSAM
+
+.661
+
+83.8
+
+59.2
+
+0
+
++ CoTracker3
+
+.661
+
+83.8
+
+59.2
+
+26
+
+RoboInter
+
+.904
+
+98.0
+
+95.9
+
+150
+
+RoboInter has the highest mean IoU on returned boxes (.909), while Astra reaches IoU
+ on the largest fraction of eligible boxes (97.1%; Table 
+5
+). In the button scene, Grounding DINO detects the panel rather than its individual buttons (Fig. 
+5
+b).
+
+We evaluate landmarks on the block task, where the cube top-face centers have matching simulator projections. In the other tasks, simulator link origins and requested surface landmarks refer to different physical points. Table 
+6
+ compares Astra’s direct estimates with tracks initialized by a human annotator.
+
+Table 6: 
+Localization of cube top-face centers. Eligible instances are visible landmarks in sampled frames; for CoTracker3 we exclude each point’s manual initialization frame. Mean error is computed only for returned points and averaged by execution.
+
+Method
+
+Returned
+
+Eligible
+
+Mean error (px)
+
+Astra
+
+453
+
+518
+
+1.75
+
+CoTracker3
+
+420
+
+500
+
+2.55
+
+A.3 
+Contact annotations
+
+Astra classifies contact correctly on 98.3% of frames for which it gives a yes/no answer. Across all eligible frames, including abstentions, it gives a correct answer on 70.7% (Table 
+7
+).
+
+Across the 1,129 sampled frames with simulator-recorded contact, Astra returns a 2D contact point in 113 (10.0% pooled across tasks; Fig. 
+5
+c). This denominator includes 73 frames in which all contacts project outside the image. We score each returned point against the nearest projected contact, using contacts on the named entity when one is specified. Four tasks have scorable coordinates; their mean error is 4.02 pixels.
+
+Table 7: 
+Task-averaged contact scores. The evaluation unit is a sampled frame for Astra and an object–execution pair for RoboInter.
+
+Measurement
+
+Result
+
+Astra: states and image points per frame
+
+Explicit yes/no answers / all frames
+
+72.0%
+
+Accuracy conditional on a yes/no answer
+
+98.3%
+
+Correct yes/no output / all eligible frames
+
+70.7%
+
+Position returned / frames with physical contact
+
+11.8%
+
+Nearest projected contact error, when scored
+
+4.02 px
+
+RoboInter: first event per object and execution
+
+Event returned / pairs with recorded contact
+
+96.9%
+
+Mean absolute offset from first recorded contact
+
+1.325 s
+
+RoboInter returns a contact event for 95 of the 99 object–execution pairs with recorded contact and one event for a pair without recorded contact. For matched pairs, the mean absolute offset is 1.325 seconds. The visual annotation marks contact during manipulation, whereas the simulator reference is the first physical contact associated with a camera frame and can precede manipulation.
+
+A.4 
+Human input and repeatability
+
+Across the 63 executions, the annotator supplied 99 landmark queries for CoTracker3 and 243 segmentation prompts for RoboInter, in addition to reviewing the RoboInter masks and marking contact frames.
+
+Within-annotator repeatability.
+
+The annotator repeated two predetermined executions per task (16 total) after at least 24 hours, without seeing the original annotations or simulator references.
+Of 24 landmarks identified in both rounds, 22 were selected in the same frame. For these 22 pairs, the mean click distance was 1.31 pixels, with equal weight given to the five contributing tasks. For 24 contact events matched by object and chronological order, the mean absolute difference between the two visual annotations was 0.052 seconds across eight tasks.
+
+A.5 
+Metric pose availability
+
+Our simulator records object poses in world coordinates for all 4,960 object observations in the evaluation, whereas none of the tested RGB pipelines outputs metric 6D poses. Figure 
+6
+ shows the coordinated motion of the gripper and bottle as they pass around the divider.
+
+Appendix B 
+Task Design Details
+
+Table 
+8
+ pairs each instruction with its terminal goal and execution constraints. For example, a bottle can finish in the requested holding pose even when the robot performs fewer than three shake cycles. Such a rollout can satisfy 
+ but fails 
+.
+
+Table 8
+: 
+Canonical instructions and episode-level success criteria. Task success (
+) requires the terminal goal; joint success (
+) also requires the conditions in the last column. Braces enclose instruction slots, with alternatives separated by slashes.
+
+Task
+
+Canonical instruction
+
+Terminal goal (
+)
+
+Additional conditions for 
+
+Place bottle
+
+Fig. 
+7
+
+Move {bottle_left/bottle_right} to {goal_left/goal_right} using the {left/right} arm.
+
+Target bottle center inside the requested goal; target bottle upright; active gripper open.
+
+Use the requested arm; keep the non-target bottle undisturbed and upright.
+
+Shake bottle
+
+Fig. 
+8
+
+Use the {left/right} arm to hold the bottle {horizontally/vertically} and shake it {left and right three times/with three small wrist rotations around the horizontal grasp axis}.
+
+Bottle contacted and held, with the gripper closed at completion; requested final holding pose.
+
+Hold and shake with the requested arm; maintain the requested holding pose during shaking; execute exactly three cycles of the requested motion: left–right shaking or small wrist rotations around the horizontal grasp axis.
+
+Orient fan
+
+Fig. 
+9
+
+Use the {left/right} arm to place the fan facing {front/front right/right/back right/back/back left/left/front left} on the pad.
+
+Fan at the pad with the requested orientation; fan upright; both grippers open.
+
+Use the requested, expert-resolved arm.
+
+Select switch
+
+Fig. 
+10
+
+Turn on the {left/middle/right} switch using the {left/right} arm.
+
+Target switch ON; released and stable.
+
+Operate the target switch using the requested arm while keeping the other switches undisturbed throughout execution.
+
+Transport via divider
+
+Fig. 
+11
+
+Move the beverage bottle to the target zone using the {left/right} arm, {passing around the left side of/passing around the right side of/passing directly over} the divider.
+
+Bottle at the target, upright and stable; both grippers open.
+
+Use the requested arm; measured bottle trajectory follows the requested route relative to the divider.
+
+Open laptop
+
+Fig. 
+12
+
+Open the laptop to {45/90/135} degrees by contacting the {left/center/right} region of the lid.
+
+Requested opening angle reached; lid stable; joint within legal limits.
+
+Contact the requested lid region.
+
+Sort blocks in order
+
+Fig. 
+13
+
+Sort the blocks in this order: {first}, then {second}, then {third}.
+
+All blocks in matching bins and on the table; both grippers open; final configuration stable.
+
+Measured placement order equals the requested color permutation.
+
+Press buttons in order
+
+Fig. 
+14
+
+Using the {left/right} arm, press the {left/middle/right}, {left/middle/right}, and {left/middle/right} buttons in that order.
+
+All three switches ON at completion.
+
+Measured activation sequence equals the requested button permutation; all presses use the requested arm.
+
+The block and button orders are permutations of the three colors (red, green, blue) and three positions (left, middle, right), respectively. Each fan scene has eight orientation branches; the expert determines the arm for each branch. Laptop and block-sorting instructions leave the arm unspecified. All switches start OFF in Select switch.
+
+Each row in the task figures shows selected stages of one expert execution in temporal order. Paired in-distribution (ID) examples start from the same initial scene. The bottle pair varies arm, object, and destination; the laptop pair varies contact region and angle.
+
+Figure 
+15
+ shows the corresponding clear and randomized views for a divider traversal.
+
+Figure 7
+: 
+Place bottle. From the same initial scene, Case A moves bottle_left to goal_right with the left arm; Case B moves bottle_right to goal_left with the right arm. Orange outlines mark the requested bottle; purple dashed outlines mark the requested goal.
+
+Figure 8
+: 
+Shake bottle. Same initial scene, left arm and horizontal holding pose; only lateral translation versus wrist rotation changes. Six extrema show three cycles. Case A uses a vertical cap reference; Case B uses a fixed horizontal reference at the initial Ready bottle height. Purple arrows are schematic; teal values are measured relative to Ready.
+
+Figure 9
+: 
+Orient fan. Object, target pad and facing annotations appear in separate panels. The calibrated table-frame insets show target and measured facing separately: +X right, +Y front and +Z up. Facing angles are measured from +X toward +Y.
+
+Figure 10
+: 
+Select switch. The left arm activates only the right switch. The other two switches remain OFF. Orange marks the requested switch; the teal ring marks its measured ON transition (normalized joint progress 
+ 0.95).
+
+Figure 11
+: 
+Transport via divider. The same scene, left arm and target are used for left-around, right-around and directly-over routes. Teal curves are recorded bottle-root trajectories projected into the camera.
+
+Figure 12
+: 
+Open laptop. Case A requests left contact and 90 degrees; Case B requests right contact and 135 degrees from the same initial scene. Orange circles locate the requested contact-region centers in the lid frame; teal labels show measured opening angles.
+
+Figure 13
+: 
+Sort blocks in order. Same initial state; only the requested sorting order changes. Both branches reach matching color bins. Numbered markers identify the successive placements; arrivals are located from recorded object positions.
+
+Figure 14
+: 
+Press buttons in order. Same initial state and left arm; only the requested activation order changes. Numbered teal markers identify successive ON transitions.
+
+Figure 15
+: 
+Paired expert demonstrations under clear (top) and randomized (bottom) appearance, with the same instruction, initial physical state, and frame indices.
+
+Appendix C 
+Benchmarking Protocol
+
+C.1 
+Dataset Collection and Expert Refinement
+
+A candidate scene is eligible when the expert satisfies 
+ on every instruction branch. Collection stops at the first failed branch and discards that scene. Table 
+1
+ of the main paper reports the fraction of candidate scenes retained for each task.
+
+Refinement uses the development scenes and acceptance criterion in Sec. 
+3.2
+ of the main paper. Iteration 0 denotes the initial program; each revision counts as one iteration. The collection rates use the final expert on separately sampled candidate scenes.
+
+C.2 
+Evaluation Conditions and Scoring
+
+Scene reconstruction and pairing.
+
+The test split contains 861 instruction branches across eight tasks, each evaluated under clear and randomized appearance. We reconstruct and verify the initial object and robot states. Sibling branches share the same physical scene and camera configuration; each clear/random pair also shares its instruction and action budget.
+
+Appearance randomization.
+
+We reuse RoboTwin’s visual domain-randomization routines 
+[
+6
+]
+ to vary table and wall textures, backgrounds, and the RGB colors of directional and point lights. Textures are sampled from RoboTwin’s unseen evaluation pool. Each surface has a 0.02 probability of using a clean background, and dynamic lighting is enabled with probability 0.02. A dedicated appearance random stream is independent of scene initialization. Sibling instruction branches share the initial appearance specification and seed; dynamic lighting subsequently follows the simulator’s rendering updates.
+
+The paired scenes have identical geometry, object and robot configurations, physical properties, and camera calibration. Neither condition adds clutter. Both use ray tracing with 32 samples per pixel, path depth 8, and OIDN denoising.
+
+Execution budgets.
+
+Both task-only and Steerable policies replan every 20 actions and run to the task-specific limit below. After the last action, the simulator advances 250 passive physics steps before final scoring.
+
+Actions
+
+Tasks
+
+400
+
+Place bottle, Orient fan, Select switch, Transport via divider
+
+600
+
+Press buttons in order
+
+700
+
+Shake bottle, Open laptop
+
+1,000
+
+Sort blocks in order
+
+Scoring and failures.
+
+Checkers evaluate simulator states and execution records; their outputs are unavailable to the policy. We report JR and TR per task and average the eight task rates equally. Only infrastructure interruptions trigger a restart, using the same scene and method configuration.
+
+Appendix D 
+Task-only Policy Training and Evaluation
+
+In the task-only conditions of Table 
+3
+ (
+c2c
+ and 
+c2r
+), both policies receive the original task instruction throughout training and evaluation.
+
+RoboTwin configuration and data.
+
+We retain each policy’s RoboTwin embodiment, camera ordering, native observation and action interfaces, and training objective. We initialize 
+ from the RoboTwin cotrained checkpoint at step 29,999 and OpenWAM from 
+OpenWAM-Alpha-Sim-RoboTwin-Full
+ at step 118,655. Each model is then trained for 30,000 updates on the 2,520 clear training episodes of RoboInF-4K. Sampling balances tasks by their available training-window counts. Normalization statistics are recomputed from the training split only, using the native quantile normalization for 
+ and min–max normalization for OpenWAM.
+
+Observation and action representations.
+
+ receives head and left/right wrist RGB images, each resized and padded to 
+, together with the 14D joint-and-gripper state. It learns joint deltas and absolute gripper targets, padded to the native 32D action space. OpenWAM assembles the three views into a 
+ canvas: the head view occupies the upper 
+ region, and two 
+ wrist views occupy the lower region. Its 20D dual-arm end-effector representation contains position, 6D rotation encoding, and gripper state, mapped to the native 80D action space. During inference, predicted 6D rotations are converted to the orientation format used by the controller. We retain the RoboTwin instruction template for OpenWAM.
+
+Table 9: 
+Task-only post-training settings. Both models use eight GPUs, global batch 8, seed 0, eight data workers, and 30,000 optimizer updates.
+
+Setting
+
+OpenWAM
+
+Action horizon
+
+50
+
+32
+
+Window start stride
+
+2
+
+1
+
+Video stride
+
+–
+
+4
+
+Peak learning rate
+
+Warmup updates
+
+1,000
+
+1,500
+
+Cosine decay endpoint
+
+20,000
+
+30,000
+
+Minimum learning rate
+
+AdamW 
+
+AdamW 
+
+Weight decay
+
+Gradient norm clip
+
+1.0
+
+1.0
+
+EMA decay
+
+0.99
+
+–
+
+Color jitter
+
+Enabled
+
+Disabled
+
+Checkpoint interval
+
+2,000
+
+2,000
+
+Optimization.
+
+We update all 
+ parameters with the action flow-matching loss. Its learning rate remains at the minimum after 20K updates. OpenWAM trains its video and action denoisers with equally weighted flow-matching losses and frozen text and visual encoders. Neither policy uses geometric cropping or rotation; OpenWAM also disables mirroring. Table 
+9
+ gives the optimizer and color augmentation settings.
+
+Inference and full-test evaluation.
+
+For each model, we use the final 30K checkpoint and training-split normalization in both appearance conditions (Appendix 
+C
+). 
+ predicts 50 actions in 10 sampling steps. OpenWAM predicts 32 actions in 10 synchronous denoising steps with guidance scale 1; approximate denoiser caching and video decoding are disabled. Each policy executes the first 20 actions before replanning with the original instruction.
+
+Appendix E 
+Steerable IR Annotation, Training, and Evaluation
+
+Following Steerable Policies 
+[
+7
+]
+, we relabel demonstrations with language commands for training and generate commands online during evaluation. Qwen3.8-Flash provides both the offline annotations and online commands. Figure 
+16
+ illustrates the procedure for 
+; OpenWAM uses the same annotation and steering procedure.
+
+Figure 16
+: 
+Steerable 
+ training and evaluation.
+ Offline, measured demonstration geometry supports semantic segmentation and diverse command annotation. A sampled command conditions the native action-learning objective. Online, Qwen generates commands from the original task, current head image, and episode history; optional localization supplies image coordinates. The trained policy executes 20 actions before receiving a new command.
+
+E.1 
+Offline Command Annotation
+
+Geometric evidence.
+
+For each of the 2,520 training demonstrations, we extract gripper aperture, the midpoint between each gripper’s fingertips, object poses, and visible object boxes from the simulator IR. Camera calibration maps each gripper midpoint into the head image; an occluded midpoint remains valid if its projection lies within the image. Object points are the centers of valid visible boxes. We express both kinds of point on a 0–255 grid with the origin at the upper left and mask invalid or out-of-view points.
+
+Semantic segmentation and candidate generation.
+
+Given the instruction, branch specification, and textual record of motion, aperture, object poses, and projected points, Qwen divides the demonstration into contiguous subtask intervals 
+ covering every action-bearing observation. For each interval, it generates atomic motion, pointing, gripper-trace, and hybrid commands that preserve the relevant branch requirements. The candidate set also includes the original task instruction and the subtask instruction. Offline generation uses thinking disabled and a 12,000-token output limit.
+
+Grounding and validation.
+
+Qwen selects the entity and frame for each spatial reference; the annotation program inserts the measured coordinates. For example, a command to approach the left edge of the laptop can identify the laptop by its visible-box center. References may use observations through the endpoint of the subtask. A trace contains two to five chronological points from one gripper, and each command contains at most five coordinate pairs. We check interval coverage, reference validity, coordinate bounds, and prompt length, repair or reject invalid annotations, and review a sample for semantic accuracy.
+
+E.2 
+Policy Training
+
+Text conditioning.
+
+For each training window, we sample a command uniformly from the individual candidates for the subtask containing its first frame. The command replaces the task prompt; the action horizon follows the usual window construction even when the window crosses a subtask boundary. Both policies use the observations, action targets, trainable parameters, and objectives described in Appendix 
+D
+. For 
+, the command and state are tokenized together.
+
+Training and inference share a model-specific coordinate renderer. For 
+, the 
+ head image is resized to 
+ and padded vertically by 28 pixels on each side. Thus, head-grid coordinates become 
+ and 
+ on the policy’s 0–255 canvas grid. For OpenWAM, the head view occupies the upper 
+ region of the 
+ three-view canvas, giving 
+ and 
+ on its 0–255 grid. Coordinates enter the policy as text tokens; the RGB inputs contain no overlays. Both policies use the augmentation settings in Appendix 
+D
+.
+
+Table 10: 
+Training settings for Steerable 
+. Normalization uses only the training split.
+
+Setting
+
+Value
+
+Initialization
+
+RoboTwin-pretrained 
+
+Training data
+
+2,520 episodes; task-balanced window sampling
+
+Training budget
+
+50,000 optimizer updates
+
+Hardware / batch
+
+8 A100 GPUs; global batch 8
+
+Seed / workers
+
+0 / 8
+
+Observations
+
+Head and two wrist RGB views; 14D joint state
+
+Action representation
+
+Joint deltas and absolute gripper targets; 14D padded to 32D
+
+Horizon / start stride
+
+50 / 2
+
+Optimizer
+
+AdamW; 
+; 
+
+Weight decay / clip
+
+ / gradient norm 1.0
+
+Learning rate
+
+1K warmup to 
+; cosine decay to 
+ at 20K; constant thereafter
+
+EMA / prompt limit
+
+0.99 / 200 tokens including state
+
+Training schedule.
+
+We train both Steerable policies for 50K updates on the clear training split, compared with 30K updates for the task-only policies. Each uses its task-only RoboTwin initialization and training-split normalization. Steerable 
+ retains the task-balanced window sampling and optimizer schedule throughout training (Table 
+10
+).
+
+E.3 
+Online Steering and Evaluation
+
+High-level controller.
+
+Every 20 actions, starting at step 0, Qwen receives the original instruction, the current head RGB image, and the episode history of head images and commands. It returns a semantic subtask, atomic motion, pointing command, or hybrid command on the final output line. The controller operates without parameter updates. Gripper-trace commands are used only during training.
+
+Localization and execution.
+
+For a spatial reference, a second Qwen call locates the target in the current head image. The system maps the result to the head grid and then to the policy canvas. If the locator returns null coordinates, the command retains its verbal descriptions without coordinates. Command generation enables thinking with a 4,096-token output limit; localization disables thinking and returns structured coordinates with a 256-token limit. A normally completed generation with reasoning but no final text is retried at most once.
+
+The policy receives the command, RGB observations, and proprioceptive state. It executes the first 20 predicted actions, or the remaining budget if shorter, before Qwen issues the next command.
+
+Test protocol.
+
+We evaluate each final 50K checkpoint on all 861 test episodes under each appearance condition using Appendix 
+C
+. In Table 
+3
+ of the main paper, both models achieve lower average joint success with online steering than with the original task instruction under both clear and randomized appearance.
+
+Appendix F 
+Implementation Details of Inference-only Agents
+
+We evaluate GPT-6 Astra and Qwen3.8-Flash on all 861 
+test_clear
+ episodes (Table 
+4
+ of the main paper). Each model selects skills through the same interface and uses the same fixed RGB-D executor, without parameter updates.
+
+F.1 
+Agent Interface
+
+At each decision stage, the model receives the task instruction, current RGB observations, robot state, and action history. It chooses a skill, specifies parameters such as the active arm, and identifies targets in the camera images. A bottle placement, for example, can require separate image points for the cap, the adjacent tabletop, and the destination surface.
+
+F.2 
+RGB-D Skill Execution
+
+Geometric grounding.
+
+The executor reads the depth at the selected pixel 
+ in its reference view. Given camera-axis depth 
+ and intrinsic matrix 
+, the target in camera coordinates is
+
+(7)
+
+Camera extrinsics transform this point into the robot execution frame.
+
+Skill execution and feedback.
+
+The motion planner uses the resulting targets and skill parameters to execute motion segments and gripper operations. The model then receives updated images and action history and can select another skill or stop. Both agents use the task and instruction checks in Appendix 
+B
+; the reported JR and TR weight the eight tasks equally.
+
+Data and initialization.
+
+Both models use the same 2,520 clear demonstrations, original task instructions, and head and wrist RGB views. LingBot-VA starts from 
+Robbyant/lingbot-va-posttrain-robotwin
+; zero-shot transfer uses this checkpoint and its official normalization statistics. GR00T starts from 
+nvidia/GR00T-N1.7-3B
+ through the custom-embodiment interface. Post-training normalization uses the RoboInF training split.
+
+Post-training.
+
+Both runs use eight A100-80GB GPUs, BF16, AdamW, and 30K updates. LingBot-VA uses a global batch of eight complete episodes, learning rate 
+ with ten warmup steps followed by constant learning rate, and weight decay 0.1. Its transformer learns joint video/action flow matching from pre-encoded latents and text features. GR00T uses a global batch of 64 windows of 40 actions, peak learning rate 
+, 1,500 warmup steps, cosine decay, and weight decay 
+. The vision-language backbone is frozen while projection, attention, and action modules are trained. Sampling units differ across models. We evaluate final 30K checkpoints; training seeds are 0 and 42, respectively.
+
+Closed-loop inference.
+
+LingBot-VA preserves temporal history and KV cache, generating 16 actions initially and 32 thereafter. Real images arrive every four executed actions while cached actions are consumed. Video/action denoising uses 25/50 steps with guidance scales 5/1. Its adapter outputs absolute end-effector poses and gripper commands. GR00T receives current images and 14D joint-and-gripper state, predicts 40 actions with four denoising steps, and executes 20 before replanning. Relative arm targets and absolute gripper targets are decoded into absolute joint-and-gripper commands.
+
+Evaluation protocol.
+
+We use the same test split and paired appearance conditions as the main paper, evaluating 861 episodes per condition. We report JR/TR with equal weight assigned to each of the eight tasks.
+
+Results.
+
+Both systems exhibit gaps between task and joint success. For Sort blocks in order, LingBot-VA achieves JR/TR of 34.3/67.6% under clear appearance and 15.7/73.1% under randomized appearance. Here, the additional check measures placement order, identifying successful final arrangements that violate the requested sequence.
+
