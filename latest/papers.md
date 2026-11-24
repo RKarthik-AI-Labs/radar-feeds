@@ -1,7 +1,7 @@
-# Paper candidates — 2026-11-23 (IST)
+# Paper candidates — 2026-11-24 (IST)
 
-Generated 2026-11-23 09:40 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
-Totals: 14 new topic matches · 6 other new cs.IR · 48 seen in earlier runs.
+Generated 2026-11-24 01:11 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Totals: 14 new topic matches · 6 other new cs.IR · 32 seen in earlier runs.
 Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
 
 ## New papers matching your topics (14), highest score first
@@ -149,25 +149,15 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Decision Columns as an Index: Interpretable Embeddings for Explainable Entity Matching and Search — https://arxiv.org/abs/2611.27910
 - DiTraR: Diverse Scorers and Transcript-Guided Re-ranking for Video Corpus Moment Retrieval — https://arxiv.org/abs/2611.27931
 
-## Already listed on an earlier day, still inside the look-back window (48)
-- FinVeriQA: Financial Research Agents for Question Answering: Routing, Retrieval, MCP Tool Use, and Provenance-Aware Evidence Verification — https://arxiv.org/abs/2611.25071 (score 14)
+## Already listed on an earlier day, still inside the look-back window (32)
 - GEOHunter: Mapping a Generative Engine Optimization Network in the Wild — https://arxiv.org/abs/2611.26564 (score 14)
 - DriftGuard: Online Memory-Drift Detection via Causal Attribution for LLM Agents — https://arxiv.org/abs/2611.25583 (score 13)
-- X-split Argus: Learning Reusable History Tokens for Efficient CTR Prediction — https://arxiv.org/abs/2611.24283 (score 10)
 - Seer: Guiding Small Deep-Research Agents with Shared Decision Models — https://arxiv.org/abs/2611.26423 (score 10)
 - MambaLIFT: Reference-Based Mechanism-Aware Attribution for VMamba — https://arxiv.org/abs/2611.25644 (score 9)
 - LINEAGE: A Benchmark for Empirical Lineage Retrieval in AI Scientific Literature — https://arxiv.org/abs/2611.25845 (score 9)
 - RouterWeave: A Unified Observation Layer for Cross-Platform Activity Analysis via Home Routers — https://arxiv.org/abs/2611.26134 (score 8)
 - Visual Attribution Limits and Graded Provenance Auditing in Commercial Video-Generation APIs — https://arxiv.org/abs/2611.26508 (score 8)
-- User Perceptions of Deceptive In-Vehicle Infotainment User Interfaces — https://arxiv.org/abs/2611.25195 (score 7)
 - Replication of Agentic Security Events: Audit and Investigation (ROGUE-AI) — https://arxiv.org/abs/2611.26553 (score 7)
-- What Survives the Shift from Text to Pixels? Conditional Protection against Prompt Injection in Image-Rendered Documents — https://arxiv.org/abs/2611.24231 (score 6)
-- AutoPI: Taxonomy-Guided Adaptive Red Teaming for Prompt Injection in LLM Agents — https://arxiv.org/abs/2611.24313 (score 6)
-- PIPETTE: Prompt Injection Purple-Teaming for Robust LLM Agents — https://arxiv.org/abs/2611.24362 (score 6)
-- SCR: Detecting Backdoor-Poisoned Samples through Clean-Reference Residuals — https://arxiv.org/abs/2611.24558 (score 6)
-- Gradient-Based Defensive Poisoning Against System Identification Attacks on Cyber-Physical Systems — https://arxiv.org/abs/2611.24662 (score 6)
-- On the Impact of Feature Reduction Techniques on Adversarial Attacks — https://arxiv.org/abs/2611.25004 (score 6)
-- MAWAM: A Multi-Agent World-Action Model for Coordinated Manipulation — https://arxiv.org/abs/2611.25105 (score 6)
 - Demonstration-Free Skill Composition for Navigation and Manipulation — https://arxiv.org/abs/2611.25462 (score 6)
 - Passing NPCR Without Diffusion: Exact Signatures, a Detection Benchmark and an Audit of Published Image Ciphers — https://arxiv.org/abs/2611.25561 (score 6)
 - Diagnosis is not a policy: a state-transition audit of caoability-conditioned test-time inference — https://arxiv.org/abs/2611.25566 (score 6)
@@ -177,8 +167,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - When Safety Rationales Hallucinate: Diagnosing and Grounding Multimodal Safety Guards — https://arxiv.org/abs/2611.25793 (score 6)
 - Mind2Act World: A Diagnostic Benchmark for Embodied Mind, Physical Action, and Mind-Action Composition in Robotic Manipulation — https://arxiv.org/abs/2611.26444 (score 6)
 - PGX: Physically Grounded Execution for Long-Horizon Humanoid Loco-Manipulation — https://arxiv.org/abs/2611.26596 (score 6)
-- Retrieving Patristic References and Modelling Topics in Bullinger's Reformation Correspondence — https://arxiv.org/abs/2611.25247 (score 4)
 - VideoTrail: Interactive Video Foraging Through Hierarchical Visualization — https://arxiv.org/abs/2611.25377 (score 3)
-- LSP-RAG: Latent Scoring Perspectives for Knowledge Graph Retrieval-Augmented Generation — https://arxiv.org/abs/2611.25229 (score 2)
 - AutoRAGBench: A Benchmark for LLM Agents Automating RAG System Development — https://arxiv.org/abs/2611.25582 (score 2)
 - Democratizing Cross-Project Knowledge for Transforming Water Governance and Climate Resilience: an Agentic AI Ecosystem — https://arxiv.org/abs/2611.26398 (score 1)
