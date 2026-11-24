@@ -1,0 +1,3775 @@
+PROSPER: LLMs as Sparse Retrievers for First-Stage Product Search
+https://arxiv.org/abs/2611.28645
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+PROSPER: LLMs as Sparse Retrievers
+
+for First-Stage Product Search
+
+Conference: 
+Proceedings of the Twentieth ACM International Conference on Web Search and Data Mining; February 15–19, 2027; Hong Kong, Hong Kong
+Proceedings of the Twentieth ACM International Conference on Web Search and Data Mining (WSDM ’27), February 15–19, 2027, Hong Kong, Hong Kong
+DOI: 
+10.1145/3862322.3863468
+ISBN: 
+979-8-4007-3117-4/2027/02
+CCS: 
+Information systems Retrieval models and ranking
+
+Hongru Song
+
+Affiliation: 
+State Key Laboratory of AI Safety, Institute of Computing Technology, Chinese Academy of Sciences
+, 
+University of Chinese Academy of Sciences
+, 
+Beijing
+, 
+China
+
+, 
+
+Yu-An Liu
+
+Affiliation: 
+State Key Laboratory of AI Safety, Institute of Computing Technology, Chinese Academy of Sciences
+, 
+University of Chinese Academy of Sciences
+, 
+Beijing
+, 
+China
+
+email: 
+songhongru24s, liuyuan21b@ict.ac.cn
+
+, 
+
+Ruqing Zhang
+
+Note: 
+Ruqing Zhang is the corresponding author.
+
+Affiliation: 
+State Key Laboratory of AI Safety, Institute of Computing Technology, Chinese Academy of Sciences
+, 
+University of Chinese Academy of Sciences
+, 
+Beijing
+, 
+China
+
+, 
+
+Jiafeng Guo
+
+Affiliation: 
+State Key Laboratory of AI Safety, Institute of Computing Technology, Chinese Academy of Sciences
+, 
+University of Chinese Academy of Sciences
+, 
+Beijing
+, 
+China
+
+email: 
+zhangruqing,guojiafeng@ict.ac.cn
+
+, 
+
+Maarten de Rijke
+
+Affiliation: 
+University of Amsterdam
+, 
+Amsterdam
+, 
+The Netherlands
+
+email: 
+m.derijke@uva.nl
+
+, 
+
+Sen Li
+
+Affiliation: 
+Taobao & Tmall Group of Alibaba
+, 
+Hangzhou
+, 
+China
+
+, 
+
+Wenjun Peng
+
+Affiliation: 
+Taobao & Tmall Group of Alibaba
+, 
+Hangzhou
+, 
+China
+
+email: 
+lisen.lisen@alibaba-inc.com
+
+email: 
+pengwj@mail.ustc.edu.cn
+
+, 
+
+Fuyu Lv
+
+Affiliation: 
+Taobao & Tmall Group of Alibaba
+, 
+Hangzhou
+, 
+China
+
+email: 
+fuyu.lfy@alibaba-inc.com
+
+ and 
+
+Xueqi Cheng
+
+Affiliation: 
+State Key Laboratory of AI Safety, Institute of Computing Technology, Chinese Academy of Sciences
+, 
+University of Chinese Academy of Sciences
+, 
+Beijing
+, 
+China
+
+email: 
+cxq@ict.ac.cn
+
+© cc
+
+Abstract.
+
+Product search is a crucial component of large-scale e-commerce platforms, where first-stage retrieval should achieve high recall while ensuring efficient online deployment.
+Sparse retrieval remains attractive for this setting due to its interpretability and deployability, yet it suffers from severe vocabulary mismatch challenges, especially for short queries and product titles.
+Large language models (LLMs) offer strong semantic capabilities, but directly applying them to sparse retrieval in product search introduces new challenges:
+
+(i)
+ 
+semantic expansion may distort critical literal signals such as brand names and model identifiers; and
+
+(ii)
+ 
+learning meaningful sparse representations is difficult in the high-dimensional vocabulary space induced by LLMs.
+
+To address these challenges, we propose PROSPER, a framework that uses LLMs as sparse retrievers for product search while explicitly preserving lexical fidelity.
+PROSPER combines
+
+(i)
+ 
+a literal residual network that alleviates lexical expansion hallucination by reinforcing underweighted literal terms through a residual compensation mechanism; and
+
+(ii)
+ 
+a lexical focusing window that uses top-
+ selection for rapid early sparsification and effective training initialization.
+
+Extensive offline evaluations and large-scale online A/B tests demonstrate that PROSPER consistently improves over existing sparse retrievers, and provides revenue gains for industrial hybrid retrieval systems.
+
+Keywords: 
+Sparse retrieval, Large language models, Product search
+
+†
+†
+cc-license: 
+by
+
+1. 
+Introduction
+
+E-commerce product search connects users with billion-scale product catalogs while processing hundreds of millions of daily queries under strict latency and memory constraints.
+Industrial retrieval pipelines typically follow the “index-retrieve-then-rank” 
+(
+Li et al., 2024
+)
+ paradigm, where first-stage retrieval plays a key role by establishing the upper bound of achievable recall, i.e., relevant products missed at this stage cannot be recovered downstream.
+
+Dense retrieval: effectiveness at the cost of deployability.
+ Dense retrieval has emerged as the dominant paradigm for first-stage retrieval, using neural encoders to map queries and documents into low-dimensional semantic spaces 
+(
+Guo et al., 2022
+; 
+Karpukhin et al., 2020
+; 
+Khattab and Zaharia, 2020
+)
+.
+Despite their effectiveness, dense representations are difficult to interpret, hindering failure diagnosis in commercial systems. Dense indices also incur substantial storage and serving overheads and can be several times larger than the original corpus 
+(
+Ma et al., 2024
+; 
+Xu et al., 2025
+)
+. These limitations motivate retrieval methods that better balance effectiveness, efficiency, and interpretability.
+
+Sparse retrieval: efficiency and interpretability, but limited semantics.
+ Sparse retrieval represents queries and documents as high-dimensional but sparse vectors aligned with lexical vocabularies, naturally supporting efficient inverted indexing and transparent matching 
+(
+Spärck Jones, 1972
+; 
+Robertson and Zaragoza, 2009
+; 
+Formal et al., 2021b
+)
+.
+They therefore remain a core component of industrial search systems. Learned sparse retrievers, most notably SPLADE 
+(
+Zamani et al., 2018
+; 
+Dai and Callan, 2020b
+; 
+Formal et al., 2021b
+)
+, jointly learn lexical expansion and term weighting, improving over classical statistical approaches. However, their masked language model backbones still struggle with vocabulary mismatch in product search, where short queries and titles are dominated by literal terms such as brands and model identifiers, leaving a persistent gap compared to dense retrievers.
+
+LLMs as sparse retrievers: opportunities and challenges.
+ Large language models (LLMs) offer stronger semantic representations and broader world knowledge than prior encoder architectures 
+(
+Qwen et al., 2025
+; 
+Tao et al., 2024
+; 
+Minaee et al., 2025
+)
+, making them promising backbones for combining semantic understanding with efficient and interpretable sparse representations.
+However, our preliminary analysis (Section 
+2.2
+) reveals that naively replacing BERT with an LLM in existing sparse frameworks is ineffective and even detrimental in product search.
+Two fundamental challenges arise:
+
+(i)
+ 
+Semantic expansion driven by LLMs often distorts critical lexical signals: expanded terms may dominate the sparse representation, while exact-match terms, such as brands or model numbers that are essential for user intent, are underweighted.
+
+(ii)
+ 
+The vastly enlarged vocabulary of LLMs makes training unstable and inefficient. Learning sparse representations for short queries and titles in a very high-dimensional space without guidance leads to poor initialization and slow convergence.
+
+PROSPER: Literal-preserving LLM-based sparse retrieval.
+
+To address these challenges, we propose PROSPER, a framework for PROduct search using LLMs as SParsE Retrievers while explicitly preserving lexical fidelity.
+PROSPER contributes at both the architectural and training levels:
+
+(i)
+ 
+We design a 
+literal residual network
+ (LRN) that employs a compensatory weighting mechanism to amplify the importance of literal terms in user queries and items. This effectively mitigates irrelevant term generation (which we term 
+lexical expansion hallucination
+) by anchoring the model’s attention to user-critical tokens, such as brand and model names.
+
+(ii)
+ 
+We apply top-
+ sparsification 
+(
+Yang et al., 2021
+; 
+Xie et al., 2026
+)
+ through a 
+lexical focusing window
+ (LFW) and find it effective for product search, improving retrieval and accelerating early sparsification. As representations become sparse, the window becomes inactive and FLOPS regularization continues to refine term weights.
+
+Overall, we present an empirical study of the challenges and practical solutions for LLM-based sparse retrieval in product search.
+
+Experimental findings.
+
+We evaluate PROSPER on both the Multi-CPR E-commerce dataset and a real-world dataset sampled from search engine logs.
+On Multi-CPR E-commerce, PROSPER improves Hit@1000 by 10.2, 4.3, and 1.5 percentage points over BM25
+(
+Robertson and Zaragoza, 2009
+)
+, SPLADE-v2 
+(
+Formal et al., 2021a
+)
+, and an LLM-based sparse retrieval baseline 
+(
+Xu et al., 2025
+)
+, respectively.
+Moreover, large-scale online A/B tests demonstrate consistent gains in key business metrics. In direct-guided settings, PROSPER improves net GMV by 1.60%, net transactions by 0.31%, and net UV by 0.24%, further validating the practical value of PROSPER in real-world industrial search systems.
+
+2. 
+Preliminaries
+
+We recall SPLADE, the foundation of our method, and then discuss the challenges of applying LLM-based sparse retrieval to product search.
+
+2.1. 
+SPLADE
+
+Model architecture.
+ Given an input query or document sequence (after WordPiece tokenization) 
+ and its BERT embeddings 
+, SPLADE uses the masked language modeling head to project each hidden state to a vocabulary-sized vector 
+. Its 
+-th dimension is the logit measuring the importance of vocabulary token 
+ to input token 
+. ReLU activation, log-saturation, and max-pooling across token positions produce the final representation:
+
+(1)
+
+where 
+ represents the importance of vocabulary token 
+ for input token 
+, and 
+ is the final weight for term 
+ in the representation.
+
+Model training.
+ SPLADE combines ranking and regularization losses. Its ranking loss uses in-batch negatives 
+(
+Lin et al., 2021
+; 
+Qu et al., 2021
+)
+ and hard negatives 
+(
+Xiong et al., 2020
+)
+. Given a query 
+, positive document 
+, hard negative 
+ (e.g., sampled by BM25), and in-batch negatives 
+, the InfoNCE loss 
+(
+van den Oord et al., 2019
+)
+ is:
+
+(2)
+
+where 
+ denotes the ranking score obtained via dot product between query and document representations.
+
+To encourage sparsity, SPLADE uses FLOPS regularization 
+(
+Paria et al., 2020
+)
+, a smooth approximation of scoring operations tied to retrieval latency. For a batch of 
+ documents, the average activation of token 
+ is estimated by 
+, yielding:
+
+(3)
+
+Unlike the 
+ regularization used in SNRM 
+(
+Zamani et al., 2018
+)
+, it penalizes high average term weights to promote a balanced index distribution. The overall objective is:
+
+(4)
+
+where 
+ and 
+ control query and document sparsity, respectively. Later SPLADE variants use techniques such as knowledge distillation 
+(
+Formal et al., 2022
+; 
+Formal et al., 2021a
+)
+; we use standard contrastive learning to isolate our architectural and sparsification mechanisms, which are orthogonal to such enhancements.
+
+2.2. 
+Exploration and challenges
+
+While SPLADE 
+(
+Formal et al., 2021b
+; 
+Formal et al., 2021a
+)
+ has demonstrated a performance comparable to dense retrieval on several benchmarks, especially in passage retrieval, its practical effectiveness in product search scenarios remains underexplored.
+
+Difference between passage retrieval and product retrieval.
+
+Passages are typically 
+content-rich
+, coherent natural language with many noisy terms, requiring models to identify important terms while filtering less informative content. Product search is more 
+keyword-centric
+. User queries are often non-fluent keyword aggregations that express purchase intent, while product titles stack attributes, brands, model identifiers, and other salient terms to maximize coverage of possible needs. Consequently, most query terms carry important constraints, and titles must support expansion without diluting these literal signals.
+
+Implementing SPLADE in product search.
+ On the Multi-CPR E-commerce test set 
+(
+Long et al., 2022
+)
+, our BERT-based SPLADE achieves 89.6% Hit@1000, below DPR’s 92.1% and the 96%+ reported on MS MARCO passage ranking 
+(
+Bajaj et al., 2018
+)
+.
+
+Enhancing SPLADE with LLMs for product search.
+
+Recent work has begun to adapt LLMs for sparse retrieval. 
+Zeng et al. (2025)
+ study the scaling behavior of LLM-based sparse retrievers, while CSPLADE 
+(
+Xu et al., 2025
+)
+, drawing on NV-Embed 
+(
+Lee et al., 2025
+)
+ and Echo Embeddings 
+(
+Springer et al., 2024
+)
+, addresses the information-flow limitations of unidirectional attention in LLM-based SPLADE. Following this line of work, we replace BERT with Qwen2.5-3B 
+(
+Qwen et al., 2025
+)
+, increasing Hit@1000 to 91.3% on Multi-CPR E-commerce 
+(
+Long et al., 2022
+)
+. Adapting existing strategies for improving LLM representation quality 
+(
+BehnamGhader et al., 2024
+; 
+Springer et al., 2024
+; 
+Xu et al., 2025
+)
+ further raises Hit@1000 to 92.4%, but target-product ranking remains suboptimal.
+
+Table 1
+. 
+Top-weighted terms from Qwen2.5-based SPLADE and PROSPER, in descending weight. Literal terms are black, useful expansions green italic, and noisy expansions red underlined.
+
+Case study and challenges.
+
+Case analyses reveal severe 
+lexical expansion hallucinations
+ (see Table 
+1
+) in Qwen-based SPLADE:
+
+(i)
+ 
+literal terms such as brands and product names remain underweighted
+(e.g., “爱立舍机油滤芯”, where “Elysee” was overlooked); and
+
+(ii)
+ 
+irrelevant expansions appear in ambiguous or rare queries
+(e.g., “老捷豹副水箱”, where the model expanded irrelevant animal-related terms).
+
+In product search, both the target product category and its modifiers are essential for capturing the user’s actual intent.
+If these literal terms are underweighted, the target product can be easily overwhelmed by a large number of superficially relevant products from the same category, leading the retriever to return items that appear semantically related but fail to match the user’s specific need.
+
+Moreover, LLM-based sparse retrieval also faces a training difficulty caused by the extremely large vocabulary space.
+LLMs typically have very large vocabularies; for example, the Qwen2.5 model 
+(
+Qwen et al., 2025
+)
+ contains over 150,000 dimensions, which is excessive compared with the length of queries (average 6 terms in our experimental datasets) and items (average 25 terms in our experimental datasets).
+Without proper constraints, sparsifying such high-dimensional representations leads to unstable early training and prevents the model from learning meaningful representations.
+
+(a)
+ 
+Model architecture
+
+(b)
+ 
+Model training
+
+Figure 1
+. 
+Overview of the proposed PROSPER framework.
+(a) The model architecture, detailing the query/item encoding process and the core LRN module that calibrates literal term weights.
+(b) The model training, illustrating the LFW, the asymmetric similarity computation, and the final loss function combining ranking loss with FLOPS regularization.
+
+3. 
+Method
+
+As illustrated in Figure 
+1
+, PROSPER combines the literal residual network to alleviate lexical expansion hallucination with the lexical focusing window for targeted training initialization.
+
+3.1. 
+Model architecture
+
+LLM-based representation.
+
+Building upon SPLADE 
+(
+Formal et al., 2021a
+)
+, our approach uses an LLM backbone to improve semantic understanding. For a tokenized query or item 
+, we extract its last-layer hidden states 
+. The language modeling head projects each hidden state to vocabulary-sized logits 
+, which, together with 
+, are input to the literal residual network.
+
+Literal residual network (LRN).
+
+The core idea of LRN is to guide the LLM to first focus on literal terms before expanding to related terms, assigning sufficient weights to critical terms such as product brands and product models that represent specific user needs.
+
+For the hidden states 
+ and logits 
+ extracted from the LLM, we first apply ReLU activation and log-saturation transformation:
+
+(5)
+
+where 
+ is the hidden state vector for the 
+-th input token, and 
+ represents the importance of the 
+-th vocabulary term for the 
+-th input token.
+
+While SPLADE uses max-pooling 
+(
+Formal et al., 2021a
+)
+, causal LLMs aggregate the preceding context at the final token. We therefore adopt last-pooling 
+(
+Tao et al., 2024
+; 
+BehnamGhader et al., 2024
+)
+, taking the representation of the last content token before the appended end-of-sequence token. The basic representation 
+ is derived by last-pooling the transformed logits 
+:
+
+(6)
+
+where 
+ is the weight for the 
+-th term in the vocabulary.
+
+Meanwhile, we obtain a pooled hidden state representation by last-pooling the transformed hidden states 
+:
+
+(7)
+
+A fully connected layer projects 
+ to the vocabulary-sized enhancement vector 
+:
+
+(8)
+
+The projection has no output activation. We combine the basic representation 
+ and the learned vector 
+ to obtain the final representation 
+:
+
+(9)
+
+where 
+ is 1 at literal-term positions in 
+ and 0 elsewhere, 
+ denotes element-wise multiplication, and 
+ is the largest weight in the basic representation. The learned residual 
+ adjusts each literal term, while expansion weights remain unchanged. We use both 
+ and 
+ to train the model.
+
+Discussion.
+
+LRN acts as a compensatory weighting mechanism. The pretrained LM head produces 
+ for semantic expansion, while a trainable projection produces 
+ for literal-term calibration. The maximum 
+ provides an input-dependent reference for the strongest activation that can overshadow a weak literal term. Subtracting 
+ from this reference gives the learned compensation for literal term 
+: a lower 
+ yields more compensation, and a higher value yields less. Adding this residual to 
+ retains its base contribution while allowing term-specific adjustment. Retrieval supervision learns how much compensation each literal term needs.
+
+We also explored two alternative compensation strategies.
+
+(i)
+ 
+Self-compensation without 
+, which directly compensates literal terms using the basic representation:
+
+This variant, denoted as 
+, sets every literal weight to 
+, removing their weight differences;
+
+(ii)
+ 
+Direct addition without complementary compensation
+, which directly adds the enhancement vector:
+
+This variant, denoted as 
+, learns the adjustment entirely through 
+. LRN supplies the input-dependent reference 
+ explicitly, helping weak literals compete with strong expansions across inputs with different activation scales.
+
+In the LRN ablation study (Section 
+4.2
+), both alternatives perform worse than the complementary residual design on our benchmark.
+
+3.2. 
+Model training
+
+Coarse-to-fine sparsification.
+
+FLOPS regularization controls sparsity softly. Our coarse-to-fine strategy enforces rapid sparsification in early training to establish a stable initialization, then refines term weights to balance retrieval quality and sparsity.
+
+Lexical focusing window.
+
+Top-
+ sparsification has been studied in SPLADE-mask 
+(
+Yang et al., 2021
+)
+ and AdaSparse 
+(
+Xie et al., 2026
+)
+. We adopt it as a 
+lexical focusing window
+ (LFW) for product search, where it improves retrieval and accelerates sparsification. LFW applies a conditional top-
+ pooling operator 
+ that activates only when the number of non-zero dimensions in a representation 
+ exceeds the window size 
+:
+
+(10)
+
+where 
+ is the 
+ norm, counting the non-zero elements in the vector, and the standard 
+TopK
+ function retains the 
+ largest weights while setting others to zero. Thus, LFW primarily affects the early, dense stages and phases out as representations become naturally sparse.
+
+LFW focuses early ranking supervision on the most important terms, enabling rapid sparsification. As fewer dimensions remain active, its role diminishes. FLOPS regularization operates throughout training and continues to refine the sparse weights.
+
+Training objective.
+
+Our final objective follows SPLADE’s contrastive ranking loss. Unlike its standard dot product, we apply 
+ normalization only to the query representation, which improves sparsification and retrieval performance in our experiments (Section 
+4.2
+).
+The similarity score is computed using the LFW operator:
+
+(11)
+
+where 
+ and 
+ are the query and item representations from the LRN output, 
+ and 
+ are their respective LFW sizes, and 
+ is the 
+ norm.
+Dynamic window shrinking did not improve over the best fixed setting in our experiments, suggesting that LFW’s main benefit lies in providing a robust and efficient training start.
+
+We use InfoNCE 
+(
+van den Oord et al., 2019
+)
+ with in-batch negatives 
+(
+Lin et al., 2021
+)
+. For query 
+, positive item 
+, and negatives 
+ from other queries in the batch, the ranking loss is:
+
+(12)
+
+The overall training objective combines this ranking loss with the FLOPS regularization terms 
+(
+Paria et al., 2020
+)
+ for both queries and items:
+
+(13)
+
+where 
+ and 
+ are hyperparameters that balance the regularization of FLOPS. Here, FLOPS regularization is applied to the basic representations 
+ and 
+.
+
+4. 
+Offline Experiments
+
+In this section, we conduct a series of offline experiments in a product search scenario to comprehensively evaluate PROSPER.
+
+4.1. 
+Experimental setup
+
+Datasets.
+ We conduct experiments on two datasets that represent public benchmarks and real-world industrial settings:
+
+(i)
+ 
+Multi-CPR e-commerce
+(
+Long et al., 2022
+)
+. Multi-CPR is a publicly available, multi-domain Chinese passage retrieval dataset. For our experiments, we use its e-commerce subset, which is sourced from real-world search scenarios. This subset contains a corpus of over 1 million passages, from which we use a training set of 100,000 query-passage pairs and a test set of 1,000 queries.
+
+(ii)
+ 
+Real-world e-commerce
+. To further validate our approach in an industrial setting, we construct a new dataset by sampling approximately 1.07 million query-item pairs from the real user click logs of a real-world e-commerce platform. The user clicks serve as the ground truth for relevance. A single query in this dataset may correspond to 1 to 10 clicked items. We create a training set of 270,000 query-item pairs and a test set of 1,000 queries along with their associated clicked items.
+
+The query and item length statistics after tokenization by the Qwen2.5 tokenizer are provided in Table 
+2
+.
+
+Table 2
+. 
+Full token length statistics of the datasets.
+
+Dataset
+
+Query length
+
+Item length
+
+Min
+
+Avg
+
+Max
+
+Min
+
+Avg
+
+Max
+
+Multi-CPR E-commerce
+
+1
+
+5
+
+23
+
+2
+
+25
+
+92
+
+Real-world E-commerce
+
+2
+
+6
+
+25
+
+2
+
+25
+
+74
+
+Baselines.
+
+For dense baselines, we compare against:
+
+(i)
+ 
+DPR
+(
+Karpukhin et al., 2020
+)
+, classic dense retrieval baseline.
+
+(ii)
+ 
+BGE Series
+(
+Xiao et al., 2023
+)
+, a series of powerful dense text embedding models, and we use 
+bge-large-zh-v1.5
+ and 
+bge-base-zh-v1.5
+ for comparison.
+
+For sparse baselines, we use:
+
+(i)
+ 
+BM25
+(
+Robertson and Zaragoza, 2009
+)
+, the classic sparse method. We compare with 
+BM25
+BERT
+ and 
+BM25
+Qwen
+, which use tokenizers of BERT-base-chinese and Qwen2.5-3B, respectively.
+
+(ii)
+ 
+Doc2Query
+(
+Nogueira et al., 2019
+)
+, which alleviates vocabulary mismatch by using a seq2seq model to generate potential queries for a document.
+
+(iii)
+ 
+DeepCT
+(
+Dai and Callan, 2019a
+; 
+Dai and Callan, 2020b
+)
+, which uses BERT to evaluate literal term importance.
+
+(iv)
+ 
+SPLADE
+(
+Formal et al., 2021b
+; 
+Formal et al., 2021a
+)
+, our main baseline. We use both 
+SPLADE
+ 
+(
+Formal et al., 2021b
+)
+ and 
+SPLADE-v2
+ 
+(
+Formal et al., 2021a
+)
+ and adjust their training process for a fair comparison.
+
+(v)
+ 
+We implement 
+SP
+Qwen-backbone
+ 
+(
+Zeng et al., 2025
+)
+ by replacing the BERT backbone in SPLADE with Qwen2.5-3B to examine whether simply scaling sparse retrieval to an LLM backbone is sufficient for product search. Following recent work on causal LLM-based sparse retrieval, particularly
+CSPLADE 
+(
+Xu et al., 2025
+)
+, and representative LLM embedding
+methods for improving representation quality, including Echo Embeddings
+
+(
+Springer et al., 2024
+)
+, LLM2Vec
+
+(
+BehnamGhader et al., 2024
+)
+, and NV-Embed
+
+(
+Lee et al., 2025
+)
+, we construct two strengthened
+Qwen-based sparse baselines. 
+SP
+Qwen-echoembedding
+
+adapts the input-repetition strategy of Echo Embeddings, while
+
+SP
+Qwen-bidattention
+ enables bidirectional attention.
+
+Model variants.
+
+To validate the effectiveness of our proposed components, we create several variants of PROSPER.
+
+•
+
+To analyze the core model design, the variants are:
+
+(i)
+ 
+PROSPER
+BERT
+, which replaces the Qwen2.5-3B 
+(
+Qwen et al., 2025
+)
+ backbone with BERT-base-chinese 
+(
+Devlin et al., 2019
+)
+;
+
+(ii)
+ 
+PROSPER
+max-pooling
+, which uses the max-pooling strategy from SPLADE;
+
+(iii)
+ 
+PROSPER
+bid-attention
+, which uses bidirectional instead of causal attention 
+(
+BehnamGhader et al., 2024
+; 
+Xu et al., 2025
+)
+;
+and 
+
+(iv)
+ 
+PROSPER
+echo-emb
+, which duplicates the input sequence to simulate a bidirectional receptive field 
+(
+Springer et al., 2024
+; 
+Xu et al., 2025
+; 
+Lee et al., 2025
+)
+.
+
+•
+
+To investigate the role of the LRN, the variants are:
+
+(i)
+ 
+PROSPER
+w/o-LRN
+, which removes the LRN module entirely;
+
+(ii)
+ 
+PROSPER
+LRN-selfcomp
+, which does not use the learned enhancement vector 
+ and directly compensates literal terms based on the basic representation
+(
+);
+
+(iii)
+ 
+PROSPER
+LRN-add
+, which replaces the complementary residual with direct addition
+(
+);
+and 
+
+(iv)
+ 
+variants that apply LRN only to queries (
+PROSPER
+LRN-q
+) or items (
+PROSPER
+LRN-d
+).
+
+•
+
+To evaluate the LFW, the variants are:
+
+(i)
+ 
+PROSPER
+w/o-LFW
+, which removes LFW;
+
+(ii)
+ 
+PROSPER
+LFW-dynamic
+, which uses a dynamic window size;
+and 
+
+(iii)
+ 
+using various fixed window sizes for query (
+) and item (
+).
+
+•
+
+To study the literal and expansion terms, we test:
+
+(i)
+ 
+PROSPER
+literal
+and 
+PROSPER
+expansion
+, which are trained and evaluated using only literal or expansion terms, respectively;
+and 
+
+(ii)
+ 
+PROSPER
+mask-lit
+and 
+PROSPER
+mask-expan
+, where the model is trained normally, but either literal or expansion terms are masked out during match and evaluation stage.
+
+•
+
+To examine query–item asymmetry in normalization, we test:
+
+(i)
+ 
+PROSPER
+all-norm
+, which applies 
+ normalization to both query and item vectors, making the scoring function equivalent to standard cosine similarity;
+
+(ii)
+ 
+PROSPER
+w/o-norm
+, which removes all normalization, resulting in a standard dot product score;
+
+(iii)
+ 
+PROSPER
+d-norm
+, which applies 
+ normalization only to the item vectors;
+and 
+
+(iv)
+ 
+PROSPER
+-norm
+, which applies 
+ normalization to the query vector to explore its effect on term weighting.
+
+Table 3
+. 
+Main results (%) on the Multi-CPR E-commerce and Real-world
+E-commerce datasets. Best results are in bold. “–” denotes metrics not reported in the original Multi-CPR paper 
+(
+Long et al., 2022
+)
+.
+
+Method
+
+Multi-CPR E-commerce
+
+Real-world
+E-commerce
+
+Hit@1
+
+Hit@10
+
+Hit@100
+
+Hit@1000
+
+MRR@10
+
+Recall@10
+
+Recall@100
+
+Recall@1000
+
+Dense Baselines
+
+DPR
+
+-
+
+-
+
+-
+
+92.1
+
+27.04
+
+42.50
+
+72.61
+
+91.07
+
+BGE-base-zh-v1.5
+
+26.6
+
+54.1
+
+80.4
+
+93.7
+
+34.70
+
+50.83
+
+75.87
+
+92.93
+
+BGE-large-zh-v1.5
+
+26.1
+
+55.2
+
+81.9
+
+93.1
+
+35.10
+
+50.66
+
+76.89
+
+93.45
+
+Sparse Baselines
+
+BM25
+Qwen
+
+14.3
+
+37.1
+
+62.6
+
+83.7
+
+20.60
+
+39.80
+
+65.53
+
+84.68
+
+BM25
+BERT
+
+16.5
+
+40.9
+
+66.9
+
+85.5
+
+23.48
+
+41.23
+
+67.84
+
+86.21
+
+Doc2Query
+
+-
+
+-
+
+-
+
+82.6
+
+23.85
+
+42.06
+
+68.41
+
+86.72
+
+DeepCT
+
+21.9
+
+46.4
+
+72.2
+
+87.5
+
+29.14
+
+46.64
+
+73.26
+
+86.90
+
+SPLADE
+
+17.2
+
+42.7
+
+70.6
+
+89.2
+
+25.87
+
+44.41
+
+72.67
+
+89.96
+
+SPLADE-v2
+
+18.4
+
+44.1
+
+71.3
+
+89.6
+
+26.40
+
+45.28
+
+73.41
+
+90.38
+
+SP
+Qwen-backbone
+
+18.2
+
+43.7
+
+72.3
+
+91.3
+
+25.46
+
+45.12
+
+73.46
+
+91.79
+
+SP
+Qwen-echoembedding
+
+19.7
+
+44.0
+
+74.2
+
+92.4
+
+26.72
+
+45.27
+
+74.35
+
+92.84
+
+SP
+Qwen-bidattention
+
+19.5
+
+43.8
+
+73.5
+
+91.8
+
+26.41
+
+45.39
+
+73.89
+
+92.10
+
+Ours
+
+PROSPER
+
+25.3
+
+50.7
+
+78.1
+
+93.9
+
+32.85
+
+50.90
+
+76.20
+
+94.08
+
+PROSPER
+BERT
+
+23.6
+
+49.2
+
+75.8
+
+91.5
+
+31.83
+
+50.43
+
+75.97
+
+93.68
+
+PROSPER
+max-pooling
+
+22.6
+
+49.5
+
+78.3
+
+93.6
+
+30.85
+
+48.45
+
+76.33
+
+93.75
+
+PROSPER
+echo-emb
+
+24.5
+
+50.7
+
+80.3
+
+94.1
+
+32.82
+
+50.18
+
+77.20
+
+94.43
+
+PROSPER
+bid-attention
+
+22.3
+
+51.4
+
+78.7
+
+93.6
+
+30.72
+
+51.06
+
+76.51
+
+93.80
+
+4.2. 
+Experimental results
+
+Overall performance.
+
+Table 
+3
+ compares PROSPER with various baselines on both datasets and highlights three main findings.
+
+•
+
+Compared with sparse baselines
+, PROSPER achieves the best performance across all metrics on both datasets. PROSPER
+BERT
+ also outperforms SPLADE-v2, showing that the benefits of our design are not limited to the Qwen2.5 backbone. Together, these results suggest that preserving literal information while learning sparse representations is beneficial across the two backbone architectures evaluated in this study.
+
+•
+
+Compared with dense baselines
+, PROSPER remains competitive, particularly on Hit@1000. The BGE models perform better on Hit@1 and MRR@10, demonstrating their strength at shallow retrieval cutoffs. In addition to the results reported in Table 
+3
+, we explored several other dense retrieval settings on Multi-CPR E-commerce:
+
+(i)
+ 
+fine-tuning the BGE models with standard contrastive loss did not improve their performance and instead led to degradation;
+
+(ii)
+ 
+fine-tuning Qwen2.5-3B as a dense retriever with contrastive loss also yielded limited effectiveness; and
+
+(iii)
+ 
+the strongest dense model we tested, Qwen3-Embedding-4B 
+(
+Zhang et al., 2025
+)
+, achieved a Hit@1000 of 94.9.
+
+PROSPER provides an interpretable, complementary retrieval signal that brings incremental value to online multi-channel recall systems.
+
+•
+
+Compared with model variants
+, the performance difference between PROSPER and PROSPER
+BERT
+ suggests that the stronger semantic capacity of Qwen2.5 benefits the proposed framework. PROSPER also outperforms PROSPER
+max-pooling
+, particularly on MRR@10, supporting the use of last-token pooling in our setting. PROSPER
+echo-emb
+ yields modest improvements on several metrics, including Hit@1000, but these gains come at the cost of doubling the input sequence length. PROSPER
+bid-attention
+ shows no consistent improvement over the causal-attention model.
+
+Figure 2
+. 
+Impact of the LRN on retrieval performance.
+
+Impact of LRN.
+
+Removing LRN reduces performance across all metrics (Figure 
+2
+). Applying LRN only to queries or only to items gives similar improvements over this baseline, showing that LRN benefits both sides. Both alternative LRN variants perform worse than PROSPER. Self-compensation removes differences among literal weights, while direct addition learns the adjustment without a shared scale reference. LRN uses the base maximum to guide learned compensation for each literal term, helping retain terms with low initial weights.
+
+Table 4
+. 
+Impact of the LFW on retrieval performance (%).
+
+Variant
+
+Hit@1
+
+Hit@10
+
+Hit@100
+
+Hit@1000
+
+=1024, 
+=512
+
+22.3
+
+49.2
+
+77.7
+
+93.5
+
+=512, 
+=256
+
+25.3
+
+50.7
+
+78.1
+
+93.9
+
+=256, 
+=128
+
+23.7
+
+50.2
+
+77.0
+
+93.4
+
+=128, 
+=64
+
+23.5
+
+49.1
+
+77.2
+
+92.9
+
+=64, 
+=32
+
+21.9
+
+48.3
+
+74.3
+
+91.9
+
+PROSPER
+LFW-dynamic
+
+24.6
+
+49.0
+
+77.8
+
+93.4
+
+PROSPER
+w/o-LFW
+
+13.3
+
+36.2
+
+65.6
+
+87.2
+
+Impact of LFW.
+
+Table 
+4
+ compares different LFW sizes and shows that:
+
+(i)
+ 
+Without LFW (PROSPER
+w/o-LFW
+), performance drops across all metrics, showing the benefit of focusing training on the top relevant terms;
+
+(ii)
+ 
+Among the different window sizes, the setting 
+ = 256, 
+ = 512 achieves the best overall performance, striking an optimal balance between focusing on the most relevant terms and maintaining sufficient vocabulary coverage;
+
+(iii)
+ 
+PROSPER
+LFW-dynamic
+, with shrinking windows 
+ for queries and 
+ for items, performs slightly below the best fixed configuration. A well-chosen fixed window is sufficient for effective training.
+
+Moreover, we explore the sparsity evolution of query and item representations during training with and without LFW in Figure 
+3
+ and find that LFW enables rapid dimension reduction in early training stages while achieving faster stabilization. These results show that top-
+ focusing is effective in product search: it accelerates convergence to sparse representations, while FLOPS regularization refines their weights throughout training.
+
+Figure 3
+. 
+Evolution of active query and item dimensions during training with and without LFW.
+
+Figure 4
+. 
+Analysis of the impact of literal terms and expansion terms on retrieval performance.
+
+Literal terms vs. expansion terms.
+
+To analyze the contributions of literal and expansion terms, we compare several variants in Figure 
+4
+ and find:
+
+(i)
+ 
+The PROSPER
+literal
+ model, trained only on literal terms, outperforms the strong BM25 baseline (e.g., +9.5 points in Hit@10), demonstrating the effectiveness of our model in evaluating the importance of terms even without expansion;
+
+(ii)
+ 
+Literal terms are superior for precision. This is evident as PROSPER
+literal
+ and PROSPER
+mask-expan
+ outperform their expansion-only counterpart, PROSPER
+expansion
+ and PROSPER
+mask-lit
+, in metrics such as Hit@10 and Hit@100;
+
+(iii)
+ 
+Expansion terms are crucial for supplementing recall. When trained in isolation, the recall of PROSPER
+expansion
+ nearly matches that of PROSPER
+literal
+ at Hit@1000. More compellingly, when evaluating the fully trained model by masking components, the expansion-only variant (PROSPER
+mask-lit
+) even surpasses the literal-only variant (PROSPER
+mask-expan
+) on the Hit@1000.
+
+Literal terms support precision, while expansions supplement recall. PROSPER combines their strengths to improve overall performance.
+
+Effectiveness-efficiency trade-off.
+
+We plot MRR@10 against # FLOPS, the average number of overlapping query and item terms 
+(
+Formal et al., 2021b
+)
+. We control this matching cost through the FLOPS penalty and LFW size. Figure 
+5
+ shows that:
+
+(i)
+ 
+Both PROSPER and SPLADE can achieve strong performance at low computational costs, but PROSPER consistently demonstrates a superior trade-off;
+
+(ii)
+ 
+Compared to BM25, PROSPER
+literal
+ and PROSPER
+mask-expan
+ substantially improve retrieval quality at comparable matching cost.
+
+Figure 5
+. 
+Effectiveness (MRR@10) vs. Efficiency (# FLOPS) trade-off on Multi-CPR E-commerce. 
+
+We investigate model size scaling in Figure 
+6
+ and find no significant performance gains with larger models. Therefore, we use the Qwen2.5-1.5B model as our backbone for online testing to achieve an optimal trade-off between effectiveness and cost.
+
+Figure 6
+. 
+Performance comparison of PROSPER with different model sizes on the Multi-CPR test set.
+
+Impact of normalization.
+ 
+Table 
+5
+ shows that query-only 
+ normalization performs best. During training, normalization promotes sparsification through competition for a shared norm. General query terms consume this norm while contributing little to distinguishing relevant products. Query-side 
+ normalization encourages the model to suppress these terms and emphasize useful, discriminative terms. Query-side 
+ normalization produces overly sparse queries in our experiments, suppressing useful terms and reducing recall.
+
+Item attributes serve different queries. Normalizing an item makes unmatched attributes compete with useful matching terms for the shared norm, weakening their contribution. Applying 
+ normalization to both sides also over-sparsifies the representations in our experiments, reducing Hit@1000 to 87.2%. Query-only 
+ normalization supports sparsification and discriminative weighting while preserving item attribute coverage.
+
+Table 5
+. 
+Impact of different similarity functions on retrieval performance.
+
+Variant
+
+Hit@1
+
+Hit@10
+
+Hit@100
+
+Hit@1000
+
+PROSPER
+
+25.3
+
+50.7
+
+78.1
+
+93.9
+
+PROSPER
+-norm
+
+15.8
+
+39.9
+
+68.0
+
+90.0
+
+PROSPER
+w/o-norm
+
+17.0
+
+40.9
+
+68.0
+
+90.0
+
+PROSPER
+all-norm
+
+17.1
+
+39.7
+
+67.2
+
+87.2
+
+PROSPER
+d-norm
+
+16.1
+
+42.3
+
+71.7
+
+91.1
+
+Offline efficiency analysis.
+
+We compare index size and matching time:
+
+(i)
+ 
+On the 1-million-item Multi-CPR corpus, PROSPER uses a 1.5 GB index, compared with about 3 GB for BERT-based dense models and 8 GB for LLM-based dense models;
+
+(ii)
+ 
+PROSPER retrieves results for 1k queries in under 1 minute, compared with over 3 minutes for Faiss-based dense retrieval.
+
+Offline case study.
+
+Table 
+1
+ compares the top-weighted terms learned by Qwen-based SPLADE and PROSPER. For the query
+
+“爱立舍机油滤芯”(Elysee oil filter), Qwen-based SPLADE mainly focuses on general oil-filter related terms, while the brand term “Elysee,” which reflects the user’s specific need, receives insufficient attention. PROSPER instead assigns higher weights to the literal brand tokens while preserving useful expansions related to oil filters. Similarly, for the query
+
+“老捷豹副水箱”(Old Jaguar water tank), Qwen-based SPLADE introduces noisy animal-related expansions, whereas PROSPER makes the expansion more concentrated on the user intent. These cases show that PROSPER better balances semantic expansion and literal keywords.
+
+5. 
+Online Experiments
+
+Next, we describe the deployment of PROSPER in a real-world search engine and present an online evaluation and analysis.
+
+5.1. 
+System deployment
+
+Our industrial-scale search engine follows the “index-retrieve-then-rank” paradigm 
+(
+Li et al., 2024
+)
+.
+As shown in Figure 
+7
+, PROSPER is deployed as a sparse retrieval channel in the industrial search engine.
+The first-stage product retrieval system combines PROSPER with traditional inverted-index, multi-modal, generative, dense, and personalized retrieval channels to cover diverse user needs.
+
+Figure 7
+. 
+Overview of the architecture of the industrial-scale search
+engine with the proposed PROSPER.
+
+For first-stage product retrieval, we perform offline inference over the product corpus and associate each product with its weighted terms, which are stored in inverted lists to construct the index. At query time, the query representation provides a set of weighted terms that is used to retrieve relevant products through inverted-index lookup. We use block-max MaxScore 
+(
+Dimopoulos et al., 2013
+; 
+Mallia et al., 2024
+; 
+Li et al., 2024
+)
+ to improve matching efficiency. The retrieved products then form a candidate set for the subsequent ranking stages.
+
+5.2. 
+Online experimental setup
+
+We use Qwen2.5-1.5B as the backbone of the deployed PROSPER model. For training, we sample approximately 330 million user click records collected by the search engine in July 2025 and train the model for one epoch. For deployment, we precompute sparse representations for approximately 80 million high-quality products and 170 million user queries. To improve online matching efficiency, we retain only the 16 highest-weighted query terms for retrieval.
+
+We deploy PROSPER in an online traffic bucket covering approximately 1% of total traffic and compare it with a baseline bucket using an identical configuration without PROSPER. Other experimental settings follow the offline experiments.
+
+For online evaluation, we divide the business metrics into direct-guided and total-guided metrics. Direct-guided metrics capture purchases made immediately after search, whereas total-guided metrics cover multiple purchase channels, including direct, live-streaming, and advertisement-guided purchases. The evaluated metrics are net gross merchandise volume (GMV), net unique visitors (UV), net transactions, and conversion rate (CVR).
+
+5.3. 
+Online experimental results
+
+Online A/B test results.
+
+The one-month A/B test yields improvements in several key business metrics over the baseline bucket, as reported in Table 
+6
+. The CVR also improves by +0.36%, while other monitored metrics show positive trends. We observe no negative impact on metrics from the ranking, advertising, or recommendation stages. We apply CUPED for variance reduction 
+(
+Deng et al., 2013
+)
+, and the guardrail indicators remain normal.
+
+Table 6
+. 
+Online A/B test results.
+
+Metric
+
+Direct guided
+
+Total guided
+
+Net GMV
+
++1.60%
+
++1.53%
+
+Net Transactions
+
++0.31%
+
++0.29%
+
+Net UV
+
++0.24%
+
++0.22%
+
+Online efficiency analysis.
+
+We evaluate online efficiency in terms of index storage and matching latency:
+
+(i)
+ 
+For the 80 million products used in our experiment, PROSPER requires a 93 GB index, compared with 152 GB for the dense retrieval channel;
+
+(ii)
+ 
+PROSPER has a matching latency of 
+20 ms, compared with 
+10 ms for the dense retrieval channel, which benefits from years of dedicated ANN optimization. Both latencies satisfy our production requirements. Moreover, all retrieval channels operate in parallel and therefore do not add serial latency to one another.
+
+Online case study.
+
+To further examine the online value of PROSPER, we collect candidate products that are missed by all pre-existing recall channels but retrieved by PROSPER. We evaluate their relevance to the corresponding queries using the online relevance model, followed by manual inspection by domain experts.
+
+6. 
+Related Work
+
+Dense retrieval.
+
+Dense retrieval models use neural networks to map text into dense embeddings, achieving strong retrieval performance 
+(
+Guo et al., 2022
+; 
+Devlin et al., 2019
+; 
+Karpukhin et al., 2020
+; 
+Gao and Callan, 2021
+)
+. DPR 
+(
+Karpukhin et al., 2020
+)
+ introduces a dual-encoder architecture with BERT 
+(
+Devlin et al., 2019
+)
+, enabling offline document encoding for efficient retrieval, while ColBERT 
+(
+Khattab and Zaharia, 2020
+)
+ enhances effectiveness through token-level late interaction. Further advances in unsupervised pre-training 
+(
+Izacard et al., 2022
+; 
+Gao and Callan, 2022
+; 
+Lei et al., 2023
+)
+, hard negative mining 
+(
+Xiong et al., 2020
+)
+, and knowledge distillation 
+(
+Hofstätter et al., 2021a
+; 
+Hofstätter et al., 2021b
+)
+ have continued to improve dense retrieval.
+
+Recent work has explored the potential of LLMs for retrieval 
+(
+Wang et al., 2024
+; 
+Lee et al., 2025
+; 
+Tao et al., 2024
+; 
+Liu et al., 2024
+; 
+Man et al., 2024
+)
+, but their causal attention limits each token to preceding context and thus restricts comprehensive text representation. LLM2Vec 
+(
+BehnamGhader et al., 2024
+)
+ and NV-Embed 
+(
+Lee et al., 2025
+)
+ address this limitation through bidirectional attention and adaptive training, while Echo Embeddings 
+(
+Springer et al., 2024
+)
+ duplicate inputs to expose tokens to the full context. Nevertheless, dense retrieval offers limited interpretability and incurs high index storage costs.
+
+Sparse retrieval.
+
+Sparse retrieval 
+(
+Spärck Jones, 1972
+; 
+Robertson and Zaragoza, 2009
+; 
+Formal et al., 2021b
+)
+ computes relevance using explicit term-level signals. Classical models such as BM25 
+(
+Robertson and Zaragoza, 2009
+)
+ rely on term weighting and inverted indices, while learned sparse retrieval methods use neural networks to assign more informative term weights 
+(
+Zamani et al., 2018
+; 
+Dai and Callan, 2019b
+; 
+Dai and Callan, 2019a
+; 
+Dai and Callan, 2020b
+; 
+Dai and Callan, 2020a
+)
+. However, their reliance on literal term overlap, combined with the length asymmetry between queries and documents, leads to persistent vocabulary mismatch.
+Some methods address this issue by expanding terms next to weighting them 
+(
+Nogueira et al., 2019
+; 
+Zhao et al., 2021
+; 
+MacAvaney et al., 2020
+; 
+Nogueira et al., 2020
+)
+; their performance lags behind dense models. SPLADE 
+(
+Formal et al., 2021b
+)
+, building on SparTerm 
+(
+Bai et al., 2020
+)
+, optimizes term-weight pooling and introduces FLOPS loss 
+(
+Paria et al., 2020
+)
+ for sparsification. Later versions incorporate hard negatives and distillation, achieving dense-level performance in passage retrieval 
+(
+Formal et al., 2021a
+; 
+Formal et al., 2022
+)
+; follow-up work explores fine-grained query-document interactions 
+(
+Kong et al., 2023
+; 
+Li et al., 2023
+)
+.
+
+Top-
+ masking in SPLADE-mask 
+(
+Yang et al., 2021
+)
+ controls sparsity during training and inference. AdaSparse 
+(
+Xie et al., 2026
+)
+ combines learnable soft top-
+, per-term thresholding, and FLOPS regularization. Our LFW uses a hard top-
+ window with LRN and FLOPS, which we find improves product retrieval and speeds up sparsification.
+
+Inspired by SPLADE and LLM-based dense retrieval, recent work has begun adapting LLMs for sparse retrieval 
+(
+Doshi et al., 2024
+; 
+Xu et al., 2025
+; 
+Lee et al., 2025
+)
+: 
+Zeng et al. (2025)
+ study the scaling laws of LLM-based sparse retrievers, while CSPLADE 
+(
+Xu et al., 2025
+)
+, building on NV-Embed 
+(
+Lee et al., 2025
+)
+ and Echo Embeddings 
+(
+Springer et al., 2024
+)
+, tackles attention-related challenges in applying SPLADE 
+(
+Formal et al., 2021b
+)
+ to LLMs. However, these studies mainly adapt LLMs through backbone scaling or attention modifications, and their generalization to product search has not been confirmed.
+
+7. 
+Conclusion
+
+We investigate LLM-based learned sparse retrieval for product search. PROSPER combines a literal residual network (LRN) and a lexical focusing window (LFW) to address lexical expansion hallucination and training initialization, respectively, and achieves improvements in both offline and online evaluation. Our results demonstrate the importance of preserving literal constraints while retaining semantic expansion in product retrieval.
+
+Despite these improvements, using model logits for term expansion and weighting can still introduce noisy terms, and the efficiency of online matching can be further optimized. Future work will explore incorporating CoT reasoning 
+(
+Wei et al., 2022
+)
+ and product category information to filter and refine expansion terms. We will also investigate learned sparse retrieval for downstream ranking and other short-text, keyword-sensitive commercial scenarios, including short-video title retrieval and local business search.
+
+Acknowledgements.
+
+This work was funded by the Strategic Priority Research Program of the CAS under Grants No. XDB0680102, the National Natural Science Foundation of China (NSFC) under Grants No. 62472408, U25B2076 and 62441229, and the National Key Research and Development Program of China under Grants No. 2023YFA1011602.
+This research was also (partially) supported by the Dutch Research Council (NWO), under project numbers 024.004.022, NWA.1389.20.183, and KICH3.LTP.20.006, and the European Union under grant agreement No. 101201510 (UNITE).
+All content represents the opinion of the authors, which is not necessarily shared or endorsed by their respective employers and/or sponsors.
+
+Ethical Considerations
+
+The experiments use internal e-commerce click logs and include an online A/B test, so protecting user privacy is especially important. We report only aggregate results and product-search examples and do not release individual user records or personally identifiable information. The internal logs were accessed under the platform’s data policies, and the online experiment covered approximately 1% of traffic with guardrail monitoring to detect unintended effects on the search system.
+
+Generative AI tools were used for language polishing. During case analysis, they served only as a supporting reference while the authors manually inspected whether expanded terms were semantically relevant. They were not used to generate training labels, evaluation ground truth, or reported metrics, and the final analysis was completed and checked by the authors.
+
+References
+
+Bai 
+et al.
+ (2020)
+
+Y. Bai, X. Li, G. Wang, C. Zhang, L. Shang, J. Xu, Z. Wang, F. Wang, and Q. Liu
+
+SparTerm: Learning Term-based Sparse Representation for Fast Text Retrieval
+.
+
+ 
+arXiv
+.
+
+External Links: 
+2010.00768
+,
+
+Document
+
+Cited by: 
+§6
+.
+
+Bajaj 
+et al.
+ (2018)
+
+P. Bajaj, D. Campos, N. Craswell, L. Deng, J. Gao, X. Liu, R. Majumder, A. McNamara, B. Mitra, T. Nguyen, M. Rosenberg, X. Song, A. Stoica, S. Tiwary, and T. Wang
+
+MS marco: a human generated machine reading comprehension dataset
+.
+
+External Links: 
+1611.09268
+,
+
+Link
+
+Cited by: 
+§2.2
+.
+
+BehnamGhader 
+et al.
+ (2024)
+
+P. BehnamGhader, V. Adlakha, M. Mosbach, D. Bahdanau, N. Chapados, and S. Reddy
+
+LLM2Vec: Large Language Models Are Secretly Powerful Text Encoders
+.
+
+ 
+arXiv
+.
+
+External Links: 
+2404.05961
+,
+
+Document
+
+Cited by: 
+§2.2
+,
+
+§3.1
+,
+
+item (v)
+,
+
+item (iii)
+,
+
+§6
+.
+
+Dai and Callan (2019a)
+
+Z. Dai and J. Callan
+
+Context-aware sentence/passage term importance estimation for first stage retrieval
+.
+
+External Links: 
+1910.10687
+,
+
+Link
+
+Cited by: 
+item (iii)
+,
+
+§6
+.
+
+Dai and Callan (2019b)
+
+Z. Dai and J. Callan
+
+Deeper text understanding for ir with contextual neural language modeling
+.
+
+In 
+Proceedings of the 42nd International ACM SIGIR Conference on Research and Development in Information Retrieval
+,
+
+SIGIR’19
+, 
+New York, NY, USA
+, 
+pp. 985–988
+.
+
+External Links: 
+ISBN 9781450361729
+,
+
+Link
+,
+
+Document
+
+Cited by: 
+§6
+.
+
+Dai and Callan (2020a)
+
+Z. Dai and J. Callan
+
+Context-aware document term weighting for ad-hoc search
+.
+
+In 
+Proceedings of The Web Conference 2020
+,
+
+WWW ’20
+, 
+New York, NY, USA
+, 
+pp. 1897–1907
+.
+
+External Links: 
+ISBN 9781450370233
+,
+
+Link
+,
+
+Document
+
+Cited by: 
+§6
+.
+
+Dai and Callan (2020b)
+
+Z. Dai and J. Callan
+
+Context-aware term weighting for first stage passage retrieval
+.
+
+In 
+Proceedings of the 43rd International ACM SIGIR Conference on Research and Development in Information Retrieval
+,
+
+SIGIR ’20
+, 
+New York, NY, USA
+, 
+pp. 1533–1536
+.
+
+External Links: 
+ISBN 9781450380164
+,
+
+Link
+,
+
+Document
+
+Cited by: 
+§1
+,
+
+item (iii)
+,
+
+§6
+.
+
+Deng 
+et al.
+ (2013)
+
+A. Deng, Y. Xu, R. Kohavi, and T. Walker
+
+Improving the sensitivity of online controlled experiments by utilizing pre-experiment data
+.
+
+In 
+Proceedings of the Sixth ACM International Conference on Web Search and Data Mining
+,
+
+WSDM ’13
+, 
+New York, NY, USA
+, 
+pp. 123–132
+.
+
+External Links: 
+ISBN 9781450318693
+,
+
+Link
+,
+
+Document
+
+Cited by: 
+§5.3
+.
+
+Devlin 
+et al.
+ (2019)
+
+J. Devlin, M. Chang, K. Lee, and K. Toutanova
+
+BERT: pre-training of deep bidirectional transformers for language understanding
+.
+
+In 
+Proceedings of the 2019 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies, Volume 1 (Long and Short Papers)
+,  
+J. Burstein, C. Doran, and T. Solorio (Eds.)
+,
+
+Minneapolis, Minnesota
+, 
+pp. 4171–4186
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+item (i)
+,
+
+§6
+.
+
+Dimopoulos 
+et al.
+ (2013)
+
+C. Dimopoulos, S. Nepomnyachiy, and T. Suel
+
+Optimizing top-k document retrieval strategies for block-max indexes
+.
+
+In 
+Proceedings of the Sixth ACM International Conference on Web Search and Data Mining
+,
+
+WSDM ’13
+, 
+New York, NY, USA
+, 
+pp. 113–122
+.
+
+External Links: 
+ISBN 9781450318693
+,
+
+Link
+,
+
+Document
+
+Cited by: 
+§5.1
+.
+
+Doshi 
+et al.
+ (2024)
+
+M. Doshi, V. Kumar, R. Murthy, V. P, and J. Sen
+
+Mistral-splade: llms for better learned sparse retrieval
+.
+
+External Links: 
+2408.11119
+,
+
+Link
+
+Cited by: 
+§6
+.
+
+Formal 
+et al.
+ (2021a)
+
+T. Formal, C. Lassance, B. Piwowarski, and S. Clinchant
+
+SPLADE v2: Sparse Lexical and Expansion Model for Information Retrieval
+.
+
+ 
+arXiv
+.
+
+External Links: 
+2109.10086
+,
+
+Document
+
+Cited by: 
+§1
+,
+
+§2.1
+,
+
+§2.2
+,
+
+§3.1
+,
+
+§3.1
+,
+
+item (iv)
+,
+
+item (iv)
+,
+
+§6
+.
+
+Formal 
+et al.
+ (2022)
+
+T. Formal, C. Lassance, B. Piwowarski, and S. Clinchant
+
+From distillation to hard negative sampling: making sparse neural ir models more effective
+.
+
+In 
+Proceedings of the 45th International ACM SIGIR Conference on Research and Development in Information Retrieval
+,
+
+SIGIR ’22
+, 
+New York, NY, USA
+, 
+pp. 2353–2359
+.
+
+External Links: 
+ISBN 9781450387323
+,
+
+Link
+,
+
+Document
+
+Cited by: 
+§2.1
+,
+
+§6
+.
+
+Formal 
+et al.
+ (2021b)
+
+T. Formal, B. Piwowarski, and S. Clinchant
+
+SPLADE: sparse lexical and expansion model for first stage ranking
+.
+
+In 
+Proceedings of the 44th International ACM SIGIR Conference on Research and Development in Information Retrieval
+,
+
+SIGIR ’21
+, 
+New York, NY, USA
+, 
+pp. 2288–2292
+.
+
+External Links: 
+ISBN 9781450380379
+,
+
+Link
+,
+
+Document
+
+Cited by: 
+§1
+,
+
+§2.2
+,
+
+item (iv)
+,
+
+item (iv)
+,
+
+§4.2
+,
+
+§6
+,
+
+§6
+.
+
+Gao and Callan (2021)
+
+L. Gao and J. Callan
+
+Condenser: a Pre-training Architecture for Dense Retrieval
+.
+
+In 
+Proceedings of the 2021 Conference on Empirical Methods in Natural Language Processing
+,  
+M. Moens, X. Huang, L. Specia, and S. W. Yih (Eds.)
+,
+
+Online and Punta Cana, Dominican Republic
+, 
+pp. 981–993
+.
+
+External Links: 
+Document
+
+Cited by: 
+§6
+.
+
+Gao and Callan (2022)
+
+L. Gao and J. Callan
+
+Unsupervised Corpus Aware Language Model Pre-training for Dense Passage Retrieval
+.
+
+In 
+Proceedings of the 60th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)
+,  
+S. Muresan, P. Nakov, and A. Villavicencio (Eds.)
+,
+
+Dublin, Ireland
+, 
+pp. 2843–2853
+.
+
+External Links: 
+Document
+
+Cited by: 
+§6
+.
+
+Guo 
+et al.
+ (2022)
+
+J. Guo, Y. Cai, Y. Fan, F. Sun, R. Zhang, and X. Cheng
+
+Semantic Models for the First-stage Retrieval: A Comprehensive Review
+.
+
+ACM Transactions on Information Systems
+ 
+40
+ (
+4
+), 
+pp. 1–42
+.
+
+External Links: 
+2103.04831
+,
+
+ISSN 1046-8188, 1558-2868
+,
+
+Document
+
+Cited by: 
+§1
+,
+
+§6
+.
+
+Hofstätter 
+et al.
+ (2021a)
+
+S. Hofstätter, S. Althammer, M. Schröder, M. Sertkan, and A. Hanbury
+
+Improving efficient neural ranking models with cross-architecture knowledge distillation
+.
+
+External Links: 
+2010.02666
+,
+
+Link
+
+Cited by: 
+§6
+.
+
+Hofstätter 
+et al.
+ (2021b)
+
+S. Hofstätter, S. Lin, J. Yang, J. Lin, and A. Hanbury
+
+Efficiently teaching an effective dense retriever with balanced topic aware sampling
+.
+
+In 
+Proceedings of the 44th International ACM SIGIR Conference on Research and Development in Information Retrieval
+,
+
+SIGIR ’21
+, 
+New York, NY, USA
+, 
+pp. 113–122
+.
+
+External Links: 
+ISBN 9781450380379
+,
+
+Link
+,
+
+Document
+
+Cited by: 
+§6
+.
+
+Izacard 
+et al.
+ (2022)
+
+G. Izacard, M. Caron, L. Hosseini, S. Riedel, P. Bojanowski, A. Joulin, and E. Grave
+
+Unsupervised dense information retrieval with contrastive learning
+.
+
+External Links: 
+2112.09118
+,
+
+Link
+
+Cited by: 
+§6
+.
+
+Karpukhin 
+et al.
+ (2020)
+
+V. Karpukhin, B. Oguz, S. Min, P. Lewis, L. Wu, S. Edunov, D. Chen, and W. Yih
+
+Dense passage retrieval for open-domain question answering
+.
+
+In 
+Proceedings of the 2020 Conference on Empirical Methods in Natural Language Processing (EMNLP)
+,  
+B. Webber, T. Cohn, Y. He, and Y. Liu (Eds.)
+,
+
+Online
+, 
+pp. 6769–6781
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§1
+,
+
+item (i)
+,
+
+§6
+.
+
+Khattab and Zaharia (2020)
+
+O. Khattab and M. Zaharia
+
+ColBERT: efficient and effective passage search via contextualized late interaction over bert
+.
+
+In 
+Proceedings of the 43rd International ACM SIGIR Conference on Research and Development in Information Retrieval
+,
+
+SIGIR ’20
+, 
+New York, NY, USA
+, 
+pp. 39–48
+.
+
+External Links: 
+ISBN 9781450380164
+,
+
+Link
+,
+
+Document
+
+Cited by: 
+§1
+,
+
+§6
+.
+
+Kong 
+et al.
+ (2023)
+
+W. Kong, J. M. Dudek, C. Li, M. Zhang, and M. Bendersky
+
+SparseEmbed: learning sparse lexical representations with contextual embeddings for retrieval
+.
+
+In 
+Proceedings of the 46th International ACM SIGIR Conference on Research and Development in Information Retrieval
+,
+
+SIGIR ’23
+, 
+New York, NY, USA
+, 
+pp. 2399–2403
+.
+
+External Links: 
+ISBN 9781450394086
+,
+
+Link
+,
+
+Document
+
+Cited by: 
+§6
+.
+
+Lee 
+et al.
+ (2025)
+
+C. Lee, R. Roy, M. Xu, J. Raiman, M. Shoeybi, B. Catanzaro, and W. Ping
+
+NV-Embed: Improved Techniques for Training LLMs as Generalist Embedding Models
+.
+
+ 
+arXiv
+.
+
+External Links: 
+2405.17428
+,
+
+Document
+
+Cited by: 
+§2.2
+,
+
+item (v)
+,
+
+item (iv)
+,
+
+§6
+,
+
+§6
+.
+
+Lei 
+et al.
+ (2023)
+
+Y. Lei, L. Ding, Y. Cao, C. Zan, A. Yates, and D. Tao
+
+Unsupervised dense retrieval with relevance-aware contrastive pre-training
+.
+
+In 
+Findings of the Association for Computational Linguistics: ACL 2023
+,  
+A. Rogers, J. Boyd-Graber, and N. Okazaki (Eds.)
+,
+
+Toronto, Canada
+, 
+pp. 10932–10940
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§6
+.
+
+Li 
+et al.
+ (2023)
+
+M. Li, S. Lin, X. Ma, and J. Lin
+
+SLIM: sparsified late interaction for multi-vector retrieval with inverted indexes
+.
+
+In 
+Proceedings of the 46th International ACM SIGIR Conference on Research and Development in Information Retrieval
+,
+
+SIGIR ’23
+, 
+New York, NY, USA
+, 
+pp. 1954–1959
+.
+
+External Links: 
+ISBN 9781450394086
+,
+
+Link
+,
+
+Document
+
+Cited by: 
+§6
+.
+
+Li 
+et al.
+ (2024)
+
+S. Li, F. Lv, R. Zhang, D. Ou, Z. Zhang, and M. de Rijke
+
+Text matching indexers in taobao search
+.
+
+In 
+Proceedings of the 30th ACM SIGKDD Conference on Knowledge Discovery and Data Mining
+,
+
+KDD ’24
+, 
+New York, NY, USA
+, 
+pp. 5339–5350
+.
+
+External Links: 
+ISBN 9798400704901
+,
+
+Link
+,
+
+Document
+
+Cited by: 
+§1
+,
+
+§5.1
+,
+
+§5.1
+.
+
+Lin 
+et al.
+ (2021)
+
+S. Lin, J. Yang, and J. Lin
+
+In-batch negatives for knowledge distillation with tightly-coupled teachers for dense retrieval
+.
+
+In 
+Proceedings of the 6th Workshop on Representation Learning for NLP (RepL4NLP-2021)
+,  
+A. Rogers, I. Calixto, I. Vulić, N. Saphra, N. Kassner, O. Camburu, T. Bansal, and V. Shwartz (Eds.)
+,
+
+Online
+, 
+pp. 163–173
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§2.1
+,
+
+§3.2
+.
+
+Liu 
+et al.
+ (2024)
+
+Z. Liu, C. Li, S. Xiao, Y. Shao, and D. Lian
+
+Llama2Vec: Unsupervised Adaptation of Large Language Models for Dense Retrieval
+.
+
+In 
+Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)
+,  
+L. Ku, A. Martins, and V. Srikumar (Eds.)
+,
+
+Bangkok, Thailand
+, 
+pp. 3490–3500
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§6
+.
+
+Long 
+et al.
+ (2022)
+
+D. Long, Q. Gao, K. Zou, G. Xu, P. Xie, R. Guo, J. Xu, G. Jiang, L. Xing, and P. Yang
+
+Multi-cpr: a multi domain chinese dataset for passage retrieval
+.
+
+In 
+Proceedings of the 45th International ACM SIGIR Conference on Research and Development in Information Retrieval
+,
+
+SIGIR ’22
+, 
+New York, NY, USA
+, 
+pp. 3046–3056
+.
+
+External Links: 
+ISBN 9781450387323
+,
+
+Link
+,
+
+Document
+
+Cited by: 
+§2.2
+,
+
+§2.2
+,
+
+item (i)
+,
+
+Table 3
+,
+
+Table 3
+.
+
+Ma 
+et al.
+ (2024)
+
+X. Ma, L. Wang, N. Yang, F. Wei, and J. Lin
+
+Fine-tuning llama for multi-stage text retrieval
+.
+
+In 
+Proceedings of the 47th International ACM SIGIR Conference on Research and Development in Information Retrieval
+,
+
+SIGIR ’24
+, 
+New York, NY, USA
+, 
+pp. 2421–2425
+.
+
+External Links: 
+ISBN 9798400704314
+,
+
+Link
+,
+
+Document
+
+Cited by: 
+§1
+.
+
+MacAvaney 
+et al.
+ (2020)
+
+S. MacAvaney, F. M. Nardini, R. Perego, N. Tonellotto, N. Goharian, and O. Frieder
+
+Expansion via prediction of importance with contextualization
+.
+
+In 
+Proceedings of the 43rd International ACM SIGIR Conference on Research and Development in Information Retrieval
+,
+
+SIGIR ’20
+, 
+New York, NY, USA
+, 
+pp. 1573–1576
+.
+
+External Links: 
+ISBN 9781450380164
+,
+
+Link
+,
+
+Document
+
+Cited by: 
+§6
+.
+
+Mallia 
+et al.
+ (2024)
+
+A. Mallia, T. Suel, and N. Tonellotto
+
+Faster learned sparse retrieval with block-max pruning
+.
+
+External Links: 
+2405.01117
+,
+
+Link
+
+Cited by: 
+§5.1
+.
+
+Man 
+et al.
+ (2024)
+
+H. Man, N. T. Ngo, F. Dernoncourt, and T. H. Nguyen
+
+ULLME: a unified framework for large language model embeddings with generation-augmented learning
+.
+
+In 
+Proceedings of the 2024 Conference on Empirical Methods in Natural Language Processing: System Demonstrations
+,  
+D. I. Hernandez Farias, T. Hope, and M. Li (Eds.)
+,
+
+Miami, Florida, USA
+, 
+pp. 230–239
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§6
+.
+
+Minaee 
+et al.
+ (2025)
+
+S. Minaee, T. Mikolov, N. Nikzad, M. Chenaghlu, R. Socher, X. Amatriain, and J. Gao
+
+Large language models: a survey
+.
+
+External Links: 
+2402.06196
+,
+
+Link
+
+Cited by: 
+§1
+.
+
+Nogueira 
+et al.
+ (2020)
+
+R. Nogueira, Z. Jiang, R. Pradeep, and J. Lin
+
+Document Ranking with a Pretrained Sequence-to-Sequence Model
+.
+
+In 
+Findings of the Association for Computational Linguistics: EMNLP 2020
+,  
+T. Cohn, Y. He, and Y. Liu (Eds.)
+,
+
+Online
+, 
+pp. 708–718
+.
+
+External Links: 
+Document
+
+Cited by: 
+§6
+.
+
+Nogueira 
+et al.
+ (2019)
+
+R. Nogueira, W. Yang, J. Lin, and K. Cho
+
+Document expansion by query prediction
+.
+
+External Links: 
+1904.08375
+,
+
+Link
+
+Cited by: 
+item (ii)
+,
+
+§6
+.
+
+Paria 
+et al.
+ (2020)
+
+B. Paria, C. Yeh, I. E. H. Yen, N. Xu, P. Ravikumar, and B. Póczos
+
+Minimizing flops to learn efficient sparse representations
+.
+
+External Links: 
+2004.05665
+,
+
+Link
+
+Cited by: 
+§2.1
+,
+
+§3.2
+,
+
+§6
+.
+
+Qu 
+et al.
+ (2021)
+
+Y. Qu, Y. Ding, J. Liu, K. Liu, R. Ren, W. X. Zhao, D. Dong, H. Wu, and H. Wang
+
+RocketQA: an optimized training approach to dense passage retrieval for open-domain question answering
+.
+
+In 
+Proceedings of the 2021 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies
+,  
+K. Toutanova, A. Rumshisky, L. Zettlemoyer, D. Hakkani-Tur, I. Beltagy, S. Bethard, R. Cotterell, T. Chakraborty, and Y. Zhou (Eds.)
+,
+
+Online
+, 
+pp. 5835–5847
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§2.1
+.
+
+Qwen 
+et al.
+ (2025)
+
+Qwen, A. Yang, B. Yang, B. Zhang, B. Hui, B. Zheng, B. Yu, C. Li, D. Liu, F. Huang, H. Wei, H. Lin, J. Yang, J. Tu, J. Zhang, J. Yang, J. Yang, J. Zhou, J. Lin, K. Dang, K. Lu, K. Bao, K. Yang, L. Yu, M. Li, M. Xue, P. Zhang, Q. Zhu, R. Men, R. Lin, T. Li, T. Tang, T. Xia, X. Ren, X. Ren, Y. Fan, Y. Su, Y. Zhang, Y. Wan, Y. Liu, Z. Cui, Z. Zhang, and Z. Qiu
+
+Qwen2.5 technical report
+.
+
+External Links: 
+2412.15115
+,
+
+Link
+
+Cited by: 
+§1
+,
+
+§2.2
+,
+
+§2.2
+,
+
+item (i)
+.
+
+Robertson and Zaragoza (2009)
+
+S. Robertson and H. Zaragoza
+
+The probabilistic relevance framework: bm25 and beyond
+.
+
+Found. Trends Inf. Retr.
+ 
+3
+ (
+4
+), 
+pp. 333–389
+.
+
+External Links: 
+ISSN 1554-0669
+,
+
+Link
+,
+
+Document
+
+Cited by: 
+§1
+,
+
+§1
+,
+
+item (i)
+,
+
+§6
+.
+
+Spärck Jones (1972)
+
+K. Spärck Jones
+
+A statistical interpretation of term specificity and its application in retrieval
+.
+
+Journal of Documentation
+ 
+28
+ (
+1
+), 
+pp. 11–21
+.
+
+Cited by: 
+§1
+,
+
+§6
+.
+
+Springer 
+et al.
+ (2024)
+
+J. M. Springer, S. Kotha, D. Fried, G. Neubig, and A. Raghunathan
+
+Repetition Improves Language Model Embeddings
+.
+
+ 
+arXiv
+.
+
+External Links: 
+2402.15449
+,
+
+Document
+
+Cited by: 
+§2.2
+,
+
+item (v)
+,
+
+item (iv)
+,
+
+§6
+,
+
+§6
+.
+
+Tao 
+et al.
+ (2024)
+
+C. Tao, T. Shen, S. Gao, J. Zhang, Z. Li, Z. Tao, and S. Ma
+
+LLMs are Also Effective Embedding Models: An In-depth Overview
+.
+
+ 
+arXiv
+.
+
+External Links: 
+2412.12591
+,
+
+Document
+
+Cited by: 
+§1
+,
+
+§3.1
+,
+
+§6
+.
+
+van den Oord 
+et al.
+ (2019)
+
+A. van den Oord, Y. Li, and O. Vinyals
+
+Representation learning with contrastive predictive coding
+.
+
+External Links: 
+1807.03748
+,
+
+Link
+
+Cited by: 
+§2.1
+,
+
+§3.2
+.
+
+Wang 
+et al.
+ (2024)
+
+L. Wang, N. Yang, X. Huang, L. Yang, R. Majumder, and F. Wei
+
+Improving text embeddings with large language models
+.
+
+In 
+Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)
+,  
+L. Ku, A. Martins, and V. Srikumar (Eds.)
+,
+
+Bangkok, Thailand
+, 
+pp. 11897–11916
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§6
+.
+
+Wei 
+et al.
+ (2022)
+
+J. Wei, X. Wang, D. Schuurmans, M. Bosma, B. Ichter, F. Xia, E. H. Chi, Q. V. Le, and D. Zhou
+
+Chain-of-thought prompting elicits reasoning in large language models
+.
+
+In 
+Proceedings of the 36th International Conference on Neural Information Processing Systems
+,
+
+NIPS ’22
+, 
+Red Hook, NY, USA
+.
+
+External Links: 
+ISBN 9781713871088
+
+Cited by: 
+§7
+.
+
+Xiao 
+et al.
+ (2023)
+
+S. Xiao, Z. Liu, P. Zhang, and N. Muennighoff
+
+C-pack: packaged resources to advance general chinese embedding
+.
+
+External Links: 
+2309.07597
+
+Cited by: 
+item (ii)
+.
+
+Xie 
+et al.
+ (2026)
+
+W. Xie, P. Carlson, S. He, and T. Yang
+
+Adaptive sparsity optimization with learnable soft top-
+ and per-term thresholding for efficient retrieval
+.
+
+In 
+Proceedings of the 49th International ACM SIGIR Conference on Research and Development in Information Retrieval
+,
+
+SIGIR ’26
+, 
+pp. 2072–2083
+.
+
+External Links: 
+Document
+
+Cited by: 
+item (ii)
+,
+
+§3.2
+,
+
+§6
+.
+
+Xiong 
+et al.
+ (2020)
+
+L. Xiong, C. Xiong, Y. Li, K. Tang, J. Liu, P. Bennett, J. Ahmed, and A. Overwijk
+
+Approximate nearest neighbor negative contrastive learning for dense text retrieval
+.
+
+External Links: 
+2007.00808
+,
+
+Link
+
+Cited by: 
+§2.1
+,
+
+§6
+.
+
+Xu 
+et al.
+ (2025)
+
+Z. Xu, A. Feng, Y. Tian, H. Ding, and L. L. Cheong
+
+CSPLADE: Learned Sparse Retrieval with Causal Language Models
+.
+
+ 
+arXiv
+.
+
+External Links: 
+2504.10816
+,
+
+Document
+
+Cited by: 
+§1
+,
+
+§1
+,
+
+§2.2
+,
+
+item (v)
+,
+
+item (iii)
+,
+
+item (iv)
+,
+
+§6
+.
+
+Yang 
+et al.
+ (2021)
+
+J. Yang, X. Ma, and J. Lin
+
+Sparsifying sparse representations for passage retrieval by top-
+ masking
+.
+
+External Links: 
+2112.09628
+,
+
+Link
+
+Cited by: 
+item (ii)
+,
+
+§3.2
+,
+
+§6
+.
+
+Zamani 
+et al.
+ (2018)
+
+H. Zamani, M. Dehghani, W. B. Croft, E. Learned-Miller, and J. Kamps
+
+From neural re-ranking to neural ranking: learning a sparse representation for inverted indexing
+.
+
+In 
+Proceedings of the 27th ACM International Conference on Information and Knowledge Management
+,
+
+CIKM ’18
+, 
+New York, NY, USA
+, 
+pp. 497–506
+.
+
+External Links: 
+ISBN 9781450360142
+,
+
+Link
+,
+
+Document
+
+Cited by: 
+§1
+,
+
+§2.1
+,
+
+§6
+.
+
+Zeng 
+et al.
+ (2025)
+
+H. Zeng, J. Killingback, and H. Zamani
+
+Scaling Sparse and Dense Retrieval in Decoder-Only LLMs
+.
+
+ 
+arXiv
+.
+
+External Links: 
+2502.15526
+,
+
+Document
+
+Cited by: 
+§2.2
+,
+
+item (v)
+,
+
+§6
+.
+
+Zhang 
+et al.
+ (2025)
+
+Y. Zhang, M. Li, D. Long, X. Zhang, H. Lin, B. Yang, P. Xie, A. Yang, D. Liu, J. Lin, F. Huang, and J. Zhou
+
+Qwen3 embedding: advancing text embedding and reranking through foundation models
+.
+
+External Links: 
+2506.05176
+,
+
+Document
+,
+
+Link
+
+Cited by: 
+item (iii)
+.
+
+Zhao 
+et al.
+ (2021)
+
+T. Zhao, X. Lu, and K. Lee
+
+SPARTA: efficient open-domain question answering via sparse transformer matching retrieval
+.
+
+In 
+Proceedings of the 2021 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies
+,  
+K. Toutanova, A. Rumshisky, L. Zettlemoyer, D. Hakkani-Tur, I. Beltagy, S. Bethard, R. Cotterell, T. Chakraborty, and Y. Zhou (Eds.)
+,
+
+Online
+, 
+pp. 565–575
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§6
+.
+

@@ -1,0 +1,3243 @@
+Fetch, Read, Reuse: How AI Search Agents Bend the Web's Rules
+https://arxiv.org/abs/2611.30546
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+Fetch, Read, Reuse: How AI Search Agents Bend the Web’s Rules
+
+Yixi Chen
+
+Affiliation: 
+KAUST
+, 
+
+, 
+
+Zafar A. Qazi
+
+Affiliation: 
+LUMS
+, 
+
+, 
+
+Marco Canini
+
+Affiliation: 
+KAUST
+, 
+
+ and 
+
+Suhaib A. Fahmy
+
+Affiliation: 
+KAUST
+, 
+
+Abstract.
+
+AI search agents form a new and fast-growing class of web traffic.
+Like a browser, they fetch pages on demand for one user; like a transcoding proxy, they rewrite what they fetch; and like a shared cache, they answer other users’ questions from the stored copy.
+The rules publishers rely on, such as 
+robots.txt
+, 
+Retry-After
+, and 
+Cache-Control
+, were written for more familiar clients, so the agent’s vendor decides which of them to follow.
+We present a black-box measurement study of how these agents fetch, read, and reuse pages, covering the search APIs of OpenAI, Anthropic, xAI, and Google and the consumer apps of ten services.
+We find that OpenAI and xAI do not honor 
+robots.txt
+, and no service acts on 
+Retry-After
+.
+Services silently read less than the origin served: OpenAI drops some formats, no service reads JavaScript-only content, and xAI reads only the first 0.5 MB of a page.
+OpenAI, Anthropic, and xAI share fetched pages across users and largely ignore 
+Cache-Control
+, so answers can reflect outdated pages for 30 minutes to a day or more.
+Publishers therefore lack effective control: directives are advisory and followed selectively, describe the served page rather than the rewritten copy, and bound how long a copy is reused but not how many answers it serves.
+We release our code and data.
+
+1. 
+Introduction
+
+People increasingly get information from answers written by AI, whether from an assistant such as ChatGPT or from the summaries that search engines now place above their results.
+A study of ChatGPT usage found that seeking information, a close substitute for web search, grew from 14% to 24% of messages in a single year 
+(
+OpenAI, 2025b
+)
+, and Google reports strong growth in queries to its AI Mode 
+(
+Kopack, 2026
+; 
+Lang et al., 2026
+)
+.
+With such an answer on the screen, few people go on to the sources.
+In a Pew Research Center study, Google users clicked a link inside a AI summary in only 1% 
+(
+Chapekis and Lieb, 2025
+)
+.
+
+The pages behind these answers are still read, but increasingly by the AI instead of the person.
+Fetches triggered by questions to AI assistants grew more than 15-fold on Cloudflare’s network over 2025 
+(
+Belson, 2025
+)
+, and by mid-2025 such fetchers already made up about a fifth of the AI bot traffic Fastly observed 
+(
+Mathur et al., 2025
+)
+.
+Publishers, meanwhile, receive few visitors in return, as AI platforms request far more pages than they refer visits back 
+(
+Cloudflare, 2026a
+; 
+Tomé, 2025
+; 
+Belson and Rhea, 2025
+)
+.
+A growing share of the web is thus read not by people but by AI assistants that search and fetch pages on their behalf, forming a new class of web traffic. We refer to these as 
+AI search agents
+.
+
+How these agents behave matters because the web runs on a loose contract between servers and clients: a server states its rules, and clients largely follow them.
+A site lists in 
+robots.txt
+ what crawlers may read, uses 
+Cache-Control
+ to say how long a copy of a page may be reused, and sends 
+Retry-After
+ to ask clients to back off.
+Each rule was written with a familiar kind of client in mind.
+A browser fetches a page to show it to one user, a crawler fetches many pages for a search index or a training corpus, and a shared cache stores copies to serve many users.
+
+Table 1. 
+Key findings, the parties they affect, and why (our assessment). 
+Table 21
+ gives the reasoning for each party.
+
+Stage
+
+Sec.
+
+Finding
+
+Affects
+
+Why it matters
+
+Fetch
+
+§ 3.1.1
+
+robots.txt
+ not honored (OpenAI, xAI)
+
+Publisher
+
+A publisher’s 
+robots.txt
+ opt-out does not stop these fetchers.
+
+§ 3.1.2
+
+Retry-After
+ ignored (all); xAI sends parallel requests
+
+Publisher, CDN
+
+An origin cannot ask these fetchers to back off, so retries and parallel requests add load to the origin and CDN.
+
+Read
+
+§ 3.2.1
+, 
+§ 3.2.2
+
+OpenAI drops some formats (e.g. JavaScript not read)
+
+Publisher, user
+
+Part of what the page served never reaches the answer: the publisher’s content goes unseen, and the user is not told..
+
+§ 3.2.3
+
+xAI reads only the first 0.5 MB
+
+Publisher, user, vendor
+
+The cap bounds the vendor’s cost, but the rest of a long page never reaches the answer, and the user is not told.
+
+Reuse
+
+§ 3.3.1
+
+Pages shared across accounts (OpenAI, Anthropic, xAI)
+
+Publisher, vendor, user
+
+One fetch serves many users: less load and cost, but a publisher paid per fetch is paid once and users may get old copies.
+
+§ 3.3.2
+, 
+§ 3.3.3
+
+Cache-Control
+ largely ignored (OpenAI, Anthropic, xAI)
+
+Publisher, user, CDN
+
+Updates and corrections reach answers 30 minutes to a day or more late, and the answer does not show the copy’s age.
+
+§ 3.3.4
+
+Failed fetches are cached
+
+Publisher, user
+
+A page stays out of answers after its error is fixed, so users miss content the publisher has restored.
+
+Of these clients, crawlers have drawn the most scrutiny.
+AI training has made crawling more costly: Wikimedia reports that AI crawlers favor rarely read pages, which miss its regional caches and fall through to its origin datacenters 
+(
+Wikimedia Foundation, 2025
+)
+, and prior work measures whether crawlers follow publishers’ rules 
+(
+Kim et al., 2025
+; 
+Cui et al., 2025
+; 
+Liu et al., 2025
+)
+.
+Far less is known about AI search agents, which fit none of these roles cleanly. Instead, they combine three roles: they fetch pages on demand for one user (a browser), rewrite what they fetch (a transcoding proxy), and answer other users’ questions from the stored copy (a shared cache).
+We therefore model an agent as three stages (fetch, read, and reuse) and ask which existing rules govern each:
+
+Fetch. Like a browser, it fetches a page on demand for one user. Unlike a browser, it hands the page to software rather than to the user, which arguably brings it under 
+robots.txt
+. Like any client, it should back off when a server sends 
+Retry-After
+.
+
+Read. Like a transcoding proxy, it rewrites the page before use, here into a form the model can consume. No HTTP rule governs what it may drop along the way or what it must tell the user.
+1
+1
+
+1
+
+                  
+                  
+                  
+                The closest is 
+Cache-Control: no-transform
+ 
+(
+Fielding et al., 2022a
+)
+, which restricts what an intermediary may change, not what the client that consumes the page does with it or tells its user.
+
+Reuse. Like a shared cache, it may answer other users’ questions from a stored copy, which is what 
+Cache-Control
+ is meant to govern.
+
+An agent only partly fits each role, so its vendor can decide which of that role’s rules apply, and no rule yet says what the agent as a whole should do.
+Vendors already disagree, starting with 
+robots.txt
+.
+OpenAI states that because 
+ChatGPT-User
+ is initiated by a human and not used for automatic crawling, “
+robots.txt
+ rules may not apply” 
+(
+OpenAI, 2026c
+)
+.
+Anthropic says its bots respect 
+robots.txt
+, with no exemption for user-initiated fetches 
+(
+Anthropic, 2026
+)
+, and xAI’s documentation does not say either way 
+(
+xAI, 2026
+)
+.
+
+The cost of these choices falls on parties with no say in them.
+Publishers face bursts of fetches with no reliable way to govern how their pages are accessed 
+(
+Wikimedia Foundation, 2025
+)
+, and the CDNs and hosting infrastructure behind them absorb the same bursts 
+(
+Mathur et al., 2025
+)
+.
+Once a page is fetched, the publisher also loses control of it: the copy may be rewritten, stored, and used to answer other users, so a publisher that charges per fetch 
+(
+Teixeira et al., 2026
+)
+ cannot tell how many answers a single fetch served.
+Users cannot tell whether an answer came from an outdated copy or, when a cited answer is wrong, whether the fault lies with the page, the retrieval, or the model.
+Citations offer little help, as generative search engines often fail to support their statements with them 
+(
+Liu et al., 2023
+; 
+Jaźwińska and Chandrasekar, 2025
+)
+.
+Neither publishers nor users can see what the agent did with the page.
+
+We expose this behavior from the outside through a black-box measurement study of how commercial AI search agents fetch, read, and reuse web pages.
+We test the search APIs of OpenAI, Anthropic, xAI, and Google, and the consumer apps of ten services, used through free, logged-in browser accounts: ChatGPT, Claude, Gemini, Grok, DeepSeek, Le Chat, Qwen, Meta AI, Perplexity, and Copilot.
+We serve test pages from origins we control and log every request.
+Each page carries a unique code, which lets us tie every answer to the request that fetched its source and tell a fresh fetch from a reused copy.
+We validate the results on public pages and release our test pages, probe code, and measurement data (
+Appendix G
+).
+2
+2
+
+2
+
+            
+            
+            
+          Code: 
+https://github.com/sands-lab/aisearch-probe
+, data: 
+https://github.com/sands-lab/aisearch-data
+
+Our findings follow the same three stages; 
+Table 1
+ summarizes them and the parties each one affects.
+
+Fetch. OpenAI and xAI do not honor 
+robots.txt
+ (
+§ 3.1.1
+). No service acts on a 
+Retry-After
+ header, and services otherwise handle failure differently: OpenAI retries server errors, Anthropic gives up after one failure, and xAI sends parallel requests (
+§ 3.1.2
+).
+
+Read. What a service reads can differ from what the origin served. OpenAI drops some formats after fetching them, no service reads content that appears only through JavaScript, and xAI reads only the first 0.5 MB of a page without telling the user (
+§ 3.2.1
+, 
+§ 3.2.2
+, 
+§ 3.2.3
+).
+
+Reuse. OpenAI, Anthropic, and xAI answer one user’s question from a page fetched for another and largely ignore 
+Cache-Control
+ (
+§ 3.3.1
+, 
+§ 3.3.2
+). After a page changes, answers can reflect its old version for about 30 minutes to a day or more (
+§ 3.3.3
+). Failures are reused too: a page that once failed can stay out of answers after it is fixed (
+§ 3.3.4
+).
+
+Taken together, these results point to three gaps in publishers’ control over this traffic.
+Existing directives are advisory, and vendors follow them selectively.
+A directive describes the page the origin served, not the rewritten copy a service keeps.
+And 
+Cache-Control
+ bounds how long a copy may be reused, not how many answers it may serve.
+We discuss which of these gaps existing mechanisms can close and where new ones are needed (
+§ 4.1
+).
+
+2. 
+Methodology
+
+Client
+OpenRouter
+optional
+Service
+Fetcher
+OpenAI 
+ xAI
+Anthropic 
+ Google
+CDN
+cache bypass
+Origin A
+tagged pages 
+ access log
+Origin B
+tagged pages 
+ access log
+CDN
+unknown
+Public site
+third-party origin 
+ no log
+Orchestrator
+ours
+not ours
+controlled tests (our origins)
+public checks (third-party sites)
+question
+answer
+direct (no CDN)
+dispatch / record
+provision / observe
+
+Figure 1. 
+Measurement testbed.
+A measurement client sends a question to a service (left), directly or through OpenRouter.
+The service’s fetcher requests pages from three kinds of origin (right): two we operate, Origin A behind a CDN with caching bypassed and Origin B served directly, and public sites, which we observe only through the answer.
+For our origins, the orchestrator provisions content and failures and reads the access log.
+
+We measure how AI search agents fetch and reuse web pages.
+To test various AI services (OpenAI, Anthropic, xAI, or Google), we create a test suite, each consisting of a URL and a question about it; our results are based on the answers to each question.
+Specifically, there are two kinds of test:
+
+Controlled tests
+ run against two origins we operate.
+Because we control them, we can change a page, inject failures, set response headers, plant codes in a page, and read every request in the access log, so each behavior can be tied to a controlled change.
+
+Public checks
+ repeat selected tests on third-party sites.
+We cannot read their logs or change their pages, so a public check can observe only the answer.
+Of our findings, only two can be checked this way: file-type handling and answer staleness.
+
+The rest of this section follows the path of a test: the services we ask (
+§ 2.1
+), the origins and sites we point them at (
+§ 2.2
+), the pages and questions we send (
+§ 2.3
+), and how we run and repeat the tests (
+§ 2.4
+).
+
+2.1. 
+Services Under Test
+
+We test the AI search services of four vendors: OpenAI, Anthropic, xAI, and Google.
+The controlled tests reach them through their APIs; a separate set of tests uses their consumer apps.
+We call each tested system a 
+service
+, the HTTP client inside the service to reach origins is its 
+fetcher
+, and the company behind the service is its 
+vendor
+.
+
+API access.
+
+We query OpenAI’s 
+gpt-5-mini
+ and xAI’s 
+grok-4.3
+ through OpenRouter, and Anthropic’s 
+claude-sonnet-5
+ through Anthropic’s own API.
+OpenRouter forwards each vendor’s own fetcher, so the origin sees the vendor’s fetcher and not OpenRouter’s (
+§ C.5
+).
+An 
+account
+ is one API key, at a vendor or at OpenRouter.
+Each experiment uses one account per service, except the sharing experiments, which need two: one direct vendor key and one OpenRouter key, with the same model (
+§ 3.3.1
+).
+For each call, we record the reply, the 
+input token
+ charged,
+3
+3
+
+3
+
+              
+              
+              
+            Tokens are the pieces of text a model reads, and APIs bill by them; input tokens cover our question and the fetched page URL.
+ any error code, and the fetch tool’s own report where the API gives one, such as Google’s fetch status or Anthropic’s retrieval time.
+
+We use 
+gemini-3.1-flash-lite
+ through Google’s free-tier API and report it separately from the other three.
+The one exception is the same-caller reuse check on our controlled origins, which used 
+gemini-2.5-flash
+ because 
+gemini-3.1-flash-lite
+ did not give usable answers for these (elaborated in 
+§ D.6
+).
+
+Consumer apps.
+
+We also tested the apps of Claude, ChatGPT, Gemini, Grok, DeepSeek, Mistral (Le Chat), Qwen, Meta AI, Perplexity, and Copilot, using free, logged-in browser accounts.
+A researcher entered each question into the app and returned the full reply for processing results.
+Web search was enabled wherever the app had a switch; apps without one use search on their own.
+For the apps, the sharing test used two accounts, one belonging to an author and one to a volunteer (
+§ 3.3.1
+)
+
+2.2. 
+Test Targets
+
+Controlled origins.
+
+We operate two origins, Origin A (
+probe.attentionhub.org
+) and Origin B (
+agentfetchlab.com
+), which serve the same content and differ only in how they deliver it (
+Fig. 1
+); we call them the controlled origins.
+Origin A sits behind Cloudflare, a widely used CDN, with caching off so that every request reaches our server.
+4
+4
+
+4
+
+              
+              
+              
+            Its responses carry 
+cf-cache-status: DYNAMIC
+.
+Its backend has no public IP and is reached through a reverse proxy.
+However, a CDN may rewrite response headers: our 
+ETag
+ did not reach clients on this origin (
+§ 3.3.2
+).
+Thus, on Origin B, we serve it directly by Caddy on a public IP, with no CDN or other intermediary.
+Neither origin restricts AI fetchers: both serve the same 
+robots.txt
+, which allows every crawler on every path.
+5
+5
+
+5
+
+              
+              
+              
+            Cloudflare does not change the file on Origin A, and all three vendors’ fetches reached our server throughout the study.
+On Origin B, every page carries an 
+ETag
+ and a 
+Last-Modified
+ date, and the server answers a conditional request using either with a 304 code.
+On Origin A, Cloudflare removes the 
+ETag
+ but passes 
+Last-Modified
+, and the 304 code still works.
+Both origins serve HTTP/2 and advertise HTTP/3.
+
+One orchestrator drives the controlled origins: it provisions content and failures and reads each origin’s access log.
+We ran every experiment on Origin A first, to explore the behavior, and then repeated it unchanged on Origin B, which has no CDN, to check that the findings do not depend on the CDN.The findings agree on both origins, apart from two injected faults that Cloudflare reports differently from Caddy (
+§ D.2
+).
+
+Public sites.
+
+Since we do not control content nor HTTP serving, here we aim to measure what file types AI search handles and whether fresh content is consistently used.
+Public tests use three sets of third-party targets.
+For file types, we use 
+public files
+: sitemaps, feeds and 
+llms.txt
+ files announced by popular sites.
+For staleness, we use two sets.
+
+Public files
+ test file types: sitemaps, feeds and 
+llms.txt
+ files announced by popular sites.
+The other two sets try to answer the same question: does a service fetch the latest page, or answer from an old copy?
+
+Changing pages
+ are homepages of popular sites that change often.
+They cover many sites, but we can only tell whether the answer matches the current page or an older one.
+
+Counter endpoints
+ are public endpoints that return one value that only rises, such as a blockchain’s block height.
+They cover fewer sites, but the value in the answer tells us exactly how old the copy is.
+How we choose them is in 
+§ C.3
+.
+
+2.3. 
+Probe Design
+
+This section describes the controlled tests.
+Public checks use third-party pages we cannot change, so none of it applies to them (
+§ C.3
+).
+
+Pages and codes.
+
+Our default test page is a 2 KB HTML document generated from a line-based source of frozen prose.
+The same source can be rendered as plain text, Markdown, JSON, XML, CSV, PDF or DOCX (
+§ C.4
+).
+Each experiment varies one thing about the page, such as its size (up to 2 MB), media type or response status, and holds everything else fixed.
+To attribute each answer to the page, run, and service that produced it, and to show that the service read the page and did not guess or recall it, we embed unguessable codes in each page, as earlier cache-deception studies plant markers to see where content ends up 
+(
+Mirheidari et al., 2020
+)
+.
+The codes are derived from the page ID and a secret known only to the origin and the measurement client.
+Some experiments place five codes at known depths of a longer page, or deliver them through scripts and data blocks (
+Fig. 5
+).
+We elaborate on how we construct these pages in 
+§ C.4
+.
+
+Questions.
+
+Each test sends a URL and one question.
+Unless an experiment needs a different answer, the question asks for the page’s ID and the code at a given depth, quoted exactly (
+§ C.1
+).
+
+Attribution.
+
+Every page has a fresh ID, and its URL carries a service tag.
+6
+6
+
+6
+
+              
+              
+              
+            In the format 
+https://<origin>/<page-id>.html?<service-tag>
+
+We match the client’s questions to origin requests by URL and time, so attribution does not depend on a fetcher’s User-Agent or source IP.
+The services treat URLs with different tags as different pages (
+§ E.1
+), so one page can be asked about under several tags without interference.
+
+Reuse.
+
+To tell reuse of a page from reuse of an earlier answer, our reuse tests ask successive questions about different codes on the same page.
+The later code is absent from earlier answers, so a correct answer with no new origin request shows that the page itself, not the earlier answer, was reused.
+
+2.4. 
+Procedure
+
+Runs.
+
+Unless otherwise stated, we test each condition in at least three independent runs, each with fresh page IDs.
+We started runs between 15 September and 10 November 2026, mostly between 06:00 and 20:00 UTC, and about a quarter on a weekend.The ethical considerations are in 
+Appendix A
+.
+
+Timeouts.
+
+Each API call has a five-minute timeout; a call that exceeds it is recorded as failed.
+
+Where we measure from.
+
+The measurement client runs on a server in Saudi Arabia, except for our own downloads of public pages, which ran from a server in the United States.
+
+3. 
+Results
+
+We organize the results by the three phases of a retrieval, which are also the three actions of the title: 
+fetch
+, how a service requests a page from the origin (
+§ 3.1
+); 
+read
+, what it does with the page after fetching it and before answering (
+§ 3.2
+); and 
+reuse
+, how it keeps and reuses the page across later questions (
+§ 3.3
+).
+Each subsection reports the controlled test first and, where one is possible, a check on public sites (
+§ 2.2
+).
+Two findings have such a check: file-type handling (
+§ 3.2.1
+) and answer staleness (
+§ 3.3.3
+).
+The others need the origin’s log or control over the page, which public sites do not give us.
+
+3.1. 
+Fetch: Identity and Failure Handling
+
+Servers set access rules for the clients that fetch from them, and these rules can depend on the client’s role.
+Here we test how the services meet them: who they say they are, how many requests each question generates, and how they respond to 
+robots.txt
+ and to failures.
+
+3.1.1. 
+Fetcher Identity and 
+robots.txt
+
+Earlier work studies whether crawlers follow 
+robots.txt
+ 
+(
+Liu et al., 2025
+; 
+Kim et al., 2025
+; 
+Cui et al., 2025
+)
+.
+We ask whether the same holds for the fetches AI search agents make for a user.
+A server first has to know who is fetching.
+The IETF Crawler Best Practices draft recommends that crawlers identify themselves in the User-Agent header 
+(
+Illyes et al., 2026
+)
+, but the header is self-declared and cannot be verified 
+(
+Kaiserman, 2025
+)
+; Cloudflare’s Web Bot Auth uses signatures instead 
+(
+Conroy, 2026
+)
+.
+Prior reports describe Grok’s fetcher as impersonating browsers and repeating requests 
+(
+Stackfox, 2026
+; 
+DataDome, 2025
+)
+, so we cannot rely on the declared identity.
+Instead, we put a service-specific tag in every URL we send, so every origin request can be attributed to a service (
+§ 2.3
+).
+
+Table 2. 
+How the API fetchers identify themselves and how many requests they send per question (median).
+For Anthropic, 99.9% is the share of page requests preceded by a 
+robots.txt
+ request within the hour.
+
+Service
+
+User-Agent
+
+ 
+
+Requests
+
+per question
+
+ 
+
+Source
+
+IPs
+
+ 
+
+Requests
+
+robots.txt
+
+OpenAI
+
+ChatGPT-User
+
+1
+
+235
+
+No
+
+Anthropic
+
+Claude-User
+
+1
+
+47
+
+Yes (99.9%)
+
+xAI
+
+macOS browser
+
+6
+
+7,774
+
+No
+
+Identity and request multiplicity.
+
+OpenAI and Anthropic send vendor-specific User-Agent names, while xAI sends browser User-Agent strings,
+7
+7
+
+7
+
+                
+                
+                
+              On both origins, xAI’s requests used one of two strings around equally, a macOS Safari one and a macOS Chrome one.
+ so the header does not identify requests from xAI.
+xAI’s fetcher also sends a median of six requests per question.
+In contrast, OpenAI’s and Anthropic’s send one.
+xAI’s requests come from far more source addresses, spread over more than a thousand networks (ASNs), while OpenAI’s and Anthropic’s come from one or two cloud networks.
+In a manual check of 100 random xAI requests, only 38 came from hosting providers, so most do not come from data centers (
+§ D.1
+).
+
+This matches the prior reports of Grok’s browser impersonation and repeated requests 
+(
+Stackfox, 2026
+; 
+DataDome, 2025
+)
+; 
+§ 3.1.2
+ shows that xAI sends these requests in parallel, whether or not the origin fails.
+
+robots.txt
+.
+
+Only Anthropic’s fetcher requests 
+robots.txt
+.
+A 
+Claude-User
+ fetcher reads it within a second before its first page request, and it reuses the rules it retrieved from 
+robots.txt
+ between page fetches (
+Table 2
+).
+We observed no such request from 
+ChatGPT-User
+, and none attributable to xAI’s browser-like fetcher.
+8
+8
+
+8
+
+                
+                
+                
+              We identify the vendor by a tag in the test page’s URL, which we cannot add to 
+/robots.txt
+, because the fetcher requests it on its own; so xAI’s browser-like User-Agent strings leave no way to attribute such a request.
+
+This agrees with what the vendors state 
+(
+OpenAI, 2026c
+; 
+Anthropic, 2026
+)
+.
+How long 
+Claude-User
+ keeps the rules before reading them again is in 
+§ D.4
+; whether the consumer apps request 
+robots.txt
+ is in 
+§ D.3
+.
+
+3.1.2. 
+Retries and Backoff Under Failure
+
+The status code of a failed response tells a web client what to do next.
+After a temporary failure (
+500
+, 
+503
+, 
+429
+) a client may retry, and a 
+Retry-After
+ header can say how long to wait first, although a client is not required to comply 
+(
+Fielding et al., 2022b
+; 
+Nottingham and Fielding, 2012
+)
+.
+After a permanent one (
+403
+, 
+404
+) a retry is pointless, and a redirect loop should be cut off.
+We serve each of these from our origin and record the requests that follow, to see whether a fetcher retries or stops, whether it waits as told, and how many requests one question sends.
+
+Table 3
+ gives the counts for a 
+500
+ (Internal Server Error), a 
+403
+ (Forbidden) or 
+404
+ (Not Found), and a redirect loop; the 
+Retry-After
+ tests and the other faults are in 
+§ D.2
+.
+
+Table 3. 
+ Requests that reached our origin per question; 1 means a single request, with no retry.
+
+Retry
+: a later request after a response; 
+parallel
+: concurrent requests, so not all are retries.
+For the redirect loop, the number of redirects followed.
+The full table is in 
+§ D.2
+.
+
+Origin response
+
+OpenAI
+
+Anthropic
+
+xAI
+
+500 Internal Server Error
+
+[-1pt]
+temporary: a retry is allowed
+
+3–8
+
+[-1pt]
+retry
+
+1
+
+[-1pt]
+no retry
+
+5–7
+
+[-1pt]
+parallel
+
+403 Forbidden, 404 Not Found
+
+[-1pt]
+permanent: a retry is pointless
+
+1
+
+[-1pt]
+no retry
+
+1
+
+[-1pt]
+no retry
+
+4–14
+
+[-1pt]
+parallel
+
+Redirect loop
+
+[-1pt]
+should be cut off
+
+1
+
+[-1pt]
+x
+
+9
+
+[-1pt]
+x
+
+57–77
+
+[-1pt]
+parallel
+
+No service waits for 
+Retry-After
+.
+
+A server sends 
+Retry-After
+ to tell a client how long to wait before trying again.
+We attached a ten-second 
+Retry-After
+ to a 
+503
+ (Service Unavailable) and to a 
+429
+ (Too Many Requests).
+However, no service waited the ten seconds and then retried: each either did not retry or retried without respecting the delay..
+Namely, OpenAI retried the 
+503
+ before the ten seconds were up, and did not retry the 
+429
+; Anthropic did not retry either.
+xAI sent its usual overlapping requests, so no retry stands out.
+9
+9
+
+9
+
+                
+                
+                
+              We confirmed with 
+curl
+ that 
+Retry-After
+ arrived through Cloudflare to an outside client.
+We cannot verify what each vendor’s fetcher received.
+
+xAI sends overlapping requests.
+
+xAI made four to seven requests even for a 
+404
+ or an empty successful page, and 12–28 when the response was cut off (
+Table 3
+, 
+Table 12
+).
+The requests overlap in time, so they are parallel fetches rather than retries.
+
+Anthropic barely retries; OpenAI retries only server errors.
+
+Anthropic sent only one request in almost every case, so a single failure ended the question.
+OpenAI sent three to eight requests after a 
+500
+, but only one after a 
+403
+ or 
+404
+ (more cases in 
+§ D.2
+).
+Whether a failure is remembered across questions is tested in 
+§ 3.3.4
+.
+
+Redirect loops.
+
+Given an endless redirect, OpenAI followed one redirect, Anthropic nine, and xAI issued 57–77 parallel hops.
+
+A failed fetch costs the caller nearly as much as a successful one.
+
+For the same 2 KB page, a failed fetch uses about as many input tokens as a successful one, for all three vendors (
+Fig. 9
+, 
+§ D.7
+).
+What accounts for the cost of a failed fetch is not visible from outside the service.
+
+3.2. 
+Read: Content Handling and Cost
+
+A fetch that reaches our origin does not mean the service uses the page in its answer.
+We test which formats, script-delivered text, and page sizes survive the fetch, and what each costs in input tokens.
+
+3.2.1. 
+Document Formats
+
+A service may fetch a document without using its contents in an answer.
+We test which document formats the services can read: each file contains codes, and we check whether the answer repeats them.
+Each trial uses a new test file in one of eight formats: HTML, plain text, Markdown, JSON, XML, CSV, PDF, or DOCX with five codes (
+§ C.4
+).
+We record whether the service requested the file, which codes appear in its answer, and whether it says it cannot read the format.
+
+Changing the format also changes the file’s bytes, in both content and length.
+
+To isolate the 
+Content-Type
+ header we serve one byte-identical 2 KB body under five different values and ask for its codes.
+
+Table 4
+shows which documents each service used in its answer.
+Every service fetched every document, and the results are the same on both origins.
+
+Table 4. 
+Which documents do AI fetchers use?
+Every fetcher retrieved every file format from our origin, but not every format was used in the answer.
+✓: the answer returned all five requested page codes; 
+: the service reported an unsupported content type. 
+
+OpenAI
+
+Anthropic
+
+xAI
+
+(a) One source, eight formats
+
+HTML, plain text, JSON, PDF
+
+✓
+
+✓
+
+✓
+
+Markdown, XML, CSV, DOCX
+
+✓
+
+✓
+
+(b) One body, five 
+Content-Type
+s
+
+text/html
+, 
+text/plain
+
+✓
+
+✓
+
+✓
+
+text/markdown
+, 
+application/xml
+, 
+text/csv
+
+✓
+
+✓
+
+OpenAI rejects four of eight formats.
+
+OpenAI answered with all five requested values from HTML, plain-text, JSON, and PDF documents.
+For Markdown, XML, CSV, and DOCX, it instead reported an unsupported content type.
+Markdown is a notable case: document-ingestion tools such as MarkItDown 
+(
+Microsoft, 2024
+)
+ and Docling 
+(
+Auer et al., 2024
+)
+ deliberately convert source documents to Markdown for LLM use.
+Anthropic and xAI answered from all eight formats.
+OpenAI’s fetcher still downloaded all four rejected formats, so the rejection happens after the fetch, not before it.
+
+OpenAI decides by the 
+Content-Type
+ header, not the content.
+
+The format test changes both the body content and the header, so it cannot tell which one decides whether OpenAI reads the document.
+We therefore serve one 2 KB body, the same byte for byte, under five 
+Content-Type
+ header values.
+OpenAI answered under 
+text/html
+ and 
+text/plain
+, but reported an unsupported content type under 
+text/markdown
+, 
+application/xml
+, and 
+text/csv
+.
+Anthropic and xAI answered under all five.
+With the bytes fixed, the header alone decided whether OpenAI used the page.
+
+The request headers accept every format.
+
+Anthropic sent 
+Accept: */*
+; OpenAI and xAI sent browser-style lists with a wildcard fallback.
+OpenAI’s list included 
+application/xml
+, although it rejected the XML response.
+
+On public sites.
+
+Public files show the same pattern: OpenAI and Google refuse some XML files, while Anthropic and xAI read them (
+§ D.5
+).
+OpenAI refused 98% of XML files, served as 
+application/xml
+ or 
+text/xml
+, but read 95% of plain-text files from the same kind of sites; its answers quote the fetcher’s “Unsupported content-type” error.
+Google refused every 
+application/xml
+ file but returned content for most 
+text/xml
+ files, and its error is generic;
+10
+10
+
+10
+
+                
+                
+                
+              Every refusal carried 
+URL_RETRIEVAL_STATUS_ERROR
+ and every successful read 
+URL_RETRIEVAL_STATUS_SUCCESS
+.
+The error value names no cause; it does rule out Google’s separate statuses for unsafe or paywalled content.
+Google is included here only: it is excluded from the controlled tests (
+§ 2
+).
+ because both are XML, the 
+Content-Type
+ header is the likely trigger, though Google does not say so.
+Anthropic refused plain text (19%) about as often as XML (14–19%) and blamed the site’s domain, not the format.
+xAI rarely refused, but returned 47% of the 
+text/xml
+ files flattened into one line.
+
+3.2.2. 
+JavaScript-Dependent Content
+
+Many sites insert their main text with client-side JavaScript, so a fetcher that does not run scripts sees a different page from a browser user.
+Vercel reports that most AI crawlers do not render JavaScript 
+(
+Zecchini et al., 2024
+)
+; we test the user-triggered fetchers directly, with test pages that hide some codes behind a script.
+We describe the test pages and runs in 
+§ C.4
+.
+
+Table 5. 
+Do AI fetchers see text that JavaScript puts on a page?
+Only the plain-HTML code ever appeared in answers, for all three services.
+
+Version
+
+Where the other codes sit
+
+Readable in page source?
+
+In answer?
+
+Plain HTML (baseline)
+
+HTML body text
+
+Yes
+
+Yes
+
+Inline script
+
+Scrambled in an inline script
+
+No
+
+No
+
+External script
+
+Scrambled in a 
+.js
+ file
+
+No
+
+No
+
+Data block
+
+JSON block, copied in by a script
+
+Yes
+
+No
+
+JSON-LD
+
+JSON-LD block, never displayed
+
+Yes
+
+No
+
+Table 5
+lists the five versions.
+The plain-HTML version is our baseline; for this, all three services returned all five codes in every sitting, so the page itself is readable.
+
+First, do the fetchers run scripts?
+In two versions of the page, the codes are scrambled inside a script (
+Table 5
+), so they can be read only by running the page’s decoder.
+
+No service returned them.
+No service requested the imported 
+.js
+ file, including xAI, which sent five to seven page requests per question with browser User-Agents (
+§ 3.1.1
+).
+We saw no sign that any fetcher runs page scripts.
+
+Second, do they at least read text inside a script tag?
+In the data-block and JSON-LD versions, the codes are in the HTML as plain text, yet no service returned them.
+This suggests that the fetchers remove the content of 
+<script>
+ tags before the page reaches the model, as HTML-to-text conversion commonly does; we infer this from the answers and cannot observe the pipeline (
+§ 4.3
+).
+It also differs from Vercel’s remark that JSON data in the initial HTML response may still be indexed 
+(
+Zecchini et al., 2024
+)
+.
+Anthropic’s fetch tool with dynamic filtering (
+§ 3.2.4
+), in which the model writes a program to analyze the fetched page, did not help either.
+
+Text that a site supplies only through JavaScript or in a script block, such as JSON-LD, is therefore invisible to all three fetchers.
+About 40% of the popular-site homepages we checked embed JSON-LD, so this content is likely missing from many answers, although we did not measure this over public pages.
+
+3.2.3. 
+Document Size
+
+A fetch of a long page does not show that the whole page informs the answer, or what it costs.
+We serve pages from 4 KB to 2 MB with codes at known depths (
+§ 2.3
+), and record which codes the answer reports and the input tokens the API charges.
+Note that no fetcher sent a 
+Range
+ header, although our origin supports byte ranges: every request asked for the whole page.
+
+Figure 2. 
+Input tokens (page content given to the model).
+(a) Tokens vs. page size; the dotted line is where xAI stops reading (
+500 KB).
+(b)–(c) Anthropic with dynamic filtering (DF) on or off, by file type for an 8 KB page and by HTML page size.
+Points and bars are means of up to 3 runs, whiskers show min and max.
+The label above each DF-on bar is its mean divided by the DF-off mean.
+
+xAI reads only the first half megabyte.
+
+OpenAI and Anthropic returned every code at every size up to 2 MB.
+xAI did the same through 512 KB, but on the 1 MB and 2 MB pages it returned only the codes within the first half megabyte, in every trial on both origins.
+Both origins sent the whole page in every one of these requests, so the limit applies to what xAI reads, not to what it downloads.
+Because xAI sends several requests per question (
+§ 3.1.1
+), a 2 MB page is served several times for an answer that uses only its first half megabyte.
+
+Input grows with page size only for Anthropic.
+
+Anthropic’s reported input token count kept growing roughly with page size, to about 760 K tokens at 2 MB with no plateau.
+11
+11
+
+11
+
+                
+                
+                
+              We did not set Anthropic’s 
+max_content_tokens
+ limit in these runs 
+(
+Anthropic, 2025
+)
+.
+
+OpenAI’s and xAI’s count rose on small pages, then stayed within a broad band up to 2 MB (
+Fig. 2
+a).
+The two bounded services differ in what they deliver: OpenAI returned all five codes at a bounded cost, whereas xAI’s bounded input coincides with the loss of content beyond about 0.5 MB.
+
+At the small end the order reverses: on a 4 KB page OpenAI reported more than twice the input of the others, because most of its input is not the page (about nine times our estimate of the page’s own tokens, against four for Anthropic and xAI) but search and tool context 
+(
+OpenAI, 2026a
+)
+.
+This is an end-to-end difference, not a statement about how OpenAI reads the page.
+12
+12
+
+12
+
+                
+                
+                
+              We estimate page-content tokens from Anthropic’s 2 MB run.
+Ratios for OpenAI and xAI are approximate because their tokenizers differ.
+
+These runs used the basic fetch tool; 
+§ 3.2.4
+ shows how much more the direct path with dynamic filtering costs.
+
+3.2.4. 
+Dynamic Filtering and Input Cost
+
+A retrieval tool may process a document before the model answers, which the origin log cannot show.
+We compare two versions of Anthropic’s fetch tool on the same pages, model, and question: the basic version, and a newer one with dynamic filtering, which can execute code to select fetched content 
+(
+Anthropic, 2025
+)
+.
+13
+13
+
+13
+
+                
+                
+                
+              The versions are 
+web_fetch_20250910
+ (basic) and 
+web_fetch_20260209
+ (dynamic filtering, direct API only).
+
+We compare API-reported input tokens, tool traces, and answers.
+
+Dynamic filtering increased input on these pages.
+
+Dynamic filtering aims to reduce input by selecting relevant content from a fetched document.
+On our 8 KB pages, however, the version with filtering reported roughly 8–22 times as many input tokens as the basic version across all eight formats (
+Fig. 2
+b).
+Enabling dynamic filtering also makes input tokens vary widely across repeated runs, where they were stable without it.
+
+The HTML comparison shows that the increase persisted at larger page sizes (
+Fig. 2
+c); one 128 KB call reported about 2 million input tokens.
+14
+14
+
+14
+
+                
+                
+                
+              This single call cost approximately $4, so we did not test larger pages; the median public homepage we measured is 158 KB.
+
+The filtering calls ran code (their traces contain 
+code_execution
+ blocks, which the basic calls never did), yet gained nothing: both versions answered the question about the deepest code, and filtering used more input tokens.
+Filtering is meant to discard irrelevant content, and our question needs codes from across the whole page, so there was little to discard.
+We did not test pages where most of the content is irrelevant to the question, where filtering may save tokens.
+
+3.3. 
+Reuse: Caching and Sharing
+
+We ask whether information fetched for one query is reused later: by whom, for how long, and is this despite what the origin says.
+Each test has three steps.
+First, a warm-up question makes the service fetch a page we serve.
+Then, after a gap, the origin keeps the page, changes it, or makes it fail.
+Finally, a repeat question asks for a code that only a new fetch could return, and the origin log shows whether one happened (
+§ C.6
+).
+
+3.3.1. 
+Reuse and Sharing Across Callers
+
+Does a page fetched for one caller serve another?
+After a warm-up question fetches a page, we ask the repeat question from a different caller: a different model, account, or app login.
+The repeat question asks for a different code on the same page, so only the page’s content, not a replay of the first answer, can answer it.
+
+Table 6
+ shows, for each change of caller, whether the service reused the page.
+The API and app trials used separate pages, so they do not test reuse between the two.
+
+Table 6. 
+Is a later question answered from a page that an earlier question made the service fetch, with no new request to our origin?
+Yes: in every trial (3–6 per cell); No: in none; otherwise the share of trials. —: not tested (most apps do not let us choose the model, and we did not vary the apps’ location).
+The “later caller” is the one asking the second question.
+Gemini API: 
+gemini-2.5-flash
+ (
+§ D.6
+).
+
+API
+
+Consumer app
+
+Later caller is…
+
+OpenAI
+
+Anthropic
+
+xAI
+
+Gemini
+
+ChatGPT
+
+Claude
+
+Grok
+
+Gemini
+
+the same account (new query or chat)
+
+Yes
+
+Yes
+
+Yes
+
+No
+
+Yes
+
+Yes
+
+1 of 3
+
+Yes
+
+the same account, a different model
+
+Yes
+
+Yes
+
+Yes
+
+—
+
+—
+
+—
+
+—
+
+—
+
+a different customer
+
+Yes
+
+Yes
+
+Yes
+
+—
+
+Yes
+
+Yes
+
+2 of 3
+
+No
+
+a different customer, called from the US
+
+Yes
+
+Yes
+
+Yes
+
+—
+
+—
+
+—
+
+—
+
+—
+
+Reuse across API callers.
+
+OpenAI, Anthropic, and xAI shared page content across models and accounts in every completed trial (
+Table 6
+).
+15
+15
+
+15
+
+                
+                
+                
+              The account comparison paired a direct vendor account with an OpenRouter account using the same model.
+
+Gemini is the exception: it fetched the page again on every question, even from the same caller minutes later, so it had no copy to share. This matches Google’s documentation, which says that its tool reads a page from an index cache when the page is indexed and fetches it live otherwise 
+(
+Google, 2026c
+)
+; our pages were new.
+
+Consumer apps show a narrower and less consistent pattern.
+
+ChatGPT and Claude reused the page in a new chat and shared it across separate logins in all three sittings.
+Grok did so inconsistently: it reused the page in one of three sittings and shared it across logins in two, and fetched again otherwise.
+The full eight-app comparison appears in 
+§ E.3
+.
+
+3.3.2. 
+Cache-Control and Conditional Requests
+
+HTTP origins can specify when a response may be reused through 
+Cache-Control
+ and 
+Expires
+ 
+(
+Fielding et al., 2022a
+)
+.
+Validators such as 
+Last-Modified
+ let a client check whether a retained response has changed 
+(
+Fielding et al., 2022b
+)
+.
+We test whether these signals affect how often a service reuses a page or requests it from our origin.
+We serve the same 2 KB page under each of 19 header settings and ask about it again after 2.5 to 80 minutes (
+§ E.4
+).
+
+Table 7
+ summarizes the outcome.
+
+Table 7. 
+Was a page answered from a stored copy, with no origin request, when re-asked up to 80 min later?
+Columns give the page’s 
+Cache-Control
+ setting.
+OpenAI and xAI behaved identically in every run and for all 19 settings (
+Table 18
+).
+OpenAI fetched the page again after about 30 min under every setting, including none, so this is not a response to the header.
+OR = via OpenRouter, D = direct.
+
+Reused?
+
+Run
+
+Route
+
+no-store
+
+private
+
+no-cache
+
+None
+
+Anthropic
+
+7 Oct
+
+OR
+
+Yes
+
+Yes
+
+Yes
+
+Yes
+
+15 Oct
+
+D
+
+Yes
+
+Yes
+
+Yes
+
+Yes
+
+17–21 Oct, 6 runs
+
+D (5), OR (1)
+
+No
+
+Yes
+
+Yes
+
+Yes
+
+OpenAI
+
+Yes
+
+Yes
+
+Yes
+
+Yes
+
+xAI
+
+Yes
+
+Yes
+
+Yes
+
+Yes
+
+The header did not change reuse, except for Anthropic’s 
+no-store
+.
+
+OpenAI answered from a stored copy for about 30 min whatever the header said, then fetched the page again.
+xAI never fetched a page again during our test, even for pages marked 
+no-store
+ or 
+no-cache
+.
+Anthropic also ignored the header until 15 October.
+From 17 October on, in every run and on both routes, it fetched 
+no-store
+ pages again on every question, but still reused pages marked 
+private
+ or 
+no-cache
+, or with no directive (
+Table 7
+).
+
+No API fetcher revalidated.
+
+On both origins we observed no 
+If-Modified-Since
+ or 
+If-None-Match
+ request from the three API fetchers: whenever they asked again, they asked for the whole page.
+16
+16
+
+16
+
+                
+                
+                
+              Among the consumer apps, only Mistral sent a conditional request, one 
+If-Modified-Since
+, and our origin answered it with 
+304 Not Modified
+.
+
+On public pages, Anthropic’s copies outlive the header.
+
+For pages that set a limit on reuse, 76% of its answers came from a copy older than the header allows.
+Even for 
+no-store
+ pages only 42% followed it, and the rest were answered from copies a day old or older.
+17
+17
+
+17
+
+                
+                
+                
+              One page that sets 
+no-store
+ was answered from a copy almost six days old, and one that sets 
+max-age=60
+ from a copy a day old.
+
+Pages marked 
+private
+, which a cache shared between users should not store, still got an old copy 81% of the time, and Anthropic shares stored copies between callers (
+§ 3.3.1
+).
+
+3.3.3. 
+Retention and Renewal
+
+Without conditional validation (
+§ 3.3.2
+), a service may keep answering from an older copy after its source changes.
+We first measure when a correction becomes visible in origin requests and answers.
+We then compare repeatedly queried pages with pages left untouched to test whether use postpones an origin revisit.
+
+Visibility of page updates.
+
+We ask about a fresh HTML or plain-text page, update it at the same URL, and ask again after a delay.
+OpenAI gave updated answers from about 30 minutes on, while Anthropic and xAI gave outdated answers for a day or more (
+Fig. 3
+a).
+Notably, even after OpenAI fetched the updated page, about 60% of its follow-up answers were still outdated; we look into why in 
+§ E.8
+.
+A fetch in the origin log therefore does not mean the answer uses the page.
+
+Questions did not renew copies.
+
+Asking about a page several times did not keep its copy longer: OpenAI and xAI downloaded it again at the same final check as a page left alone (
+§ E.5
+).
+
+Figure 3. 
+How long after a change a service keeps answering from the old state. Each mark is one follow-up question, placed by the time since (a) a page update or (b) the fix of an error page.
+Stale means the answer still shows the old page (a) or the error (b); fetched means our origin received a request for that question.
+Time axes are logarithmic.
+
+On public pages, Anthropic answered from copies that were hours or days old.
+
+To see whether the reuse we measured on our own pages also happens on real sites, we asked about 90 homepages that change often (elaborated in 
+§ E.6
+).
+Anthropic’s fetch tool reports when it fetched each page, so we can read the age of its copy directly.
+18
+18
+
+18
+
+                
+                
+                
+              The reply carries a 
+retrieved_at
+ time and the exact retrieved content for each fetched page, and a failed fetch returns an error code such as 
+url_not_allowed
+ or 
+url_not_accessible
+.
+The other three services return no fetch time in our runs (OpenAI and xAI through OpenRouter, Google through its API).
+
+65% of Anthropic’s answers to the normal URL came from a copy more than an hour old, and 7% from one more than a week old.
+The answers agree: Anthropic answered from outdated copies (
+).
+
+Public endpoints agree with our own origins.
+
+Judging whether a page’s text is stale is noisy, since a service may quote a different part or paraphrase it.
+A public endpoint whose value only increases has none of this noise: the answer is a number, so how far it lags the live value is measured directly, and we do not need to build a different question for each page.
+We asked each service for the current value of such an endpoint, one that changes every few seconds to minutes, every 45 minutes for about three days.
+We compared each answer with our reference log, which records the endpoint’s value every five minutes.
+
+Figure 4. 
+How far behind the live value each service’s answer is, on one public endpoint per 
+Cache-Control
+ setting: Hacker News (
+no-cache
+), NIST beacon (
+no-store
+), USGS quakes (
+max-age=60
+), and Ethereum height (no header).
+Google’s USGS answers are excluded because it mis-transcribed the value.
+
+Fig. 4
+shows one representative endpoint for each header setting (
+§ E.7
+ shows all eight).
+Google was almost always current.
+OpenAI’s answers were typically about an hour behind the value in our reference log.
+
+xAI’s were about eight hours behind and Anthropic’s about eleven, in line with the copies lasting up to about a day on our origins (
+Fig. 3
+).
+
+The header made no visible difference, as on our own origins: endpoints marked 
+no-store
+, 
+no-cache
+, or 
+max-age=60
+ were no fresher than those with no header.
+Notably, we also checked how Anthropic handles 
+no-store
+ on the NIST beacon, and the result only partly agrees with our origins.
+Its answers were either current or from a very old copy, with nothing in between; 
+§ E.7
+ looks into why.
+
+3.3.4. 
+Heal from Negative Caching
+
+Negative caching is established in DNS: resolvers can retain a failed lookup and answer later queries without asking the authoritative server 
+(
+Andrews, 1998
+)
+.
+We ask whether services do the same with a failed page fetch, after the origin has recovered.
+Each trial starts with a fresh URL that returns an error (
+503
+, 
+404
+, or 
+403
+) throughout the first query; once that query ends, we switch the URL to a marked 
+200
+ page and ask again after a delay.
+A service that remembers the failure answers with an error and sends no request; one that does not fetches the page and returns the marker.
+A page that was available from the start, asked at the same age, shows whether the service reuses ordinary copies at that delay.
+
+Failures are remembered, but differently by each service.
+
+Anthropic did not fetch a recovered page again for any of the three errors in the whole window, up to about 11 hours, and its answers kept saying the page was broken.
+OpenAI sent no request for about the first 25 minutes; after that it fetched the recovered page again, but 70% of such trials its answer still quoted the original error.
+xAI read the fix promptly for 
+503
+ and 
+403
+, but for 
+404
+ behaved like Anthropic, with no new request at any delay (
+Fig. 3
+b).
+
+4. 
+Discussion
+
+4.1. 
+HTTP Mechanisms in the AI Era
+
+Our findings show that AI search agents do not follow the assumptions that HTTP makes of browsers and crawlers.
+We discuss which existing mechanisms still apply and what new ones the retrieval stack may need.
+
+Control signals work only when a vendor chooses to follow them.
+
+Cache directives remain the right way for a publisher to say how its pages may be reused, and one vendor already follows part of them: from mid-October 2026, Anthropic honors 
+no-store
+ by fetching such pages again on every question (
+§ 3.3.2
+).
+Within a single role, such as reuse, an existing directive still applies, and following it takes a policy change by the vendor, not a new protocol.
+But compliance is partial.
+Anthropic follows 
+no-store
+ on our pages but not consistently on a public endpoint (
+§ E.7
+), and it still reuses pages marked 
+no-cache
+; OpenAI and xAI follow none of the directives.
+The other signals we tested are no better: OpenAI and xAI ignored 
+Retry-After
+, and only Anthropic requested 
+robots.txt
+ (
+§ 3.1.2
+, 
+§ 3.1.1
+).
+For 
+robots.txt
+, the standard defines rules for crawlers, which it calls automated clients, and says nothing about fetches that a user triggers 
+(
+Koster et al., 2022
+)
+.
+Nothing in these specifications requires a vendor to follow the advisory signal, so a publisher gives up control over how its pages are fetched and reused to the vendors.
+
+Directives describe the origin’s page, not the service’s copy.
+
+HTTP’s reuse rules assume that a cache holds the object the origin served: 
+ETag
+ and 
+Last-Modified
+ check whether it changed, and 
+Cache-Control
+ says how long it stays valid.
+Services process pages before the model reads them: none read text that a page supplies only through scripts (
+§ 3.2.2
+), and Anthropic’s dynamic filtering lets the model run code on the fetched page (
+§ 3.2.4
+).
+A 
+max-age=600
+ on a news article governs only the original HTML, not the text a service extracts from it, and no fetcher sent a conditional request (
+§ 3.3.2
+).
+We cannot see what a service stores, so whether a processed copy is what it reuses remains open.
+
+Publishers cannot tell who is fetching.
+
+An origin identifies a client by its address and its User-Agent, and both are self-declared.
+OpenAI and Anthropic name their fetchers, while xAI’s documentation does not 
+(
+xAI, 2026
+)
+ and its requests carry browser-like User-Agents from many source addresses across over a thousand networks (
+§ 3.1.1
+, 
+§ D.1
+).
+An operator cannot single such a fetcher out by address or identity, and log studies that attribute traffic by declared User-Agent 
+(
+Kim et al., 2025
+)
+ would miss it.
+Emerging IETF work proposes to bind an agent’s identity to a cryptographic signature instead of an address 
+(
+Meunier and Major, 2026
+)
+, which would let an origin apply a policy per agent.
+Any mechanism that enforces control above needs this first.
+
+What new mechanisms may be needed.
+
+Two gaps remain that no existing HTTP mechanism covers.
+
+A request cannot say how much the answer depends on it.
+
+AI search agents multiply the requests an origin receives, since one user question can trigger many fetches 
+(
+Sayyid-Ali et al., 2026
+)
+.
+Some of these requests are exploratory, collecting context by following links, while others fetch the page the answer uses.
+
+To the origin they look the same, so when it is overloaded it cannot serve the needed requests first and slow the rest.
+A lightweight header that marks a request as essential or exploratory would allow this.
+
+HTTP caches whole pages, but retrieval reuses pieces of text.
+
+An HTTP cache stores a response under its URL and treats it as stale as a whole.
+A retrieval system splits pages into chunks and reuses the chunks that are relevant to a question 
+(
+Jin et al., 2026
+)
+, which may come from pages on several origins.
+Such a system may answer from a stored chunk without requesting the page, and one changed sentence makes the whole URL stale under HTTP.
+How freshness rules should apply to chunks, when one answer mixes chunks from several origins, is an open problem.
+
+4.2. 
+Vendors See the Fetch, Users and Publishers Do Not
+
+Vendors see what a fetch retrieved, when, and at what cost.
+Users and publishers see little of it, and cannot respond to what they cannot see.
+
+Users cannot see what a fetch costs.
+
+Input cost depends on the service, not only on the page (
+§ 3.2.3
+).
+OpenAI’s stays within a band up to 2 MB, xAI bounds it by reading only the first 0.5 MB and dropping the rest without saying so, and Anthropic’s grows with the page, to about 760 K tokens for a 2 MB page.
+Anthropic offers a size limit 
+(
+Anthropic, 2025
+)
+, but a user cannot predict in advance what size is proper for their question.
+A failed fetch costs too: for a 2 KB page, a call whose fetch failed used about as many input tokens as one whose fetch succeeded (
+§ D.7
+), so it adds to the bill without adding anything to the answer.
+
+Users cannot see how old an answer is.
+
+Nothing in an answer shows whether it comes from a live fetch or a stored copy.
+An update reached answers after 30 minutes (OpenAI) to a day or more (Anthropic, xAI) (
+§ 3.3.3
+), and OpenAI sometimes answered from the old version although it had fetched the new one (
+§ E.8
+).
+Only Anthropic’s API reports the retrieval time and lets a developer ask for a fresh fetch 
+(
+Anthropic, 2025
+)
+; we found neither for OpenAI or xAI, and none of the services shows this to the end user.
+From outside, we observe only how long a copy lasts, not whether a fixed time limit or eviction ends it; either way, the answer carries no sign of its age.
+
+Publishers cannot see how their page is used.
+
+A fetch shows the publisher one request, not how many answers it will serve: a stored copy is shared across accounts (
+§ 3.3.1
+), and each later use leaves no request at all.
+The origin’s log therefore counts fetches and not uses, so anything that depends on counting, such as pay-per-fetch, sees only part of the use 
+(
+Teixeira et al., 2026
+)
+.
+
+Publishers do not know what format an AI agent wants.
+
+There is no agreed format for web content that is friendly to AI agents.
+An agent has two options.
+If it wants the human view, it should run scripts and browse interactively.
+If it wants the content, it should read the file directly, in a form like Markdown.
+The services do neither fully.
+Some retrieval stacks browse a page like a person 
+(
+OpenAI, 2025a
+)
+, yet no service runs JavaScript (
+§ 3.2.2
+), and OpenAI refuses Markdown (
+§ 3.2.1
+), the format commonly recommended for LLM input 
+(
+Microsoft, 2024
+; 
+Auer et al., 2024
+)
+.
+A publisher therefore cannot tell which form to optimize for.
+
+4.3. 
+Limitations
+
+Cost-constrained parameter space.
+
+Our experiments incurred approximately $400 in API costs, which constrained the parameter space we could explore.
+In particular, object sizes beyond 
+, where the token costs are highest, were tested only sparsely.
+Real-world HTML pages frequently exceed this threshold, so our cost estimates are conservative for the tail of the size distribution.
+
+Two controlled origins.
+
+Some experiments need a controlled origin: planting codes, setting arbitrary 
+Cache-Control
+ directives, and varying response size are not possible on third-party sites.
+We use two, one behind a CDN with caching bypassed and one served directly, and their results agree, but both are our own new domains.
+Agents may apply different policies to established sites, depending on domain reputation, location, or hosting provider, which two origins cannot exercise.
+We complement the controlled measurements with observations on public pages and endpoints.
+
+Public-page validation.
+
+On third-party pages we see only the answer, not the process behind it: there is no request log and no extracted text.
+A stale answer therefore shows that an old version was used, but not where it came from.
+The fetcher may also receive a different edition of a page than our polling server does (by region, language, or bot rules), or an older copy from the site’s own cache.
+Services differ in how they turn a page into text and in whether they quote at all, so we score each answer by outcome and report read rates per service.
+The sites are popular pages that allow all four fetchers, and a stale answer is a lower bound on reuse.
+We therefore use these pages to validate the controlled results, not to estimate rates.
+
+Vendor coverage and black-box view.
+
+We study three commercial API vendors (Anthropic, OpenAI, xAI), plus Google on public pages and several consumer apps in the appendix; other vendors may behave differently.
+Behavior also changes over time: Anthropic’s mid-study shift to fetching 
+no-store
+ pages again on our origins shows that findings can become outdated within the measurement period, so our results are a snapshot.
+We see the request log at the origin and the API reply at the client, but not what happens in between.
+The dynamic-filtering result is inferred from token counts and tool traces, internal steps such as chunking, storing, and deduplication cannot be observed, and our explanation for old answers after a new fetch is a guess (
+§ E.8
+).
+For the same reason, we cannot say why Anthropic’s fetch tool reused an old copy of the NIST beacon, which sends 
+no-store
+, but fetched our own 
+no-store
+ pages again (
+§ E.7
+).
+We also measure how long a service keeps a page and whom it shares it with, but not how often reuse happens, which depends on how popular pages are among users (for web pages, popularity is classically skewed 
+(
+Breslau et al., 1999
+)
+) and is visible only to the vendors.
+
+Content we did not test.
+
+Our pages are plain text, and a question asks for a code that a plain string match can find, so the check does not depend on how well the model understands the page.
+Images and video would need richer pages, and checking an answer about an image or a video would depend on whether the model can read it, which adds a variance of its own.
+We also did not test how services handle ads, which is a natural next direction.
+It would mean serving ads to the fetchers, and since services keep stored copies and share them across accounts, those ads could reach other users’ answers.
+
+5. 
+Related Work
+
+Bot and crawler measurement.
+
+Kim et al. find that scrapers comply less as 
+robots.txt
+ directives get stricter, and that AI search crawlers rarely check the file at all 
+(
+Kim et al., 2025
+)
+.
+Cui et al. study how publishers write 
+robots.txt
+ rules for LLM bots and report cases where a bot did not follow them 
+(
+Cui et al., 2025
+)
+.
+Sayyid et al. audit what ChatGPT and Claude can do with a page and the traffic this creates: one question can trigger 10–40 fetches, and fetched pages are reused for about 10–15 minutes from the same address 
+(
+Sayyid-Ali et al., 2026
+)
+.
+Unlike studies of periodic crawlers and the controls publishers have against them 
+(
+Kim et al., 2025
+; 
+Cui et al., 2025
+; 
+Liu et al., 2025
+)
+, or of what answer engines can do with a page 
+(
+Sayyid-Ali et al., 2026
+)
+, we study the on-demand fetch itself, beyond whether it honors 
+robots.txt
+.
+We measure it at the origin server, in request logs: what a fetcher requests, how long it keeps and shares what it fetched, how it handles failures, and what each fetch costs.
+
+AI traffic impact on web infrastructure.
+
+Zhang et al. inject controlled AI workloads into a Varnish deployment and find that cache miss rates double when AI traffic reaches 25% of requests and triple at 100% 
+(
+Zhang et al., 2025
+)
+.
+The Wikimedia Foundation reports that AI bots account for roughly 35% of pageviews but over 65% of resource-intensive requests, with a preference for low-popularity pages that bypasses regional caches and reaches origin datacenters 
+(
+Wikimedia Foundation, 2025
+)
+.
+Recent proposals have agents retrieve passages that publishers expose under their own policies, in place of whole pages 
+(
+Chen et al., 2025
+; 
+Hua and Xiao, 2026
+)
+.
+These works establish the strain and one remedy, but do not explain which agent behaviors drive the load.
+We provide that missing layer: passive server-side measurement that attributes origin pressure to specific retrieval properties.
+
+Web proxies.
+
+Web proxies have long been a major research area.
+Caching proxies shared by many users cut latency and load 
+(
+Fielding et al., 2022a
+)
+, and transcoding or data-saving proxies compress and modify pages to save users’ data 
+(
+Tahir et al., 2020
+; 
+Agababov et al., 2015
+; 
+Li et al., 2016
+)
+.
+They also raised concerns: measurements found that they removed content and ads and weakened security, and that Web Light applied by default, so publishers could opt out only with a header 
+(
+Tahir et al., 2020
+; 
+Kondracki et al., 2020
+)
+.
+Shared caches have also leaked one user’s private page to another, by treating different URLs as the same page 
+(
+Mirheidari et al., 2020
+)
+; we test this for AI search agents with personalised links and find no leak.
+AI search agents combine both roles, but differ in three ways: the user receives an answer and not the page, so neither the user nor the publisher can see what was changed; the processed page is reused across accounts; and the behavior depends on an non-deterministic model, so it can vary between runs.
+We measure whether the controls publishers rely on, such as 
+Cache-Control
+, are respected, observed at the origin server.
+
+Caching in the retrieval stack.
+
+Most retrieval-augmented systems search a pre-indexed, static corpus, and the caches built for them decide reuse by embedding similarity rather than by URL 
+(
+Lewis et al., 2020
+; 
+Bergman et al., 2025
+; 
+Jin et al., 2026
+)
+.
+Work aimed at the open web adds freshness: it reuses a stored answer or page only while it is likely still current, or re-fetches pages and re-indexes only what changed 
+(
+Mansoor et al., 2026
+; 
+Zerhoudi et al., 2026
+)
+.
+Systems that retrieve from the live web at inference time focus on task completion and answer quality from the agent side 
+(
+Nakano et al., 2021
+)
+.
+These works design or propose caches for agents.
+We measure the caches that commercial services already run: whether an answer comes from a fetch or from a stored copy, how long that copy is kept, and which 
+Cache-Control
+ signals the service respects, observed at the origin server.
+
+6. 
+Conclusion
+
+We measured how AI search agents retrieve the web, using controlled origins and public pages.
+Services share fetched pages across accounts and mostly ignore the origin’s cache rules, and their fetchers differ in whether they honor retry delays, request 
+robots.txt
+, or read certain formats, scripts, and long pages.
+A publisher therefore cannot predict when a change reaches users, and a user cannot see how old or how complete an answer is.
+AI retrieval is a new traffic class: it fetches on demand like a browser, rewrites pages like a transcoding proxy, and reuses them like a shared cache, and the controls HTTP gives publishers do not yet govern it.
+Our study covers how these systems behave, not their security; a natural next step is to test the fetchers’ security properties, such as TLS validation
+(
+Kondracki et al., 2020
+)
+, with the same controlled origins.
+
+References
+
+Agababov et al
+.
+ (2015)
+
+Victor Agababov, Michael
+Buettner, Victor Chudnovsky, Mark Cogan,
+Ben Greenstein, Shane McDaniel,
+Michael Piatek, Colin Scott,
+Matt Welsh, and Bolian Yin.
+2015.
+
+Flywheel: Google’s Data Compression Proxy for the
+Mobile Web. In 
+Proceedings of the USENIX Symposium
+on Networked Systems Design and Implementation (NSDI)
+.
+367–380.
+
+https://www.usenix.org/conference/nsdi15/technical-sessions/presentation/agababov
+
+Andrews (1998)
+
+Mark Andrews.
+1998.
+
+Negative Caching of DNS Queries (DNS
+NCACHE)
+.
+
+RFC 2308. Internet
+Engineering Task Force.
+
+https://doi.org/10.17487/RFC2308
+
+Proposed Standard.
+
+Anthropic (2025)
+
+Anthropic.
+2025.
+
+Web Fetch Tool
+.
+
+Anthropic.
+
+Retrieved November 17, 2026 from 
+https://platform.claude.com/docs/en/agents-and-tools/tool-use/web-fetch-tool
+
+Anthropic (2026)
+
+Anthropic.
+2026.
+
+Does Anthropic Crawl Data From the Web,
+and How Can Site Owners Block the Crawler?
+
+Retrieved November 17, 2026 from 
+https://support.claude.com/en/articles/8896518
+
+Auer et al
+.
+ (2024)
+
+Christoph Auer, Maksym
+Lysak, Ahmed Nassar, Michele Dolfi,
+Nikolaos Livathinos, Panos Vagenas,
+Cesar Berrospi Ramis, Matteo Omenetti,
+Fabian Lindlbauer, Kasper Dinkla,
+Lokesh Mishra, Yusik Kim,
+Shubham Gupta, Rafael Teixeira de Lima,
+Valery Weber, Lucas Morin,
+Ingmar Meijer, Viktor Kuropiatnyk, and
+Peter W. J. Staar. 2024.
+
+Docling Technical Report.
+
+https://doi.org/10.48550/arXiv.2408.09869
+
+arXiv:2408.09869 [cs.CL]
+
+Belson (2025)
+
+David Belson.
+2025.
+
+The 2025 Cloudflare Radar Year in
+Review: The Rise of AI, Post-Quantum, and Record-Breaking DDoS Attacks
+.
+
+Cloudflare.
+
+Retrieved November 18, 2026 from 
+https://blog.cloudflare.com/radar-2025-year-in-review/
+
+Belson and Rhea (2025)
+
+David Belson and Sam
+Rhea. 2025.
+
+The Crawl Before the Fall…of
+Referrals: Understanding AI’s Impact on Content Providers
+.
+
+Retrieved November 17, 2026 from 
+https://blog.cloudflare.com/ai-search-crawl-refer-ratio-on-radar/
+
+Bergman et al
+.
+ (2025)
+
+Shai Bergman, Anne-Marie
+Kermarrec, Diana Petrescu, Rafael Pires,
+Mathis Randl, Martijn de Vos, and
+Ji Zhang. 2025.
+
+Leveraging Approximate Caching for Faster
+Retrieval-Augmented Generation. In 
+Proceedings of
+the International Middleware Conference (Middleware)
+.
+340–353.
+
+https://doi.org/10.1145/3721462.3770776
+
+Berners-Lee et al
+.
+ (2005)
+
+Tim Berners-Lee, Roy T.
+Fielding, and Larry Masinter.
+2005.
+
+Uniform Resource Identifier (URI):
+Generic Syntax
+.
+
+RFC 3986. Internet
+Engineering Task Force.
+
+https://doi.org/10.17487/RFC3986
+
+Bethke (2026)
+
+Erik Bethke.
+2026.
+
+TL;DR;AI4ME: The First Kilobyte Belongs
+to the Robots
+.
+
+Retrieved November 17, 2026 from 
+https://bike4mind.com/blog/tl-dr-ai4me-the-first-kilobyte-belongs-to-the-robots
+
+Breslau et al
+.
+ (1999)
+
+Lee Breslau, Pei Cao,
+Li Fan, Graham Phillips, and
+Scott Shenker. 1999.
+
+Web Caching and Zipf-like Distributions: Evidence
+and Implications. In 
+Proceedings of the IEEE
+Conference on Computer Communications (INFOCOM)
+. 126–134.
+
+https://doi.org/10.1109/INFCOM.1999.749260
+
+Chapekis and Lieb (2025)
+
+Athena Chapekis and Anna
+Lieb. 2025.
+
+Google Users Are Less Likely to Click on
+Links When an AI Summary Appears in the Results
+.
+
+Pew Research Center.
+
+Retrieved October 8, 2026 from 
+https://www.pewresearch.org/short-reads/2025/07/22/google-users-are-less-likely-to-click-on-links-when-an-ai-summary-appears-in-the-results/
+
+Chen et al
+.
+ (2025)
+
+Yixi Chen, Muhammad
+Bilal, Tie Ma, Zafar Ayyub Qazi,
+Marco Canini, and Suhaib Fahmy.
+2025.
+
+From Crawled to Published: A Publisher-Controlled Web
+Architecture for an AI-Native Internet.
+
+https://doi.org/10.48550/arXiv.2511.18354
+
+arXiv:2511.18354 [cs.NI]
+
+Cloudflare (2026a)
+
+Cloudflare.
+2026a.
+
+Cloudflare Radar
+.
+
+Retrieved November 17, 2026 from 
+https://radar.cloudflare.com
+
+Cloudflare (2026b)
+
+Cloudflare.
+2026b.
+
+Markdown for Agents
+.
+
+Cloudflare.
+
+Retrieved November 17, 2026 from 
+https://developers.cloudflare.com/fundamentals/reference/markdown-for-agents/
+
+Conroy (2026)
+
+Matthew Conroy.
+2026.
+
+The Internet Has a Second Audience
+.
+
+Cloudflare.
+
+Retrieved November 17, 2026 from 
+https://blog.cloudflare.com/agentic-web/
+
+Cui et al
+.
+ (2025)
+
+Jian Cui, Mingming Zha,
+XiaoFeng Wang, and Xiaojing Liao.
+2025.
+
+The Odyssey of 
+robots.txt
+ Governance:
+Measuring Convention Implications of Web Bots in Large Language Model
+Services. In 
+Proceedings of the ACM Conference on
+Computer and Communications Security (CCS)
+. 21–35.
+
+https://doi.org/10.1145/3719027.3765063
+
+DataDome (2025)
+
+DataDome.
+2025.
+
+The Great Masquerade: How AI Agents Are
+Spoofing Their Way In
+.
+
+Retrieved November 17, 2026 from 
+https://datadome.co/threat-research/ai-agent-spoofing/
+
+Durumeric and Adrian (2022)
+
+Zakir Durumeric and
+David Adrian. 2022.
+
+Chrome (CrUX) Top Million Websites
+.
+
+Retrieved November 17, 2026 from 
+https://github.com/zakird/crux-top-lists
+
+Fielding et al
+.
+ (2022a)
+
+Roy T. Fielding, Mark
+Nottingham, and Julian Reschke.
+2022a.
+
+HTTP Caching
+.
+
+RFC 9111. Internet
+Engineering Task Force.
+
+https://doi.org/10.17487/RFC9111
+
+Standards Track.
+
+Fielding et al
+.
+ (2022b)
+
+Roy T. Fielding, Mark
+Nottingham, and Julian Reschke.
+2022b.
+
+HTTP Semantics
+.
+
+RFC 9110. Internet
+Engineering Task Force.
+
+https://doi.org/10.17487/RFC9110
+
+Standards Track.
+
+Google (2017)
+
+Google. 2017.
+
+Overview of CrUX
+.
+
+Retrieved November 17, 2026 from 
+https://developer.chrome.com/docs/crux
+
+Google (2026a)
+
+Google.
+2026a.
+
+Gemini Deprecations
+.
+
+Google AI Studio.
+
+Retrieved November 17, 2026 from 
+https://aistudio.google.com/docs/deprecations#gemini-2.5-flash-models
+
+Google (2026b)
+
+Google.
+2026b.
+
+Troubleshooting Guide: Recitation Issue
+.
+
+Google AI Studio.
+
+Retrieved November 17, 2026 from 
+https://aistudio.google.com/docs/troubleshooting#recitation-issue
+
+Google (2026c)
+
+Google.
+2026c.
+
+URL Context
+.
+
+Google AI Studio.
+
+Retrieved November 17, 2026 from 
+https://aistudio.google.com/docs/url-context
+
+Habib et al
+.
+ (2026)
+
+Rumaisa Habib, Balaji
+Balachandran, Nurullah Demir, and Zakir
+Durumeric. 2026.
+
+“Stop Trying to Make Fetch Happen”: Towards a
+Modality-Aware Understanding of Unnecessary Resources on the Web. In
+
+Proceedings of the ACM Internet Measurement
+Conference (IMC)
+. 339–355.
+
+https://doi.org/10.1145/3777912.3839788
+
+Howard (2024)
+
+Jeremy Howard.
+2024.
+
+The 
+/llms.txt
+ File, v2
+.
+
+Retrieved November 17, 2026 from 
+https://llmstxt.org/
+
+Hua and Xiao (2026)
+
+Peichun Hua and Yunming
+Xiao. 2026.
+
+Semantics Delivery Network: Rethinking Web
+Retrieval Infrastructure for LLM Agents. In
+
+Proceedings of the ACM Workshop on Hot Topics in
+Networks (HotNets)
+.
+
+https://arxiv.org/abs/2609.22486
+
+Illyes et al
+.
+ (2026)
+
+Gary Illyes, Mirja
+Kühlewind, and A. Kohn.
+2026.
+
+Crawler Best Practices
+.
+
+Internet-Draft draft-illyes-aipref-cbcp-04.
+Internet Engineering Task Force.
+
+https://datatracker.ietf.org/doc/html/draft-illyes-aipref-cbcp-04
+
+Expired Internet-Draft.
+
+iptoasn.com (2026)
+
+iptoasn.com.
+2026.
+
+IP-to-ASN Database
+.
+
+Retrieved November 17, 2026 from 
+https://iptoasn.com/
+
+Ivan (2025)
+
+Ivan Ivan.
+2025.
+
+Bug with Stale Search Results Looping in
+Web Queries
+.
+
+Retrieved November 17, 2026 from 
+https://community.openai.com/t/bug-with-stale-search-results-looping-in-web-queries/1152931
+
+Jaźwińska and Chandrasekar (2025)
+
+Klaudia Jaźwińska and
+Aisvarya Chandrasekar. 2025.
+
+AI Search Has a Citation Problem
+.
+
+Retrieved November 17, 2026 from 
+https://www.cjr.org/tow_center/we-compared-eight-ai-search-engines-theyre-all-bad-at-citing-news.php
+
+Jin et al
+.
+ (2026)
+
+Chao Jin, Zili Zhang,
+Xuanlin Jiang, Fangyue Liu,
+Shufan Liu, Xuanzhe Liu, and
+Xin Jin. 2026.
+
+RAGCache: Efficient Knowledge Caching for
+Retrieval-Augmented Generation.
+
+ACM Transactions on Computer Systems
+
+44, 1 (2026),
+2:1–2:27.
+
+https://doi.org/10.1145/3768628
+
+Kaiserman (2025)
+
+Aviad Kaiserman.
+2025.
+
+AI Crawler Spoofing Exposed: How
+Attackers Masquerade as ChatGPT, Mistral, and Perplexity
+.
+
+HUMAN Security.
+
+Retrieved November 17, 2026 from 
+https://www.humansecurity.com/learn/blog/ai-crawler-spoofing-chatgpt-mistral-perplexity/
+
+Kim et al
+.
+ (2025)
+
+Taein Kim, Karstan Bock,
+Claire Luo, Amanda Liswood,
+Chloe Poroslay, and Emily Wenger.
+2025.
+
+Scrapers Selectively Respect 
+robots.txt
+
+Directives: Evidence from a Large-Scale Empirical Study. In
+
+Proceedings of the ACM Internet Measurement
+Conference (IMC)
+. 541–557.
+
+https://doi.org/10.1145/3730567.3764471
+
+Kondracki et al
+.
+ (2020)
+
+Brian Kondracki, Assel
+Aliyeva, Manuel Egele, Jason Polakis,
+and Nick Nikiforakis. 2020.
+
+Meddling Middlemen: Empirical Analysis of the Risks
+of Data-Saving Mobile Browsers. In 
+Proceedings of
+the IEEE Symposium on Security and Privacy (SP)
+. 810–824.
+
+https://doi.org/10.1109/SP40000.2020.00077
+
+Kopack (2026)
+
+Steve Kopack.
+2026.
+
+Google-Parent Alphabet’s Stock Price
+Plunges, Erasing More Than $500 Billion in Value
+.
+
+NBC New York.
+
+Retrieved November 17, 2026 from 
+https://www.nbcnewyork.com/news/national-international/alphabet-google-stock-ai-advertising/6564812/
+
+Koster et al
+.
+ (2022)
+
+Martijn Koster, Gary
+Illyes, Henner Zeller, and Lizzi
+Sassman. 2022.
+
+Robots Exclusion Protocol
+.
+
+RFC 9309. Internet
+Engineering Task Force.
+
+https://doi.org/10.17487/RFC9309
+
+Lang et al
+.
+ (2026)
+
+Hannah Erin Lang, Erin
+Woo, and Suzanne Vranica.
+2026.
+
+Alphabet Sheds Half a Trillion in Market
+Value in Stock’s Worst Day Ever
+.
+
+The Wall Street Journal.
+
+Retrieved November 11, 2026 from 
+https://www.wsj.com/tech/ai/alphabet-sheds-half-a-trillion-in-market-value-in-stocks-worst-day-ever-bde7bb6e
+
+Lewis et al
+.
+ (2020)
+
+Patrick Lewis, Ethan
+Perez, Aleksandra Piktus, Fabio Petroni,
+Vladimir Karpukhin, Naman Goyal,
+Heinrich Küttler, Mike Lewis,
+Wen-tau Yih, Tim Rocktäschel,
+Sebastian Riedel, and Douwe Kiela.
+2020.
+
+Retrieval-Augmented Generation for
+Knowledge-Intensive NLP Tasks. In 
+Advances in
+Neural Information Processing Systems (NeurIPS)
+, Vol. 33.
+9459–9474.
+
+https://proceedings.neurips.cc/paper/2020/hash/6b493230205f780e1bc26945df7481e5-Abstract.html
+
+Li et al
+.
+ (2016)
+
+Zhenhua Li, Weiwei Wang,
+Tianyin Xu, Xin Zhong,
+Xiang-Yang Li, Yunhao Liu,
+Christo Wilson, and Ben Y. Zhao.
+2016.
+
+Exploring Cross-Application Cellular Traffic
+Optimization with Baidu TrafficGuard. In
+
+Proceedings of the USENIX Symposium on Networked
+Systems Design and Implementation (NSDI)
+. 61–76.
+
+https://www.usenix.org/conference/nsdi16/technical-sessions/presentation/li-zhenhua
+
+Liu et al
+.
+ (2025)
+
+Enze Liu, Elisa Luo,
+Shawn Shan, Geoffrey M. Voelker,
+Ben Y. Zhao, and Stefan Savage.
+2025.
+
+Somesite I Used To Crawl: Awareness, Agency and
+Efficacy in Protecting Content Creators From AI Crawlers. In
+
+Proceedings of the ACM Internet Measurement
+Conference (IMC)
+. 78–99.
+
+https://doi.org/10.1145/3730567.3732913
+
+Liu et al
+.
+ (2023)
+
+Nelson Liu, Tianyi Zhang,
+and Percy Liang. 2023.
+
+Evaluating Verifiability in Generative Search
+Engines. In 
+Findings of the Association for
+Computational Linguistics: EMNLP
+. 7001–7025.
+
+https://doi.org/10.18653/v1/2023.findings-emnlp.467
+
+Mansoor et al
+.
+ (2026)
+
+Muhammad Mansoor, Tahir
+Ahmad, and Yeo-Chan Yoon.
+2026.
+
+Risk-Constrained Freshness-Aware Semantic Caching for
+Open-Web Retrieval-Augmented LLMs.
+
+https://doi.org/10.48550/arXiv.2607.04281
+
+arXiv:2607.04281 [cs.CL]
+
+Mathur et al
+.
+ (2025)
+
+Matthew Mathur, David
+King, and Fastly Security Research Team.
+2025.
+
+AI Bots in Q2 2025: Trends from
+Fastly’s Threat Insights Report
+.
+
+Retrieved November 17, 2026 from 
+https://www.fastly.com/blog/ai-bots-q2-2025-trends-fastlys-threat-insights-report
+
+Meunier and Major (2026)
+
+Thibault Meunier and
+Sandor Major. 2026.
+
+HTTP Message Signatures for Automated
+Traffic
+.
+
+Internet-Draft
+draft-ietf-webbotauth-httpsig-protocol-00. Internet
+Engineering Task Force.
+
+https://datatracker.ietf.org/doc/draft-ietf-webbotauth-httpsig-protocol/
+
+Expires 5 March 2027.
+
+Microsoft (2024)
+
+Microsoft.
+2024.
+
+MarkItDown
+.
+
+Retrieved November 17, 2026 from 
+https://github.com/microsoft/markitdown
+
+Mirheidari et al
+.
+ (2020)
+
+Seyed Ali Mirheidari,
+Sajjad Arshad, Kaan Onarlioglu,
+Bruno Crispo, Engin Kirda, and
+William Robertson. 2020.
+
+Cached and Confused: Web Cache Deception in the
+Wild. In 
+Proceedings of the USENIX Security
+Symposium (USENIX Security)
+. 665–682.
+
+https://www.usenix.org/conference/usenixsecurity20/presentation/mirheidari
+
+Mudgal et al
+.
+ (2026)
+
+Priyanka Mudgal, Kai
+Zhao, Guilin Zhang, Andy Olsen,
+Ezekiel Miller, Xu Chu, and
+Aletta Johanna Blanken. 2026.
+
+MemLeak: Cross-User Semantic Leakage in
+Multi-Tenant AI Agent Memory. In 
+Workshop on
+Personalized, Aligned, Long-Term Memory for AI Systems (PALM) at the
+Conference on Neural Information Processing Systems
+.
+
+arXiv:2610.04195
+
+https://neurips.cc/virtual/2026/loc/paris/169601
+
+Nakano et al
+.
+ (2021)
+
+Reiichiro Nakano, Jacob
+Hilton, Suchir Balaji, Jeff Wu,
+Long Ouyang, Christina Kim,
+Christopher Hesse, Shantanu Jain,
+Vineet Kosaraju, William Saunders,
+Xu Jiang, Karl Cobbe,
+Tyna Eloundou, Gretchen Krueger,
+Kevin Button, Matthew Knight,
+Benjamin Chess, and John Schulman.
+2021.
+
+WebGPT: Browser-Assisted Question-Answering with
+Human Feedback.
+
+arXiv:2112.09332 [cs.CL]
+
+https://arxiv.org/abs/2112.09332
+
+Nottingham (2010)
+
+Mark Nottingham.
+2010.
+
+HTTP Cache-Control Extensions for Stale
+Content
+.
+
+RFC 5861. Internet
+Engineering Task Force.
+
+https://doi.org/10.17487/RFC5861
+
+Nottingham and Fielding (2012)
+
+Mark Nottingham and
+Roy T. Fielding. 2012.
+
+Additional HTTP Status Codes
+.
+
+RFC 6585. Internet
+Engineering Task Force.
+
+https://doi.org/10.17487/RFC6585
+
+Proposed Standard.
+
+OpenAI (2025a)
+
+OpenAI.
+2025a.
+
+gpt-oss: Reference Implementation of the
+Browser Tool (
+simple_browser
+)
+.
+
+Retrieved November 5, 2026 from 
+https://github.com/openai/gpt-oss/tree/main/gpt_oss/tools/simple_browser
+
+OpenAI (2025b)
+
+OpenAI.
+2025b.
+
+How People Are Using ChatGPT
+.
+
+Retrieved October 8, 2026 from 
+https://openai.com/index/how-people-are-using-chatgpt/
+
+OpenAI (2026a)
+
+OpenAI.
+2026a.
+
+API Pricing
+.
+
+Retrieved November 17, 2026 from 
+https://developers.openai.com/api/docs/pricing
+
+OpenAI (2026b)
+
+OpenAI.
+2026b.
+
+OpenAI Model Spec
+.
+
+Retrieved November 17, 2026 from 
+https://model-spec.openai.com/2026-10-29.html#respect_creators
+
+OpenAI (2026c)
+
+OpenAI.
+2026c.
+
+Overview of OpenAI Crawlers
+.
+
+Retrieved October 8, 2026 from 
+https://developers.openai.com/api/docs/bots
+
+OpenRouter (2026)
+
+OpenRouter.
+2026.
+
+Web Search: Native Search Providers
+.
+
+OpenRouter.
+
+Retrieved November 17, 2026 from 
+https://openrouter.ai/docs/guides/features/server-tools/web-search#native-search-providers
+
+Ruth et al
+.
+ (2022)
+
+Kimberly Ruth, Deepak
+Kumar, Brandon Wang, Luke Valenta, and
+Zakir Durumeric. 2022.
+
+Toppling Top Lists: Evaluating the Accuracy of
+Popular Website Lists. In 
+Proceedings of the ACM
+Internet Measurement Conference (IMC)
+. 374–387.
+
+https://doi.org/10.1145/3517745.3561444
+
+Sayyid-Ali et al
+.
+ (2026)
+
+Abdur-Rahman Ibrahim Sayyid-Ali,
+Daanish Uddin Khan, and Naveed Anwar
+Bhatti. 2026.
+
+Are LLM Web Search Engines Sustainable? A
+Web-Measurement Study of Real-Time Fetching. In
+
+Proceedings of the ACM Web Conference (WWW)
+.
+2083–2093.
+
+https://doi.org/10.1145/3774904.3792278
+
+Stackfox (2026)
+
+Stackfox.
+2026.
+
+Grok Bot User-Agent: xAI’s Crawler
+Spoofs Its Identity
+.
+
+Retrieved November 17, 2026 from 
+https://stackfox.co/research/grok-user-agent
+
+Tahir et al
+.
+ (2020)
+
+Ammar Tahir,
+Muhammad Tahir Munir, Shaiq Munir Malik,
+Zafar Ayyub Qazi, and Ihsan Ayyub
+Qazi. 2020.
+
+Deconstructing Google’s Web Light Service. In
+
+Proceedings of the ACM Web Conference (WWW)
+.
+884–893.
+
+https://doi.org/10.1145/3366423.3380168
+
+Teixeira et al
+.
+ (2026)
+
+Rúben Teixeira, Jack
+Galilee, Kayte Johnston,

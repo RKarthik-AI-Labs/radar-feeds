@@ -1,0 +1,3298 @@
+Reducing Authorship Attribution Risk in Student Texts Through Style-Conditioned Rewriting
+https://arxiv.org/abs/2611.29642
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+Reducing Authorship Attribution Risk in Student Texts Through Style-Conditioned Rewriting
+Thanks: 
+Co-senior authors
+
+Li Siyan
+
+†
+†
+thanks: 
+Co-first authors
+
+  
+
+Zhen Xu
+1
+1
+footnotemark: 
+
+1
+
+  
+
+Jiayi Chen
+
+  
+
+Shopnil Shahriar
+
+  
+
+Alessandro Sayad
+
+  
+
+Xuanming Zhang
+
+Affiliation: 
+Renzhe Yu
+,
+
+Zhou Yu
+2
+2
+footnotemark: 
+
+2
+
+Affiliation: 
+Columbia University
+
+Email: 
+siyan.li@columbia.edu
+,
+zx2393@tc.columbia.edu
+
+Abstract
+
+Building NLP applications for education is constrained by data scarcity due to student privacy concerns and data regulations. To address this, we propose a style-aware approach to rewriting student forum posts that retains analytical value while reducing identifiability. Our method isolates content, structure, and style as separate conditioning channels and aggregates over student-disjoint exemplar partitions within style clusters, extending Differentially Private In-context Learning (DP-ICL) with cluster-restricted retrieval. Across three educational NLP datasets, our approach achieves high style fidelity, preserves downstream task performance, and reduces authorship attribution risk relative to the original student-written texts, including against a dedicated authorship-attribution model.
+
+1 
+Introduction
+
+NLP applications for education face significant 
+reproducibility challenges
+: real student data is subject to strict data protection requirements under privacy regulations and institutional policies 
+pardo2014ethical
+; 
+young2014educational
+; 
+neshaei2025bridging
+; 
+Lohse et al. (2019)
+. We note that simply redacting sensitive information is insufficient, as Institutional Review Boards (IRBs) often prohibit the release of student-authored content; therefore, even student texts without any personally-identifiable information (PII) cannot be released. Given these constraints, researchers have investigated general-purpose LLMs for student simulation 
+Jin et al. (2025)
+; 
+Li et al. (2026)
+; 
+xu2025classroom
+ and data synthesis 
+Li and Botelho (2025)
+; 
+Kieser et al. (2023)
+.
+
+A central challenge for current simulation and synthesis efforts is the 
+tradeoff between privacy and utility
+: methods that strongly protect identity tend to degrade the linguistic and pedagogical signals that make the data useful. Our paper addresses this tradeoff in the context of 
+discussion forum posts
+.
+
+Figure 1: 
+SEAMS pipeline.
+
+Three conditioning channels (bullet summary, template, cluster exemplars) condition 
+ parallel LLM generations.
+Candidates are embedded, 
+-clipped, and averaged with Gaussian noise; the released rewrite is the candidate closest to the mean.
+
+Discussion forums are the de facto interactive medium for both MOOCs and university courses, where learners ask questions, discuss ideas, and reflect on course material 
+onyema2019online
+. Unlike formal academic writing, forum posts embody naturalistic student language, reflecting diverse cognitive and communicative tendencies as evidenced by their varying lengths, tones, and rhetorical structures. These posts are rich with pedagogically meaningful signals, including urgency, confusion, and emotional states 
+Khodeir (2021)
+; 
+Agrawal et al. (2015)
+, making them a valuable, rich resource
+
+Cho et al. (2024)
+. More recently, increasingly capable language models have spurred the deployment of virtual teaching assistants in discussion forums 
+Goel and Polepeddi (2018)
+; 
+shah2024students
+; 
+Kweon et al. (2025)
+,
+which require training and evaluation data that reflects the full distribution of student writing styles.
+
+In the context of student simulation, general-purpose models often fail to capture the diversity in personalities, cognitive capabilities, and stylistic idiosyncrasies 
+Martynova et al. (2025)
+; 
+zheng2025teaching
+. This failure could lead to high-stakes consequences; a virtual teaching assistant trained on distributionally flat synthetic student data may fail to produce the pedagogically optimal response in deployment.
+Addressing this requires synthetic data that captures the underlying stylistic distribution of real student populations.
+
+We propose 
+rewriting
+ each real student post into a less-identifiable version that preserves the stylistic and semantic properties needed for downstream NLP; unlike fully synthetic generation, each output corresponds to exactly one source post. Prior work on synthetic data 
+Li et al. (2023)
+; 
+Nadă˙ (2025)
+ and differentially private language modeling 
+yu2021differentially
+; 
+shi2022just
+; 
+Flemings et al. (2024)
+ pays little attention to style-preserving synthesis in education. The core challenge is to 
+preserve cluster-level style for utility while suppressing individual stylistic fingerprints
+ that enable re-identification. We address this by decomposing student texts into content, structure, and style, then aggregating over student-disjoint exemplar partitions to limit any one author’s impact. We implement this via Style-conditioned Ensemble Aggregation with Multi-channel Synthesis (
+SEAMS
+). SEAMS extends DP-ICL (
+wu2024privacy
+, more details in Section 
+3.5
+) by incorporating stylistically similar exemplars while restricting influence of individual authors. Across three datasets, SEAMS preserves style, maintains downstream task performance, and empirically reduces authorship attribution risk relative to the originals.
+
+Our contributions are as follows: (1) 
+SEAMS
+1
+1
+
+1
+
+Code, including all prompts, and the SEAMS-rewritten Stanford MOOC and Stack Exchange data are released here: 
+https://github.com/siyan-sylvia-li/seams_release
+; the proprietary dataset cannot be released under its data agreement.
+, a privacy-motivated, style-aware pipeline for rewriting student forum posts.
+(2) Evidence across three educational NLP datasets that SEAMS preserves downstream task performance and high style fidelity.
+(3) Evidence that SEAMS empirically reduces authorship attribution risk compared to original student posts.
+
+2 
+Related Work
+
+Recent work has increasingly turned to LLMs for simulating students, both for training teachers 
+Mikeska et al. (2025)
+, evaluating pedagogical agents 
+(
+Jin et al., 2025
+)
+, modeling behavioral trajectories 
+(
+xu2025classroom
+)
+, and supporting authentic human-AI collaboration in educational settings 
+(
+Li et al., 2026
+)
+. However, these simulators rely on prompting general-purpose LLMs, which may not faithfully reproduce the heterogeneity of real student populations 
+wu2025embracing
+; 
+Martynova et al. (2025)
+ and offer no mechanism for releasing privacy-protected versions of real student writing. SEAMS addresses both.
+
+Style-conditioned Generation:
+ Prior literature on conditional generation 
+zhang2023survey
+ and style transfer has studied approaches to steer LLM output style, from exemplar-based prompting 
+reif2022recipe
+, contrastive prompting 
+suzgun2022prompt
+, and controlled text editing 
+Liu et al. (2024)
+; 
+Luo et al. (2023)
+. SEAMS draws on this literature but targets a privacy-preserving rather than purely stylistic objective.
+
+Differentially Private Text Generation:
+
+Training-time DP methods extend DP-SGD 
+(
+Abadi et al., 2016
+)
+ to language model fine-tuning 
+(
+yu2021differentially
+; 
+shi2022just
+)
+ and attribute-conditioned synthetic text 
+(
+yue2023
+; 
+Mattern et al., 2022
+)
+, or train the generator itself from DP signals 
+(
+tan2025ctcl
+; 
+Hou et al., 2025
+; 
+xu2026dprft
+)
+. Inference-time methods instead release each token under DP 
+(
+tang2024privacy
+; 
+Amin et al., 2024
+; 
+vinod2025invisibleink
+; 
+Flemings et al., 2024
+)
+, refine samples through API calls with DP-compliant feedback 
+(
+xie2024augpe
+; 
+Chien et al., 2026
+; 
+wang2025secpe
+)
+, or aggregate predictions across disjoint demonstration sets, as in DP-ICL 
+(
+wu2024privacy
+)
+. Generally, these methods produce a new 
+dataset
+ with guarantees, while SEAMS studies one-to-one rewriting, adding multi-channel conditioning and cluster-restricted retrieval, and trade formal guarantees for style fidelity. The closest one-to-one method, DP-Prompt 
+(
+utpala2023locally
+)
+, paraphrases each document under local DP.
+
+3 
+SEAMS
+
+SEAMS isolates three conditioning channels from student texts: content, structure, and style. It then aggregates over candidate generations from student-disjoint exemplar partitions within style clusters. The rest of this section describes each component. 
+SEAMS does not include PII redaction
+; therefore, any institution interested in using SEAMS should perform redactions independently.
+
+3.1 
+Preprocessing
+
+Each post is converted into two SEAMS input channels: bullet summaries for content and academic-content-removed templates for structure. Together with retrieved cluster exemplars for style, these form the three conditioning channels.
+
+Bullet summaries:
+ We summarize each post with 
+Qwen-2.5-7B-Instruct
+ 
+qwen2024qwen2
+ into bullet points that retain content while removing style signals, using a GEPA-optimized 
+Agrawal et al. (2025)
+ prompt. We use this model for cost considerations, and a 7B model is sufficient for this task. The optimization uses Stack Exchange posts, maximizing semantic similarity, stylistic 
+dissimilarity
+, reconstruction fidelity, and succinctness. Details are in Appendix 
+C
+.
+
+Academic-content-removed templates:
+ We also use GPT-5-mini (
+permitted by our IRB
+) to convert each post into a template where academic content is replaced by bracketed slots, e.g., 
+[concept or knowledge]
+, while preserving connectives and rhetorical structure. We chose GPT-5-mini because templating requires reliable span-level identification of domain-specific content; in pilot comparisons, GPT-5-mini produced templates that matched expert annotations more closely than 
+Qwen3-30B-A3B-Instruct-2507
+. The template was originally designed by education collaborators for clustering, but we find it suitable for SEAMS’ structural channel. We GEPA-optimize the templating prompt against expert annotations on proprietary student posts, maximizing the per-character agreement rate between model predictions and human reference (Appendix 
+D
+).
+
+3.2 
+Embedding Model Selection
+
+Well-formed, meaningful style clustering requires an embedding model that distinguishes posts by writing style rather than topic. We compare 
+StyleDistance
+ 
+patel2025styledistance
+, 
+wegmann2022same
+, Coh-Metrix 
+Graesser et al. (2004)
+, and 
+all-Mini-LM-v6
+ 
+reimers2019sentence
+. 
+StyleDistance
+ is selected because it separates within-student and between-student post pairs the most in terms of embedding cosine similarities, yielding the highest t-test statistics (Appendix 
+B
+).
+
+3.3 
+Per-Seed Style Clustering
+
+HDBSCAN (with UMAP reduction first) is selected for its ability to identify clusters of varying density without requiring a fixed cluster count.
+We sweep a combination of HDBSCAN settings, with minimum cluster size 
+ and minimum samples 
+. The best HDBSCAN setting for the dataset is selected and fixed across seeds based on the average validation cluster membership similarity. Intuitively, high cluster membership similarity indicates better similarity between the unseen posts and existing clusters, leading to higher-quality retrieval.
+
+3.4 
+Cross-Seed Meta-Cluster Formation
+
+Per-seed HDBSCAN clusters can be unstable across random seeds. To identify a shared meta-cluster mapping across seeds for easy comparison (and to enable comparison against other cluster-based approaches), we perform average-linkage agglomerative hierarchical clustering to connect clusters from the previous step to form meta-clusters. As all data points are discussion forum posts, they occupy a similar style embedding space, potentially flattening the cosine similarity between cluster centers and reducing modularity in the final meta-cluster hierarchy. Therefore, we remove dominant shared directions using All-but-the-Top (ABTT, 
+Mu et al. (2017)
+) on the embeddings. The final meta-cluster count aims to maximize cross-seed cluster representation, such that most meta-clusters aggregate clusters from multiple seeds rather than a single seed, enhancing generalizability.
+
+3.5 
+Privacy-Motivated Generation
+
+Once the clusters are finalized, the generation step consists of three components: student-disjoint partition, candidate generation, and noisy aggregation. We adopt the DP-ICL framework 
+wu2024privacy
+ as the structural basis for this step. DP-ICL obtains differentially private responses from a noisy consensus over LLM outputs conditioned on disjoint exemplar subsets: noisy voting over predicted labels for classification, and noisy aggregation in an embedding or keyword space for generation. SEAMS follows the generation setting and aggregates in embedding space. We extend it with cluster-restricted retrieval and student-disjoint partitioning to match our specific threat model. Unlike DP-ICL’s Embedding Space Aggregation (ESA), which returns a 
+public
+ zero-shot candidate 
+(
+wu2024privacy
+)
+, we select among the privately conditioned candidates themselves and retrieve exemplars by style similarity rather than random subsampling. We therefore 
+do not claim any formal differential privacy guarantees
+; our framework is privacy-motivated, drawing structural principles from DP-ICL. We include ESA as a baseline. Algorithm 
+1
+ describes this procedure.
+
+Student-disjoint Partitioning:
+ Retrieved exemplars are divided into disjoint sets, and if a student authors multiple posts among the exemplars, they are all placed in the same partition. This is to ensure that any single student’s individual style influences appear in only one of the 
+ candidates, as one candidate is produced per partition. We use cluster-restricted retrieval (retrieving within the same cluster only), which further pulls candidates toward the 
+cluster
+’s typical register.
+
+Candidate Generation:
+ Given the partitions, one candidate rewrite is created by an LLM per partition; the content and structural channels are shared across candidates so that candidate differences stem from stylistic conditioning alone. The rewriter prompt is selected from alternatives proposed by the MIPROv2 prompt optimizer 
+opsahl2024optimizing
+ under a simplified setting rather than refinement (selection details in Appendix 
+E
+; the final prompt is given in Appendix 
+P
+), as iterative refinement may steer 
+all
+ generations toward the typical structure of forum posts to maximize average metric value, leading to low-diversity generations.
+
+Noisy Aggregation:
+ Following DP-ICL, candidate embeddings from 
+StyleDistance
+ 
+patel2025styledistance
+ are 
+-clipped
+ to bound the influence of any single candidate, 
+averaged
+ to find a consensus, and 
+perturbed
+ with Gaussian noise to reduce the determinism in the selection. The chosen rewrite candidate is the one whose clipped embedding lies closest to the mean. Together, these operations limit the per-candidate influence on the output.
+
+Component ablations (Appendix 
+L
+) show that selecting the candidate most similar to mean embeddings filters low-quality tail outputs, while cluster restriction and noisy aggregation preserve fidelity and serve structural roles.
+
+Algorithm 1
+ 
+ Privacy-Motivated Generation
+
+1:
+
+              
+              
+            Target post 
+, meta-cluster 
+, content bullets 
+,
+structural template 
+, retrieval size 
+, partition count 
+,
+noise multiplier 
+, clipping bound 
+
+2:
+
+              
+              
+            Synthetic post 
+
+3:
+
+ 
+ cluster members ranked by cosine similarity to 
+
+4:
+
+ 
+Student-Disjoint Partitioning
+
+5:
+
+6:
+
+for
+ 
+ 
+to
+ 
+ 
+do
+
+7:
+
+ 
+Candidate Generation
+
+8:
+
+              
+              
+              
+
+9:
+
+              
+              
+              
+
+10:
+
+              
+              
+              
+
+ clip to 
+
+11:
+
+end
+ 
+for
+
+12:
+
+ 
+Noisy Aggregation
+
+13:
+
+14:
+
+15:
+
+return
+ 
+
+4 
+Datasets
+
+We validate SEAMS across three complementary, English-language datasets spanning different educational contexts and downstream classification tasks (Table 
+1
+).
+
+4.1 
+Proprietary Discussion Forum Dataset
+
+Through an existing institutional partnership with a large public university in the United States, we retrieve student discussion forum posts in their deployed learning management system, covering 15 academic terms from Fall 2019 through Winter 2024. The data access is approved by the Institutional Review Board.
+
+The full corpus comprises over four million posts across nearly two thousand courses. Most of these are non-question posts, featuring instructor-issued task prompts with limited stylistic variation; therefore, we restrict our analysis to student-originated academic questions, rather than more logistics-focused queries and announcements, to better capture diverse writing styles.
+
+To identify these questions at scale, we use a two-stage filtering pipeline. We first retain only posts containing a question mark. From these, we randomly sample about 25,000 posts and prompt GPT-4o-mini to classify each as academic or not, yielding 10,074 academic questions. The filtered data includes 7000+ unique students, more than 50 departments, and 700+ courses.
+
+We generate the cognitive engagement level of forum posts based on Bloom’s taxonomy 
+Krathwohl (2002)
+ using Qwen3-30B-A3B-Instruct-2507 
+yang2025qwen3
+, following guidance from learning science co-authors and motivated by prior evidence of its applicability to related tasks 
+wang2026memorization
+; 
+Badry et al. (2026)
+. In a random sample of 100 LLM-generated silver labels, 88% match domain expert judgments. We formulate this as a multi-class classification task, assigning each post to one of six cognitive complexity levels. This tests whether synthesized posts preserve the cognitive and linguistic properties that distinguish higher-order thinking (e.g., analysis, evaluation) from lower-order thinking (e.g., memorization).
+
+Dataset
+
+Posts
+
+Task
+
+Proprietary
+
+10,074
+
+Cognitive Engagement
+
+Stanford MOOC
+
+29,604
+
+Confusion
+
+Stack Exchange
+
+10,000
+
+Subject
+
+Table 1: 
+Dataset statistics and downstream task types.
+
+Figure 2: 
+Reconstruction quality of our methods on three datasets, measured as semantic similarities and stylistic similarities in the embedding space of 
+wegmann2022same
+. The best-performing approaches are marked with *.
+
+4.2 
+Stanford MOOCPosts
+
+The Stanford MOOCPosts dataset 
+Agrawal et al. (2015)
+ contains 29,604 discussion forum posts from Stanford’s online courses. We use pre-existing labels for confusion, treating them as linear regression labels with values ranging from 1 to 7.
+
+4.3 
+Stack Exchange
+
+We sample 10,000 posts evenly from Stack Exchange across 10 subject areas
+2
+2
+
+2
+
+biology
+, 
+chemistry
+, 
+cs
+, 
+cstheory
+, 
+economics
+, 
+linguistics
+, 
+math
+, 
+philosophy
+, 
+physics
+, 
+stats
+. The downstream task is subject classification: predicting which of the 10 sites a question was posted to. Subject is carried mainly by content, complementing Bloom’s taxonomy level and expressed confusion.
+
+Figure 3: 
+Example generations from DP-Prompt, Cluster-Summary-Centric, and SEAMS given the same input. Note that DP-Prompt capitalizes and formalizes the post, CS creates an email-like structure, while SEAMS achieves a register similar to typical student discussion posts.
+
+5 
+Experiments
+
+In our experiments, we set 
+ and 
+ for SEAMS (aggregation settings in Appendix 
+N
+). We use 
+Qwen-2.5-72B-Instruct
+ to run all generations, unless otherwise specified. We use this model for its strong instruction-following and generation quality at a size that is feasible to serve locally over corpora of our scale. Appendix 
+O
+ reports hardware, wall-clock, and token costs.
+
+5.1 
+Baselines
+
+Naive Zero-shot Generation:
+ We examine whether the content and the structural channels alone are sufficient to reconstruct discussion forum posts. We study two baselines: 
+Zero-shot-Content (
+ZS-C
+)
+, where the model is provided only the bullet summaries, and 
+Zero-shot-Content-Structure (
+ZS-CS
+)
+, where both the bullet summaries and the extracted templates are supplied.
+
+Cluster-Summary-Centric (
+CS
+):
+ Another natural way to utilize our cluster structures from SEAMS, but with enhanced privacy, is to condense clusters to their summaries. Summaries are generated by repeatedly sampling from the cluster and producing a series of summary candidates; the final summary is the one closest in the semantic embedding space to the averaged candidate embedding. This is similar to our aggregation mechanism. We then employ contrastive summaries to prevent all cluster summaries from becoming too similar, thereby preserving cluster-level signals (Appendix 
+F
+).
+
+The naive and summary-based baselines all leverage variants of the SEAMS prompt to ensure fair comparison. Instead of referring to the style context, these baseline prompts instruct the LLM to follow the tone and register typical of a student discussion forum post.
+
+SEAMS with 
+ (
+SEAMS-1
+):
+ To isolate the effect of aggregating across multiple candidate generations. For fair comparison, we use the same 
+; that is, each LM call for SEAMS has 
+ posts, but each call for SEAMS-1 has 
+ posts. This corresponds to the standard retrieval-based in-context learning approach.
+
+DP-Prompt
+:
+ Following 
+utpala2023locally
+’s main experimental setup, we run DP-Prompt without logit clipping. Clipping was reported in their work to provide a modest privacy-utility tradeoff, but is not used in their headline comparisons; we similarly omit it to faithfully reproduce the published method as evaluated. We swept across different temperatures and chose 
+ because it achieved the best reconstruction quality.
+
+Embedding Space Aggregation (
+ESA
+):
+ 
+wu2024privacy
+ produces the differentially-private output from candidates generated 
+without
+ private demonstrations, choosing the one with the highest cosine similarity to the noisy aggregate embedding. For this baseline, we instantiate the candidates as ZS-CS examples, then select the output accordingly.
+
+5.2 
+Cluster Validation
+
+We inspect the 14 final meta-clusters on our proprietary dataset to judge their stylistic distinctiveness (Appendix 
+G
+). We discover various stylistic registers, from formulaic questions to analytical essays, supporting the use of clusters as style signals.
+
+5.3 
+Reconstruction Quality
+
+To improve robustness, we repeat all experiments across five seeds. We sample 1,000 validation posts and 1,000 test posts, stratified by post-content categories (course department or discussion topic). We evaluate generation quality along two dimensions: semantic preservation and style fidelity. Semantic preservation is measured using sentence embedding similarity from 
+all-mpnet-base-v2
+; style fidelity is measured using style embedding similarity under both 
+StyleDistance
+ and 
+wegmann2022same
+, which is used to ensure evaluation robustness by providing an embedding separate from the SEAMS mechanisms.
+
+Results are reported in Figure 
+2
+, with full results in Table 
+7
+. Overall, we find that 
+SEAMS preserves stylistic similarity to the original student data across domains
+.
+SEAMS-1 performs comparably to SEAMS on fidelity across all three datasets, and slightly better on Stanford MOOC, indicating that 
+fidelity gains
+ come from in-context exemplar conditioning, less from aggregating across partitions. For the naive approaches, ZS-CS often outperforms ZS-C, suggesting that our structural templates are useful for generation. ESA, which selects among ZS-CS candidates, still falls below SEAMS because it selects from stylistically weak exemplars, and selection cannot compensate for missing style. Finally, most reconstruction methods achieve reasonable semantic similarity, suggesting that content and structural channels are generally sufficient to preserve meaning. In contrast, 
+achieving high style fidelity remains the primary bottleneck
+.
+
+5.4 
+Downstream Performance
+
+As another measure of utility, we compare downstream evaluation metrics when models are trained on original vs. reconstructed data. We compute the difference between these metrics as a proxy for utility preservation. Since we formulate the Stanford MOOCPost downstream task as a regression problem, we use 
+ as the evaluation metric; for the other two tasks, we use macro-F1.
+
+We fine-tune 
+distilbert-base-uncased
+ on the 
+validation
+ split, using either the original posts or their rewrites constructed in the previous experiments, and evaluate on the original 
+test
+ posts. Hyperparameters are fixed for all methods
+3
+3
+
+3
+
+              
+              
+              
+            3 epochs, learning rate 
+, batch size 16.
+.
+
+Method
+
+Proprietary
+
+Stanford
+
+Stack Exch.
+
+SEAMS
+
+SEAMS-1
+
+ESA
+
+CS
+
+DP-Prompt
+
+ZS-CS
+
+ZS-C
+
+Table 2: 
+Downstream utility of fine-tuned DistilBERT classifiers.
+
+ = score when training on rewrites 
+ score when training on the same original posts. Closer to zero is better, and the best methods are bolded.
+
+Table 
+2
+ reports the difference in downstream metric values across datasets and reconstruction approaches. Classifiers trained on SEAMS rewrites lose at most 1.8 points relative to training on original posts, and SEAMS retains the most task signal on Stanford MOOC. Confusion (Stanford MOOC), which is expressed largely through affect and register, most clearly separates the methods, whereas subject (Stack Exchange) is carried by content: every method except ZS-C stays within 0.3 points of training on original posts. On Bloom’s level, which depends more on content, DP-Prompt retains slightly more signal than SEAMS as a better semantic-preserving method.
+SEAMS also 
+preserves the within-cluster vs. between-cluster style separation
+ observed in the original data, indicating that population-level stylistic structure survives the rewrite (Appendix 
+I
+).
+
+SEAMS vs.
+
+Win rate
+
+No boilerplate
+
+ZS-CS
+
+CS
+
+DP-Prompt
+
+Table 3: 
+Percentage of human judgments in which the SEAMS rewrite was rated closer to the original style than the baseline rewrite, with item-bootstrap CI.
+
+(a) LUAR attribution risk on three datasets
+
+(b) Fidelity vs. LUAR risk (Proprietary)
+
+Figure 4: 
+(a) Attribution risk under LUAR when the attacker ranks all students: MRR ratio (MRR / chance-level MRR; 1.0 
+ random attribution, lower is better), mean 
+ std over 5 seeds.
+Results for all attackers, including a within-cluster analysis, are in Appendix 
+J
+. (b) Style fidelity vs. LUAR attribution risk on the proprietary dataset.
+
+5.5 
+Human Evaluation
+
+We strengthen our results with a style-similarity judgment study on Prolific. Each one of 180 sampled items shows an original post from the proprietary dataset, paired with two randomly-ordered rewrites of that same post, one from SEAMS and one from a baseline (ZS-CS, CS, or DP-Prompt). Annotators choose which rewrite “sounds more like it was written by the same person who wrote the original,” focusing on wording and style rather than content, or judge them equally similar (Appendix 
+Q
+). Participants were current college or graduate students compensated at $15 per hour; each rated 30 items plus three attention checks, and failing a check excluded them. Of 32 participants who started, 24 completed the study, yielding 3-5 ratings per item.
+
+Annotators judged SEAMS rewrites closer to the original author’s style than every baseline (Table 
+3
+). Because ZS-CS and CS outputs often contain boilerplates (e.g., “[Your Name]”) that could cue annotators, we also report items where neither rewrite contains such boilerplates and find that SEAMS’s advantage persists. Raters show fair agreement (Gwet’s AC1 
+; 
+Gwet, 2014
+), which we report as the primary statistic because SEAMS is preferred at a similar rate on nearly every item, a high-prevalence setting in which Krippendorff’s 
+ understates agreement (
+); such levels are typical for subjective judgments of generated text 
+(
+Clark et al., 2021
+; 
+Karpinska et al., 2021
+; 
+Amidei et al., 2019
+)
+. In an exploratory analysis, pairwise agreement increases with the style gap between the two rewrites (Spearman 
+, 
+, using 
+wegmann2022same
+ embeddings), suggesting disagreement concentrates on items where the rewrites are stylistically close.
+
+5.6 
+Authorship Attacks
+
+Prior work on authorship obfuscation 
+(
+Brennan et al., 2012
+; 
+potthast2016author
+)
+ often targets stylometric attackers,
+4
+4
+
+4
+
+              
+              
+              
+            An 
+authorship attacker
+ is a model that, given a text and writing samples from a set of candidate authors, ranks the candidates by how likely each is to have written it. 
+Stylometric
+ attackers rely on hand-crafted style features such as function-word frequencies, character 
+-grams, punctuation, and sentence length 
+(
+Burrows, 2002
+)
+; 
+embedding-based
+ attackers compare learned neural representations.
+ while we evaluate both stylometric and embedding-based ones. We evaluate on all three datasets; because Stack Exchange authors are public users, results there measure how much individual style survives rewriting rather than re-identification risk. Our central claim is that style-cluster conditioning pulls reconstructions toward the cluster mean, thereby reducing the individual authorship signal. An attacker holding other posts by every student in the training data tries to identify the author of a released rewrite, ranking all students; Appendix 
+J
+ additionally restricts candidates to the author’s style cluster.
+
+We use three attackers. Two are retrieval-based and rank candidates by the maximum cosine similarity between the input and a candidate’s posts: 
+wegmann2022same
+ (Weg-ret) embeddings and LUAR 
+(
+uar-emnlp2021
+)
+, an authorship representation trained to identify authors across documents. The third is stylometric (Stylo-clf; 
+Burrows, 2002
+), a logistic regression classifier using the feature 
+difference
+ between the rewrite and a candidate post to predict same- vs. different-author. We report the 
+MRR ratio
+: the true author’s mean reciprocal rank divided by its chance level over the same posts. A ratio of 
+ indicates random attribution; higher values indicate more exploitable authorship signal.
+
+SEAMS reduces MRR ratios relative to real posts for all three attackers on all three datasets (LUAR in Figure 
+4
+a; others in Appendix 
+J
+). The reduction is largest for the strongest attacker, LUAR (paired 
+-test over seeds, 
+ on each), evidence that 
+SEAMS empirically reduces attribution risk
+ relative to the original data.
+SEAMS is also below SEAMS-1 on six of nine attacker-dataset pairs, suggesting that the partition-then-aggregate approach contributes modestly to author protection.
+Consistent with the well-known privacy-utility tradeoff, ZS-CS, ESA, and DP-Prompt achieve stronger MRR ratio reduction on the proprietary dataset, but sacrifice style fidelity (Figure 
+4
+b, Table 
+7
+). On Stanford MOOC and Stack Exchange, where style fidelity is similar across methods, all rewriting methods except DP-Prompt each similar attribution risk. We see that 
+SEAMS balances privacy and utility
+ by providing meaningful risk reduction across attack modes while maintaining downstream utility.
+
+6 
+Discussion and Conclusion
+
+Style as the Bottleneck
+ Across our experiments, reconstruction methods reliably preserve content but struggle to maintain an authentic student register. Even with high-level stylistic instructions, their rewrites often show limited linguistic diversity. The example generations (Figure 
+3
+) suggest that Qwen-2.5-72B has a weak prior understanding of student discussion style. The stronger style preservation of exemplar-conditioned methods across datasets indicates that for style-driven generation in non-mainstream registers, in-context exemplars convey information that instructions alone do not. This motivates using 
+exemplar-based approaches
+ to synthesize data from non-mainstream domains. Refreshing the exemplar pool with SEAMS rewrites may further reduce attribution risk without a significant decline in fidelity, but we leave its systematic study to future work.
+
+Balancing Empirical Privacy and Utility
+ Prior differentially private text generation methods often incur significant utility costs, as illustrated by DP-Prompt’s low stylistic similarity to the original data. SEAMS balances privacy and utility differently: it forgoes formal guarantees but achieves a moderate empirical reduction in within-cluster authorship attribution risk while maintaining reconstruction fidelity sufficient for downstream training.
+
+Conclusion
+ In summary, we present SEAMS, a multi-channel, cluster-centric framework for high-fidelity, privacy-motivated reconstruction of student text. By isolating content, structure, and style into conditioning channels and aggregating across student-disjoint partitions within stylistic clusters, SEAMS 
+preserves high style fidelity and downstream utility
+ on educationally meaningful tasks while 
+empirically reducing authorship attribution risk
+, a combination not achieved by prior methods we evaluated.
+
+Limitation
+
+One limitation of our work is that we do not offer formal differential privacy guarantees. Our privacy claim is strictly empirical and is demonstrated through its ability to mitigate author attribution risk in Section 
+5.6
+. Practitioners facing requirements of formal 
+ guarantees should choose the appropriate DP methods.
+
+We report ablations of cluster-restricted retrieval, noisy aggregation, and candidate selection in Appendix 
+L
+; their attack differences fall within seed variance, so the privacy contribution of individual components remains uncertain. Our SEAMS vs. SEAMS-1 comparison suggests partitioning contributes modestly to attack resistance.
+
+SEAMS is not the most privacy-preserving method, as seen in the Authorship Attack section. While the tradeoff between privacy and utility is well-established, there is still room for improvement, potentially through performing generation with in-context examples generated through SEAMS to further reduce attribution risk, or using more computationally expensive approaches that offer more formal DP guarantees.
+
+Inter-rater agreement in our human evaluation is low (ordinal Krippendorff’s 
+; Gwet’s AC1 
+), reflecting the subjectivity of style judgments. We were able to attribute the low agreement potentially to participants disagreeing on stylistically similar rewrites of the same original posts, as there are irreducible variabilities in human language.
+
+Finally, we only evaluate on one generator model, as our work aims to compare different methods using the same underlying model. However, it is possible that changing the model would alter the effectiveness of each of the methods studied. We leave testing the effect of varying the generator model to future work.
+
+Ethical Considerations
+
+Our proprietary dataset is collected and analyzed in accordance with the existing IRB protocol. The data has not been anonymized at the source. All third-party models and datasets are used in accordance with their respective licenses.
+
+For institutions planning to use SEAMS to rewrite their data for release, we note that SEAMS does not inherently support redacting personally identifiable information. Therefore, any rewritten data should undergo PII redaction or abstraction prior to release.
+
+References
+
+Abadi et al. (2016)
+
+Martin Abadi, Andy Chu, Ian Goodfellow, H Brendan McMahan, Ilya Mironov, Kunal Talwar, and Li Zhang. 2016.
+
+Deep learning with differential privacy.
+
+In 
+Proceedings of the 2016 ACM SIGSAC Conference on Computer and Communications Security
+, pages 308–318. ACM.
+
+Agrawal et al. (2015)
+
+Akshay Agrawal, Jagadish Venkatraman, Shane Leonard, and Andreas Paepcke. 2015.
+
+Youedu: addressing confusion in mooc discussion forums by recommending instructional video clips.
+
+International Educational Data Mining Society
+.
+
+Agrawal et al. (2025)
+
+Lakshya A Agrawal, Shangyin Tan, Dilara Soylu, Noah Ziems, Rishi Khare, Krista Opsahl-Ong, Arnav Singhvi, Herumb Shandilya, Michael J Ryan, Meng Jiang, and 1 others. 2025.
+
+Gepa: Reflective prompt evolution can outperform reinforcement learning.
+
+arXiv preprint arXiv:2507.19457
+.
+
+Amidei et al. (2019)
+
+Jacopo Amidei, Paul Piwek, and Alistair Willis. 2019.
+
+Agreement is overrated: A plea for correlation to assess human evaluation reliability
+.
+
+In 
+Proceedings of the 12th International Conference on Natural Language Generation
+, pages 344–354, Tokyo, Japan. Association for Computational Linguistics.
+
+Amin et al. (2024)
+
+Kareem Amin, Alex Bie, Weiwei Kong, Alexey Kurakin, Natalia Ponomareva, Umar Syed, Andreas Terzis, and Sergei Vassilvitskii. 2024.
+
+Private prediction for large-scale synthetic text generation
+.
+
+In 
+Findings of the Association for Computational Linguistics: EMNLP 2024
+, pages 7244–7262, Miami, Florida, USA. Association for Computational Linguistics.
+
+Badry et al. (2026)
+
+Mahmoud Badry, Walaa Medhat, Shereen A Taie, and Asmaa Hashem Sweidan. 2026.
+
+Cognitively aligned assessment item generation with open-source llms: A comprehensive evaluation on learningq.
+
+International Journal of Advanced Computer Science and Applications
+, 17(5).
+
+Brennan et al. (2012)
+
+Michael Brennan, Sadia Afroz, and Rachel Greenstadt. 2012.
+
+Adversarial stylometry: Circumventing authorship recognition to preserve privacy and anonymity.
+
+ACM Transactions on Information and System Security (TISSEC)
+, 15(3):1–22.
+
+Burrows (2002)
+
+John Burrows. 2002.
+
+‘delta’: a measure of stylistic difference and a guide to likely authorship.
+
+Literary and linguistic computing
+, 17(3):267–287.
+
+Chi and Wylie (2014)
+
+Michelene TH Chi and Ruth Wylie. 2014.
+
+The icap framework: Linking cognitive engagement to active learning outcomes.
+
+Educational psychologist
+, 49(4):219–243.
+
+Chien et al. (2026)
+
+Eli Chien, Yuzheng Hu, Ryan McKenna, Shanshan Wu, Zheng Xu, and Peter Kairouz. 2026.
+
+MAPLE: Metadata augmented private language evolution
+.
+
+arXiv preprint arXiv:2603.19258
+.
+
+Cho et al. (2024)
+
+Yongwan Cho, Rabia Emhamed AlMamlook, and Tasnim Gharaibeh. 2024.
+
+A systematic review of knowledge tracing and large language models in education: Opportunities, issues, and future research.
+
+arXiv preprint arXiv:2412.09248
+.
+
+Clark et al. (2021)
+
+Elizabeth Clark, Tal August, Sofia Serrano, Nikita Haduong, Suchin Gururangan, and Noah A. Smith. 2021.
+
+All that’s ‘human’ is not gold: Evaluating human evaluation of generated text
+.
+
+In 
+Proceedings of the 59th Annual Meeting of the Association for Computational Linguistics and the 11th International Joint Conference on Natural Language Processing (Volume 1: Long Papers)
+, pages 7282–7296, Online. Association for Computational Linguistics.
+
+Covington and McFall (2010)
+
+Michael A Covington and Joe D McFall. 2010.
+
+Cutting the gordian knot: The moving-average type–token ratio (mattr).
+
+Journal of quantitative linguistics
+, 17(2):94–100.
+
+Flemings et al. (2024)
+
+James Flemings, Meisam Razaviyayn, and Murali Annavaram. 2024.
+
+Differentially private next-token prediction of large language models.
+
+In 
+Proceedings of the 2024 Conference of the North American Chapter of the Association for Computational Linguistics: Human Language Technologies (Volume 1: Long Papers)
+, pages 4390–4404.
+
+Goel and Polepeddi (2018)
+
+Ashok K Goel and Lalith Polepeddi. 2018.
+
+Jill watson: A virtual teaching assistant for online education.
+
+In 
+Learning engineering for online education
+, pages 120–143. Routledge.
+
+Graesser et al. (2004)
+
+Arthur C Graesser, Danielle S McNamara, Max M Louwerse, and Zhiqiang Cai. 2004.
+
+Coh-metrix: Analysis of text on cohesion and language.
+
+Behavior research methods, instruments, & computers
+, 36(2):193–202.
+
+Graesser and Person (1994)
+
+Arthur C Graesser and Natalie K Person. 1994.
+
+Question asking during tutoring.
+
+American educational research journal
+, 31(1):104–137.
+
+Gwet (2014)
+
+Kilem L Gwet. 2014.
+
+Handbook of inter-rater reliability: The definitive guide to measuring the extent of agreement among raters.
+
+Hou et al. (2025)
+
+Charlie Hou, Mei-Yu Wang, Yige Zhu, Daniel Lazar, and Giulia Fanti. 2025.
+
+Private federated learning using preference-optimized synthetic data
+.
+
+In 
+Proceedings of the 42nd International Conference on Machine Learning
+, volume 267 of 
+Proceedings of Machine Learning Research
+, pages 24025–24044.
+
+Jin et al. (2025)
+
+Hyoungwook Jin, Minju Yoo, Jeongeon Park, Yokyung Lee, Xu Wang, and Juho Kim. 2025.
+
+Teachtune: Reviewing pedagogical agents against diverse student profiles with simulated students.
+
+In 
+Proceedings of the 2025 CHI Conference on Human Factors in Computing Systems
+, pages 1–28.
+
+Karabenick (2003)
+
+Stuart A Karabenick. 2003.
+
+Seeking help in large college classes: A person-centered approach.
+
+Contemporary educational psychology
+, 28(1):37–58.
+
+Karpinska et al. (2021)
+
+Marzena Karpinska, Nader Akoury, and Mohit Iyyer. 2021.
+
+The perils of using Mechanical Turk to evaluate open-ended text generation
+.
+
+In 
+Proceedings of the 2021 Conference on Empirical Methods in Natural Language Processing
+, pages 1265–1285, Online and Punta Cana, Dominican Republic. Association for Computational Linguistics.
+
+Khodeir (2021)
+
+Nabila A Khodeir. 2021.
+
+Bi-gru urgent classification for mooc discussion forums based on bert.
+
+IEEE Access
+, 9:58243–58255.
+
+Kieser et al. (2023)
+
+Fabian Kieser, Peter Wulff, Jochen Kuhn, and Stefan Küchemann. 2023.
+
+Educational data augmentation in physics education research using chatgpt.
+
+Physical Review Physics Education Research
+, 19(2):020150.
+
+King (1994)
+
+Alison King. 1994.
+
+Guiding knowledge construction in the classroom: Effects of teaching children how to question and how to explain.
+
+American educational research journal
+, 31(2):338–368.
+
+Krathwohl (2002)
+
+David R Krathwohl. 2002.
+
+A revision of bloom’s taxonomy: An overview.
+
+Theory into practice
+, 41(4):212–218.
+
+Kweon et al. (2025)
+
+Sunjun Kweon, Sooyohn Nam, Hyunseung Lim, Hwajung Hong, and Edward Choi. 2025.
+
+A large-scale real-world evaluation of an llm-based virtual teaching assistant.
+
+In 
+Proceedings of the 63rd Annual Meeting of the Association for Computational Linguistics (Volume 6: Industry Track)
+, pages 850–864.
+
+Li et al. (2026)
+
+Haoxuan Li, Jifan Yu, Xin Cong, Yang Dang, Daniel Zhang-Li, Lu Mi, Yisi Zhan, Huiqin Liu, and Zhiyuan Liu. 2026.
+
+Which type of students can llms act? investigating authentic simulation with graph-based human-ai collaborative system.
+
+AI Open
+.
+
+Li and Botelho (2025)
+
+Hongming Li and Anthony F Botelho. 2025.
+
+Balancing the imbalance: Enhancing mooc discussion forum urgency prediction with llm-generated data augmentation.
+
+In 
+Proceedings of the 18th International Conference on Computer-Supported Collaborative Learning-CSCL 2025, pp. 455-459
+. International Society of the Learning Sciences.
+
+Li et al. (2023)
+
+Zhuoyan Li, Hangxiao Zhu, Zhuoran Lu, and Ming Yin. 2023.
+
+Synthetic data generation with large language models for text classification: Potential and limitations.
+
+In 
+Proceedings of the 2023 conference on empirical methods in natural language processing
+, pages 10443–10461.
+
+Lin (2004)
+
+Chin-Yew Lin. 2004.
+
+Rouge: A package for automatic evaluation of summaries.
+
+In 
+Text summarization branches out
+, pages 74–81.
+
+Liu et al. (2024)
+
+Pusheng Liu, Lianwei Wu, Linyong Wang, Sensen Guo, and Yang Liu. 2024.
+
+Step-by-step: Controlling arbitrary style in text with large language models.
+
+In 
+Proceedings of the 2024 Joint International Conference on Computational Linguistics, Language Resources and Evaluation (LREC-COLING 2024)
+, pages 15285–15295.
+
+Lohse et al. (2019)
+
+James J Lohse, Christine A McManus, and David A Joyner. 2019.
+
+Surveying the mooc data set universe.
+
+In 
+2019 IEEE Learning With MOOCS (LWMOOCS)
+, pages 159–164. IEEE.
+
+Luo et al. (2023)
+
+Guoqing Luo, Yu Han, Lili Mou, and Mauajama Firdaus. 2023.
+
+Prompt-based editing for text style transfer.
+
+In 
+Findings of the Association for Computational Linguistics: EMNLP 2023
+, pages 5740–5750.
+
+Martynova et al. (2025)
+
+Daria Martynova, Jakub Macina, Nico Daheim, Nilay Yalcin, Xiaoyu Zhang, and Mrinmaya Sachan. 2025.
+
+Can llms effectively simulate human learners? teachers’ insights from tutoring llm students.
+
+In 
+Proceedings of the 20th Workshop on Innovative Use of NLP for Building Educational Applications (BEA 2025)
+, pages 100–117.
+
+Mattern et al. (2022)
+
+Justus Mattern, Zhijing Jin, Benjamin Weggenmann, Bernhard Schölkopf, and Mrinmaya Sachan. 2022.
+
+Differentially private language models for secure data sharing.
+
+In 
+Proceedings of the 2022 Conference on Empirical Methods in Natural Language Processing
+, pages 4860–4873. Association for Computational Linguistics.
+
+Mikeska et al. (2025)
+
+Jamie N Mikeska, Aakanksha Bhatia, Shreyashi Halder, Tricia Maxwell, Beata Beigman Klebanov, Benny Longwill, Kashish Behl, and Calli Shekell. 2025.
+
+Generative ai teaching simulations as formative assessment tools within preservice teacher preparation.
+
+In 
+Proceedings of the Artificial Intelligence in Measurement and Education Conference (AIME-Con): Full Papers
+, pages 212–220.
+
+Mu et al. (2017)
+
+Jiaqi Mu, Suma Bhat, and Pramod Viswanath. 2017.
+
+All-but-the-top: Simple and effective postprocessing for word representations.
+
+arXiv preprint arXiv:1702.01417
+.
+
+Appendix A 
+AI Assistant Usage
+
+In this project, in addition to using LLMs for experimentation purposes, we used AI assistants and agents to help write code and revise sections of the paper.
+
+Appendix B 
+Embedding Model Selection
+
+B.1 
+Overview
+
+We compare four embedding models on their ability to separate same-student from different-student post pairs, specifically 
+StyleDistance
+ 
+patel2025styledistance
+, 
+wegmann2022same
+, Coh-Metrix 
+Graesser et al. (2004)
+, and 
+all-Mini-LM-v6
+ 
+reimers2019sentence
+. Discriminability is measured via the 
+-test of within- versus between-student pairwise cosine similarities, computed on 319 proprietary student forum posts drawn from 30 distinct students (10–17 posts per student). StyleDistance with PCA reduction to 
+ achieves the largest separation and is adopted for the per-seed style clustering.
+
+B.2 
+Embeddings Compared
+
+•
+
+Coh-Metrix
+ 
+(
+Graesser et al., 2004
+)
+: 108 hand-crafted indices of text cohesion, syntactic complexity, and lexical sophistication. We drop 4 zero-variance indices and z-score-normalize the remaining 104 features.
+
+•
+
+StyleDistance
+ 
+(
+patel2025styledistance
+)
+: a 768-dimensional neural style embedding trained with synthetic parallel examples for content-independent style representation.
+
+•
+
+AnnaWegmann Style-Embedding
+ 
+(
+wegmann2022same
+)
+: a 768-dimensional neural style embedding trained with a contrastive same-author objective.
+
+•
+
+all-MiniLM-L6-v2
+ 
+(
+reimers2019sentence
+)
+: a 384-dimensional general-purpose semantic sentence embedding, included as a content-driven baseline.
+
+For each neural embedding we additionally evaluate PCA-reduced variants with 
+. For Coh-Metrix we evaluate 
+.
+
+B.3 
+Evaluation Protocol
+
+For each embedding we compute pairwise cosine similarities between all 319 posts and partition the pairs into two distributions according to whether the two posts share the same author. The 30-student sample yields 
+ within-student pairs and 
+ between-student pairs. A discriminative style embedding produces a clear gap, with within-student similarities markedly higher than between-student similarities. We quantify the separation with an independent 
+-test.
+
+B.4 
+Results
+
+Table 
+4
+ reports the best PCA configuration per embedding. StyleDistance with 
+ achieves the largest 
+-statistic, outperforming the other neural style embedding AnnaWegmann, the semantic baseline all-MiniLM, and the hand-crafted Coh-Metrix features.
+
+Method
+
+Best dim
+
+-stat
+
+within / between
+
+Coh-Metrix
+
+OG (104)
+
+25.52
+
+-
+0.146 / -0.005
+
+StyleDistance
+
+34.71
+
+-
+0.250 / -0.007
+
+AnnaWegmann
+
+26.01
+
+-
+0.243 / -0.002
+
+all-MiniLM-L6-v2
+
+30.33
+
+-
+0.107 / -0.006
+
+Table 4: 
+Embedding model comparison on 319 posts from 30 students. “Best dim” is the configuration giving the largest 
+-statistic per method. For Coh-Metrix this is the original dimensionality. For the neural embeddings it is the best 
+ PCA variant.
+
+PCA consistently helps the neural embeddings: reducing StyleDistance from 768 to 128 dimensions raises its 
+-statistic from 20.70 to 34.71, and AnnaWegmann shows a similar jump (10.56 to 26.01). The raw outputs contain noisy dimensions that dilute the discriminative signal. Coh-Metrix, already low-dimensional, shows little change under PCA.
+
+The relatively strong performance of all-MiniLM-L6-v2 likely reflects a content confound rather than true author differentiation. Students in our dataset tend to post within the same course, so within-student pairs are often within-course pairs, and topical similarity inflates within-student scores. StyleDistance is explicitly trained for content-independent style representation, and the fact that it still outperforms the semantic baseline suggests its advantage reflects a genuine stylistic signal rather than residual topical similarity.
+
+Appendix C 
+Bullet Summarizer Details
+
+C.1 
+Overview
+
+Each student forum post is summarized into bullet points using Qwen-2.5-7B-Instruct 
+qwen2024qwen2
+ served locally via vLLM. The prompt is optimized with GEPA 
+Agrawal et al. (2025)
+. The final artifact is the optimized prompt paired with fixed model weights; no student data touches the optimizer.
+
+C.2 
+Optimization Objective
+
+GEPA maximizes a scalar score computed over each (post, bullets) pair:
+
+(1)
+
+where each term is defined as follows.
+
+Semantic preservation (
+sim
+).
+
+Cosine similarity between the 
+all-mpnet-base-v2
+ embeddings of the post and its bullets. Rewards retaining the informational content of the post.
+
+Stylistic dissimilarity (
+style_sim
+).
+
+Cosine similarity between the 
+StyleDistance
+ embeddings of the post and its bullets. This term is 
+subtracted
+: lower style similarity means the bullets do not carry the author’s writing style, which is the desired outcome. If bullets encode style, the cluster-ID conditioning applied downstream becomes redundant at inference time.
+
+Reconstruction fidelity (
+).
+
+ROUGE-1 F
+1
+ between the original post and a round-trip reconstruction of it from the bullets alone. A separate 
+Predict
+ module (same task LM) is prompted to reconstruct the original post from the bullets; poor reconstruction indicates the bullets omit key specifics.
+
+Length penalty (
+).
+
+(2)
+
+Zero when bullets are at most 30% of the post length by character count; grows linearly beyond that threshold and is capped at 1.
+
+Weights.
+
+The default weights are 
+, 
+, 
+, 
+.
+
+When GEPA’s reflection pass is active, the metric also returns natural-language feedback to the reflection LM (GPT-5) to guide prompt revision.
+
+C.3 
+Training Data
+
+GEPA is run on Stack Exchange posts (200 training, 150 validation examples), drawn from a filtered CSV requiring 
+ characters per post. Student data is never used during optimization.
+
+C.4 
+In-Context Demonstrations
+
+Eight manually constructed (post, bullets) demonstrations are provided at inference time to cover distinct failure modes identified in early spot-checks.
+
+Appendix D 
+Academic-Content-Removed Template Details
+
+D.1 
+Overview
+
+Each student post is converted into a 
+template
+ in which domain-specific academic content is replaced by one of four bracketed markers, leaving all non-domain text (connectives, hedging, filler, opinion markers, punctuation) intact. The templating prompt is optimized with GEPA 
+Agrawal et al. (2025)
+ against expert human annotations on 50 proprietary student posts, maximizing character-level agreement with the human reference masks. The task LM is GPT-5-mini; the reflection LM is GPT-5.
+
+D.2 
+Marker Vocabulary
+
+Four markers cover the domain-content categories identified by our education collaborators:
+
+Marker
+
+Semantics
+
+###
+
+Named concept, theory, formula, or domain term the student is asking about
+
+***
+
+The question body directly related to the target concept (what is explicitly being asked)
+
+%%%
+
+The student’s explanation of their own understanding of the concept
+
+^^^
+
+Context or condition of the question (a specific scenario, given information, or described situation)
+
+Two rules govern the output: (1) each masked span must start and end exactly at the boundaries of the domain-specific content; (2) if two consecutive sentences belong to the same marker type, they are separated by a period rather than concatenated (e.g. 
+%%%.%%%
+ not 
+%%%%%%
+).
+
+During SEAMS, we then perform the replacement of markers into free texts so that SEAMS has better context.
+
+D.3 
+Optimization Objective
+
+Character-level accuracy.
+
+Given an original post 
+, a model-produced template 
+, and a human-annotated reference template 
+, the score is the fraction of character positions on which the model and human agree about whether that character is masked:
+
+(3)
+
+where 
+, determined by splitting 
+ on the marker regex 
+[\*#^%]+
+ and locating the surviving literal substrings in 
+. The metric also returns natural-language feedback to guide GEPA’s reflection pass.
+
+D.4 
+Training Data
+
+Optimization uses 50 expert-annotated student posts (40 train / 50 validation, all available examples used as the validation set). The annotations were produced by education collaborators and cover posts from multiple course departments. Because this data is proprietary, the released artifact is the optimized prompt only; no student post text is embedded in the model weights.
+
+D.5 
+In-Context Demonstrations
+
+Six manually constructed (post, template) demonstrations are provided at inference time, selected to cover recurring structural patterns.
+
+Appendix E 
+MIPROv2 Prompt Proposal for the Rewriter
+
+E.1 
+Instruction Candidate Proposal
+
+We use MIPROv2 
+opsahl2024optimizing
+ in proposal-only mode: we call 
+_propose_instructions
+ to generate 
+ candidate instruction strings without any few-shot bootstrapping (
+max_bootstrapped_demos
+ 
+, 
+max_labeled_demos
+ 
+).
+
+E.2 
+Candidate Evaluation
+
+Each candidate instruction is evaluated on a sample of 
+ held-out posts drawn from the validation split. For each post the rewriter is called with the top-
+ (
+) most style-similar training posts as exemplars, retrieved by cosine similarity under 
+StyleDistance
+ 
+patel2025styledistance
+ embeddings. The per-example score used to rank candidates is:
+
+(4)
+
+where 
+style_sim
+ is cosine similarity between 
+StyleDistance
+ embeddings of the generated and original post, 
+sem_sim
+ is cosine similarity between 
+all-mpnet-base-v2
+ embeddings, and 
+ is unigram overlap with the original post.
+
+Candidates are ranked by mean 
+sem_sim
+ across the evaluation sample; the top-ranked instruction is adopted as the fixed rewriter prompt for all downstream runs.
+
+Appendix F 
+Cluster Summary Generation
+
+Each cluster is summarized via a two-stage process: 
+contrastive prompt construction
+ followed by 
+ensemble candidate selection
+.
+
+Focal and contrast post selection.
+
+For a given meta-cluster 
+, we first compute its meta-centroid 
+ as the 
+-normalized mean of the 
+-normalized cluster-center embeddings of all constituent seed clusters. We then collect the union of all post texts belonging to those seed clusters (deduplicating across seeds) and select the 
+ posts whose embeddings lie closest to 
+ in cosine similarity as the 
+focal
+ set. To form the 
+contrast
+ set, we randomly sample 
+ posts from the union of all other meta-clusters, excluding posts that appear in 
+.
+
+Axis-specific contrastive prompt.
+
+The LLM receives the focal and contrast posts and is instructed to produce a two-sentence summary. The first sentence describes what the focal posts share with student discussion posts 
+in general
+ (i.e., the baseline register or content). The second sentence articulates what specifically distinguishes the focal cluster 
+from
+ the contrast examples. This contrastive framing is critical for preventing all cluster summaries from collapsing to generic descriptions of student posts.
+
+Ensemble candidate selection.
+
+We generate 
+ candidate summaries by querying the LLM. Each candidate is embedded with a text embedding model (
+text-embedding-3-small
+), and the embeddings are 
+-normalized. The final summary is the candidate whose normalized embedding has the highest cosine similarity to the mean of all candidate embeddings:
+
+where 
+ is the normalized embedding of candidate 
+. This is the same centroid-proximity aggregation used in the privacy-motivated generation step, and it favors summaries that are semantically representative of the consensus across candidates while filtering out outlier generations.
+
+Appendix G 
+Cluster Inspection
+
+Table 
+6
+ presents the concise summaries of the 14 identified clusters, highlighting the most distinguishing features of each cluster. To further examine their conceptual validity, we reviewed the cluster content in relation to educational theories on student question-asking and academic help-seeking. Overall, the clusters align with prior research in learning science that students’ questions could serve different functions, including clarifying confusion, checking understanding, asking for evidence, extending or elaborating ideas, or promoting peer discussion 
+Graesser and Person (1994)
+; 
+Karabenick (2003)
+; 
+King (1994)
+.
+
+Specifically, the identified clusters reflect several theoretically meaningful patterns. Several capture 
+clarification-oriented help-seeking
+, in which students pose short, task-focused questions to resolve confusion. For example, students ask questions (rewrite version) such as 
+“Hi class, I got so confused with the last question on the weekly quiz. How does 1.98 come out in this question?”
+ Another set of clusters captures 
+peer-oriented interaction
+, where students combine acknowledgment, feedback, and follow-up questions to sustain discussion with classmates. Representative example like 
+“Hi xx, I like and definitely agree with your post. Here are some further questions to consider: How much do you think the public has become significantly better at openly stopping hate in person, so as to motivate them to mask spreading hate behind social media? …"
+ In addition, a set of clusters reflects more 
+elaborate, reflective, and synthesis-oriented questions
+. Those questions often summarize students’ personal understanding and then connect it to broader topical discussion. For example, 
+“In reading …, I learned that there are some ethical theories holding that there exist universal ethical rules. In my understanding, when they say these rules are universal, they mean "they are universal for every human being in every possible occasion". However, isn’t it a meaningless claim?” 
+Such questions move beyond clarification and invite interpretation, evaluation, and synthesis, aligning with the constructive engagement emphasized in the ICAP framework 
+Chi and Wylie (2014)
+.
+
+Overall, this inspection indicates that these clusters capture theoretically meaningful variations in students’ question asking in discussion forums.
+
+Method
+
+Semantic
+
+Style
+
+ROUGE-1
+
+SEAMS
+seed
+
+0.874 
+ .004
+
+0.923 
+ .006
+
+0.648 
+ .006
+
+SEAMS
+
+0.874 
+ .004
+
+0.923 
+ .004
+
+0.648 
+ .005
+
+CS
+seed
+
+0.864 
+ .004
+
+0.608 
+ .005
+
+0.577 
+ .010
+
+CS
+
+0.854 
+ .004
+
+0.688 
+ .016
+
+0.549 
+ .012
+
+Table 5: 
+Ablation of per-seed vs. meta-aggregation (
+, averaged over 5 seeds).
+Values are mean 
+ std over seeds.
+
+Table 6: 
+Cluster Summary: Key Distinguishing Features
+
+Cluster
+
+Summarization
+
+1
+
+Dialogic peer responses that combine salutations, personalized feedback, reflective interpretation, and multiple probing follow-up questions. These posts often link course texts to broader implications.
+
+2
+
+Strongly interpersonal peer replies that begin with greetings and praise, directly address classmates, and ask several conversational questions for clarification, reflection, or opinion.
+
+3
+
+Elaborative peer-feedback posts that combine praise, constructive critique, personal reflection, and open-ended questions. They foreground relational engagement and continued dialogue.
+
+4
+
+Relational and affective replies that acknowledge peers, connect to readings or personal experiences, and close with targeted reflective questions.
+
+5
+
+Highly dialogic and informal exchanges that combine empathy, tentative suggestions, personal reactions, and exploratory clarification questions directed to peers or instructors.
+
+6
+
+Mini-essay style posts that summarize and analyze readings or films, often using quotations, citations, and comparative or theoretical arguments to provoke discussion.
+
+7
+
+Synthesis-oriented posts that interweave textual summary, interpretation, evaluative stance, and structured prompts for group work or class discussion.
+
+8
+
+Concise, task-focused entries formatted as two numbered standalone content questions, with minimal greeting, first-person framing, or contextual elaboration.
+
+9
+
+Formulaic peer-feedback replies that begin with a greeting and positive acknowledgment, followed by exactly two numbered follow-up questions.
+
+10
+
+Structured responses to assigned prompts, often using labels or numbered answers, multi-paragraph synthesis, course readings, citations, and reflective questions.
+
+11
+
+Terse, decontextualized technical or concept-clarification questions, often using domain-specific terms, acronyms, and stacked sub-questions with little interpersonal framing.
+
+12
+
+Brief, polite help-seeking messages with greetings, explicit confusion or help-seeking phrases, and a single focused clarifying question.
+
+13
+
+Casual, peer-directed dialogic posts with named addressees, brief references to readings or lectures, and dense strings of quick follow-up questions.
+
+14
+
+Formulaic troubleshooting requests that open with greetings and gratitude or confusion markers, then ask narrowly scoped procedural or assignment-related questions.
+
+Appendix H 
+Generation Quality: Full Table
+
+We present the full table in Table 
+7
+. Lexical overlap is measured using ROUGE-1 
+Lin (2004)
+. We additionally report diversity metrics, including MATTR 
+Covington and McFall (2010)
+ and Self-BLEU 
+zhu2018texygen
+.
+
+Dataset
+
+Method
+
+Sem
+ 
+
+Sty
+ 
+
+Weg
+ 
+
+R-1
+ 
+
+MATTR
+
+Self-BLEU
+ 
+
+Proprietary
+
+SEAMS
+
+87.4 
+ 0.4
+
+92.3 
+ 0.4
+
+85.3 
+ 1.2
+
+64.8 
+ 0.5
+
+85.2
+
+19.8
+
+SEAMS-1
+
+87.1 
+ 0.4
+
+91.4 
+ 0.5
+
+83.3 
+ 1.4
+
+63.8 
+ 0.5
+
+84.7
+
+19.5
+
+ESA
+
+87.0 
+ 0.3
+
+67.4 
+ 0.2
+
+17.7 
+ 0.5
+
+59.8 
+ 0.3
+
+85.3
+
+23.0
+
+CS
+
+85.4 
+ 0.4
+
+68.8 
+ 1.6
+
+25.7 
+ 4.9
+
+54.9 
+ 1.2
+
+86.0
+
+27.7
+
+DP-Prompt (t=1.0)
+
+91.8 
+ 0.1
+
+55.4 
+ 0.1
+
+61.4 
+ 0.2
+
+86.7
+
+15.6
+
+ZS-CS
+
+86.6 
+ 0.4
+
+62.7 
+ 0.3
+
+7.9 
+ 0.6
+
+58.3 
+ 0.3
+
+85.1
+
+23.5
+
+ZS-C
+
+79.0 
+ 0.2
+
+55.2 
+ 0.1
+
+36.2 
+ 0.2
+
+86.4
+
+37.7
+
+Stanford MOOC
+
+SEAMS
+
+84.6 
+ 0.7
+
+82.3 
+ 1.1
+
+44.9 
+ 3.1
+
+68.7 
+ 1.2
+
+87.6
+
+15.8
+
+SEAMS-1
+
+85.2 
+ 0.2
+
+83.7 
+ 0.4
+
+49.5 
+ 1.1
+
+69.7 
+ 0.4
+
+87.5
+
+17.0
+
+ESA
+
+84.2 
+ 0.2
+
+81.4 
+ 0.5
+
+41.3 
+ 1.7
+
+66.9 
+ 0.5
+
+87.7
+
+20.0
+
+CS
+
+77.1 
+ 1.6
+
+76.0 
+ 0.9
+
+25.3 
+ 2.5
+
+51.2 
+ 3.6
+
+88.1
+
+30.8
+
+DP-Prompt (t=1.0)
+
+85.0 
+ 0.3
+
+77.5 
+ 0.3
+
+31.1 
+ 1.0
+
+56.6 
+ 0.4
+
+89.3
+
+13.4
+
+ZS-CS
+
+83.3 
+ 0.2
+
+80.1 
+ 0.5
+
+38.1 
+ 1.5
+
+64.6 
+ 0.5
+
+87.5
+
+20.5
+
+ZS-C
+
+66.2 
+ 0.4
+
+74.4 
+ 0.3
+
+15.6 
+ 0.6
+
+28.7 
+ 0.2
+
+87.2
+
+38.6
+
+Stack Exchange
+
+SEAMS
+
+85.7 
+ 0.3
+
+92.0 
+ 0.3
+
+71.7 
+ 0.6
+
+63.4 
+ 0.7
+
+81.1
+
+17.3
+
+SEAMS-1
+
+86.0 
+ 0.4
+
+91.5 
+ 0.2
+
+71.6 
+ 0.7
+
+63.7 
+ 0.3
+
+81.5
+
+16.5
+
+ESA
+
+85.7 
+ 0.1
+
+90.7 
+ 0.1
+
+68.2 
+ 0.4
+
+62.1 
+ 0.2
+
+81.5
+
+19.1
+
+CS
+
+84.4 
+ 0.6
+
+88.9 
+ 1.0
+
+64.5 
+ 1.5
+
+54.0 
+ 4.9
+
+81.8
+
+26.0
+
+DP-Prompt (t=1.0)
+
+90.3 
+ 0.0
+
+88.0 
+ 0.2
+
+59.5 
+ 0.7
+
+60.8 
+ 0.2
+
+82.0
+
+18.1
+
+ZS-CS
+
+85.5 
+ 0.2
+
+90.2 
+ 0.1
+
+67.2 
+ 0.4
+
+61.4 
+ 0.2
+
+81.5
+
+19.0
+
+ZS-C
+
+77.2 
+ 0.3
+
+82.6 
+ 0.3
+
+42.2 
+ 1.0
+
+35.7 
+ 0.2
+
+83.5
+
+37.0
+
+Table 7: 
+Generation quality across all three datasets. All values multiplied by 100; best per dataset-column in bold for Sem/Sty/Weg/R-1. 
+Sem
+ and 
+Sty
+ are cosine similarities to the original post in 
+all-mpnet-base-v2
+ and 
+StyleDistance/styledistance
+; 
+Weg
+ is style similarity under 
+wegmann2022same
+, an embedder not used for retrieval. R-1 is ROUGE-1 F1 (stemmed). MATTR (window 50) and Self-BLEU measure lexical and generation diversity.
+
+Appendix I 
+Relational Structure Preservation
+
+Beyond per-post fidelity, we ask whether SEAMS preserves 
+population-level
+ stylistic structure, measured by the within-vs-between cluster style gap:
+
+,
+the difference between mean pair-wise cosine similarity of within-cluster and between-cluster posts. Values close to the original indicate that population-level style survives the rewrite. We compute 
+ in two embedding spaces to rule out artifacts of the space SEAMS uses for aggregation (Table 
+8
+).
+
+SEAMS reproduces the original 
+ 
+in both spaces; SEAMS-1 behaves comparably, suggesting partitioning is not the source of structural preservation. CS substantially inflates 
+, likely due to within-cluster homogenization from rewriting all members against a single cluster summary. This is a failure mode SEAMS avoids by conditioning on individual exemplars.
+
+Method
+
+Within 
+
+sep
+
+StyleDistance
+
+Original posts
+
+SEAMS
+
+SEAMS-1
+
+CS
+
+Wegmann
+
+Original posts
+
+SEAMS
+
+SEAMS-1
+
+CS
+
+Table 8: 
+Within-cluster embedding similarities and the difference between within- and between-cluster similarities, computed in both 
+StyleDistance
+ and 
+AnnaWegmann
+ style embedding space, across methods.
+
+Appendix J 
+Authorship Attack: Full Table
+
+We report two attack settings. In the 
+global
+ setting used in Section 
+5.6
+, the attacker ranks every student with training posts, without knowing the true author’s style cluster (Table 
+9
+). In the 
+within-cluster
+ setting, candidates are restricted to the students in the true author’s home cluster, the meta-cluster containing most of their training posts (Table 
+10
+). This removes easy negatives from other clusters and isolates the individual style that remains once cluster-level style is preserved; it also adds two further attackers: a Wegmann classifier (Weg-clf; logistic regression on the difference of 
+wegmann2022same
+ embeddings) and a semantic retriever (MPNet-ret; 
+all-mpnet-base-v2
+). MPNet-ret links posts through shared course content rather than style; since every faithful rewrite preserves content, no method reduces it substantially. In the within-cluster setting, SEAMS is below SEAMS-1 on seven of nine attacker–dataset pairs for the three main attackers.
+
+Method
+
+Weg-ret
+
+Stylo-clf
+
+LUAR
+
+Proprietary
+ (6,231 candidates)
+
+Real (unmodified)
+
+10.18 
+ 3.28
+
+6.21 
+ 0.61
+
+70.28 
+ 4.09
+
+SEAMS
+
+7.88 
+ 2.76
+
+5.86 
+ 0.79
+
+35.47 
+ 4.12
+
+SEAMS-1
+
+6.31 
+ 2.38
+
+6.48 
+ 1.08
+
+34.53 
+ 5.21
+
+ESA
+
+5.26 
+ 1.13
+
+4.31 
+ 0.50
+
+27.33 
+ 5.25
+
+ZS-CS
+
+4.04 
+ 1.73
+
+4.10 
+ 0.87
+
+22.15 
+ 5.93
+
+DP-Prompt
+
+2.62 
+ 0.83
+
+4.11 
+ 1.08
+
+21.22 
+ 4.54
+
+Stanford MOOC
+ (10,626 candidates)
+
+Real (unmodified)
+
+88.05 
+ 5.51
+
+15.28 
+ 3.72
+
+200.06 
+ 11.53
+
+SEAMS
+
+35.65 
+ 4.09
+
+11.39 
+ 4.19
+
+87.55 
+ 9.25
+
+SEAMS-1
+
+36.22 
+ 2.37
+
+11.82 
+ 3.91
+
+94.78 
+ 7.17
+
+ESA
+
+32.61 
+ 3.21
+
+11.14 
+ 4.47
+
+83.76 
+ 5.95
+
+ZS-CS
+
+30.67 
+ 1.62
+
+11.73 
+ 4.73
+
+80.50 
+ 7.74
+
+DP-Prompt
+
+27.60 
+ 3.45
+
+10.46 
+ 3.09
+
+53.61 
+ 7.31
+
+Stack Exchange
+ (5,702 candidates)
+
+Real (unmodified)
+
+22.90 
+ 4.93
+
+31.39 
+ 8.92
+
+123.52 
+ 7.79
+
+SEAMS
+
+9.50 
+ 1.89
+
+12.36 
+ 3.53
+
+55.35 
+ 5.49
+
+SEAMS-1
+
+10.41 
+ 2.22
+
+10.06 
+ 4.57
+
+57.81 
+ 6.39
+
+ESA
+
+8.18 
+ 1.81
+
+11.87 
+ 4.40
+
+51.85 
+ 5.87
+
+ZS-CS
+
+8.27 
+ 0.81
+
+12.11 
+ 3.35
+
+50.77 
+ 3.46
+
+DP-Prompt
+
+4.26 
+ 0.69
+
+9.61 
+ 3.30
+
+30.04 
+ 1.00
+
+Table 9: 
+Global authorship attack: the attacker ranks all students with training posts (MRR ratio, mean 
+ std over 5 seeds; 1.0 
+ random chance, higher 
+ easier to attribute). This is the setting reported in Section 
+5.6
+.
+
+Method
+
+Weg-ret
+
+Stylo-clf
+
+LUAR
+
+Weg-clf
+
+MPNet-ret
+
+Proprietary
+
+  Real (unmodified)
+
+2.30 
+ 0.27
+
+2.69 
+ 0.39
+
+8.80 
+ 0.74
+
+1.76 
+ 0.19
+
+6.53 
+ 0.64
+
+  SEAMS
+
+1.89 
+ 0.31
+
+2.38 
+ 0.31
+
+5.56 
+ 0.73
+
+1.35 
+ 0.20
+
+5.86 
+ 0.72
+
+  SEAMS-1
+
+2.13 
+ 0.28
+
+2.37 
+ 0.28
+
+5.61 
+ 0.83
+
+1.49 
+ 0.32
+
+6.18 
+ 0.72
+
+  ESA
+
+1.47 
+ 0.37
+
+1.91 
+ 0.23
+
+4.62 
+ 0.92
+
+1.09 
+ 0.32
+
+5.80 
+ 0.70
+
+  ZS-CS
+
+1.46 
+ 0.44
+
+1.98 
+ 0.11
+
+3.94 
+ 0.92
+
+0.98 
+ 0.26
+
+5.79 
+ 0.76
+
+  DP-Prompt
+
+1.34 
+ 0.17
+
+2.11 
+ 0.37
+
+4.45 
+ 0.69
+
+1.05 
+ 0.23
+
+6.29 
+ 0.81
+
+Stanford MOOC
+
+  Real (unmodified)
+
+6.89 
+ 0.21
+
+4.36 
+ 0.39
+
+13.30 
+ 1.13
+
+4.73 
+ 0.73
+
+9.45 
+ 0.66
+
+  SEAMS
+
+4.20 
+ 0.25
+
+4.00 
+ 0.54
+
+8.51 
+ 0.37
+
+3.55 
+ 0.24
+
+9.15 
+ 0.40
+
+  SEAMS-1
+
+4.42 
+ 0.19
+
+4.17 
+ 0.47
+
+8.90 
+ 0.28
+
+3.50 
+ 0.38
+
+9.09 
+ 0.48
+
+  ESA
+
+4.05 
+ 0.39
+
+4.12 
+ 0.72
+
+8.46 
+ 0.55
+
+3.34 
+ 0.27
+
+9.00 
+ 0.64
+
+  ZS-CS
+
+4.04 
+ 0.17
+
+4.18 
+ 0.72
+
+8.34 
+ 0.66
+
+3.61 
+ 0.25
+
+8.77 
+ 0.65
+
+  DP-Prompt
+
+3.76 
+ 0.51
+
+3.64 
+ 0.60
+
+7.26 
+ 0.33
+
+3.03 
+ 0.32
+
+8.90 
+ 0.48
+
+Stack Exchange
+
+  Real (unmodified)
+
+3.30 
+ 0.28
+
+5.38 
+ 0.90
+
+12.48 
+ 1.67
+
+2.30 
+ 0.37
+
+14.92 
+ 0.73
+
+  SEAMS
+
+2.07 
+ 0.19
+
+3.40 
+ 0.59
+
+7.27 
+ 0.75
+
+1.70 
+ 0.32
+
+14.20 
+ 0.61
+
+  SEAMS-1
+
+2.32 
+ 0.23
+
+3.20 
+ 0.47
+
+7.95 
+ 0.94
+
+1.89 
+ 0.31
+
+14.13 
+ 0.97
+
+  ESA
+
+1.89 
+ 0.12
+
+3.44 
+ 0.43
+
+6.99 
+ 0.67
+
+1.63 
+ 0.23
+
+14.28 
+ 0.74
+
+  ZS-CS
+
+1.91 
+ 0.14
+
+3.26 
+ 0.43
+
+6.86 
+ 0.85
+
+1.52 
+ 0.19
+
+14.21 
+ 0.78
+
+  DP-Prompt
+
+1.54 
+ 0.21
+
+3.06 
+ 0.53
+
+5.44 
+ 0.71
+
+1.58 
+ 0.20
+
+14.86 
+ 0.50
+
+Table 10: 
+Within-cluster authorship attack: candidates are the students in the true author’s home cluster (MRR ratio, mean 
+ std over 5 seeds; 1.0 
+ random chance, higher 
+ easier to attribute; protocol in Section 
+5.6
+).
+
+Appendix K 
+Ablation: Meta-Clustering Necessity
+
+SEAMS uses meta-clusters formed by cross-seed agglomerative clustering rather than per-seed HDBSCAN clusters directly. We ablate this choice by comparing two variants of each method: 
+ variants retrieve same-cluster exemplars (SEAMS) or generate summaries (CS) using only the per-seed clusters from the current seed, while the other versions use the cross-seed meta-clusters.
+
+Table 
+5
+ reports the results. For SEAMS, per-seed and meta-cluster variants are statistically indistinguishable on all three metrics, indicating that the meta-clustering step is not critical for high-fidelity exemplar-based generation. For CS, however, meta-clustering substantially improves style fidelity (0.688 vs. 0.608), at a small cost to semantic similarity and ROUGE-1.
+
+This asymmetry is consistent with the failure mode of the CS pipeline. Per-seed clusters are smaller and more variable across seeds, so per-seed cluster summaries are noisier and less stylistically distinctive. Cross-seed aggregation stabilizes the cluster definitions, producing summaries that more consistently characterize the cluster’s register. SEAMS does not depend on summary stability because it conditions on individual exemplars within the cluster.
+
+We therefore retain meta-clustering in the main pipeline: although it is not necessary for SEAMS itself, it is necessary for fair comparison against the CS baseline, which depends on stable cluster-level summaries.
+
+Appendix L 
+Ablation: Selection Mechanism
+
+To support our design choices, we evaluate three SEAMS variants on our proprietary student dataset, each across five seeds. 
+Unconstrained retrieval
+ removes cluster restriction, retrieving over the entire corpus excluding posts by the target author. 
+Deterministic selection
+ removes clipping and noise, selecting the candidate closest to the raw mean embedding. 
+Random selection
+ chooses the final candidate at random.
+
+Method
+
+Sem
+
+Sty
+
+Weg
+
+R-1
+
+SEAMS (
+)
+
+87.4 
+ 0.4
+
+92.3 
+ 0.4
+
+85.3 
+ 1.2
+
+64.8 
+ 0.5
+
+Unconstrained
+
+87.6 
+ 0.3
+
+92.5 
+ 0.4
+
+85.4 
+ 1.1
+
+65.1 
+ 0.4
+
+Deterministic
+
+87.5 
+ 0.3
+
+92.4 
+ 0.4
+
+85.3 
+ 1.1
+
+64.9 
+ 0.5
+
+Random
+
+87.2 
+ 0.3
+
+91.2 
+ 0.6
+
+83.1 
+ 1.5
+
+64.2 
+ 0.5
+
+Method
+
+MATTR
+
+Self-BLEU
+
+SEAMS (
+)
+
+85.2 
+ 0.2
+
+19.8 
+ 0.2
+
+Unconstrained
+
+85.2 
+ 0.2
+
+19.5 
+ 0.5
+
+Deterministic
+
+85.2 
+ 0.2
+
+19.9 
+ 0.4
+
+Random
+
+85.2 
+ 0.2
+
+20.0 
+ 0.3
+
+Table 11: 
+Generation quality of SEAMS ablation variants on the proprietary dataset, averaged over 5 seeds. All values multiplied by 100.
+
+Method
+
+Weg-ret
+
+Stylo-clf
+
+LUAR
+
+Weg-clf
+
+MPNet-ret
+
+SEAMS (
+)
+
+1.89 
+ 0.31
+
+2.38 
+ 0.31
+
+5.56 
+ 0.73
+
+1.35 
+ 0.20
+
+5.86 
+ 0.72
+
+Unconstrained
+
+1.94 
+ 0.26
+
+2.49 
+ 0.21
+
+5.61 
+ 0.77
+
+1.32 
+ 0.25
+
+6.05 
+ 0.75
+
+Deterministic
+
+1.85 
+ 0.31
+
+2.37 
+ 0.42
+
+5.44 
+ 0.66
+
+1.36 
+ 0.24
+
+5.87 
+ 0.76
+
+Random
+
+1.94 
+ 0.26
+
+2.32 
+ 0.41
+
+5.65 
+ 0.69
+
+1.39 
+ 0.36
+
+6.02 
+ 0.77
+
+Table 12: 
+Within-cluster authorship attack results for SEAMS ablation variants on the proprietary dataset (MRR ratio, mean 
+ std over 5 seeds; lower is harder to attribute; protocol in Section 
+5.6
+).
+
+All variants except random selection match full SEAMS across the quality distribution (Table 
+11
+), and attack differences remain within seed variance (Table 
+12
+), though unconstrained retrieval is directionally higher on four of five attackers (e.g., 
+ on semantic retrieval).
+
+We draw three findings. First, approximately 71% of unconstrained top-
+ retrievals already fall within the target post’s cluster, indicating that style retrieval largely recovers cluster membership on its own; cluster restriction provides an in-cluster guarantee that may matter more for smaller or more heterogeneous corpora. Second, random selection degrades quality primarily in the tail: mean style fidelity drops, and more outputs fall below a style fidelity of 80 (12.7% vs. 10.8%), with a 10th percentile of 74.4 vs. 78.6. Consensus selection therefore acts as worst-case insurance by filtering degenerate candidates. Third, deterministic selection behaves identically to full SEAMS, but retaining the noise maintains structural consistency with DP-ICL at no measured quality cost.
+
+Appendix M 
+Embedding-Probe Downstream Evaluation
+
+As a complement to fine-tuning (Table 
+2
+), we train logistic regression (ridge regression for Stanford MOOC) on frozen embeddings of the same validation posts, using either a semantic model (
+all-mpnet-base-v2
+) or a style model (
+StyleDistance
+), and evaluate on the original test posts. For every model, the regularization strength is selected by cross-validation on its training posts alone (5-fold for logistic regression, leave-one-out for ridge regression). Semantic probes lose little with any method’s rewrites, while style probes separate the methods: SEAMS or SEAMS-1 has the smallest style loss on every dataset (Table 
+13
+).
+
+Proprietary
+
+Stanford MOOC
+
+Stack Exchange
+
+(Bloom’s level, macro-F1)
+
+(confusion, 
+)
+
+(subject, macro-F1)
+
+Method
+
+Semantic 
+
+Style 
+
+Semantic 
+
+Style 
+
+Semantic 
+
+Style 
+
+SEAMS
+
+SEAMS-1
+
+ESA
+
+CS
+
+DP-Prompt
+
+ZS-CS
+
+ZS-C
+
+Table 13: 
+Downstream utility with embedding probes (logistic or ridge regression on frozen semantic and style embeddings).
+
+ = metric when training on rewrites 
+ metric when training on original posts, both tested on original posts; values closer to zero indicate less utility loss.
+Metric is macro-F1 for classification and 
+ for regression, 
+100; mean 
+ std over 5 seeds.
+Training on original posts scores 34.7/29.8 (Proprietary), 20.8/17.3 (Stanford MOOC), and 80.5/35.9 (Stack Exchange) with semantic/style embeddings.
+Semantic 
+s are within noise for every method, so bold marks the smallest style loss per dataset only.
+
+Appendix N 
+Aggregation Hyperparameters
+
+We use clipping bound 
+ and noise multiplier 
+ (Algorithm 
+1
+). Candidate embeddings are computed with StyleDistance, whose embeddings have norms of roughly 17, so clipping effectively normalizes each candidate embedding, and the added Gaussian noise has a per-dimension standard deviation of 
+. The same settings are used for all SEAMS variants that retain noisy aggregation and for the ESA baseline, which shares SEAMS’s aggregation step.
+
+Appendix O 
+Computational Cost
+
+Clustering is run once per dataset, after an optimal cluster configuration has been selected using a small batch of posts as the validation set. Clustering runs on CPU and takes under 10 minutes per setting for each of the datasets we process.
+
+All experiments using open-source models are conducted on machines with 5 A6000 GPUs (48GB each): 4 host the 72B generation model and 1 hosts the embedding model. We did not record exact wall-clock time, and report file modification times as estimates. On the proprietary dataset, SEAMS (
+) takes approximately 21.6 seconds per post and SEAMS-1 approximately 10.7 seconds per post.
+
+Table 
+14
+ reports token usage per post, computed from the LLM cache produced during our experiments. SEAMS costs 
+ more in LLM calls than SEAMS-1, but only about 17% more in total tokens per post, since each call carries a shorter prompt.
+
+Method
+
+Calls
+
+Prompt tok.
+
+Compl. tok.
+
+/post
+
+/call
+
+/call
+
+SEAMS (
+)
+
+5
+
+1,023
+
+105
+
+SEAMS-1
+
+1
+
+4,545
+
+259
+
+Method
+
+Prompt tok.
+
+Compl. tok.
+
+Total tok.
+
+/post
+
+/post
+
+/post
+
+SEAMS (
+)
+
+5,117
+
+527
+
+5,644
+
+SEAMS-1
+
+4,545
+
+259
+
+4,804
+
+Ratio
+
+1.13
+
+2.03
+
+1.17
+
+Table 14: 
+Token usage per post on the proprietary dataset. Values are approximate, computed from the LLM cache produced during our experiments.
+
+Appendix P 
+SEAMS DSPy Rewriter Specification
+
+The generation module in SEAMS is implemented as a DSPy Signature with three inputs and one output; DSPy compiles it into the model prompt.
+
+\iow_now:Ne
+¨
+\iow_now:Ne
+¨class RewriteSignature(dspy.Signature):
+\iow_now:Ne
+¨    """Generate a student discussion forum post that includes all the key points provided in the ‘bullet_summary‘. Ensure that the post closely mirrors the writing style, tone, and format of the ‘style_context‘ exemplar posts. Additionally, follow the structural guidelines detailed in the ‘post_template‘ to ensure the rewritten post is well-organized and meets the specified criteria.
+\iow_now:Ne
+¨
+\iow_now:Ne
+¨    1. **Content Coverage**: Make sure that every point listed in the ‘bullet_summary‘ is addressed in the rewritten post.
+\iow_now:Ne
+¨    2. **Style and Tone**: Adopt the same writing style, tone, and format as the exemplar posts provided in ‘style_context‘. This includes sentence structure, vocabulary, and any specific formatting elements.
+\iow_now:Ne
+¨    3. **Structure**: Follow the structure outlined in the ‘post_template‘. This may include sections, paragraphs, headings, and other organizational elements that are important for the post’s clarity and readability.
+\iow_now:Ne
+¨
+\iow_now:Ne
+¨    By adhering to these guidelines, the rewritten post should effectively communicate the required content while maintaining a consistent and appropriate style and structure."""
+\iow_now:Ne
+¨
+\iow_now:Ne
+¨    bullet_summary: str = dspy.InputField(
+\iow_now:Ne
+¨        desc="Bullet points that the rewritten post must cover.")
+\iow_now:Ne
+¨    post_template: str = dspy.InputField(
+\iow_now:Ne
+¨        desc="Description of the general structure of what the rewritten post should look like.")
+\iow_now:Ne
+¨    style_context: str = dspy.InputField(
+\iow_now:Ne
+¨        desc="Numbered peer posts demonstrating the target register.")
+\iow_now:Ne
+¨    rewritten_post: str = dspy.OutputField(
+\iow_now:Ne
+¨        desc="The rewritten post, content-preserving and register-matched, "
+\iow_now:Ne
+¨             "with all identifying surface details replaced.")
+
+Appendix Q 
+Annotation Information
+
+Both human evaluations used a Streamlit application. In the style-match evaluation, each screen showed the original post above two rewrites (“Rewrite A” and “Rewrite B”) with the instruction: “Both rewrites cover the same content as the original post. Which rewrite sounds more like it was written by the same person who wrote the original? Focus on wording, tone, and writing style, not on content.” Annotators chose “Rewrite A is more similar,” “Equally similar,” or “Rewrite B is more similar.” Three attention checks were placed at fixed positions: a verbatim copy of the original versus scrambled text, an instruction to select a specific option, and a near-copy of a casual post versus unrelated formal text. Figure 
+5
+ shows the style-match interface.
+
+Figure 5: 
+Interface of the style-match evaluation (post text replaced with placeholders).
+
+Appendix R 
+Naturalness Evaluation
+
+Before the style-match evaluation, we ran a preference-based naturalness study on Prolific with current college and graduate students ($15/hour). Each pair contained an original post and a generated post with 
+different
+ content (from SEAMS, CS, or ZS-CS), along with real-vs.-real control pairs and attention checks, and annotators chose which post “you or your peers [are] more likely to write,” or judged 

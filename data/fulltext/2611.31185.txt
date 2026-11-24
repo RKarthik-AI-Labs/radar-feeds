@@ -1,0 +1,3248 @@
+CO-GRAFT: Attributing Reinforcement Learning Gains in Search Agents via Role-Level Policy Grafting
+https://arxiv.org/abs/2611.31185
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+CO-GRAFT
+: Attributing Reinforcement Learning Gains in Search Agents via Role-Level Policy Grafting
+
+Ramraj Chandradevan
+
+  
+
+Sayontan Ghosh
+
+  
+
+Vinoth Selvendran
+
+Email: 
+{first.last}@gmail.com
+
+Abstract
+
+Reinforcement learning (RL) improves large language model search agents by up to 32 exact-match (EM) points over their pre-RL initializations, yet overall accuracy gains do not identify which underlying functional capabilities improve or interact during training. We introduce 
+CO-GRAFT
+, a reward-agnostic interventional attribution framework in which an RL-trained agent and its pre-RL initialization jointly generate a single trajectory under closed-loop execution with live retrieval. Each policy controls a mutually exclusive subset of four functional roles: intermediate reasoning, search-or-answer decision, search query generation, and final answer extraction. Evaluating all 
+ role assignments without modifying weights or retraining defines a cooperative game whose Shapley values decompose the total RL gain across roles, while Möbius interaction terms distinguish standalone role improvements from multi-role coupling. Applying 
+CO-GRAFT
+ to Search-R1 agents across Qwen2.5 and Llama-3.2 models (spanning two sizes, base and instruction-tuned initializations, GRPO and PPO optimizers, and NQ and HotpotQA datasets), we show that query generation never exceeds 15% of the total gain; instead, gains are governed by pre-RL answer validity, search retention, model scale, and fixed task-level search budgets, shifting credit from reasoning toward answer extraction in larger or well-formatted answer response checkpoints while smaller base models rely on reasoning–decision coupling.
+
+1 
+Introduction
+
+Large language model (LLM) search agents answer multi-hop and knowledge-intensive questions by interleaving reasoning with external retrieval across multiple turns 
+Jin et al. (2025b)
+; 
+Song et al. (2025)
+; 
+Chen et al. (2025)
+; 
+Zheng et al. (2025b)
+; 
+Sun et al. (2025)
+; 
+Gao et al. (2025)
+; 
+Guo et al. (2025)
+. At each turn, the agent executes four distinct functional roles in sequence 
+Jin et al. (2025b)
+; 
+Song et al. (2025)
+; 
+Chen et al. (2025)
+: it generates intermediate reasoning (
+R
+), makes a binary decision (
+D
+) either to invoke search or to terminate and answer, formulates a search query (
+Q
+) when search is chosen, and extracts the final answer (
+A
+) once retrieval concludes. Post-training these agents with reinforcement learning (RL) improves exact-match (EM) accuracy by 6 to 25 points over non-RL inference and retrieval baselines 
+Jin et al. (2025b)
+; 
+Jin et al. (2025a)
+, and by up to 32 points over prompted pre-RL search agents in our evaluation.
+
+However, overall EM improvements do not reveal which functional capabilities change during RL post-training or how multiple capabilities interact to increase accuracy 
+Jin et al. (2025a)
+. Whether an agent is trained with outcome rewards 
+Jin et al. (2025b)
+; 
+Chen et al. (2025)
+; 
+Guo et al. (2025)
+, process rewards 
+Lightman et al. (2024)
+; 
+Wang et al. (2024b)
+; 
+Zheng et al. (2025b)
+, or auxiliary reward shaping such as format 
+Jin et al. (2025b)
+; 
+Guo et al. (2025)
+ and retrieval-utility rewards 
+Song et al. (2025)
+; 
+Sun et al. (2025)
+; 
+Gao et al. (2025)
+, an increase in final EM can result from four distinct role behaviors 
+Jin et al. (2025b)
+; 
+Jin et al. (2025a)
+: formulating more effective search queries, reasoning more accurately over retrieved passages, deciding more appropriately when to search versus answer, or formatting final answers to match evaluation criteria. Identifying which of these roles actually drives EM gains is critical, especially for outcome-reward RL 
+Jin et al. (2025b)
+; 
+Guo et al. (2025)
+, where supervision is applied only to the final answer, yet applies generally to any trained search agent for diagnosing failure modes and targeting future training improvements.
+
+Existing evaluation and credit-assignment approaches do not isolate the causal contribution of each functional role under closed-loop execution. Observational behavioral analyses measure surface statistics, such as response length 
+Jin et al. (2025b)
+; 
+Guo et al. (2025)
+, search frequency 
+Jin et al. (2025b)
+; 
+Jin et al. (2025a)
+, or query lexical overlap 
+Jin et al. (2025a)
+, which correlate with training progress without verifying whether changes in a given role actually increase end-to-end EM accuracy. Single-role ablations 
+Jin et al. (2025a)
+ perturb one component in isolation and therefore miss multi-role interactions where two or more roles must be controlled jointly by the RL policy to produce a gain. Offline trajectory interventions 
+Zheng et al. (2025b)
+ evaluate static prefixes rather than closed-loop execution (interactive feedback with live retrieval), whereas process-reward 
+Lightman et al. (2024)
+; 
+Wang et al. (2024b)
+ and step-level credit-assignment methods 
+Gao et al. (2025)
+ alter reward signals during optimization rather than decomposing the learned capabilities of an already-trained checkpoint.
+
+Figure 1: 
+Overview of the 
+CO-GRAFT
+ framework for attributing RL performance gains. (a) A search-agent trajectory partitioned into four roles: reasoning 
+R
+, decision 
+D
+, query 
+Q
+, and answer 
+A
+; gray passages are returned by the environment. (b) A grafted trajectory for 
+: the RL agent (filled) generates 
+R
+ and 
+A
+, while its pre-RL model (outlined) generates 
+D
+ and 
+Q
+ during live retrieval. (c) The 
+ grid of all 16 role combinations, indexed by the roles owned by the RL agent (
+) while the pre-RL model generates the remaining roles: columns add search roles (
+D
+, 
+Q
+) and rows add reasoning and answer roles (
+R
+, 
+A
+), progressing from 
+ (top left, pre-RL model alone) to 
+ (bottom right, RL agent alone). Each cell reports the mean EM (%) of the grafted policy on the same 1,000 evaluation questions (darker shading indicates higher EM), alongside each role’s Shapley percentage share of total gain 
+ for Qwen2.5-3B base (GRPO, NQ) and Qwen2.5-7B base (PPO, HotpotQA).
+
+To overcome these limitations, we introduce 
+CO-GRAFT
+ (
+Co-Policy Grafting
+), a reward-agnostic interventional attribution framework in which an RL-trained agent and its pre-RL initialization jointly generate a single trajectory with live retrieval. Each policy controls a mutually exclusive subset of the four roles within the same trajectory (Figure 
+1
+b), generating the token spans for its assigned roles and passing the resulting prefix to the other policy at role boundaries. Evaluating all 
+ role combinations defines Shapley 
+Shapley (1953)
+ values without modifying model weights, requiring access to training rewards, or retraining. From these 16 measurements, Möbius interaction terms 
+Harsanyi (1963)
+ separate standalone single-role improvement from pairwise and higher-order (multi-role) dependencies, and Shapley values aggregate each role’s marginal contribution across all role combinations into a single additive attribution score.
+
+Applying 
+CO-GRAFT
+ to Search-R1 agents 
+Jin et al. (2025b)
+; 
+Jin et al. (2025a)
+ across Qwen2.5 
+Qwen et al. (2025)
+ and Llama-3.2 
+Grattafiori et al. (2024)
+ models (spanning two model sizes, base and instruction-tuned initializations, and GRPO 
+Shao et al. (2024)
+ and PPO 
+Schulman et al. (2017)
+ optimizers on NQ 
+Kwiatkowski et al. (2019)
+ and HotpotQA 
+Yang et al. (2018)
+ datasets) reveals how RL redistributes capability across roles. First, search query generation (
+Q
+) never accounts for more than 15% of the total RL gain on either dataset, showing that improved retrieval queries are not the primary driver of accuracy gains. Second, pre-RL answer validity, search retention, and model scale govern how credit is distributed between reasoning and answer extraction: larger models and instruction-tuned checkpoints that already produce well-formed answers before RL shift credit from reasoning (
+R
+) toward final answer extraction (
+A
+), whereas smaller base models exhibit strong positive coupling between reasoning and decision (
+R
+D
+). Third, decision (
+D
+) gains reflect learning a fixed task-level search budget rather than deciding when to stop based on question-level evidence sufficiency.
+
+We summarize our contributions as follows:
+
+•
+
+We propose 
+CO-GRAFT
+, an interventional attribution framework that segments a search agent trajectory into four functional roles (
+R
+, 
+D
+, 
+Q
+, and 
+A
+) and evaluates all 
+ role-assignment combinations between an RL-trained agent and its pre-RL initialization under live retrieval without modifying weights or retraining.
+
+•
+
+We formulate an exact decomposition of RL total EM gains via Shapley values and Möbius interaction terms, isolating standalone role improvements from pairwise and higher-order interactions.
+
+•
+
+We evaluate Search-R1 agents using our framework across Qwen2.5 and Llama-3.2 models on NQ and HotpotQA, showing that RL gains are driven by pre-RL answer validity, search retention, model scale, and fixed task-level search budgets while query generation remains bounded at 
+ of total gain.
+
+2 
+CO-GRAFT
+
+We introduce 
+CO-GRAFT
+, an attribution framework that decomposes the performance gain of an RL-trained search agent across the functional roles of its trajectory. To isolate where RL improvements originate, we first partition every trajectory into four exhaustive, non-overlapping roles. We then construct grafted rollouts in which the RL policy and its pre-RL initialization jointly generate trajectories under controlled role assignments, and finally quantify both standalone and synergistic contributions using Shapley decomposition and Möbius interaction terms.
+
+Roles.
+
+CO-GRAFT
+ decomposes a search-agent trajectory into four distinct roles covering every policy-generated token. Following the standard Search-R1 trajectory format 
+Jin et al. (2025b)
+, an agent interleaves reasoning blocks (
+<think>
+</think>
+) with search calls (
+<search>
+</search>
+)—each followed by environment-returned passages enclosed in 
+<information>
+…
+</information>
+ tags—before terminating with a final response (
+<answer>
+</answer>
+; Figure 
+1
+a). We formalize four 
+functional roles
+, 
+: 
+R
+ encompasses all reasoning tokens generated prior to the next action tag; 
+D
+ governs the discrete action selection (
+<search>
+, 
+<answer>
+, or an incomplete-turn termination); 
+Q
+ comprises the search query string; and 
+A
+ contains the final answer text. Because 
+<information>
+ blocks are injected externally by the retriever rather than sampled from either policy model, they belong to no player. Crucially, this partition assigns every model-generated token in the trajectory to exactly one role, ensuring that any shift in task accuracy traces directly to the specific roles whose output tokens change.
+
+Grafted rollouts.
+
+A grafted rollout is a trajectory generated jointly by the RL agent and its pre-RL model, each owning a non-overlapping subset of the roles (Figure 
+1
+b). Let 
+ denote the RL-trained agent (the 
+donor
+) and 
+ denote its exact pre-RL initialization (the 
+recipient
+), both sharing the same tokenizer and prompt template. For a grafted policy 
+, every role segment 
+ is generated by 
+ if 
+ and by 
+ otherwise. During generation, whichever policy writes the active segment conditions on the full preceding prefix, including tokens produced by the paired model and live passages returned by the retriever for each search query. To prevent artifacts during policy hand-offs, our harness enforces three invariance constraints: (1) because a model generates reasoning and its subsequent action tag in one pass, the harness discards the tag produced by the owner of 
+R
+ and lets the owner of 
+D
+ decode the action tag from the identical prefix; (2) all hand-offs occur strictly at whole-token boundaries so split tokens (e.g., “
+␣<
+” in “ 
+<search>
+”) do not distort downstream tokenization; and (3) the harness parses an action only when a complete opening-and-closing tag pair is generated, treating malformed or unclosed tags as invalid turns that pass an error prompt to the next step. All remaining execution mechanics follow the standard search-agent inference loop, recovering pure recipient behavior at 
+ and pure donor behavior at 
+.
+
+Shapley attribution.
+
+Evaluating all 
+ role combinations (Figure 
+1
+c) defines a cooperative game whose Shapley values provide an exact, order-invariant attribution of the RL gain. Let 
+ denote the mean Exact Match (EM) score of grafted policy 
+ across a fixed evaluation set, with 
+ and 
+ representing the recipient and donor baselines, respectively. The Shapley value of role 
+ 
+Shapley (1953)
+ is
+
+(1)
+
+where 
+ weights each marginal contribution by the fraction of the 
+ role permutations in which the subset 
+ precedes role 
+. By the efficiency axiom, 
+ holds identically, guaranteeing that the four role attributions sum to the exact total RL gain. We report role 
+shares
+ as normalized percentages (the bars in Figure 
+1
+c) of this total gain (
+). Because percentage normalization becomes unstable near zero gain, we report shares only when the overall RL gain reaches at least four EM points (four times the single-point decoding noise floor), labeling smaller differences as “no gain.”
+
+Möbius interactions.
+
+While Shapley values aggregate each role’s total credit into a single scalar, Möbius interaction terms 
+Harsanyi (1963)
+ split that credit into what a role gains alone versus what it gains only together with other roles. For every role combination 
+ of two or more roles (
+), the interaction term is
+
+(2)
+
+Intuitively, 
+ isolates the residual gain realized only when 
+ simultaneously controls all roles in 
+: it becomes zero when roles contribute independently, turns positive under synergistic coupling, and turns negative when roles overlap as substitutes. Because raw interaction magnitudes remain informative even when overall RL gains are small, we report Möbius terms directly in EM points across all evaluated models.
+
+3 
+Experimental Setup
+
+In this section, we detail our search agents, datasets, metrics, training recipe, retrieval setup, trajectory harness, and auxiliary control tests to study the RL performance gain attribution across agent roles using our proposed 
+CO-GRAFT
+ framework. We examine the publicly available Search-R1 
+Jin et al. (2025b)
+; 
+Jin et al. (2025a)
+ checkpoints, and supplement them by training additional models using the same Search-R1 training and evaluation setting.
+
+3.1 
+Agents
+
+Recipients.
+
+We choose search agents across two families 
+ two starting points 
+ two sizes. The first family comprises Qwen2.5-3B and Qwen2.5-7B, each as 
+base
+ and 
+instruct
+ 
+Qwen et al. (2025)
+. The second comprises Llama-3.2-1B and Llama-3.2-3B, each as 
+base
+ and 
+instruct
+ 
+Grattafiori et al. (2024)
+. Every recipient is run under its donor’s training prompt, so 
+ is the prompted pre-RL model that prior work reports as the baseline 
+Jin et al. (2025b)
+.
+
+Donors.
+
+For each corresponding recipient model above, we obtain an RL-trained (GRPO) donor agent. For Qwen2.5-3B, Qwen2.5-7B and Llama-3.2-3B (base and instruct) the donors are available publicly. For Llama-3.2-1B (base and instruct), we train the donors ourselves by following the same recipe (§
+3.3
+).
+
+3.2 
+Evaluation Datasets and Metrics
+
+We use the same evaluation datasets from the Search-R1 setting.
+Because running every question through 16 role assignments is computationally expensive, we evaluate on fixed random subsets rather than full test sets: 1,000 questions each of NQ 
+Kwiatkowski et al. (2019)
+ and HotpotQA 
+Yang et al. (2018)
+.
+Our primary metric is EM on the last answer block, and we also report the valid-answer rate (the fraction of questions with a well-formed answer block).
+
+3.3 
+Training Recipe
+
+We adapt the Search-R1 GRPO recipe to train search agents, including outcome EM reward on the final answer plus a 0.2 format bonus for a well-formed trajectory, retrieved tokens masked from the loss, four search turns of at most 500 generated tokens per turn, group size 5, learning rate 
+, batch size 512, KL coefficient 
+, and 1
+ steps of 240 prompts. Moreover, we train on the combined training split of NQ and HotpotQA and evaluate separately on both test sets.
+
+3.4 
+Retrieval Environment
+
+Following the Search-R1 setup 
+Jin et al. (2025b)
+, we use E5-base-v2 
+Wang et al. (2024a)
+ as the dense dual-encoder over the 21M-passage 2018 Wikipedia dump with exact inner-product search. The retriever is queried live during every rollout, returning the top three passages as retrieved evidence.
+
+3.5 
+Harness
+
+To execute multi-turn rollouts, each trajectory in both training and evaluation is bounded to at most four search turns followed by one final answer turn, with a maximum of 500 generated tokens per turn. Any turn that terminates without a complete action tag receives an invalid-action prompt and passes to the next turn if the turn budget permits.
+
+Because trajectory grafting modifies rollout execution flow, we verify that the 
+CO-GRAFT
+ harness preserves single-policy behavior when no role switching occurs, by evaluating 
+ (pre-RL agent only) and 
+ (RL agent only), under the original Search-R1 codebase and the 
+CO-GRAFT
+ harness across identical evaluation sets. Across 32 comparisons (8 model pairs, two datasets, and two policy behaviors), 
+CO-GRAFT
+ matches Search-R1 accuracy within single-point EM noise in 28 cases, with the remaining four cases differing by at most 2.3 points. Thus, the harness reproduces baseline policy behaviors without introducing implementation artifacts.
+
+3.6 
+Control Experiments
+
+We run three control experiments to isolate role attributions from formatting artifacts, fixed search budgets, and query-text conditioning.
+
+Answer Content vs. Formatting.
+
+To separate tag compliance from factual gains under strict EM, we recompute attributions using lenient metrics (substring match, token F1, and valid-answer rate). Under lenient scoring on NQ, 
+A
+ attribution collapses for Qwen2.5 models (e.g., from 38% to 
+% on Qwen2.5-7B base) but persists for Llama-3.2-1B-Instruct (12 vs. 16 EM points), showing that 
+A
+ gains reflect format compliance in Qwen2.5 and content improvement in Llama-3.2. However, Table 
+1
+ reports strict EM.
+
+Adaptive Stopping vs. Fixed Search Depth.
+
+To test whether 
+D
+ learns per-question adaptive stopping or a uniform search count, we replace 
+D
+ with a fixed budget 
+ while retaining the RL agent’s remaining roles. Across all evaluated pairs, the optimal fixed budget matches the full RL agent within one EM point (e.g., 
+ on NQ and 
+ on HotpotQA for Qwen2.5-3B PPO), indicating a learned task-level search depth rather than adaptive stopping.
+
+Passage Retrieval vs. Query Conditioning.
+
+To separate retrieval quality from query-text conditioning, we hold the RL agent’s retrieved passages fixed across all 16 combinations on Qwen2.5-3B and Qwen2.5-7B (PPO). Freezing passages drops 
+Q
+ attribution by 60–100% (0.6–2.5 EM points), confirming that 
+Q
+ gains come from retrieval rather than text conditioning. However, providing RL-retrieved passages to the pre-RL model adds at most 3 EM points, whereas giving the RL agent control of 
+R
+ yields 11–22 EM points under both live and frozen retrieval.
+
+recipient
+
+type
+
+data
+
+pre-RL
+
+RL
+
+srch
+
+valid
+
+R
+
+D
+
+Q
+
+A
+
+Qwen2.5-3B
+
+base
+
+NQ
+
+15.8
+
+45.2
+
++29.4
+
+0.9
+1.1
+
+53
+98
+
+70
+
+7
+
+6
+
+17
+
+HotpotQA
+
+9.2
+
+38.9
+
++29.7
+
+0.9
+1.6
+
+51
+97
+
+81
+
+1
+
+5
+
+13
+
+Qwen2.5-7B
+
+base
+
+NQ
+
+25.5
+
+48.2
+
++22.7
+
+1.4
+1.1
+
+79
+100
+
+40
+
+9
+
+13
+
+38
+
+HotpotQA
+
+18.3
+
+44.1
+
++25.8
+
+1.6
+1.6
+
+66
+100
+
+45
+
+18
+
+5
+
+32
+
+Qwen2.5-3B
+
+instruct
+
+NQ
+
+21.8
+
+41.3
+
++19.5
+
+1.0
+1.3
+
+97
+100
+
+36
+
+21
+
+4
+
+39
+
+HotpotQA
+
+22.0
+
+34.9
+
++12.9
+
+1.2
+1.9
+
+94
+99
+
+69
+
+12
+
+4
+
+15
+
+Qwen2.5-7B
+
+instruct
+
+NQ
+
+30.9
+
+41.9
+
++11.0
+
+1.0
+1.2
+
+97
+99
+
+34
+
+6
+
+14
+
+46
+
+HotpotQA
+
+30.7
+
+39.0
+
++8.3
+
+1.3
+1.6
+
+95
+99
+
+35
+
+6
+
+14
+
+45
+
+Llama-3.2-1B
+
+base
+
+NQ
+
+2.1
+
+17.2
+
++15.1
+
+0.2
+0.0
+
+40
+100
+
+27
+
+26
+
+0
+
+47
+
+HotpotQA
+
+1.7
+
+17.8
+
++16.1
+
+0.2
+0.0
+
+18
+100
+
+40
+
+38
+
+0
+
+22
+
+Llama-3.2-3B
+
+base
+
+NQ
+
+12.6
+
+44.2
+
++31.6
+
+0.7
+1.0
+
+66
+100
+
+33
+
+18
+
+15
+
+34
+
+HotpotQA
+
+9.6
+
+32.0
+
++22.4
+
+0.7
+1.0
+
+63
+100
+
+23
+
+25
+
+12
+
+40
+
+Llama-3.2-1B
+
+instruct
+
+NQ
+
+12.7
+
+28.8
+
++16.1
+
+0.8
+0.8
+
+68
+98
+
+-23
+
+41
+
+16
+
+66
+
+HotpotQA
+
+6.8
+
+19.6
+
++12.8
+
+0.8
+0.8
+
+57
+96
+
+1
+
+36
+
+16
+
+46
+
+Llama-3.2-3B
+
+instruct
+
+NQ
+
+29.0
+
+32.2
+
++3.2
+
+1.4
+0.0
+
+86
+100
+
+— no gain —
+
+HotpotQA
+
+21.3
+
+22.6
+
++1.3
+
+1.6
+0.0
+
+83
+100
+
+— no gain —
+
+Table 1: 
+Main results showing the RL gain attribution study using our proposed 
+CO-GRAFT
+ framework. 
+pre-RL
+, 
+RL
+, and 
+ refer to EM (%) of the pre-RL agent, the RL agent, and their difference, where as 
+srch
+ and 
+valid
+ refer to searches per question and valid-answer rate (%) shown as pre-RL agent 
+ RL agent. Shares (%) for roles (R: Reason, D: Decision, Q: Query, and A: Answer) are reported when the gain (
+) exceeds 4 points.
+
+4 
+Results
+
+In this section, we present our main results in Table 
+1
+ and understand the findings across multiple factors, including question complexity, model scale, and instruction tuning.
+
+4.1 
+Effect of Question Complexity: Single-hop vs. Multi-hop
+
+Question complexity has only a secondary effect on role distribution, mainly shifting credit between Reasoning and Answer while overall patterns remain driven by search behavior. Comparing role attributions across single-hop NQ and multi-hop HotpotQA for seven models (two models are excluded because their RL gain fell below the reporting threshold), we find that the Query role remains invariant across task types and stays bounded at or below 15%. In contrast, Reasoning and Answer exhibit a clear trade-off: Reasoning attribution is consistently higher on multi-hop HotpotQA (across six of seven models with maximum up to 33 percentage points), whereas Answer attribution is higher on single-hop NQ (across six of seven models with maximum up to 29 percentage points), reflecting how multi-hop queries promote and shift credit from final answer generation toward intermediate reasoning steps. Meanwhile, the Decision share remains below 25% when search behavior is stable (reaching non-zero search calls), but increases substantially when models either increase or decrease search calls (reaching up to 38–86% when searches drop to zero). Overall, the distributional shift across question complexity is smaller than the divergence induced by changes in search behavior.
+
+4.2 
+Effect of Model Scale: Smaller vs. Larger Models
+
+Model scale shifts which roles receive credit, moving attribution away from Reasoning and Decision toward Answer and Query. Across the three families where both sizes gain at least four points (Qwen2.5 base, Qwen2.5 instruct, and Llama-3.2 base), larger models allocate 17 to 40 percentage points more credit to Answer and Query combined in five of six comparisons. This shift is stronger in Qwen2.5 base, where the 3B model relies heavily on Reasoning (70% vs. 40% on NQ; 81% vs. 45% on HotpotQA) while the 7B model shifts 19 to 21 points more toward Answer; Qwen2.5 instruct mirrors this trade-off on HotpotQA (Reasoning 69% vs. 35%; Answer 15% vs. 45%). Similarly, in Llama-3.2 base, the 1B model abandons search (Query 
+) whereas the 3B model sustains search calls and attributes 12–15% to Query. Because larger models show higher pre-RL valid-answer rates (e.g., 53% vs. 79% on Qwen2.5 NQ) with the exception of Qwen2.5-Instruct, where rates are equal (97%), the gain attributions generally suggest a scale-driven shift toward Answer and Query.
+
+Möbius terms
+
+Shapley values
+
+one role
+
+two roles
+
+three and four roles
+
+agent
+
+gain
+
+R
+
+D
+
+Q
+
+A
+
+R
+D
+
+R
+Q
+
+R
+A
+
+D
+Q
+
+D
+A
+
+Q
+A
+
+RDQ
+
+RDA
+
+RQA
+
+DQA
+
+RDQA
+
+R
+
+D
+
+Q
+
+A
+
+NQ
+
+Qwen2.5-3B base
+
+29.4
+
++18.8
+
++0.6
+
++2.5
+
++5.7
+
++2.0
+
+1.1
+
+2.2
+
+1.7
+
+2.9
+
+1.4
+
++1.8
+
++5.2
+
++1.6
+
++2.1
+
+1.6
+
++20.6
+
++1.9
+
++1.8
+
++5.0
+
+Qwen2.5-3B instruct
+
+19.5
+
++11.0
+
++6.2
+
++3.6
+
++13.8
+
+2.5
+
+4.4
+
+8.9
+
+1.7
+
+7.3
+
+4.1
+
++2.9
+
++7.7
+
++4.1
+
++3.2
+
+4.1
+
++7.0
+
++4.0
+
++0.9
+
++7.6
+
+Qwen2.5-7B base
+
+22.7
+
++11.7
+
++4.7
+
++3.6
+
++8.6
+
+4.6
+
+0.6
+
++0.9
+
+1.6
+
+0.7
+
++0.1
+
++2.1
+
++0.4
+
+1.1
+
++3.0
+
+3.8
+
++9.1
+
++2.1
+
++2.9
+
++8.6
+
+Llama-3.2-3B base
+
+31.6
+
++0.1
+
+2.5
+
++2.4
+
++7.0
+
++8.8
+
++0.4
+
++2.1
+
+2.4
+
++0.7
+
+0.3
+
++7.0
+
++4.0
+
++0.5
+
++1.0
+
++2.8
+
++10.3
+
++5.8
+
++4.8
+
++10.8
+
+HotpotQA
+
+Qwen2.5-3B base
+
+29.7
+
++21.4
+
+0.5
+
++1.5
+
++4.2
+
++2.8
+
++2.7
+
++0.8
+
+0.6
+
+0.8
+
+0.1
+
+0.6
+
++1.1
+
+1.8
+
++0.4
+
+0.8
+
++23.9
+
++0.3
+
++1.6
+
++3.9
+
+Qwen2.5-3B instruct
+
+12.9
+
++10.3
+
++0.9
+
++2.6
+
++4.0
+
++1.0
+
+4.5
+
+4.5
+
+2.1
+
+0.3
+
+3.1
+
++3.3
+
++0.8
+
++5.0
+
++1.3
+
+1.8
+
++8.9
+
++1.6
+
++0.5
+
++2.0
+
+Qwen2.5-7B base
+
+25.8
+
++9.9
+
++5.8
+
++1.9
+
++6.2
+
++1.3
+
+1.1
+
++7.8
+
+0.6
+
++1.9
+
++0.1
+
++0.6
+
+8.1
+
+0.0
+
+0.7
+
++0.8
+
++11.6
+
++4.6
+
++1.3
+
++8.4
+
+Llama-3.2-3B base
+
+22.4
+
+0.2
+
+0.5
+
++0.2
+
++5.1
+
++5.4
+
+0.0
+
++2.2
+
++0.2
+
++3.0
+
++1.1
+
++3.0
+
+0.2
+
+0.3
+
++0.1
+
++3.3
+
++5.3
+
++5.6
+
++2.6
+
++8.9
+
+Table 2: 
+Möbius terms and Shapley values (EM points) of four GRPO agents on NQ and HotpotQA. Roles R, D, Q, and A refer to the same in Table 
+1
+. The 15 Möbius terms of a row sum to the gain. Cell shading highlights positive terms in blue and negative terms in red. Largest Shapley value is in bold.
+
+4.3 
+Effect of Instruction Tuning: Base vs. Instruct
+
+Instruction tuning does not produce a uniform shift in credit allocation; instead, its effect depends on how post-training alters a model’s valid-answer rate and search trajectory. Across four base–instruct pairs, we find that instruction-tuned models with high valid-answer rates realize smaller RL gains and shift attribution toward Answer, whereas models that abandon search stall the RL gains and break the pattern. Specifically, in the Qwen2.5 family (3B and 7B), instruct variants start 18 to 44 percentage points higher in valid-answer rate than their base counterparts, leaving less format learning for RL and yielding 9.9 to 17.5 points lower overall gains while shifting credit from Reasoning (
+ to 
+ percentage points) to Answer (
+ to 
+ points on NQ). Conversely, Llama-3.2-1B reverses this trend: both variants begin with low valid-answer rates, yet the instruct model gains 6.1 to 11.2 points more because it preserves search (0.9 to 1.0 vs. 0.2 to 0.0 for base), raising Query attribution by 10 to 12 percentage points. Finally, Llama-3.2-3B instruct illustrates the combined effect of both behaviors—starting at a high valid-answer rate (86% vs. 66% on NQ) while abandoning search entirely (1.4–1.6 to 0.0), resulting in negligible gains (
+ to 
+ points vs. 
+ to 
+ for base). Together, these comparisons demonstrate that pre-RL answer validity and search retention predict role attribution far more reliably than instruction tuning alone.
+
+5 
+Analysis
+
+We examine four representative Search-R1 checkpoints in depth to uncover how roles interact and whether the RL optimizer alters credit attribution. Starting from Qwen2.5-3B base—which exhibits the largest Reasoning share in Table 
+1
+—we select three controlled ablations that each vary a single axis: instruction tuning (Qwen2.5-3B instruct), model scale within the same family (Qwen2.5-7B base), and model family at comparable scale (Llama-3.2-3B base). Because public GRPO and PPO checkpoints exist for all four models, this unified selection supports both our role-interaction and optimizer-sensitivity analyses below.
+
+5.1 
+Role Interactions: Pairwise and Higher-Order Terms
+
+While Shapley values quantify how much credit each role receives, Möbius interaction terms (Eq. 
+2
+; Table 
+2
+) reveal whether those gains arise independently or through multi-role coordination. A pairwise interaction is positive when two roles produce synergistic gains beyond the sum of their individual effects, and negative when they overlap as substitutes. Across our four focal checkpoints and two datasets, pairwise terms already reshape how Table 
+1
+ shares should be read: in Llama-3.2-3B base, 
+R
+D
+ is the largest pairwise term on both NQ (
+) and HotpotQA (
+) while solo Reasoning (
+ and 
+) and Decision (
+ and 
+) contribute little or nothing on their own, showing that both roles must act together to improve exact match. Conversely, in Qwen2.5-3B instruct on NQ, negative pairwise terms with Answer (
+R
+A
+ 
+, 
+D
+A
+ 
+) alongside strong solo contributions (
+ for Reasoning, 
+ for Decision, and 
+ for Answer against a 
+ total gain) indicate redundant overlap rather than joint synergy, while Qwen2.5-7B base shows task sensitivity (single-hop vs. multi-hop) as 
+R
+A
+ shifts from 
+ on NQ to 
+ on HotpotQA.
+
+Higher-order Möbius terms further clarify multi-role dynamics, provided that they are interpreted alongside lower-order effects rather than in isolation. Because a three- or four-way term isolates what remains after subtracting lower-order terms, a positive higher-order value can offset negative pairwise interactions rather than prove simultaneous synergy across all included roles as seen on NQ for 
+R
+D
+A
+ in Qwen2.5-3B base (
+ offsetting 
+R
+A
+ 
+ and 
+D
+A
+ 
+) and Qwen2.5-3B instruct (
+ offsetting 
+ and 
+).
+By contrast, Llama-3.2-3B base exhibits a positive 
+R
+D
+Q
+ term (
+ on NQ) alongside modest or non-negative pairwise terms (
+R
+D
+ 
+, 
+R
+Q
+ 
+, 
+D
+Q
+ 
+), indicating that RL Query adds incremental value once Reasoning and Decision are jointly engaged. Together, Shapley values identify where credit lands, while Möbius terms show whether a share reflects standalone competence (Qwen2.5-3B base), coupled co-adaptation (Llama-3.2-3B base), or overlapping roles (Qwen2.5-3B instruct). This analysis can guide iterative RL training by indicating whether reward shaping should target individual roles or joint role combinations.
+
+5.2 
+RL Optimizer Sensitivity: GRPO vs. PPO
+
+model
+
+data
+
+opt.
+
+srch
+
+R
+
+D
+
+Q
+
+A
+
+Qwen2.5-3B
+
+NQ
+
+GRPO
+
++29.4
+
+1.1
+
+70
+
+7
+
+6
+
+17
+
+base
+
+PPO
+
++27.7
+
+2.1
+
+83
+
+-1
+
+2
+
+16
+
+Hotpot
+
+GRPO
+
++29.7
+
+1.6
+
+81
+
+1
+
+5
+
+13
+
+PPO
+
++26.8
+
+2.2
+
+67
+
+7
+
+8
+
+18
+
+Qwen2.5-3B
+
+NQ
+
+GRPO
+
++19.5
+
+1.3
+
+36
+
+21
+
+4
+
+39
+
+instruct
+
+PPO
+
++12.8
+
+1.9
+
+31
+
+17
+
+6
+
+46
+
+Hotpot
+
+GRPO
+
++12.9
+
+1.9
+
+69
+
+12
+
+4
+
+15
+
+PPO
+
++11.3
+
+2.1
+
+84
+
+7
+
+-9
+
+18
+
+Qwen2.5-7B
+
+NQ
+
+GRPO
+
++22.7
+
+1.1
+
+40
+
+9
+
+13
+
+38
+
+base
+
+PPO
+
++20.8
+
+4.0
+
+-27
+
+77
+
+11
+
+39
+
+Hotpot
+
+GRPO
+
++25.8
+
+1.6
+
+45
+
+18
+
+5
+
+32
+
+PPO
+
++26.6
+
+3.9
+
+20
+
+50
+
+10
+
+20
+
+Llama-3.2-3B
+
+NQ
+
+GRPO
+
++31.6
+
+1.0
+
+33
+
+18
+
+15
+
+34
+
+base
+
+PPO
+
++28.1
+
+1.0
+
+38
+
+17
+
+13
+
+32
+
+Hotpot
+
+GRPO
+
++22.4
+
+1.0
+
+23
+
+25
+
+12
+
+40
+
+PPO
+
++21.9
+
+1.0
+
+25
+
+22
+
+16
+
+37
+
+Table 3: 
+Role gain attribution between GRPO vs. PPO public checkpoints. 
+, 
+srch
+, R, D, Q, and A refer to the same in Table 
+1
+. Largest share among roles are in bold.
+
+The choice of RL optimizer alters the leading role only when it pushes search behavior to the turn limit; otherwise, the starting checkpoint governs which roles capture the performance gain. Comparing public GRPO and PPO checkpoints across four models (Table 
+3
+), we find that the dominant roles remain consistent under both optimizers for three architectures: Reasoning leads in Qwen2.5-3B base (70% under GRPO vs. 83% under PPO on NQ); Qwen2.5-3B instruct favors Answer on NQ (39% vs. 46%) and Reasoning on HotpotQA (69% vs. 84%); and Llama-3.2-3B base balances Reasoning and Answer within six points on NQ (33% and 34% under GRPO vs. 38% and 32% under PPO) while favoring Answer on HotpotQA (40% vs. 37%). Notably, this invariance holds even when PPO increases search frequency over GRPO in both Qwen2.5-3B variants (2.1 vs. 1.1 and 1.9 vs. 1.3 searches per question on NQ), indicating that moderate shifts in search depth do not reorganize role attribution. The sole exception is Qwen2.5-7B base, where PPO saturates the four-search turn limit on NQ, shifting 77% of credit to Decision and yielding a negative standalone Reasoning share (
+%), whereas GRPO averages 1.1 searches and splits credit evenly between Reasoning (40%) and Answer (38%). Overall, the starting model rather than the RL optimizer establishes the role distribution, with the optimizer disrupting it only when driving search depth to the turn boundary.
+
+6 
+Related Work
+
+Prior work on RL for search agents primarily evaluates end-to-end task performance rather than decomposing which behavioral changes produce the gain. Existing RL search agents 
+Jin et al. (2025b)
+; 
+Jin et al. (2025a)
+; 
+Song et al. (2025)
+; 
+Chen et al. (2025)
+; 
+Zheng et al. (2025b)
+; 
+Sun et al. (2025)
+; 
+Gao et al. (2025)
+ optimize outcome-based rewards and report aggregate Exact Match (EM) scores. Methods that restrict optimization to query generation 
+Jiang et al. (2025)
+ or assign separate rewards to search and answer steps 
+Wang et al. (2025)
+ pre-specify which trajectory roles require improvement rather than measuring their empirical contributions, while ablations on training configurations 
+Xu et al. (2026)
+ vary algorithmic hyperparameters rather than functional roles. Furthermore, intra-policy credit-assignment methods, including step-level rewards 
+Zheng et al. (2025a)
+; 
+Wang et al. (2026)
+, turn deletion 
+Zhu et al. (2026)
+, counterfactual branching 
+Li et al. (2026a)
+, document replay 
+Mukhopadhyay et al. (2026)
+, and per-role advantage estimation 
+Wu et al. (2026)
+, compute signals exclusively within a single policy without comparing the trained agent against its pre-RL initialization. 
+CO-GRAFT
+ directly measures the performance difference between the trained policy and its initialization across functional roles.
+
+A second line of research combines multiple models during inference or localizes post-training behavioral changes. 
+Venhoff et al. (2026)
+ and 
+Choi et al. (2026)
+ switch between base and post-trained checkpoints at the individual token level during closed-book generation, whereas 
+CO-GRAFT
+ assigns complete functional roles across multi-turn trajectories with live retriever feedback to obtain an exact Shapley attribution of the RL gain. To localize RL improvements, 
+Li et al. (2026b)
+ attribute gains to parameter subsets in weight space, whereas 
+Lyu (2026)
+ demonstrate that out-of-domain gains from math RL with verifiable rewards stem largely from answer formatting, a pattern consistent with our Qwen2.5 findings. Finally, ShapleyFlow 
+Yang et al. (2026)
+ applies Shapley values to static modules within a fixed agentic workflow, whereas 
+CO-GRAFT
+ attributes the training gain between two policies across functional trajectory roles during interactive retrieval.
+
+7 
+Conclusion
+
+We introduce 
+CO-GRAFT
+, a framework that decomposes the EM gain of an RL-trained search agent across its four trajectory roles under closed-loop execution, showing that pre-RL answer validity, search retention, and model scale govern whether gains stem from reasoning–decision coupling, fixed task-level search budgets, or final answer extraction, while search query generation (
+Q
+) never exceeds 15% of the total gain on NQ and HotpotQA. Because outcome-based EM obscures which functional behavior improves during training, future RL reward designs targeting retrieval skill should explicitly supervise query formulation (
+Q
+) and evidence-sufficient stopping decisions (
+D
+).
+
+Limitations
+
+CO-GRAFT
+ attributes the performance difference between a pair of policies rather than evaluating a standalone checkpoint, and its interpretations are subject to the properties of cooperative game-theoretic decomposition and our experimental setup. Attribution shares measure gains relative to a chosen baseline policy (the pre-RL initialization), and Shapley values average marginal contributions across all role permutations; when multi-role interactions are substantial (such as in the Qwen2.5-7B PPO pair), additive Shapley shares alone do not capture joint dependencies and must be interpreted alongside the Möbius interaction terms. In addition, functional boundaries are segmented using structural action tags, grouping internal planning, passage synthesis, and structural formatting together inside the intermediate reasoning role (
+R
+), leaving finer-grained decompositions of 
+R
+ to future work.
+
+Our empirical evaluation is also bounded by model scale, inference serving stochasticity, and diagnostic scope. Compute constraints limit our locally trained models to 7B parameters or smaller, requiring us to omit a 14B or 32B model pair, and batched greedy decoding introduces approximately one EM point of serving variance. Furthermore, the fixed-budget and retrieval-swap diagnostics cover only the two Qwen2.5 PPO pairs on NQ and HotpotQA, and selecting the optimal budget on the evaluation set provides an upper-bound estimate within this noise floor. Finally, training recipes incorporating query-level process rewards, longer optimization schedules, or live web search may redistribute gains differently across roles, which 
+CO-GRAFT
+ can be directly applied to measure.
+
+References
+
+Chen 
+et al.
+ (2025)
+
+M. Chen, L. Sun, T. Li, H. Sun, Y. Zhou, C. Zhu, H. Wang, J. Z. Pan, W. Zhang, H. Chen, F. Yang, Z. Zhou, and W. Chen
+
+ReSearch: learning to reason with search for llms via reinforcement learning
+.
+
+External Links: 
+2503.19470
+,
+
+Link
+
+Cited by: 
+§1
+,
+
+§1
+,
+
+§6
+.
+
+Choi 
+et al.
+ (2026)
+
+Y. Choi, S. Hwang, S. Jun, S. Lee, S. Choi, M. Park, and D. Kim
+
+New model, old habits: behavior transfer under model swapping in multi-session llm agents
+.
+
+External Links: 
+2610.19712
+,
+
+Link
+
+Cited by: 
+§6
+.
+
+Gao 
+et al.
+ (2025)
+
+J. Gao, W. Fu, M. Xie, S. Xu, C. He, Z. Mei, B. Zhu, and Y. Wu
+
+Beyond ten turns: unlocking long-horizon agentic search with large-scale asynchronous rl
+.
+
+External Links: 
+2508.07976
+,
+
+Link
+
+Cited by: 
+§1
+,
+
+§1
+,
+
+§1
+,
+
+§6
+.
+
+Grattafiori 
+et al.
+ (2024)
+
+A. Grattafiori, A. Dubey, A. Jauhri, A. Pandey, A. Kadian, A. Al-Dahle, A. Letman, A. Mathur, A. Schelten, A. Vaughan, A. Yang, A. Fan, A. Goyal, A. Hartshorn, A. Yang, A. Mitra, A. Sravankumar, A. Korenev, A. Hinsvark, A. Rao, A. Zhang, A. Rodriguez, A. Gregerson, A. Spataru, B. Roziere, B. Biron, B. Tang, B. Chern, C. Caucheteux, C. Nayak, C. Bi, C. Marra, C. McConnell, C. Keller, C. Touret, C. Wu, C. Wong, C. C. Ferrer, C. Nikolaidis, D. Allonsius, D. Song, D. Pintz, D. Livshits, D. Wyatt, D. Esiobu, D. Choudhary, D. Mahajan, D. Garcia-Olano, D. Perino, D. Hupkes, E. Lakomkin, E. AlBadawy, E. Lobanova, E. Dinan, E. M. Smith, F. Radenovic, F. Guzmán, F. Zhang, G. Synnaeve, G. Lee, G. L. Anderson, G. Thattai, G. Nail, G. Mialon, G. Pang, G. Cucurell, H. Nguyen, H. Korevaar, H. Xu, H. Touvron, I. Zarov, I. A. Ibarra, I. Kloumann, I. Misra, I. Evtimov, J. Zhang, J. Copet, J. Lee, J. Geffert, J. Vranes, J. Park, J. Mahadeokar, J. Shah, J. van der Linde, J. Billock, J. Hong, J. Lee, J. Fu, J. Chi, J. Huang, J. Liu, J. Wang, J. Yu, J. Bitton, J. Spisak, J. Park, J. Rocca, J. Johnstun, J. Saxe, J. Jia, K. V. Alwala, K. Prasad, K. Upasani, K. Plawiak, K. Li, K. Heafield, K. Stone, K. El-Arini, K. Iyer, K. Malik, K. Chiu, K. Bhalla, K. Lakhotia, L. Rantala-Yeary, L. van der Maaten, L. Chen, L. Tan, L. Jenkins, L. Martin, L. Madaan, L. Malo, L. Blecher, L. Landzaat, L. de Oliveira, M. Muzzi, M. Pasupuleti, M. Singh, M. Paluri, M. Kardas, M. Tsimpoukelli, M. Oldham, M. Rita, M. Pavlova, M. Kambadur, M. Lewis, M. Si, M. K. Singh, M. Hassan, N. Goyal, N. Torabi, N. Bashlykov, N. Bogoychev, N. Chatterji, N. Zhang, O. Duchenne, O. Çelebi, P. Alrassy, P. Zhang, P. Li, P. Vasic, P. Weng, P. Bhargava, P. Dubal, P. Krishnan, P. S. Koura, P. Xu, Q. He, Q. Dong, R. Srinivasan, R. Ganapathy, R. Calderer, R. S. Cabral, R. Stojnic, R. Raileanu, R. Maheswari, R. Girdhar, R. Patel, R. Sauvestre, R. Polidoro, R. Sumbaly, R. Taylor, R. Silva, R. Hou, R. Wang, S. Hosseini, S. Chennabasappa, S. Singh, S. Bell, S. S. Kim, S. Edunov, S. Nie, S. Narang, S. Raparthy, S. Shen, S. Wan, S. Bhosale, S. Zhang, S. Vandenhende, S. Batra, S. Whitman, S. Sootla, S. Collot, S. Gururangan, S. Borodinsky, T. Herman, T. Fowler, T. Sheasha, T. Georgiou, T. Scialom, T. Speckbacher, T. Mihaylov, T. Xiao, U. Karn, V. Goswami, V. Gupta, V. Ramanathan, V. Kerkez, V. Gonguet, V. Do, V. Vogeti, V. Albiero, V. Petrovic, W. Chu, W. Xiong, W. Fu, W. Meers, X. Martinet, X. Wang, X. Wang, X. E. Tan, X. Xia, X. Xie, X. Jia, X. Wang, Y. Goldschlag, Y. Gaur, Y. Babaei, Y. Wen, Y. Song, Y. Zhang, Y. Li, Y. Mao, Z. D. Coudert, Z. Yan, Z. Chen, Z. Papakipos, A. Singh, A. Srivastava, A. Jain, A. Kelsey, A. Shajnfeld, A. Gangidi, A. Victoria, A. Goldstand, A. Menon, A. Sharma, A. Boesenberg, A. Baevski, A. Feinstein, A. Kallet, A. Sangani, A. Teo, A. Yunus, A. Lupu, A. Alvarado, A. Caples, A. Gu, A. Ho, A. Poulton, A. Ryan, A. Ramchandani, A. Dong, A. Franco, A. Goyal, A. Saraf, A. Chowdhury, A. Gabriel, A. Bharambe, A. Eisenman, A. Yazdan, B. James, B. Maurer, B. Leonhardi, B. Huang, B. Loyd, B. D. Paola, B. Paranjape, B. Liu, B. Wu, B. Ni, B. Hancock, B. Wasti, B. Spence, B. Stojkovic, B. Gamido, B. Montalvo, C. Parker, C. Burton, C. Mejia, C. Liu, C. Wang, C. Kim, C. Zhou, C. Hu, C. Chu, C. Cai, C. Tindal, C. Feichtenhofer, C. Gao, D. Civin, D. Beaty, D. Kreymer, D. Li, D. Adkins, D. Xu, D. Testuggine, D. David, D. Parikh, D. Liskovich, D. Foss, D. Wang, D. Le, D. Holland, E. Dowling, E. Jamil, E. Montgomery, E. Presani, E. Hahn, E. Wood, E. Le, E. Brinkman, E. Arcaute, E. Dunbar, E. Smothers, F. Sun, F. Kreuk, F. Tian, F. Kokkinos, F. Ozgenel, F. Caggioni, F. Kanayet, F. Seide, G. M. Florez, G. Schwarz, G. Badeer, G. Swee, G. Halpern, G. Herman, G. Sizov, Guangyi, Zhang, G. Lakshminarayanan, H. Inan, H. Shojanazeri, H. Zou, H. Wang, H. Zha, H. Habeeb, H. Rudolph, H. Suk, H. Aspegren, H. Goldman, H. Zhan, I. Damlaj, I. Molybog, I. Tufanov, I. Leontiadis, I. Veliche, I. Gat, J. Weissman, J. Geboski, J. Kohli, J. Lam, J. Asher, J. Gaya, J. Marcus, J. Tang, J. Chan, J. Zhen, J. Reizenstein, J. Teboul, J. Zhong, J. Jin, J. Yang, J. Cummings, J. Carvill, J. Shepard, J. McPhie, J. Torres, J. Ginsburg, J. Wang, K. Wu, K. H. U, K. Saxena, K. Khandelwal, K. Zand, K. Matosich, K. Veeraraghavan, K. Michelena, K. Li, K. Jagadeesh, K. Huang, K. Chawla, K. Huang, L. Chen, L. Garg, L. A, L. Silva, L. Bell, L. Zhang, L. Guo, L. Yu, L. Moshkovich, L. Wehrstedt, M. Khabsa, M. Avalani, M. Bhatt, M. Mankus, M. Hasson, M. Lennie, M. Reso, M. Groshev, M. Naumov, M. Lathi, M. Keneally, M. Liu, M. L. Seltzer, M. Valko, M. Restrepo, M. Patel, M. Vyatskov, M. Samvelyan, M. Clark, M. Macey, M. Wang, M. J. Hermoso, M. Metanat, M. Rastegari, M. Bansal, N. Santhanam, N. Parks, N. White, N. Bawa, N. Singhal, N. Egebo, N. Usunier, N. Mehta, N. P. Laptev, N. Dong, N. Cheng, O. Chernoguz, O. Hart, O. Salpekar, O. Kalinli, P. Kent, P. Parekh, P. Saab, P. Balaji, P. Rittner, P. Bontrager, P. Roux, P. Dollar, P. Zvyagina, P. Ratanchandani, P. Yuvraj, Q. Liang, R. Alao, R. Rodriguez, R. Ayub, R. Murthy, R. Nayani, R. Mitra, R. Parthasarathy, R. Li, R. Hogan, R. Battey, R. Wang, R. Howes, R. Rinott, S. Mehta, S. Siby, S. J. Bondu, S. Datta, S. Chugh, S. Hunt, S. Dhillon, S. Sidorov, S. Pan, S. Mahajan, S. Verma, S. Yamamoto, S. Ramaswamy, S. Lindsay, S. Lindsay, S. Feng, S. Lin, S. C. Zha, S. Patil, S. Shankar, S. Zhang, S. Zhang, S. Wang, S. Agarwal, S. Sajuyigbe, S. Chintala, S. Max, S. Chen, S. Kehoe, S. Satterfield, S. Govindaprasad, S. Gupta, S. Deng, S. Cho, S. Virk, S. Subramanian, S. Choudhury, S. Goldman, T. Remez, T. Glaser, T. Best, T. Koehler, T. Robinson, T. Li, T. Zhang, T. Matthews, T. Chou, T. Shaked, V. Vontimitta, V. Ajayi, V. Montanez, V. Mohan, V. S. Kumar, V. Mangla, V. Ionescu, V. Poenaru, V. T. Mihailescu, V. Ivanov, W. Li, W. Wang, W. Jiang, W. Bouaziz, W. Constable, X. Tang, X. Wu, X. Wang, X. Wu, X. Gao, Y. Kleinman, Y. Chen, Y. Hu, Y. Jia, Y. Qi, Y. Li, Y. Zhang, Y. Zhang, Y. Adi, Y. Nam, Yu, Wang, Y. Zhao, Y. Hao, Y. Qian, Y. Li, Y. He, Z. Rait, Z. DeVito, Z. Rosnbrick, Z. Wen, Z. Yang, Z. Zhao, and Z. Ma
+
+The llama 3 herd of models
+.
+
+External Links: 
+2407.21783
+,
+
+Link
+
+Cited by: 
+§1
+,
+
+§3.1
+.
+
+Guo 
+et al.
+ (2025)
+
+D. Guo, D. Yang, H. Zhang, J. Song, P. Wang, Q. Zhu, R. Xu, R. Zhang, S. Ma, X. Bi, X. Zhang, X. Yu, Y. Wu, Z. F. Wu, Z. Gou, Z. Shao, Z. Li, Z. Gao, A. Liu, B. Xue, B. Wang, B. Wu, B. Feng, C. Lu, C. Zhao, C. Deng, C. Ruan, D. Dai, D. Chen, D. Ji, E. Li, F. Lin, F. Dai, F. Luo, G. Hao, G. Chen, G. Li, H. Zhang, H. Xu, H. Ding, H. Gao, H. Qu, H. Li, J. Guo, J. Li, J. Chen, J. Yuan, J. Tu, J. Qiu, J. Li, J. L. Cai, J. Ni, J. Liang, J. Chen, K. Dong, K. Hu, K. You, K. Gao, K. Guan, K. Huang, K. Yu, L. Wang, L. Zhang, L. Zhao, L. Wang, L. Zhang, L. Xu, L. Xia, M. Zhang, M. Zhang, M. Tang, M. Zhou, M. Li, M. Wang, M. Li, N. Tian, P. Huang, P. Zhang, Q. Wang, Q. Chen, Q. Du, R. Ge, R. Zhang, R. Pan, R. Wang, R. J. Chen, R. L. Jin, R. Chen, S. Lu, S. Zhou, S. Chen, S. Ye, S. Wang, S. Yu, S. Zhou, S. Pan, S. S. Li, S. Zhou, S. Wu, T. Yun, T. Pei, T. Sun, T. Wang, W. Zeng, W. Liu, W. Liang, W. Gao, W. Yu, W. Zhang, W. L. Xiao, W. An, X. Liu, X. Wang, X. Chen, X. Nie, X. Cheng, X. Liu, X. Xie, X. Liu, X. Yang, X. Li, X. Su, X. Lin, X. Q. Li, X. Jin, X. Shen, X. Chen, X. Sun, X. Wang, X. Song, X. Zhou, X. Wang, X. Shan, Y. K. Li, Y. Q. Wang, Y. X. Wei, Y. Zhang, Y. Xu, Y. Li, Y. Zhao, Y. Sun, Y. Wang, Y. Yu, Y. Zhang, Y. Shi, Y. Xiong, Y. He, Y. Piao, Y. Wang, Y. Tan, Y. Ma, Y. Liu, Y. Guo, Y. Ou, Y. Wang, Y. Gong, Y. Zou, Y. He, Y. Xiong, Y. Luo, Y. You, Y. Liu, Y. Zhou, Y. X. Zhu, Y. Huang, Y. Li, Y. Zheng, Y. Zhu, Y. Ma, Y. Tang, Y. Zha, Y. Yan, Z. Z. Ren, Z. Ren, Z. Sha, Z. Fu, Z. Xu, Z. Xie, Z. Zhang, Z. Hao, Z. Ma, Z. Yan, Z. Wu, Z. Gu, Z. Zhu, Z. Liu, Z. Li, Z. Xie, Z. Song, Z. Pan, Z. Huang, Z. Xu, Z. Zhang, and Z. Zhang
+
+DeepSeek-r1 incentivizes reasoning in llms through reinforcement learning
+.
+
+Nature
+ 
+645
+ (
+8081
+), 
+pp. 633–638
+.
+
+External Links: 
+ISSN 1476-4687
+,
+
+Link
+,
+
+Document
+
+Cited by: 
+§1
+,
+
+§1
+,
+
+§1
+.
+
+Harsanyi (1963)
+
+J. C. Harsanyi
+
+A simplified bargaining model for the n-person cooperative game
+.
+
+International Economic Review
+ 
+4
+, 
+pp. 44–70
+.
+
+External Links: 
+Link
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+Jiang 
+et al.
+ (2025)
+
+P. Jiang, X. Xu, J. Lin, J. Xiao, Z. Wang, J. Sun, and J. Han
+
+S3: you don’t need that much data to train a search agent via RL
+.
+
+In 
+Proceedings of the 2025 Conference on Empirical Methods in Natural Language Processing
+,  
+C. Christodoulopoulos, T. Chakraborty, C. Rose, and V. Peng (Eds.)
+,
+
+Suzhou, China
+, 
+pp. 21599–21617
+.
+
+External Links: 
+Link
+,
+
+Document
+,
+
+ISBN 979-8-89176-332-6
+
+Cited by: 
+§6
+.
+
+Jin 
+et al.
+ (2025a)
+
+B. Jin, J. Yoon, P. Kargupta, S. O. Arik, and J. Han
+
+An empirical study on reinforcement learning for reasoning-search interleaved llm agents
+.
+
+arXiv preprint arXiv:2505.15117
+.
+
+Cited by: 
+§1
+,
+
+§1
+,
+
+§1
+,
+
+§1
+,
+
+§3
+,
+
+§6
+.
+
+Jin 
+et al.
+ (2025b)
+
+B. Jin, H. Zeng, Z. Yue, J. Yoon, S. Arik, D. Wang, H. Zamani, and J. Han
+
+Search-r1: training llms to reason and leverage search engines with reinforcement learning
+.
+
+arXiv preprint arXiv:2503.09516
+.
+
+Cited by: 
+§1
+,
+
+§1
+,
+
+§1
+,
+
+§1
+,
+
+§2
+,
+
+§3.1
+,
+
+§3.4
+,
+
+§3
+,
+
+§6
+.
+
+Kwiatkowski 
+et al.
+ (2019)
+
+T. Kwiatkowski, J. Palomaki, O. Redfield, M. Collins, A. Parikh, C. Alberti, D. Epstein, I. Polosukhin, J. Devlin, K. Lee, K. Toutanova, L. Jones, M. Kelcey, M. Chang, A. M. Dai, J. Uszkoreit, Q. Le, and S. Petrov
+
+Natural questions: a benchmark for question answering research
+.
+
+Transactions of the Association for Computational Linguistics
+ 
+7
+, 
+pp. 452–466
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§1
+,
+
+§3.2
+.
+
+Li 
+et al.
+ (2026a)
+
+M. Li, H. Zeng, Z. Qian, J. Huang, S. Kwon, H. Zamani, and H. Yu
+
+RICE-po: turning retrieval interactions into credit signals for reasoning agents
+.
+
+External Links: 
+2605.26352
+,
+
+Link
+
+Cited by: 
+§6
+.
+
+Li 
+et al.
+ (2026b)
+
+X. Li, M. Li, and T. Zhou
+
+What does rl improve for visual reasoning? a frankenstein-style analysis
+.
+
+External Links: 
+2602.12395
+,
+
+Link
+
+Cited by: 
+§6
+.
+
+Lightman 
+et al.
+ (2024)
+
+H. Lightman, V. Kosaraju, Y. Burda, H. Edwards, B. Baker, T. Lee, J. Leike, J. Schulman, I. Sutskever, and K. Cobbe
+
+Let's verify step by step
+.
+
+In 
+International Conference on Learning Representations
+,  
+B. Kim, Y. Yue, S. Chaudhuri, K. Fragkiadaki, M. Khan, and Y. Sun (Eds.)
+,
+
+Vol. 
+2024
+, 
+pp. 39578–39601
+.
+
+External Links: 
+Link
+
+Cited by: 
+§1
+,
+
+§1
+.
+
+Lyu (2026)
+
+Z. Lyu
+
+Same answer, new box: how much of rlvr’s out-of-domain gain is answer format?
+.
+
+External Links: 
+2610.20639
+,
+
+Link
+
+Cited by: 
+§6
+.
+
+Mukhopadhyay 
+et al.
+ (2026)
+
+D. Mukhopadhyay, U. K. Ghosh, and S. Chatterjee
+
+Bridge evidence: static retrieval utility does not predict causal utility in multi-step agentic search
+.
+
+External Links: 
+2607.15253
+,
+
+Link
+
+Cited by: 
+§6
+.
+
+Qwen 
+et al.
+ (2025)
+
+Qwen, A. Yang, B. Yang, B. Zhang, B. Hui, B. Zheng, B. Yu, C. Li, D. Liu, F. Huang, H. Wei, H. Lin, J. Yang, J. Tu, J. Zhang, J. Yang, J. Yang, J. Zhou, J. Lin, K. Dang, K. Lu, K. Bao, K. Yang, L. Yu, M. Li, M. Xue, P. Zhang, Q. Zhu, R. Men, R. Lin, T. Li, T. Tang, T. Xia, X. Ren, X. Ren, Y. Fan, Y. Su, Y. Zhang, Y. Wan, Y. Liu, Z. Cui, Z. Zhang, and Z. Qiu
+
+Qwen2.5 technical report
+.
+
+External Links: 
+2412.15115
+,
+
+Link
+
+Cited by: 
+§1
+,
+
+§3.1
+.
+
+Schulman 
+et al.
+ (2017)
+
+J. Schulman, F. Wolski, P. Dhariwal, A. Radford, and O. Klimov
+
+Proximal policy optimization algorithms
+.
+
+External Links: 
+1707.06347
+,
+
+Link
+
+Cited by: 
+§1
+.
+
+Shao 
+et al.
+ (2024)
+
+Z. Shao, P. Wang, Q. Zhu, R. Xu, J. Song, X. Bi, H. Zhang, M. Zhang, Y. K. Li, Y. Wu, and D. Guo
+
+DeepSeekMath: pushing the limits of mathematical reasoning in open language models
+.
+
+External Links: 
+2402.03300
+,
+
+Link
+
+Cited by: 
+§1
+.
+
+Shapley (1953)
+
+L. S. Shapley
+
+A value for n-person games
+.
+
+In 
+Contributions to the Theory of Games II
+,  
+H. W. Kuhn and A. W. Tucker (Eds.)
+,
+
+pp. 307–317
+.
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+Song 
+et al.
+ (2025)
+
+H. Song, J. Jiang, Y. Min, J. Chen, Z. Chen, W. X. Zhao, L. Fang, and J. Wen
+
+R1-searcher: incentivizing the search capability in llms via reinforcement learning
+.
+
+External Links: 
+2503.05592
+,
+
+Link
+
+Cited by: 
+§1
+,
+
+§1
+,
+
+§6
+.
+
+Sun 
+et al.
+ (2025)
+
+H. Sun, Z. Qiao, J. Guo, X. Fan, Y. Hou, Y. Jiang, P. Xie, F. Huang, and Y. Zhang
+
+ZeroSearch: incentivize the search capability of llms without searching
+.
+
+arXiv preprint arXiv:2505.04588
+.
+
+Cited by: 
+§1
+,
+
+§1
+,
+
+§6
+.
+
+Venhoff 
+et al.
+ (2026)
+
+C. Venhoff, I. Arcuschin, P. Torr, A. Conmy, and N. Nanda
+
+Base models know how to reason, thinking models learn when
+.
+
+In 
+Proceedings of the 43rd International Conference on Machine Learning
+,  
+T. Zhang, M. Dudik, M. Jaggi, A. Agarwal, S. Li, D. Schuurmans, J. Zhu, F. Berkenkamp, H. Dong, and A. Bietti (Eds.)
+,
+
+Proceedings of Machine Learning Research
+, Vol. 
+306
+, 
+pp. 123688–123732
+.
+
+External Links: 
+Link
+
+Cited by: 
+§6
+.
+
+Wang 
+et al.
+ (2026)
+
+J. Wang, Z. Xi, Y. Yang, H. Luo, S. Dou, T. Gui, and Q. Zhang
+
+Enhancing LLM-based search agents via contribution weighted group relative policy optimization
+.
+
+In 
+Proceedings of the 64th Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)
+,  
+M. Liakata, V. P. Moreira, J. Zhang, and D. Jurgens (Eds.)
+,
+
+San Diego, California, United States
+, 
+pp. 31704–31718
+.
+
+External Links: 
+Link
+,
+
+Document
+,
+
+ISBN 979-8-89176-390-6
+
+Cited by: 
+§6
+.
+
+Wang 
+et al.
+ (2024a)
+
+L. Wang, N. Yang, X. Huang, B. Jiao, L. Yang, D. Jiang, R. Majumder, and F. Wei
+
+Text embeddings by weakly-supervised contrastive pre-training
+.
+
+External Links: 
+2212.03533
+,
+
+Link
+
+Cited by: 
+§3.4
+.
+
+Wang 
+et al.
+ (2024b)
+
+P. Wang, L. Li, Z. Shao, R. Xu, D. Dai, Y. Li, D. Chen, Y. Wu, and Z. Sui
+
+Math-shepherd: verify and reinforce LLMs step-by-step without human annotations
+.
+
+In 
+Proceedings of the 62nd Annual Meeting of the Association for Computational Linguistics (Volume 1: Long Papers)
+,  
+L. Ku, A. Martins, and V. Srikumar (Eds.)
+,
+
+Bangkok, Thailand
+, 
+pp. 9426–9439
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§1
+,
+
+§1
+.
+
+Wang 
+et al.
+ (2025)
+
+Y. Wang, Z. Wei, X. Zhu, and Y. Meng
+
+Beyond outcome reward: decoupling search and answering improves llm agents
+.
+
+External Links: 
+2510.04695
+,
+
+Link
+
+Cited by: 
+§6
+.
+
+Wu 
+et al.
+ (2026)
+
+X. Wu, Y. Yan, Z. Lu, S. Chen, X. Zhang, A. Liu, C. Deng, J. Liu, J. Ma, J. Shao, J. Xiao, and Y. Shen
+
+IterSynth: rethinking deep search agents via role-decoupled iterative synthesis
+.
+
+In 
+Proceedings of the 2026 Conference on Empirical Methods in Natural Language Processing
+,  
+H. Lee, S. Dev, J. J. Li, and D. Elliott (Eds.)
+,
+
+Budapest, Hungary
+, 
+pp. 49432–49458
+.
+
+External Links: 
+Link
+,
+
+Document
+,
+
+ISBN 979-8-89176-459-0
+
+Cited by: 
+§6
+.
+
+Xu 
+et al.
+ (2026)
+
+Y. Xu, S. Lu, J. Cheng, M. Wang, Q. Xie, X. Wang, R. He, and J. Liang
+
+How to train your deep research agent? prompt, reward, and policy optimization in search-r1
+.
+
+External Links: 
+2602.19526
+,
+
+Link
+
+Cited by: 
+§6
+.
+
+Yang 
+et al.
+ (2026)
+
+Y. Yang, B. Huang, S. Qi, C. Feng, H. Hu, Y. Zhu, J. Hu, H. Zhao, Z. He, X. Liu, Z. Wang, M. Wen, L. Qiu, X. Cao, X. Cai, Y. Yu, and W. Zhang
+
+Attribution-based analysis and optimization of modular agentic workflows
+.
+
+In 
+Findings of the Association for Computational Linguistics: ACL 2026
+,  
+M. Liakata, V. P. Moreira, J. Zhang, and D. Jurgens (Eds.)
+,
+
+San Diego, California, United States
+, 
+pp. 7247–7264
+.
+
+External Links: 
+Link
+,
+
+Document
+,
+
+ISBN 979-8-89176-395-1
+
+Cited by: 
+§6
+.
+
+Yang 
+et al.
+ (2018)
+
+Z. Yang, P. Qi, S. Zhang, Y. Bengio, W. Cohen, R. Salakhutdinov, and C. D. Manning
+
+HotpotQA: a dataset for diverse, explainable multi-hop question answering
+.
+
+In 
+Proceedings of the 2018 Conference on Empirical Methods in Natural Language Processing
+,  
+E. Riloff, D. Chiang, J. Hockenmaier, and J. Tsujii (Eds.)
+,
+
+Brussels, Belgium
+, 
+pp. 2369–2380
+.
+
+External Links: 
+Link
+,
+
+Document
+
+Cited by: 
+§1
+,
+
+§3.2
+.
+
+Zheng 
+et al.
+ (2025a)
+
+X. Zheng, K. An, Z. Wang, Y. Wang, and Y. Wu
+
+StepSearch: igniting LLMs search ability via step-wise proximal policy optimization
+.
+
+In 
+Proceedings of the 2025 Conference on Empirical Methods in Natural Language Processing
+,  
+C. Christodoulopoulos, T. Chakraborty, C. Rose, and V. Peng (Eds.)
+,
+
+Suzhou, China
+, 
+pp. 21805–21830
+.
+
+External Links: 
+Link
+,
+
+Document
+,
+
+ISBN 979-8-89176-332-6
+
+Cited by: 
+§6
+.
+
+Zheng 
+et al.
+ (2025b)
+
+Y. Zheng, D. Fu, X. Hu, X. Cai, L. Ye, P. Lu, and P. Liu
+
+DeepResearcher: scaling deep research via reinforcement learning in real-world environments
+.
+
+In 
+Proceedings of the 2025 Conference on Empirical Methods in Natural Language Processing
+,  
+C. Christodoulopoulos, T. Chakraborty, C. Rose, and V. Peng (Eds.)
+,
+
+Suzhou, China
+, 
+pp. 414–431
+.
+
+External Links: 
+Link
+,
+
+Document
+,
+
+ISBN 979-8-89176-332-6
+
+Cited by: 
+§1
+,
+
+§1
+,
+
+§1
+,
+
+§6
+.
+
+Zhu 
+et al.
+ (2026)
+
+Q. Zhu, J. Wu, and L. Wang
+
+LOTAPO: leave-one-turn attribution for self-generated process rewards in multi-turn search reasoning
+.
+
+External Links: 
+2607.13501
+,
+
+Link
+
+Cited by: 
+§6
+.
+
+Appendix A 
+From Möbius Terms to Shapley Values
+
+Möbius interaction terms and Shapley values represent two complementary decompositions of the same 16 combination measurements.
+For each subset 
+, 
+CO-GRAFT
+ measures 
+, the EM score obtained when the RL-trained agent owns the roles in 
+ and the pre-RL initialization owns the remaining roles 
+.
+The Möbius inversion partitions the total gain into 15 components, one for each non-empty subset 
+: 
+ captures the marginal synergy that emerges only when the RL agent owns all roles in 
+ simultaneously, after subtracting all lower-order effects explained by subsets of 
+ (Eq. 
+2
+).
+Consequently, the gain of any combination 
+ equals the sum of the Möbius terms composed within it:
+
+(3)
+
+and for the grand combination 
+, all 15 terms sum to the total RL gain 
+.
+
+A Shapley value assigns each role its fair share of these interaction components by dividing every term 
+ equally among its participating roles:
+
+(4)
+
+For intermediate reasoning (
+R
+), 
+ equals the standalone term 
+, plus half of the three pairwise terms containing 
+R
+, one-third of the three three-way terms containing 
+R
+, and one-quarter of the four-way term.
+Thus, Möbius terms identify which roles (individually or jointly) generate performance gains, whereas Shapley values summarize each role’s overall contribution into a single scalar without retaining higher-order coupling structure.
+
+role
+
+alone
+
+ pairs
+
+ triples
+
+ four
+
+Shapley
+
+Qwen2.5-3B base, NQ (gain 29.4)
+
+R
+
++18.8
+
+0.7
+
++2.9
+
+0.4
+
++20.6
+
+D
+
++0.6
+
+1.3
+
++3.0
+
+0.4
+
++1.9
+
+Q
+
++2.5
+
+2.1
+
++1.8
+
+0.4
+
++1.8
+
+A
+
++5.7
+
+3.3
+
++3.0
+
+0.4
+
++5.0
+
+Llama-3.2-3B base, NQ (gain 31.6)
+
+R
+
++0.1
+
++5.7
+
++3.8
+
++0.7
+
++10.3
+
+D
+
+2.5
+
++3.6
+
++4.0
+
++0.7
+
++5.8
+
+Q
+
++2.4
+
+1.2
+
++2.8
+
++0.7
+
++4.8
+
+A
+
++7.0
+
++1.3
+
++1.8
+
++0.7
+
++10.8
+
+Table 4: 
+Shapley values rebuilt from the Möbius terms of Table 
+2
+ (EM points). 
+alone
+: the single-role term; the next three columns: half of the sum of the two-role terms that contain the role, a third of the three-role terms and a quarter of the four-role term. The four parts add up to the Shapley value, up to rounding.
+
+Table 
+4
+ illustrates Eq. 
+4
+ on NQ across two contrasting checkpoints.
+For Qwen2.5-3B base, higher-order interaction terms are negligible: standalone reasoning achieves 
+ EM points and its Shapley value is 
+, indicating that its attribution closely reflects independent reasoning improvements.
+For Llama-3.2-3B base, the opposite pattern holds: standalone reasoning gains only 
+ points, yet its Shapley value reaches 
+, driven by 
+ points from pairwise interactions (primarily 
+R
+D
+ at 
+) and 
+ points from three- and four-way terms.
+Because this attribution arises only when the RL policy simultaneously controls decision-making, 
+ cannot be interpreted independently of 
+.
+
+Figure 2: 
+Interaction matrices for the four GRPO-trained agents in Table 
+2
+ on NQ (left) and HotpotQA (right), measured in EM points. Outlined diagonal entries denote standalone role gains when the RL agent controls a single role. Off-diagonal entries show pairwise Möbius terms (joint two-role gain minus the sum of standalone gains). Right-hand bars report each role’s Shapley value in EM points (and percentage share of total gain). 
+ denotes the unweighted sum of all three- and four-role Möbius terms, whereas diagonal entries, upper-triangular pairs, and 
+ sum to the total RL gain. Color shading is shown in the heatmap bar that saturates at 
+ points.
+
+Appendix B 
+Interaction Matrices
+
+Figure 
+2
+ visualizes the standalone and pairwise Möbius terms from Table 
+2
+ across agents and datasets.
+Diagonal entries display single-role gains, off-diagonal entries display pairwise interactions, right-hand bars show Shapley values, and 
+ aggregates the three- and four-role terms omitted from the 2D grid.
+Three structural regimes emerge:
+(1) For Qwen2.5-3B base, the standalone reasoning diagonal (
+ on NQ, 
+ on HotpotQA) dominates all other entries, while every pairwise interaction remains within 
+ points, confirming largely additive role contributions.
+(2) For Qwen2.5-3B-Instruct on NQ, all four diagonal terms are positive (
+ to 
+) whereas all six pairwise terms are negative (
+ to 
+), demonstrating substantial cross-role redundancy.
+(3) For Llama-3.2-3B base, the standalone diagonals for reasoning and decision are zero or negative (
+ and 
+ on NQ; 
+ and 
+ on HotpotQA), while 
+R
+D
+forms the largest pairwise entry on both datasets (
+ and 
+), showing strong coupling between reasoning and search termination.
+Finally, 
+ is substantial for Qwen2.5-3B-Instruct (
+) and Llama-3.2-3B base (
+) on NQ, requiring joint inspection of the matrix alongside the higher-order columns of Table 
+2
+.
+
+Appendix C 
+Example Trajectories
+
+We present qualitative case studies illustrating three distinct attribution patterns: gains driven by intermediate reasoning (
+R
+), final answer extraction (
+A
+), and search-or-answer decisions (
+D
+).
+For each case, we select an evaluation instance where the pre-RL initialization fails, the RL-trained agent succeeds, and performance across the 16 role assignments tracks control of the target role.
+Figures 
+3
+–
+5
+ display the complete trajectories (with line breaks collapsed and retrieved passage text omitted for readability) with color-coding each generated span by the active role policy.
+
+Question:
+ where was the first sonic drive in located? 
+Gold answer:
+ Woodward, Oklahoma
+ 
+
+Pre-RL agent alone
+ (answer “San Bernardino, California”, EM 0, 1 search)
+
+Turn 1.
+ 
+R
+ 
+I will conduct reasoning and search for the answer to the question. 
+<think>
+ The first Sonic Drive-In was founded in 1969 by Don Thompson and his wife, Mary. It was located in San Bernardino, California. 
+</think>
+ 
+D
+ 
+<search>
+ 
+Q
+ 
+first sonic drive in location 
+</search>
+ 
+env
+ 
+3 passages returned
+
+Turn 2.
+ 
+D
+ 
+<answer>
+ 
+A
+ 
+San Bernardino, California 
+</answer>
+
+RL agent alone
+ (answer “Woodward, Oklahoma”, EM 1, 1 search)
+
+Turn 1.
+ 
+R
+ 
+<think>
+ To answer this question, I need to find information about the first Sonic Drive-In location. This involves knowing the history of Sonic Drive-In and its founding location. 
+</think>
+ 
+D
+ 
+<search>
+ 
+Q
+ 
+Where was the first Sonic Drive-In located 
+</search>
+ 
+env
+ 
+3 passages returned
+
+Turn 2.
+ 
+R
+ 
+<think>
+ From the information provided, I found that the first Sonic Drive-In was located in Woodward, Oklahoma. 
+</think>
+ 
+D
+ 
+<answer>
+ 
+A
+ 
+Woodward, Oklahoma 
+</answer>
+ 
+
+R
+ reasoning 
+D
+ decision 
+Q
+ query 
+A
+ answer 
+env
+ written by the environment
+
+Figure 3: 
+Reasoning-led gain: Qwen2.5-3B base (GRPO) on NQ. The reasoning role receives 70% of this agent’s gain on NQ (Table 
+1
+). Both models receive the same three passages, which contain the gold answer. EM on this question is 1 in all eight role assignments in which the RL agent writes 
+R
+ and 0 in the other eight.
+
+Question:
+ what kind of beer is st pauli girl? 
+Gold answer:
+ Special Dark / Lager / Non-Alcoholic Malt Beverage
+ 
+
+Pre-RL agent alone
+ (answer “St. Pauli Girl is a German beer brand.”, EM 0, 1 search)
+
+Turn 1.
+ 
+R
+ 
+<think>
+ St. Pauli Girl is a popular beer brand from Germany. To find out what kind of beer it is, I will search for information about St. Pauli Girl. 
+</think>
+ 
+D
+ 
+<search>
+ 
+Q
+ 
+St. Pauli Girl beer type 
+</search>
+ 
+env
+ 
+3 passages returned
+
+Turn 2.
+ 
+D
+ 
+<answer>
+ 
+A
+ 
+St. Pauli Girl is a German beer brand. 
+</answer>
+
+RL agent alone
+ (answer “Lager”, EM 1, 1 search)
+
+Turn 1.
+ 
+R
+ 
+<think>
+ To answer this question, I need to find out what kind of beer ’St. Pauli Girl’ is. This involves identifying the type of beer it represents. 
+</think>
+ 
+D
+ 
+<search>
+ 
+Q
+ 
+What kind of beer is St. Pauli Girl? 
+</search>
+ 
+env
+ 
+3 passages returned
+
+Turn 2.
+ 
+R
+ 
+<think>
+ From the information provided, I found that ’St. Pauli Girl’ is a beer. 
+</think>
+ 
+D
+ 
+<answer>
+ 
+A
+ 
+Lager 
+</answer>
+ 
+
+R
+ reasoning 
+D
+ decision 
+Q
+ query 
+A
+ answer 
+env
+ written by the environment
+
+Figure 4: 
+Answer-led gain: Qwen2.5-3B base (GRPO) on NQ. The answer role receives 17% of this agent’s gain on NQ (Table 
+1
+). Both models receive the same three passages, which contain the gold answer. EM on this question is 1 in all eight role assignments in which the RL agent writes 
+A
+ and 0 in the other eight, and no answer written by the pre-RL model contains the gold answer.
+
+Question:
+ What did the person in which the Toronto Pearson International Airport is named in honour of organize to win the Nobel Peace Prize? 
+Gold answer:
+ United Nations Emergency Force
+ 
+
+Pre-RL agent alone
+ (answer “Sir William Randal Cremer”, EM 0, 1 search)
+
+Turn 1.
+ 
+R
+ 
+<think>
+ The Toronto Pearson International Airport is named after Sir Samuel Leonard Tilley, who was a Canadian politician and businessman. To find out what he organized to win the Nobel Peace Prize, I need to search for information about his Nobel Peace Prize. 
+</think>
+ 
+D
+ 
+<search>
+ 
+Q
+ 
+query: Sir Samuel Leonard Tilley Nobel Peace Prize 
+</search>
+ 
+env
+ 
+3 passages returned
+
+Turn 2.
+ 
+R
+ 
+<think>
+ From the search results, I found that Sir William Randal Cremer was the one who organized to win the Nobel Peace Prize. He was awarded the Nobel Peace Prize in 1903 for his work with the international arbitration movement. 
+</think>
+ 
+D
+ 
+<answer>
+ 
+A
+ 
+Sir William Randal Cremer 
+</answer>
+
+RL agent alone
+ (answer “the United Nations Emergency Force”, EM 1, 4 searches)
+
+Turn 1.
+ 
+R
+ 
+<think>
+ 1. I need to find out who the Toronto Pearson International Airport is named after. 2. I need to find out what this person organized to win the Nobel Peace Prize. 
+</think>
+ 
+D
+ 
+<search>
+ 
+Q
+ 
+Toronto Pearson International Airport 
+</search>
+ 
+env
+ 
+3 passages returned
+
+Turn 2.
+ 
+R
+ 
+<think>
+ 1. The Toronto Pearson International Airport is named after Lester B. Pearson. 2. I need to find out what Lester B. Pearson organized to win the Nobel Peace Prize. 
+</think>
+ 
+D
+ 
+<search>
+ 
+Q
+ 
+Lester B. Pearson Nobel Peace Prize 
+</search>
+ 
+env
+ 
+3 passages returned
+
+Turn 3.
+ 
+R
+ 
+<think>
+ 1. Lester B. Pearson won the Nobel Peace Prize. 2. I need to find out what he organized to win the prize. 
+</think>
+ 
+D
+ 
+<search>
+ 
+Q
+ 
+Lester B. Pearson Suez Canal Crisis 
+</search>
+ 
+env
+ 
+3 passages returned
+
+Turn 4.
+ 
+R
+ 
+<think>
+ 1. Lester B. Pearson won the Nobel Peace Prize for his work. 2. I need to find out what he organized to win the prize. 
+</think>
+ 
+D
+ 
+<search>
+ 
+Q
+ 
+Lester B. Pearson organized to win the Nobel Peace Prize 
+</search>
+ 
+env
+ 
+3 passages returned
+
+Turn 5.
+ 
+R
+ 
+<think>
+ 1. Lester B. Pearson won the Nobel Peace Prize in 1957. 2. I need to find out what he organized to win the prize. 
+</think>
+ 
+D
+ 
+<answer>
+ 
+A
+ 
+the United Nations Emergency Force 
+</answer>
+ 
+
+R
+ reasoning 
+D
+ decision 
+Q
+ query 
+A
+ answer 
+env
+ written by the environment
+
+Figure 5: 
+Decision-led gain: Qwen2.5-7B base (PPO) on HotpotQA. The decision role receives 50% of this agent’s gain on HotpotQA (§
+5.2
+). EM on this question is 1 in four of the eight role assignments in which the RL agent writes 
+D
+ and 0 in all eight in which the pre-RL model writes it.
+
