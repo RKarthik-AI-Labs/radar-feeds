@@ -1,0 +1,1863 @@
+Delegent: A Multi-Agent Harness That Reduces Cost without Sacrificing Performance
+https://arxiv.org/abs/2611.33098
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+Delegent: A Multi-Agent Harness
+
+That Reduces Cost without Sacrificing Performance
+
+Lingwei Gu
+
+Affiliation: 
+David R. Cheriton School of Computer Science
+
+  
+
+Jimmy Lin
+
+Affiliation: 
+University of Waterloo
+
+Abstract
+
+Agents built on frontier language models are expensive. At every step, the frontier model re-reads its entire context and
+executes every subtask regardless of its difficulty. This paper explores the simple thesis that much of this
+cost can be removed by delegating easy subtasks to a small language model, or SLM, that runs on hardware one already owns.
+To test it, we build Delegent, a simple and effective agent harness built on Claude Code, in which the frontier model stays in charge of
+every task but hands focused subtasks, such as investigating code, running tests, and searching a corpus, to SLM
+subagents. Existing approaches such as cascades and model routers usually choose which model executes the entire task, whereas in Delegent, the frontier model always leads the execution and delegates easy subtasks to the SLM. No router or model is trained, so either model can be swapped freely. With the help of
+a 27B FP8 SLM, Delegent reduces the frontier cost of long-horizon coding by 67% and of agentic search by 59%, with no loss
+in task performance, and even a 2B SLM that fits on a laptop reduces the coding cost by 66%. The savings grow with the legwork that the frontier model would otherwise do itself, and a short
+instruction, which leaves the main coding tasks to the frontier model, accounts for most of the saving and keeps the 2B SLM
+from losing tasks. Code: 
+https://github.com/castorini/delegent
+.
+
+Main loop
+Frontier model
+Subagents
+SLM
+spawn
+Agent
+Delegate
+get_document
+search
+Bash
+Read
+Edit
+…
+visit
+Environment
+ repository or corpus
+User
+task
+answer
+
+Figure 1: 
+The Delegent harness. It starts from the stock Claude Code harness, and everything in orange is what we
+add. The user talks to the main loop, where the frontier model leads the task and spawns subagents. The loops share
+most tools, and each adds a few.
+
+1 
+Introduction
+
+Agents are simply models using tools in loops. The harness invokes the model, executes its tool calls, returns the
+results, and invokes the model again, until the task is done. The loop is simple but costly, because at every step the model
+re-reads its entire context, which grows with every tool call. A frontier coding agent that takes a hundred steps to
+resolve an issue thus pays for a hundred ever longer prompts. Long-horizon agents are therefore expensive for organizations that pay per
+token, and individuals on subscription plans exhaust their quota and have to wait for the next reset.
+
+Yet much of what a frontier model does at each step is easy legwork, such as locating the relevant code, reproducing a bug, running
+tests, issuing searches, and reading documents. Little of this work seems to require a frontier model, yet existing agents use the
+frontier model for all of it, even in subagents, billing every step at frontier prices. A small language model, or SLM, costs far
+less, and nothing extra on a GPU that one already owns. An SLM on its own falls well short of a frontier model on these tasks and cannot
+replace one, but it does not need to compete with the frontier if the frontier model stays in charge and delegates only easy subtasks. This leads to a simple thesis:
+
+A small language model running on local hardware can take over the easy subtasks of a frontier model, cutting its
+cost substantially without hurting task performance, and without any training.
+
+To test this thesis, we build Delegent (
+Figure
+ 
+1
+), an agent harness that runs a frontier model and a local SLM as a team. For
+coding, Delegent is derived from Claude Code.
+1
+1
+
+1
+
+https://code.claude.com/docs
+ It keeps the agent loop and subagents of
+Claude Code, but routes each model call by role, sending the calls of the main loop to the frontier model and the calls
+of its subagents to the SLM. For agentic search, it adds a 
+Delegate
+ tool whose subagents search the corpus and
+return reports with evidence. The frontier model stays in charge of every task. A short instruction tells it what to delegate, the harness runs
+the delegated subtasks on the SLM and checks the evidence in their reports, and the frontier model alone produces the
+final answer. Since nothing is trained, either model is a drop-in component.
+
+As the headline result, we find that the thesis holds on both long-horizon coding and agentic search. With GPT-6.1-Sol at
+high reasoning effort as the frontier model and Qwen3.8-27B-FP8 as the SLM, the frontier model’s cost on DeepSWE falls to a third,
+with no loss in resolved tasks. On 694 search questions, its cost falls to 41%, and it answers exactly as many
+questions correctly as on its own. Even a 2B model, MiniCPM5-2B, cuts frontier cost on DeepSWE to a third, and with Qwen3.8-27B-FP8 paid for at API prices, the
+total cost of a DeepSWE task is still only 38%. Delegation adds
+some latency, which is bounded by the local hardware that serves the SLM.
+
+Contrary to the dominant approach to combining cheap and expensive models, we do not let the SLM answer first and then
+decide whether to trust it 
+(
+Chen et al., 2024
+; 
+Aggarwal et al., 2024
+; 
+Yue et al., 2024
+)
+, nor do we train a router that
+picks one model per query 
+(
+Ding et al., 2024
+; 
+Ong et al., 2025
+)
+. In both cases, a model is given the entire task and must solve it by itself, which a 2B SLM is rarely capable of. In Delegent, the frontier model always produces the
+final answer, and the SLM only does the legwork. No output of the SLM is accepted without the frontier model reading it
+first. Our contribution is thus a piece of harness engineering: the coordination of two models of very
+different cost.
+
+To better circumscribe our claims, let us be more precise:
+
+•
+
+By 
+cost
+, we mean what the frontier model is charged, with prompt caching taken into account. The SLM
+runs on a GPU under the user’s control, and for coding, we also price Qwen3.8-27B-FP8 at API prices.
+
+•
+
+By 
+local
+, we mean an SLM served on a single GPU under the user’s control. The 27B FP8 model needs a
+workstation GPU, and the 2B model fits on a laptop.
+
+•
+
+By 
+training-free
+, we mean that no model is trained or fine-tuned, so the SLM and the frontier
+model can each be swapped freely.
+
+This paper makes three contributions. First, we build Delegent, an open-source, training-free harness in which a frontier
+model delegates work to a local SLM, which we describe in 
+Section
+ 
+2
+. Second, we evaluate it on three coding and
+five search datasets with two SLMs of very different sizes, and show in 
+Section
+ 
+4
+ that frontier cost falls by
+more than half in eight of nine evaluations while task performance holds. Third, we analyze in 
+Section
+ 
+5
+ where the savings come from and how they depend on our instruction and
+the frontier model.
+
+2 
+The Delegent Harness
+
+Delegent is built on Claude Code and coordinates two models of very different cost, as 
+Figure
+ 
+1
+ illustrates. The 
+frontier model
+
+leads every task. It plans, decides what to delegate and whether to believe what comes back, and writes the final patch
+or answer. 
+SLM subagents
+ on a local GPU do the legwork, each in its own tool loop and with a fresh context.
+Delegent lets the frontier model judge the task type, coding or search, and supplies the matching tool set.
+
+Routing model calls by role.
+
+In Claude Code, the main loop calls a model at every step, and so does each subagent that it starts with the built-in Agent
+tool. Minor jobs go to a small auxiliary model. For each task, Delegent places a relay between Claude Code and the models. The relay speaks
+the Anthropic Messages API, so Claude Code runs unmodified, and it routes each call according to the model that the call
+names. Calls from the main loop go to the frontier model, and calls from the subagents and the auxiliary model go to
+the SLM. Every frontier call within a task carries the same prompt-cache key, so consecutive steps hit the provider’s
+cache. SLM calls go to vLLM 
+(
+Kwon et al., 2023
+)
+ through a proxy that pins each subagent to one GPU replica, so
+its growing prefix stays cached.
+
+Running subtasks.
+
+For coding, the frontier model delegates a subtask through its Agent tool and writes a brief, the instructions for the
+Claude Code subagent. The subagent works in the same container with Claude Code’s default tools. For search, Delegent adds a 
+Delegate
+ tool for delegating one focused search
+subtask, such as finding or checking a fact. Instead of designing the search subagent from scratch, we borrow from
+AREX 
+(
+Lu et al., 2026
+)
+, a family of deep research agents. Its smallest member, AREX-Turbo, is built around a 4B
+model, so its prompts and tools are already written for a small model to follow. An AREX-Turbo agent works in a loop
+with four tools: it searches the corpus, visits the documents it finds, compresses its own history into notes when the
+history grows long, and finishes with an answer, the evidence that supports it, and a confidence. Our SLM subagent sees only the subtask
+and the question, and its final answer, evidence, and confidence form the report that returns to the frontier model. In both coding and search, subtasks from one turn run concurrently.
+
+Returning reports.
+
+The frontier model’s context receives only the final report of a subagent and none of its tool outputs. For search, the harness
+also looks up each evidence line in the cited document and notes whether it was found verbatim.
+
+Steering the frontier model.
+
+A short instruction (
+Appendix
+ 
+A
+) explains the economics to the frontier model. Since every step re-reads the entire context, the
+cheapest plan has the fewest steps of the frontier model’s own, so the instruction asks it to delegate tool-heavy work
+and to keep its own tool use to a few targeted checks. It covers both kinds of delegation, Claude Code’s subagents for
+coding and the 
+Delegate
+ tool for search.
+
+3 
+Experimental Setup
+
+Tasks.
+
+For coding, we use random samples of SWE-bench
+Verified 
+(
+Jimenez et al., 2024
+)
+,
+2
+2
+
+2
+
+https://openai.com/index/introducing-swe-bench-verified/
+ SWE-bench Pro 
+(
+Deng et al., 2025
+)
+, and DeepSWE
+v1.1 
+(
+Huang et al., 2026
+)
+, drawn as described in 
+Appendix
+ 
+C
+. For search, we use 200 BrowseComp-Plus questions 
+(
+Chen et al., 2025
+)
+,
+randomly sampled from those not used to draft the instruction, and four datasets from CMASS 
+(
+Sharifymoghaddam et al., 2026
+)
+, an agentic search benchmark over
+ClimbMix 
+(
+Diao et al., 2025
+)
+, an open web corpus of 400B tokens that agents can access only through BM25
+search 
+(
+Robertson and Zaragoza, 2009
+; 
+Lin et al., 2021
+)
+. The CMASS datasets are BrowseComp-Plus, Total Recall
+QA 
+(
+Rafiee et al., 2026
+)
+, HotpotQA 
+(
+Yang et al., 2018
+)
+, and DeepSearchQA 
+(
+Gupta et al., 2026
+)
+, which we
+abbreviate as TRQA and DSQA. DSQA questions have several correct answers, and CMASS evaluates them in two modes. In 
+find one
+, any correct answer counts, while 
+find all
+
+needs the exact set.
+
+Models.
+
+All our runs use the Delegent harness, built on Claude Code, and the frontier model it calls can change
+freely. Our main experiments call 
+GPT-6.1-Sol
+, accessed through the OpenAI API, and on DeepSWE we run ablations
+with 
+Claude Opus 5.5
+ at xhigh effort. We run Sol at high reasoning effort, the same with and without delegation, to keep our
+experiments affordable. At this effort, it resolves just over half of the DeepSWE tasks alone. We pair it with two SLMs of very different sizes, both easy to run on a single
+device. Qwen3.8-27B-FP8
+3
+3
+
+3
+
+https://qwen.ai/blog?id=qwen3.8
+ fits on one workstation GPU, and MiniCPM5-2B 
+(
+Hu et al., 2024
+; 
+MiniCPM Team, 2025
+)
+
+is small enough for a laptop. We
+serve both with vLLM, one GPU per replica, and test MiniCPM5-2B on coding only.
+
+Baseline.
+
+We compare against the frontier model alone on the same tasks, using the same harness without the delegation tool and instruction.
+For coding, this is Claude Code with its default tools and subagents, where we send every call to the frontier model, including the calls
+that Claude Code sends to Haiku by default. As a sanity check, Claude Opus 5.5 alone resolves
+68% of our DeepSWE tasks in this setup, in line with the 68.4% that Artificial Analysis reports for Claude Opus 5.5 in Claude Code.
+4
+4
+
+4
+
+https://x.com/ArtificialAnlys/status/2102932119995756613
+, for Claude Opus 5.5 at max effort on DeepSWE v1.1.
+
+Metrics.
+
+A coding task is resolved if the final patch passes the task’s hidden tests. A search answer is graded against the gold
+answer by GPT-6.1-Sol at low effort with the official BrowseComp-Plus grading prompt 
+(
+Chen et al., 2025
+)
+, and
+the same judge grades every system. All coding runs, including those of the frontier model alone, use Claude Code with its default tools except web access, a
+context of up to 1M tokens for the frontier model and 131k tokens for the SLM, and the same limits on turns and time,
+which 
+Appendix
+ 
+B
+ lists. Latency is wall-clock time per task.
+
+Cost.
+
+We count frontier cost at the API prices of the frontier model,
+5
+5
+
+5
+
+https://developers.openai.com/api/docs/pricing
+, accessed October 2026.
+ with prompt caching for
+
+every system
+:
+
+where 
+ are token counts in millions and output includes reasoning tokens. We report cost per task and relative to the
+frontier model alone. For coding, we also price Qwen3.8-27B-FP8 at the API rates of Chutes, a provider that serves the same FP8
+model, with prompt caching as well. Input costs $0.039 per million tokens, a tenth of that when it repeats the
+subagent’s previous request, and output costs $1.25 per million tokens.
+
+4 
+Results
+
+Task set
+
+System
+
+Solved
+
+ 
+
+Frontier cost
+
+($ per task)
+
+ 
+
+Relative
+
+cost
+
+ 
+
+Cost with SLM
+
+at API price
+
+ 
+
+Frontier calls
+
+per task
+
+ 
+
+SLM calls
+
+per task
+
+Verified (50)
+
+Frontier model alone
+
+46
+
+0.244
+
+100%
+
+0.244 (100%)
+
+0
+32.4
+
+–
+
++ Qwen3.8-27B-FP8
+
+46
+
+0.108
+
+0
+44%
+
+0.139 (57%)
+
+0
+12.7
+
+0
+32.7
+
++ MiniCPM5-2B
+
+47
+
+0.129
+
+0
+53%
+
+–
+
+0
+15.2
+
+0
+79.0
+
+Pro (75)
+
+Frontier model alone
+
+63
+
+0.617
+
+100%
+
+0.617 (100%)
+
+0
+61.2
+
+–
+
++ Qwen3.8-27B-FP8
+
+63
+
+0.227
+
+0
+37%
+
+0.266 (43%)
+
+0
+19.9
+
+0
+42.7
+
++ MiniCPM5-2B
+
+62
+
+0.274
+
+0
+44%
+
+–
+
+0
+23.1
+
+0
+65.5
+
+DeepSWE (50)
+
+Frontier model alone
+
+29
+
+2.110
+
+100%
+
+2.110 (100%)
+
+176.1
+
+–
+
++ Qwen3.8-27B-FP8
+
+29
+
+0.704
+
+0
+33%
+
+0.806 (38%)
+
+0
+46.6
+
+0
+82.0
+
++ MiniCPM5-2B
+
+30
+
+0.712
+
+0
+34%
+
+–
+
+0
+48.1
+
+106.1
+
+Table 1: 
+Coding results with GPT-6.1-Sol as the frontier model. Relative cost is relative to the frontier model alone;
+cost with SLM adds the SLM at the API price of Qwen3.8-27B-FP8 (
+Section
+ 
+3
+); no API serves MiniCPM5-2B.
+
+Task set
+
+System
+
+Solved
+
+ 
+
+Frontier cost
+
+($ per task)
+
+ 
+
+Relative
+
+cost
+
+ 
+
+Frontier calls
+
+per task
+
+ 
+
+SLM calls
+
+per task
+
+BrowseComp-Plus
+†
+ (200)
+
+Frontier model alone
+
+193
+
+0.114
+
+100%
+
+0
+8.8
+
+–
+
++ Qwen3.8-27B-FP8
+
+192
+
+0.071
+
+0
+63%
+
+0
+5.7
+
+305.2
+
+BrowseComp-Plus (80)
+
+Frontier model alone
+
+72
+
+0.211
+
+100%
+
+13.9
+
+–
+
++ Qwen3.8-27B-FP8
+
+71
+
+0.066
+
+0
+31%
+
+0
+6.2
+
+495.7
+
+TRQA (68)
+
+Frontier model alone
+
+64
+
+0.048
+
+100%
+
+0
+6.2
+
+–
+
++ Qwen3.8-27B-FP8
+
+67
+
+0.015
+
+0
+31%
+
+0
+3.1
+
+0
+69.1
+
+HotpotQA (204)
+
+Frontier model alone
+
+198
+
+0.033
+
+100%
+
+0
+5.4
+
+–
+
++ Qwen3.8-27B-FP8
+
+198
+
+0.008
+
+0
+25%
+
+0
+2.5
+
+0
+29.3
+
+DSQA, find one (71)
+
+Frontier model alone
+
+70
+
+0.067
+
+100%
+
+0
+7.7
+
+–
+
++ Qwen3.8-27B-FP8
+
+70
+
+0.020
+
+0
+29%
+
+0
+3.6
+
+106.2
+
+DSQA, find all (71)
+
+Frontier model alone
+
+66
+
+0.121
+
+100%
+
+10.3
+
+–
+
++ Qwen3.8-27B-FP8
+
+65
+
+0.032
+
+0
+26%
+
+0
+4.3
+
+223.9
+
+All (694)
+
+Frontier model alone
+
+663
+
+0.091
+
+100%
+
+0
+8.2
+
+–
+
++ Qwen3.8-27B-FP8
+
+663
+
+0.037
+
+0
+41%
+
+0
+4.2
+
+194.2
+
+Table 2: 
+Search results, with frontier cost per question. 
+†
+Over its own corpus; all other sets over ClimbMix.
+
+Coding.
+
+The thesis holds on all three coding sets (
+Table
+ 
+1
+). With Qwen3.8-27B-FP8 as its subagent, the
+frontier model resolves no fewer tasks than on its own, at between a third and a half of the cost. On DeepSWE, the frontier model’s cost falls
+from $2.11 to $0.70 per task. The results with MiniCPM5-2B are much the same: task performance holds, and on DeepSWE the 2B
+model saves as much as the 27B FP8 model.
+
+Paying for the SLM changes little on long tasks. At API prices, Qwen3.8-27B-FP8 adds about 10 cents to a DeepSWE task, so its total cost stays at 38%, and even on the short tasks of SWE-bench Verified, the total is 57%.
+
+Search.
+
+Across all 694 search questions (
+Table
+ 
+2
+), the frontier model answers 663 correctly with Qwen3.8-27B-FP8 as its subagent, exactly as many as on its own, at
+41% of the cost. On no set do the two systems differ by more than three questions. The savings, however, vary
+considerably. On ClimbMix, frontier cost falls to between a quarter and a third, but on BrowseComp-Plus
+over its own corpus, it falls only to 63%.
+
+The difference lies in how much the frontier model has to read on its own. On BrowseComp-Plus, the corpus is a set of
+files, and a command such as 
+rg
+ returns only the lines that match. On ClimbMix, the only access is BM25
+search, which returns whole documents that the model then reads a page at a time. Answering the same questions thus
+takes more than twice as much reading on ClimbMix, and delegation moves most of it to the SLM. Since a web agent also
+finds pages through a search engine and opens them, we consider the ClimbMix savings more representative.
+
+Prompt caching.
+
+Every system, including the frontier model alone, uses the provider’s prompt cache with a stable key per task, as any
+practical deployment would, so all savings are measured against a cached baseline. Nearly all frontier input on coding is cached, with or without delegation.
+
+Latency.
+
+Delegation adds latency that depends mainly on the local hardware serving the SLM. With Qwen3.8-27B-FP8, the median DeepSWE task takes 38 minutes instead of 25,
+and a short SWE-bench Verified task about twice as long.
+
+5 
+Analysis
+
+The results leave two questions open, namely where the savings come from and why task performance holds. We answer
+them with statistics computed from the transcripts of our runs. Unless noted otherwise, we use DeepSWE, the hardest of
+our task sets. Its tasks are long, and the frontier model alone resolves just over half of them, so DeepSWE leaves the
+most room for savings and would also reveal any loss in task performance.
+
+<25
+25–50
+50–100
+100–200
+>200
+Frontier model’s calls on the task when working alone
+Relative cost
+
+Figure 2: 
+Median relative frontier cost per coding task, by how many calls the frontier model makes on the task when
+working alone. Pooled over 350 task pairs from the three coding sets and both SLMs.
+
+How do the savings vary across tasks?
+
+The saving on a task depends on how much work the frontier model would do on it alone. 
+Figure
+ 
+2
+ groups the
+coding tasks by the number of calls that the frontier model makes without delegation. On tasks that need fewer than 25
+calls, delegation brings frontier cost to about 60% of working alone, and on 11% of these tasks, it even costs more.
+The relative cost keeps falling as tasks grow longer, to about a quarter for tasks that need more than 200 calls, where
+delegation never costs more. On search, the corresponding quantity is how much the frontier model reads (
+Section
+ 
+4
+). The
+saving can thus be anticipated from how long the frontier model works on a task alone.
+
+Where do the savings come from?
+
+Claude Code already delegates by default, but to the frontier model itself. Without our harness, GPT-6.1-Sol starts
+subagents on 98% of DeepSWE tasks, and these subagents, which also run on GPT-6.1-Sol, make more calls than the main loop
+and account for 53% of its cost. Delegent moves this work to the SLM, which explains 80% of the saving. The remainder
+comes from the frontier model itself, which now takes 46 to 48 LLM turns per task instead of 84. It reads and edits code
+about as often as before, but its test runs drop from about eight per task to one or two, and it no longer makes nearly all of the 23
+calls per task that it spent on maintaining a task list and messaging its subagents. Since only reports return, the tool output that reaches the frontier model also shrinks, by 11 to 12% on DeepSWE and by 13 to 24% on 
+SWE-bench
+ Pro.
+
+What work does the SLM take over?
+
+The SLM takes over the legwork of finding and checking, while the frontier model handles the main coding tasks itself. On
+coding, a subagent typically searches the repository for the code involved in an issue, reads the relevant files, and
+runs the tests or a small script to reproduce a bug or confirm a fix. Per DeepSWE task, the subagents of Qwen3.8-27B-FP8 issue
+about 24 code searches, read about 30 files or parts of files, run the tests 12 times, and run 5 scripts of their own.
+The files they write, about four per task, are nearly all such 
+throwaway
+ scripts outside the repository. MiniCPM5-2B works
+the same way with more steps, and in 9 of 50 episodes, it also edits source files. On search, a subagent issues its own
+BM25 searches, reads the documents it finds, and returns an answer with quoted evidence, its sources, and a confidence,
+and the harness checks each quote against its source. In both cases, the frontier model receives findings that it can
+verify cheaply, and it decides the answer on its own.
+
+Frontier
+
++ subagents
+
+Solved
+
+ 
+
+LLM
+
+cost
+
+ 
+
+LLM
+
+turns
+
+Without our instruction
+
+Sol alone
+
+29
+
+100%
+
+0
+84
+
+Sol + Qwen
+
+28
+
+0
+55%
+
+101
+
+Sol + MiniCPM
+
+22
+
+0
+51%
+
+0
+90
+
+With our instruction
+
+Sol + Sol
+
+34
+
+0
+60%
+
+0
+52
+
+Sol + Qwen
+
+29
+
+0
+33%
+
+0
+46
+
+Sol + MiniCPM
+
+30
+
+0
+34%
+
+0
+48
+
+Table 3: 
+With and without our instruction, on 50 DeepSWE tasks. Sol alone runs its subagents on
+Sol. LLM cost is what Sol is charged, including any Sol subagents, relative to Sol alone; it
+excludes the SLM.
+
+Is the instruction necessary?
+
+Table
+ 
+3
+ varies the instruction and the model that runs the subagents, and shows that the instruction is necessary, particularly for the weaker SLM.
+Without the instruction, delegating to an SLM about halves frontier cost. With Qwen3.8-27B-FP8, the frontier model resolves 28 of
+the 50 tasks at 55% of the cost, but with MiniCPM5-2B, it resolves only 22, seven fewer than on its own. With the
+instruction, both SLMs match the frontier model alone at a third of the cost, so task performance no longer depends on
+the SLM. With subagents still running on GPT-6.1-Sol, the instruction alone brings frontier cost to 60% with no loss in
+task performance, and replacing these subagents with an SLM removes a further 27 points. Roughly three fifths of the
+saving can thus be attributed to the instruction and two fifths to the SLM.
+
+Does the strength of the SLM matter?
+
+Not much in our experiments, even though the two SLMs are far apart on their own: on the same 30 DeepSWE tasks, Qwen3.8-27B-FP8 resolves 5
+and MiniCPM5-2B none. As subagents, however, they lead to the same task performance and nearly the same frontier cost
+(
+Table
+ 
+1
+). Since the frontier model hands out narrow subtasks and handles the main coding tasks itself,
+a weaker SLM mostly costs more SLM calls, 106 instead of 82 per DeepSWE task, rather than accuracy.
+
+Per DeepSWE task
+
+Sol
+
+Opus
+
+How it works alone
+
+ 
+
+long loop of
+
+edit, test, fix
+
+ 
+
+plan first,
+
+then act
+
+Solved alone, of 50
+
+29
+
+34
+
+LLM turns, alone
+
+84
+
+18
+
+With an SLM, under our instruction
+
+Solved, of 50
+
+29.5
+
+38
+
+LLM turns
+
+47
+
+13
+
+Turns handed to the SLM
+
+94
+
+21
+
+SLM turns before 1st LLM edit
+
+25%
+
+59%
+
+Words in each brief
+
+45
+
+130
+
+Frontier cost vs. LLM alone
+
+34%
+
+69%
+
+Table 4: 
+Two frontier models in Delegent on DeepSWE. With an SLM, values average the two SLMs. A brief is what the
+frontier model writes for a subagent.
+
+What changes with a different frontier model?
+
+The saving depends on how the frontier model works, as 
+Table
+ 
+4
+ shows for GPT-6.1-Sol and Claude Opus 5.5. On its own,
+GPT-6.1-Sol works in a long loop of editing, testing, and fixing. It takes 84 LLM turns per DeepSWE task and makes its
+first edit at turn 18. Claude Opus 5.5 instead plans before it acts, taking 18 turns and making its first edit at turn 7.
+Delegation follows these habits. GPT-6.1-Sol hands off much of its loop, mostly after it has started editing, so about
+94 turns per task move to the SLM and its cost falls to 34%. Claude Opus 5.5 delegates mainly before its first edit, to learn
+about the code it is about to change, and writes longer briefs, about 130 words instead of 45. Only about 21 turns move
+to the SLM, and its cost falls to 69%, roughly in proportion to its own turns, which fall from 18 to 13. With either
+SLM, Claude Opus 5.5 also resolves slightly more tasks than on its own. Thus, Delegent saves the most for a frontier model
+that does much of its own legwork, while a frontier model that plans first uses the SLM mainly to inform its plan.
+
+6 
+Related Work
+
+Cascades such as FrugalGPT 
+(
+Chen et al., 2024
+)
+ and routers such as RouteLLM 
+(
+Ong et al., 2025
+)
+ decide which
+model answers; in Delegent, the frontier model always answers. In Minions 
+(
+Narayan et al., 2025
+)
+, a cloud model decomposes long-document tasks for a local model; we study
+long-horizon agentic tasks in which the frontier model decides what to hand off. Orchestrator-worker designs are common
+in agents,
+6
+6
+
+6
+
+https://www.anthropic.com/research/building-effective-agents
+ and 
+Belcak et al. (2025)
+ argue that SLMs suit much of agentic work.
+
+Concurrent with our work, 
+Samway et al. (2026)
+ study teams of coding agents in which a lead agent
+delegates subtasks to workers, and find that cheap models pay off as planners but not as implementers.
+7
+7
+
+7
+
+            
+            
+            
+            
+            
+            
+            
+          See also 
+https://cohere.com/blog/lessons-from-scaling-teams-of-frontier-coding-agents
+ Their workers
+are API models, and the team spends more compute for higher reward, while Delegent delegates to a local SLM to lower
+frontier cost. Our ablation agrees, since without our instruction, the 2B SLM loses tasks.
+
+7 
+Conclusion
+
+On Delegent, a frontier model spends a third as much on DeepSWE and 41% as much on agentic search, with no loss in
+task performance, and the saving grows with the legwork the frontier model would otherwise do. Claude Code
+already delegates much of this legwork, but to the frontier model. A short instruction that leaves the main coding tasks
+to the frontier model makes this work, and with it, even a 2B SLM loses no tasks. How much is saved also depends on the
+frontier model. One that iterates at length saves the most, while one that plans first uses the SLM mainly to inform its
+plan. These results support our thesis that a local SLM can take over much of the work of a frontier model, cutting its
+cost without hurting task performance and without training.
+
+Limitations
+
+Reliance on Claude Code.
+
+For coding, Delegent reuses the agent loop and subagents of Claude Code as they are, and adds only the harness around them: routing each model call by role to a frontier model or a local SLM, cache-aware serving on both
+sides, and the instruction that steers delegation. For search, it also adds the delegation tool and the evidence check, and its SLM subagent uses the prompts and
+tools of AREX-Turbo, whose final report cites a source for every claim, which is what the evidence
+check needs.
+The amount of harness engineering is thus modest, and our finding is that it suffices to remove most of the frontier cost.
+
+Cost of the SLM.
+
+The SLM is not free. We report frontier cost because it is the metered, scarce resource, and both of our SLMs fit on hardware that a
+user can own. At the API price of the same FP8 model on Chutes, $0.039 per million input tokens,
+a tenth of that for input repeated from the subagent’s previous request, which is 86 to 90% of its input in our runs, and $1.25 per million output tokens, Qwen3.8-27B-FP8 adds 3 to 10 cents per coding task, and the total stays at 38 to 57% of the frontier model alone. No API serves MiniCPM5-2B. We price the SLM for coding only, since
+our search logs keep no per-call token counts.
+
+Coverage of tasks and models.
+
+We study agentic coding and agentic search only, though these are two of the most important capabilities of today’s
+models. Our main results use GPT-6.1-Sol at high reasoning effort. We test Claude Opus 5.5 as the frontier model on DeepSWE only, and the 2B
+SLM on coding only. For coding, Delegent builds on Claude Code, which Claude Opus 5.5 is likely tuned for, so it may favor
+Claude Opus 5.5 there. On agentic search, the frontier model uses each corpus’s standard setup, and GPT-6.1-Sol alone answers
+193 of 200 BrowseComp-Plus questions, so it is not held back there. How much work is delegated depends on how well the
+frontier model follows the instruction, which may differ for other frontier models.
+
+Latency.
+
+Delegation makes tasks slower, about twice as slow at the median on short coding tasks, which may not suit interactive
+use. How much slower depends on the hardware that serves the SLM. Our latencies were measured on shared GPUs of several
+kinds and will vary with the GPU, the serving stack, and the load.
+
+No claim of improved performance.
+
+Agent runs are not deterministic, and different frontier models use delegation differently. GPT-6.1-Sol hands off
+its legwork to save cost, while Claude Opus 5.5 uses its subagents to check its own work. A gain in task performance is
+therefore not guaranteed for every frontier model or task set. We claim only that delegation causes no loss in task
+performance, even where the delegating system solves more tasks than the frontier model alone.
+The reduction in frontier cost, on the other hand, is consistent across task sets and models.
+
+References
+
+Aggarwal 
+et al.
+ (2024)
+
+P. Aggarwal, A. Madaan, A. Anand, S. P. Potharaju, S. Mishra, P. Zhou, A. Gupta, D. Rajagopal, K. Kappaganthu, Y. Yang, S. Upadhyay, M. Faruqui, and Mausam
+
+AutoMix: automatically mixing language models
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+Note: 
+arXiv:2310.12963
+
+Cited by: 
+§1
+.
+
+Belcak 
+et al.
+ (2025)
+
+P. Belcak, G. Heinrich, S. Diao, Y. Fu, X. Dong, S. Muralidharan, Y. C. Lin, and P. Molchanov
+
+Small language models are the future of agentic AI
+.
+
+arXiv preprint arXiv:2506.02153
+.
+
+Cited by: 
+§6
+.
+
+Chen 
+et al.
+ (2024)
+
+L. Chen, M. Zaharia, and J. Zou
+
+FrugalGPT: how to use large language models while reducing cost and improving performance
+.
+
+Transactions on Machine Learning Research
+.
+
+Note: 
+arXiv:2305.05176
+
+Cited by: 
+§1
+,
+
+§6
+.
+
+Chen 
+et al.
+ (2025)
+
+Z. Chen, X. Ma, S. Zhuang, P. Nie, K. Zou, A. Liu, J. Green, K. Patel, R. Meng, M. Su, S. Sharifymoghaddam, Y. Li, H. Hong, X. Shi, X. Liu, N. Thakur, C. Zhang, L. Gao, W. Chen, and J. Lin
+
+BrowseComp-Plus: a more fair and transparent evaluation benchmark of deep-research agent
+.
+
+arXiv preprint arXiv:2508.06600
+.
+
+Cited by: 
+§3
+,
+
+§3
+.
+
+Deng 
+et al.
+ (2025)
+
+X. Deng, J. Da, E. Pan, 
+et al.
+
+SWE-Bench Pro: can AI agents solve long-horizon software engineering tasks?
+.
+
+arXiv preprint arXiv:2509.16941
+.
+
+Cited by: 
+§3
+.
+
+Diao 
+et al.
+ (2025)
+
+S. Diao, Y. Yang, Y. Fu, X. Dong, D. Su, M. Kliegl, Z. Chen, P. Belcak, Y. Suhara, H. Yin, M. Patwary, Y. C. Lin, J. Kautz, and P. Molchanov
+
+Nemotron-CLIMB: clustering-based iterative data mixture bootstrapping for language model pre-training
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+Note: 
+arXiv:2504.13161
+
+Cited by: 
+§3
+.
+
+Ding 
+et al.
+ (2024)
+
+D. Ding, A. Mallick, C. Wang, R. Sim, S. Mukherjee, V. Rühle, L. V. S. Lakshmanan, and A. H. Awadallah
+
+Hybrid LLM: cost-efficient and quality-aware query routing
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Note: 
+arXiv:2404.14618
+
+Cited by: 
+§1
+.
+
+Gupta 
+et al.
+ (2026)
+
+N. Gupta, R. Chatterjee, L. Haas, C. Tao, A. Wang, C. Liu, H. Oiwa, E. Gribovskaya, J. Ackermann, J. Blitzer, S. Goldshtein, and D. Das
+
+DeepSearchQA: bridging the comprehensiveness gap for deep research agents
+.
+
+arXiv preprint arXiv:2601.20975
+.
+
+Cited by: 
+§3
+.
+
+Hu 
+et al.
+ (2024)
+
+S. Hu, Y. Tu, X. Han, 
+et al.
+
+MiniCPM: unveiling the potential of small language models with scalable training strategies
+.
+
+In 
+Conference on Language Modeling
+,
+
+Note: 
+arXiv:2404.06395
+
+Cited by: 
+§3
+.
+
+Huang 
+et al.
+ (2026)
+
+W. Huang, C. Lee, L. Tng, and S. Ge
+
+DeepSWE: measuring frontier coding agents on original, long-horizon engineering tasks
+.
+
+arXiv preprint arXiv:2607.07946
+.
+
+Cited by: 
+§3
+.
+
+Jimenez 
+et al.
+ (2024)
+
+C. E. Jimenez, J. Yang, A. Wettig, S. Yao, K. Pei, O. Press, and K. Narasimhan
+
+SWE-bench: can language models resolve real-world GitHub issues?
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Cited by: 
+§3
+.
+
+Kwon 
+et al.
+ (2023)
+
+W. Kwon, Z. Li, S. Zhuang, Y. Sheng, L. Zheng, C. H. Yu, J. E. Gonzalez, H. Zhang, and I. Stoica
+
+Efficient memory management for large language model serving with PagedAttention
+.
+
+In 
+Proceedings of the 29th Symposium on Operating Systems Principles
+,
+
+Cited by: 
+§2
+.
+
+Lin 
+et al.
+ (2021)
+
+J. Lin, X. Ma, S. Lin, J. Yang, R. Pradeep, and R. Nogueira
+
+Pyserini: a Python toolkit for reproducible information retrieval research with sparse and dense representations
+.
+
+In 
+Proceedings of the 44th International ACM SIGIR Conference on Research and Development in Information Retrieval
+,
+
+pp. 2356–2362
+.
+
+Cited by: 
+§3
+.
+
+Lu 
+et al.
+ (2026)
+
+S. Lu, C. Li, K. Luo, Z. Zhang, H. Wang, H. Xiao, L. Xiong, J. Wang, S. Wang, X. Jiang, W. Li, Y. Hu, H. Qian, B. Yan, J. Chen, Z. Xia, Y. Shao, K. Liu, Z. Dou, D. He, C. Li, Q. Ye, Z. Wang, and Z. Liu
+
+AREX: towards a recursively self-improving agent for deep research
+.
+
+arXiv preprint arXiv:2607.21461
+.
+
+Cited by: 
+§2
+.
+
+MiniCPM Team (2025)
+
+MiniCPM Team
+
+MiniCPM4: ultra-efficient LLMs on end devices
+.
+
+arXiv preprint arXiv:2506.07900
+.
+
+Cited by: 
+§3
+.
+
+Narayan 
+et al.
+ (2025)
+
+A. Narayan, D. Biderman, S. Eyuboglu, A. May, S. Linderman, J. Zou, and C. Ré
+
+Cost-efficient collaboration between on-device and cloud language models
+.
+
+In 
+Proceedings of the 42nd International Conference on Machine Learning
+,
+
+PMLR
+, Vol. 
+267
+, 
+pp. 45682–45719
+.
+
+Note: 
+arXiv:2502.15964
+
+Cited by: 
+§6
+.
+
+Ong 
+et al.
+ (2025)
+
+I. Ong, A. Almahairi, V. Wu, W. Chiang, T. Wu, J. E. Gonzalez, M. W. Kadous, and I. Stoica
+
+RouteLLM: learning to route LLMs from preference data
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Note: 
+arXiv:2406.18665
+
+Cited by: 
+§1
+,
+
+§6
+.
+
+Rafiee 
+et al.
+ (2026)
+
+M. Rafiee, H. Soudani, Z. Abbasiantaeb, M. Aliannejadi, F. Hasibi, and H. Zamani
+
+Total Recall QA: a verifiable evaluation suite for deep research agents
+.
+
+arXiv preprint arXiv:2603.18516
+.
+
+Cited by: 
+§3
+.
+
+Robertson and Zaragoza (2009)
+
+S. Robertson and H. Zaragoza
+
+The probabilistic relevance framework: BM25 and beyond
+.
+
+Foundations and Trends in Information Retrieval
+ 
+3
+ (
+4
+), 
+pp. 333–389
+.
+
+Cited by: 
+§3
+.
+
+Samway 
+et al.
+ (2026)
+
+K. Samway, D. D’souza, O. D. Domingues, M. Fadaee, T. Yi-Chern, and N. Dziri
+
+Scaling inference-time compute with teams of coding agents
+.
+
+arXiv preprint arXiv:2610.17471
+.
+
+Cited by: 
+§6
+.
+
+Sharifymoghaddam 
+et al.
+ (2026)
+
+S. Sharifymoghaddam, L. Gu, Y. Ge, and J. Lin
+
+CMASS: a ClimbMix agentic search suite for evaluating search agents across heterogeneous tasks
+.
+
+arXiv preprint arXiv:2608.20317
+.
+
+Cited by: 
+§3
+.
+
+Yang 
+et al.
+ (2018)
+
+Z. Yang, P. Qi, S. Zhang, Y. Bengio, W. W. Cohen, R. Salakhutdinov, and C. D. Manning
+
+HotpotQA: a dataset for diverse, explainable multi-hop question answering
+.
+
+In 
+Proceedings of the 2018 Conference on Empirical Methods in Natural Language Processing
+,
+
+pp. 2369–2380
+.
+
+Cited by: 
+§3
+.
+
+Yue 
+et al.
+ (2024)
+
+M. Yue, J. Zhao, M. Zhang, L. Du, and Z. Yao
+
+Large language model cascades with mixture of thought representations for cost-efficient reasoning
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Note: 
+arXiv:2310.03094
+
+Cited by: 
+§1
+.
+
+Appendix A 
+Prompts
+
+Coding instruction.
+
+We supply this instruction to Claude Code as a user-level 
+CLAUDE.md
+ file.
+
+# Working with subagents
+
+Subagents (the Agent tool) run on a small, fast model and cost far less than you. Every step you take re-reads the whole
+conversation, so the cheapest plan is the one with the fewest steps of your own.
+
+- Delegate investigation (find the code involved in the issue and explain how it works; write a minimal script
+that reproduces the bug and report its output) and verification (run the reproduction and the relevant tests; report
+only what fails). Make the code changes yourself.
+
+- Run subagents in the foreground (do not use run_in_background) and launch independent ones in the same turn,
+so their reports come back together and nothing needs polling.
+
+- Ask each subagent for a short report, at most 150 words: only the facts you need, with file paths, line numbers
+and exact error messages.
+
+- Do not keep a task list (TaskCreate / TaskUpdate / TaskList / TaskGet) for this job; keep your plan in your own
+messages.
+
+- Subagent reports can be wrong: check a fact yourself before your fix depends on it.
+
+Search instruction.
+
+We append this instruction to the system prompt of the frontier model.
+
+You have a research assistant: the Delegate tool hands it a focused subtask; it searches the same corpus with its own
+search engine and returns a short report with evidence, the docids and its confidence. It is fast, and its
+high-confidence reports are usually right. Work through it:
+
+- Delegate all searching, including checks of a candidate ("does the corpus confirm that X ...?"). Run independent
+subtasks in parallel.
+
+- Do not run broad searches or read whole documents yourself. To confirm one fact, use a single targeted search, or
+read only the part of the document around it (get_document with an offset).
+
+- Each report ends with an automatic lookup of its evidence in the cited documents: a located passage is verbatim
+there.
+
+- Give your final answer as soon as the evidence covers every condition of the question.
+
+Example briefs.
+
+Below is the first brief that each frontier model wrote for a Qwen3.8-27B-FP8 subagent on the same DeepSWE
+task, which adds module loading flags to the interpreter of the ABS language. The brief of GPT-6.1-Sol:
+
+Inspect ABS module require loader, cache, environments, tests and project instructions. Read-only investigation; do
+not edit. Identify files/functions to change and relevant test commands, including how environment stderr and runtime
+values work. Short report at most 150 words with paths and line numbers.
+
+The brief of Claude Opus 5.5, abridged:
+
+In the Go repo at /app (the ABS programming language interpreter), report facts only (max 200 words, with file paths
+and line numbers; do not modify files):
+
+- How the builtin require(path) is implemented today: the function name/file, how it resolves the path (relative
+to what directory? how the current file’s directory is tracked [...]), whether there’s a module cache (variable name,
+key type), and how the module file is lexed/parsed/evaluated (which helper it calls).
+
+- How builtin functions are registered (the map name/file, function signature, how they access the environment
+[...]).
+
+- The CLI entrypoint: main.go and repl/repl.go BeginRepl(args []string, version string) [...]
+
+The later testing brief of Claude Opus 5.5 asks the subagent, for every failing test outside the new test files, to check whether it also
+fails on the base branch and to report whether the failure is pre-existing.
+
+Appendix B 
+Run Settings
+
+Setting
+
+Value
+
+Claude Code version
+
+2.1.232
+
+Tools
+
+default, except web search and web fetch
+
+Frontier model context
+
+up to 1M tokens
+
+SLM context
+
+131k tokens
+
+Turn limit
+
+100 turns
+
+Tool time limit
+
+60 minutes (90 on DeepSWE)
+
+Table 5: 
+Settings shared by all coding runs.
+
+Coding.
+
+Table
+ 
+5
+ lists the settings that all coding runs share. Both SLMs think before acting on coding, while on
+search, Qwen3.8-27B-FP8 answers without thinking.
+
+Search subagent.
+
+On search, the SLM subagent works in our own loop of at most 80 steps with four tools from AREX-Turbo:
+
+•
+
+search
+ takes up to five queries and returns the top 10 BM25 hits for each with their best-matching
+passage, through the ClimbMix search API or, on BrowseComp-Plus, a BM25 index of the corpus files with the
+benchmark’s default parameters.
+
+•
+
+visit
+ returns the passages of a document that best match a stated goal.
+
+•
+
+update_context
+ replaces the history of the subagent with its own notes.
+
+•
+
+finish
+ returns the answer, its evidence with sources, and a confidence.
+
+We took these prompts and tools as published, leaving out the Google Scholar tool of AREX-Turbo, and did not tune them.
+
+Frontier model on search.
+
+The frontier model runs on the BrowseComp-Plus corpus with the system prompt and the Bash and Read tools of Claude
+Code, taken from a recorded Claude Code session, in our own loop, which adds the 
+Delegate
+ tool. On ClimbMix, it
+uses the 
+search
+ and 
+get_document
+ tools of the official BrowseComp-Plus agent. With delegation, the
+output of the frontier model’s own tool calls on BrowseComp-Plus is cut at 12,000 characters instead of Claude Code’s
+30,000. The cut applied to 18 of its 395 own calls.
+
+Hardware.
+
+Each SLM replica serves several concurrent episodes, almost always from a single GPU. For coding,
+Qwen3.8-27B-FP8 ran on NVIDIA H200 and RTX PRO 6000 Blackwell GPUs, and MiniCPM5-2B on H200, RTX PRO 6000 Blackwell, RTX 6000 Ada, and
+L40S GPUs. The Claude Opus 5.5 runs also used H100 and RTX A6000 GPUs, with one Qwen3.8-27B-FP8 replica split across two A6000s. For
+search, Qwen3.8-27B-FP8 ran mostly on RTX PRO 6000 and H100 GPUs. Due to budget constraints, we served Claude Opus 5.5 through Claude
+subagents, each call with a clean context.
+
+Choosing the tools.
+
+In our experiments, the tools were set by the task set. Afterwards, we asked GPT-6.1-Sol at low effort to choose between
+the two tool sets with the following prompt:
+
+Here is a task. <task> ... </task> Do not do the task. Decide which kind of task it is and answer with exactly one
+word: coding if it asks you to change code in a software repository, or search if it asks you to find the answer to a
+question.
+
+For all 869 tasks and questions, it chose the tools that our experiments used. The question costs about
+$0.0005 per task, under one point of relative cost on every task set, which our cost figures leave out.
+
+Reruns and later runs.
+
+Claude Code compacts a long conversation to keep its context short. An episode of the frontier model that compacted
+and then failed was rerun with its full 1M-token context, in every system alike. Search questions that failed for
+infrastructure reasons (8 of 694) were rerun with identical settings, and no question was rerun because of its answer.
+Runs added after our main experiments, namely the reruns after compaction and the runs of 
+Section
+ 
+5
+, served
+both SLMs on a shared vLLM cluster with the same weights, behind a proxy that applies the same request conversion as
+our own servers.
+
+Appendix C 
+Task Sampling
+
+Coding tasks were sampled with Python’s 
+random.Random(20261020)
+ from the tasks that all compared systems
+finished without an infrastructure failure, namely 50 SWE-bench Verified tasks (all such tasks among those not used to draft
+the instruction), 75 SWE-bench Pro tasks, and 50 DeepSWE v1.1 tasks. The comparison of the two SLMs on their own uses 30
+DeepSWE tasks sampled with the same seed from those that both finished without an infrastructure failure. The 200
+BrowseComp-Plus questions were sampled with seed 20261019 from held-out questions. The sampled task lists are released
+with the paper.
+

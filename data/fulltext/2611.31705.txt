@@ -1,0 +1,5524 @@
+FoveaWAM: Role-Aware 4D World-Action Modeling for Dynamic Manipulation
+https://arxiv.org/abs/2611.31705
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+FoveaWAM: Role-Aware 4D World–Action Modeling for Dynamic Manipulation
+
+Jiaqi Yin
+
+  
+
+Baoyue Zhang
+
+  
+
+Jiyuan Zhang
+
+Affiliation: 
+Beijing Zhongguancun Academy  Peking University  Beijing Academy of Artificial Intelligence
+†
+Corresponding authors
+
+  
+
+Wenxuan Liu
+
+  
+
+Zhaofei Yu
+
+  
+
+Yue Deng
+
+  
+
+Tiejun Huang
+
+Abstract
+
+To manipulate a moving object, a policy must predict the scene at the moment its action
+executes, yet every millisecond spent predicting pushes that moment further away.
+Scene-level forecasts are computationally expensive, whereas target-centric forecasts can
+omit nearby objects that affect contact. Our key insight is that what a policy
+must predict decouples by role: only the target’s pose, which determines contact, requires
+millimeter precision, while the surroundings matter primarily through the clearance they
+leave and the motion they impart. We present FoveaWAM, a native 4D world–action model
+that allocates precision according to these roles. Specifically, it models the target’s past and future motion as a
+metric SE(3) trajectory, the surroundings as sparse 3D flow, and relies on the current frame
+for everything static. This compact representation lets FoveaWAM act in 15.1 ms on one
+RTX 5090, about 
+ faster than video world–action baselines, leaving substantially less time for the scene to evolve before action execution.
+To evaluate each policy under its own latency, we introduce 
+OnTimeBench
+, a dynamic
+manipulation benchmark in which the scene keeps moving while the policy computes.
+FoveaWAM reaches 82.1% success on 
+OnTimeBench
+, 20.8 points above the strongest baseline, and
+also leads on DOMINO and real-robot tasks.
+
+Project page: 
+https://foveawam.github.io/
+.
+
+ 
+
+Figure 1
+: 
+FoveaWAM allocates prediction precision by role.
+
+(a) Illustrative target SE(3) poses and sparse 3D flow. The inset shows a staged grasp.
+(b) FoveaWAM leads in native SR on 
+OnTimeBench
+ at about one tenth the p95 latency of OpenWAM-
+.
+
+1 
+Introduction
+
+Robot manipulation policies have made substantial progress in static scenes 
+[
+10
+, 
+4
+]
+.
+In these scenes, the world stays still during inference, so the observed scene remains valid when the action executes.
+In dynamic manipulation, however, the target keeps moving during inference, so the observed pose is already outdated when the action executes.
+For example, a block sliding down a ramp at about 0.9 m/s travels 18 cm during a 200 ms inference interval, far exceeding the positional tolerance of accurate contact.
+Successful manipulation therefore requires predicting the target’s pose at execution time. Predicting the target’s motion requires accounting for surrounding objects, but the target continues to move while the prediction is being computed. The longer prediction takes, the further ahead the policy must predict.
+This creates a tension between 
+accurate prediction and timely action.
+
+Existing methods vary in what they predict (Fig. 
+2
+).
+Scene-level predictors model future images or video 
+[
+61
+, 
+53
+, 
+45
+, 
+29
+]
+
+or 3D motion 
+[
+58
+]
+. These predictions capture surrounding motion, but a dense forecast can spend computation on parts of the scene with little bearing
+on contact. In a video forecast, the target may occupy only a small region, and its pose remains implicit in the predicted pixels. AHEAD limits its rollout to task-relevant
+latent patches 
+[
+41
+]
+. PUMA supervises future features of the target 
+[
+14
+]
+, and SPOT predicts target pose trajectories 
+[
+17
+]
+. Focusing on the target can omit surrounding objects that block access or alter its motion. For example, a
+moving obstacle can close the approach path even if the target follows the
+predicted trajectory. Determining whether that path stays clear and estimating
+the target’s pose at contact impose different demands on a forecast.
+
+What should a policy predict about a moving scene, and how precisely,
+
+to make accurate contact in time?
+
+Figure 2
+: 
+Where prediction precision goes.
+
+(a) Full-scene methods, such as video world–action models, predict future
+frames of the whole scene and leave the target pose implicit
+
+[
+53
+, 
+45
+]
+.
+(b) Target-centric methods focus prediction on the object, using future
+features 
+[
+14
+]
+ or pose trajectories 
+[
+17
+]
+.
+(c) FoveaWAM predicts a precise SE(3) trajectory for the target and only sparse 3D
+flow for its surroundings, and reads the static scene from the current frame.
+
+Our key insight is that prediction requirements 
+differ by role
+ (Fig. 
+1
+).
+The target’s position and orientation at execution time directly determine contact success and therefore require precise prediction.
+In contrast, the surroundings affect the contact only indirectly, by obstructing
+access or altering the target’s motion, so their motion requires only coarse
+prediction.
+Finally, the rest of the scene is static, so it is already available in the current frame and requires no prediction.
+A policy can therefore make accurate contact in time by concentrating precise prediction on
+the target and capturing the surroundings at low cost.
+This allocation resembles biological vision, where the fovea resolves fine detail and
+peripheral vision preserves
+
+broad motion awareness 
+[
+12
+, 
+39
+, 
+34
+]
+.
+
+Based on this insight, we propose 
+FoveaWAM
+, a native 4D world–action model that allocates precision by role (Fig. 
+2
+c).
+FoveaWAM observes and predicts scene motion directly in metric 3D space over time, rather than in pixels.
+In this space, each part of the scene can be represented separately, so each receives the precision that its role requires.
+The target is predicted precisely, as a metric SE(3) trajectory that gives its future position and orientation explicitly with only a few parameters.
+In contrast, the surroundings are predicted coarsely, as sparse 3D flow, and the static scene is not predicted.
+The same allocation applies to the input.
+A single frame already shows the static scene and the layout of the surroundings, so only the target’s motion requires a history.
+FoveaWAM therefore reads one RGB-D frame and a short SE(3) pose history of the target, instead of the image or optical-flow
+histories used by existing dynamic policies 
+[
+50
+, 
+14
+, 
+29
+]
+.
+Since both the input and the predictions are compact, FoveaWAM acts in 15.1 ms on one RTX 5090, about 
+ faster than video world–action models, and the scene has little time to move before the action executes.
+
+The tension between accurate prediction and timely action can be measured only when the evaluation accounts for inference time. However, the default evaluators of DOMINO 
+[
+14
+]
+ and PhysMani-Bench 
+[
+58
+]
+ pause the simulation during inference, so a slow policy is scored as if it were instant.
+We therefore introduce 
+OnTimeBench
+, a benchmark of 14 dynamic manipulation tasks in which the world never pauses and every policy is evaluated at its native latency.
+On the same scenes, pausing the world overestimates slow policies and changes the ranking of methods (Fig. 
+6
+c).
+
+Experiments show that FoveaWAM makes accurate contact in time.
+On 
+OnTimeBench
+, it reaches 82.1% success at native latency, 20.8 points above the strongest baseline.
+It also leads by 19.9 points on the single-arm tasks of DOMINO 
+[
+14
+]
+, whose evaluator pauses during inference, so its advantage does not come from speed alone.
+On six real-robot tasks, it achieves the highest success on every task and 48.3% on average, 17.5 points above the strongest baseline.
+Finally, ablations show that each part of the role-aware design contributes to success,
+with the largest drop from removing the target’s pose history.
+
+Our key contributions are as follows:
+
+•
+
+We identify distinct prediction requirements in dynamic manipulation and
+propose a role-aware prediction paradigm. It forecasts target motion precisely
+and surrounding motion coarsely, using the current frame for static geometry.
+This allocation preserves the precision needed for contact while reducing
+prediction cost.
+
+•
+
+We present 
+FoveaWAM
+, a native 4D world–action model that
+instantiates this paradigm and achieves precise, low-latency action generation.
+It acts in 15.1 ms, about 
+ faster than video world–action models,
+and outperforms the strongest baseline by 20.8 points on 
+OnTimeBench
+. It also leads
+on DOMINO’s single-arm tasks with paused physics and across six dynamic real-robot tasks.
+
+•
+
+We build 
+OnTimeBench
+, a benchmark of 14 dynamic manipulation tasks in
+which the world never pauses and every policy is evaluated at its native
+latency, exposing the cost of latency that paused evaluation hides.
+
+2 
+Related Work
+
+Dynamic manipulation.
+
+Earlier systems used explicit tracking and interception planning for moving objects
+
+[
+1
+, 
+2
+, 
+32
+]
+. Recent methods learn to handle motion
+from data 
+[
+8
+, 
+24
+, 
+50
+]
+. They use optical-flow histories
+
+[
+14
+, 
+29
+]
+ or condition actions on forecasts at inference
+
+[
+30
+, 
+41
+, 
+58
+]
+. FoveaWAM encodes past motion with a metric SE(3) pose
+history and a single current frame. Asynchronous execution and chunk-transition
+methods address action timing and continuity 
+[
+27
+, 
+5
+, 
+36
+, 
+42
+, 
+50
+]
+.
+The default DOMINO 
+[
+14
+]
+ and PhysMani-Bench 
+[
+58
+]
+ rollouts step
+physics after actions return. 
+OnTimeBench
+ advances physics during inference to evaluate
+each policy at its native latency.
+
+Figure 3
+: 
+Overview of FoveaWAM.
+
+(a) Architecture. The current RGB-D frame and the target and robot histories form scene tokens 
+, alongside summary tokens 
+ and noisy action tokens 
+. All tokens share masked attention, followed by separate world and action FFNs. During training, linear decoders predict the sparse 3D flow from 
+ and the target SE(3) trajectory from 
+.
+(b) Attention mask. Rows are queries, columns are keys, and hatched cells are masked.
+(c) Training and inference. The two streams are trained jointly. At inference, the decoders are skipped, and the world stream runs once per query and caches its keys and values for the action stream.
+
+Forecasting in world–action models.
+
+World–action models (WAMs) couple video and action prediction 
+[
+65
+, 
+23
+, 
+53
+, 
+45
+]
+,
+building on video prediction as a policy objective 
+[
+49
+, 
+43
+]
+. Recent models
+predict features or latent tokens 
+[
+64
+, 
+60
+, 
+40
+]
+, masks 
+[
+54
+]
+, flow
+
+[
+56
+]
+, or object slots 
+[
+28
+]
+ alongside or in place of RGB. PUMA,
+Fast-WAM, and SG-WAM use future supervision during training and can omit the forecast
+at deployment 
+[
+14
+, 
+57
+, 
+62
+]
+. During training, FoveaWAM supervises motion in
+a role-aware metric 4D state that explicitly represents the target’s future pose.
+
+Object-centric and geometric motion representations.
+
+Manipulation policies use metric 3D inputs 
+[
+35
+, 
+59
+]
+. Related representations
+include point tracks 
+[
+48
+, 
+3
+, 
+51
+]
+, 3D flow
+
+[
+55
+, 
+15
+, 
+18
+, 
+58
+]
+, object keypoints or trajectories
+
+[
+31
+, 
+17
+, 
+38
+]
+, and rigid-body decompositions 
+[
+6
+, 
+7
+]
+.
+DOCIR separates robot, target, and obstacles in visual inputs 
+[
+13
+]
+. Gaze-based
+robot perception concentrates sensing through foveated inputs
+
+[
+22
+, 
+11
+]
+ or active camera control 
+[
+20
+]
+.
+FoveaWAM allocates prediction precision by role, using coarse sparse flow for the scene
+and 
+a metric SE(3) trajectory for the target.
+
+3 
+FoveaWAM
+
+FoveaWAM applies the role-aware allocation to both what it reads and what it predicts
+(Fig. 
+3
+a). It reads the current RGB-D frame for the static scene
+and the context, and an SE(3) pose history for the target. It predicts coarse sparse 3D
+flow for the scene and a precise SE(3) trajectory for the target. In between, a world
+stream (scene tokens 
+ and summary tokens 
+) and an action stream (noisy action
+tokens 
+) share one masked attention in each of the 
+ layers.
+
+3.1 
+Problem Formulation
+
+We study manipulation in scenes that keep moving while the policy computes. At query
+
+, the policy 
+ reads an RGB-D frame 
+ captured at time 
+, a
+history 
+ of the target pose 
+,
+and a history 
+ of the robot state, all in the robot base frame. Learned
+from demonstrations, the policy outputs a chunk of 
+ commands at control period
+
+,
+
+(1)
+
+where command 
+ executes at 
+.
+
+Each task assigns the scene three roles. The 
+target
+ is the object whose pose the
+robot must match within a contact or containment tolerance. The 
+context
+ is the
+part of the surroundings that affects contact. It contains the obstacles that the robot
+must clear and the drivers that move the target. Everything else is 
+static
+. The
+chunk becomes available only after inference, so each executed command must account for
+the target and the context at its execution time.
+
+3.2 
+Role-Aware Dynamics Encoding
+
+A single frame shows where things are but not how they move. The context does not need
+a motion history of its own. The clearance it leaves is visible in the current geometry,
+and the motion it imparts appears in how the target has moved. FoveaWAM therefore pairs one
+RGB-D frame with a short metric pose history of the target.
+
+Scene tokens from the current frame.
+
+Contact is decided in metric space, so FoveaWAM anchors each patch token at a metric 3D
+point. A frozen MAE ViT-B/16 
+[
+16
+]
+ encoder turns the RGB image into
+196 patch tokens on a 
+ grid. The depth map back-projects the
+center of patch 
+ to a point 
+ in the base frame. A linear embedding
+of 
+ is added to the patch token, and 
+ also sets the 3D rotary
+position embeddings of its queries and keys. Attention between patches then depends on
+their relative metric positions, and observations, predictions, and actions share one
+frame.
+
+Target tokens from the pose history.
+
+The pose history covers the last 350 ms in 8 samples at
+20 Hz. The SE(3) encoder turns it into 8 tokens, one for the
+current target pose and seven for the motions between consecutive samples. Each motion
+token holds the translation, relative rotation, time interval, and finite-difference
+velocity and acceleration in physical units, so the quantities that decide where the
+target will be enter the model directly. The state encoder adds 8 robot
+tokens with the end-effector states at the same times. The whole history thus
+costs 16 low-dimensional tokens, whereas each additional frame would cost
+196 patch tokens. The patch, target, and robot tokens together form the scene
+tokens 
+. The target poses come from the simulator in simulation and from an online
+RGB-D tracker on the robot.
+
+3.3 
+Role-Aware 4D Future Prediction
+
+Figure 4
+: 
+Overview of 
+OnTimeBench
+.
+ 
+OnTimeBench
+ evaluates each policy at its native
+latency on 14 dynamic tasks in five families, with 1,400 held-out test scenes.
+(a) During a 200 ms inference, the default DOMINO evaluator 
+[
+14
+]
+ pauses the
+world, while 
+OnTimeBench
+ keeps it moving. (b) Tasks per family. (c) The
+14 tasks, with motion cues overlaid.
+
+Each command acts at a future time, so the world stream must also represent the scene
+at the execution times. The target’s pose decides contact, so the SE(3) decoder predicts
+its full trajectory. The context matters through clearance and imparted motion, which a
+coarse flow already captures. Both predictions are base-frame changes from the current
+state at 
+, with 
+50 ms for
+
+, and together with the current state they cover the execution
+times of the whole chunk. Both decoders are linear and run only during training. A
+linear readout forces the world-stream states themselves to encode the predicted motion.
+
+Sparse 3D scene flow.
+
+The flow covers every surface that the patches see, including the robot, the target,
+and the context. For each patch point 
+ and horizon 
+, the flow decoder reads
+the final state of patch token 
+ and predicts the displacement 
+ and
+a visibility logit 
+, trained with
+
+(2)
+
+where 
+ and 
+ are the true displacement and visibility at 
+, and
+
+ contains the valid pairs. Displacements are divided by a scale 
+ fitted
+on the training labels, and the squared error is averaged over coordinates.
+
+Target SE(3) trajectory.
+
+The flow samples the target only at the few patches it covers, which is too sparse to
+determine its rotation. The world stream therefore also holds 16 learned
+summary tokens 
+ that attend to the whole scene, and the SE(3) decoder predicts the
+target’s rigid motion from their mean final state. For each horizon 
+, it predicts a displacement
+
+ and a rotation increment 
+, trained with
+
+(3)
+
+where 
+ and
+
+ are the true displacement and orientation,
+
+, 
+ is the
+geodesic distance, and 
+ contains the horizons with valid labels.
+Rotation matters for contact. An error 
+ moves a contact point at distance 
+
+from the target’s origin by up to 
+, nearly 9 mm for 
+
+and 
+ cm.
+
+3.4 
+World–Action Learning and Inference
+
+Action stream.
+
+The action stream holds 
+ tokens. Each token embeds one noisy command, which
+consists of an end-effector translation increment, a rotation increment, and a gripper
+command. World tokens use layer normalization, and
+action tokens use adaptive layer normalization conditioned on the flow time 
+. The
+attention mask lets 
+ attend to 
+, 
+ to 
+ and 
+, and 
+ to all tokens
+(Fig. 
+3
+b). In every layer, the action stream reads the patch
+states shaped by the scene flow and the summary states shaped by the target trajectory.
+The world stream never reads the actions, so its states do not depend on the noise or
+flow time.
+
+Training objective.
+
+We train the action stream 
+ with flow matching 
+[
+25
+]
+.
+With the normalized chunk 
+, noise 
+, and
+
+, it regresses the velocity
+
+(4)
+
+where 
+, 
+ denotes the inputs in
+Eq. (
+1
+), and the MSE averages over valid commands and action dimensions. Both streams are trained jointly with
+
+(5)
+
+where 
+ sums auxiliary appearance losses.
+
+Inference.
+
+At deployment, FoveaWAM skips the flow and SE(3) decoders, as in the action-only inference
+of prior video WAMs 
+[
+23
+, 
+57
+]
+ (Fig. 
+3
+c). Since the world states
+do not depend on the noise, the world stream runs once per query and caches its keys
+and values. The action stream then integrates 5 Euler steps
+on this cache. One query takes 15.1 ms at p95 on one RTX 5090, within one control
+period. Commands are indexed by time from capture, so the policy needs no latency input
+(Sec. 
+4.2
+).
+
+4 
+OnTimeBench
+
+The default evaluators of DOMINO 
+[
+14
+]
+ and PhysMani-Bench 
+[
+58
+]
+
+advance the simulation only after the policy returns its actions, so inference takes
+no time in the scene.
+A policy that computes for 200 ms thus still finds the ball where it observed it,
+although a real ball would have rolled 18 cm (Fig. 
+4
+a).
+In 
+OnTimeBench
+, observation, scene motion, and action execution share one physical clock.
+The scene keeps moving while the policy computes, so each policy is evaluated at its
+native latency.
+
+OnTimeBench
+ contains 14 tasks in five families (Fig. 
+4
+b, c).
+Grasp tasks pick up a moving target, and Place tasks put a held object into a moving
+receptacle.
+Pass tasks guide a wand along a rotating wire without contact, Capture tasks catch a
+rolling or sliding object, and the Impact task grasps a part after a striker hits it.
+Target speeds range from 0.03 to 1.14 m/s.
+The tasks also differ in what decides success.
+In the seven rotation-sensitive tasks, the target rotates and its orientation matters
+at contact.
+In the nine context-active tasks, an obstacle limits the clearance or a driver such as
+a conveyor, ramp, or striker moves the target.
+
+4.1 
+Construction
+
+OnTimeBench
+ is built in MuJoCo and robosuite 
+[
+44
+, 
+66
+]
+ with a Franka Panda arm
+controlled at 20 Hz.
+Each scene samples the target’s initial state and motion parameters within
+task-specific ranges and is kept only if it is physically feasible.
+A task-specific expert with privileged simulator state provides 800
+demonstrations per task.
+A demonstration is kept only if the expert succeeds, a replay of its actions reproduces
+the episode, and its path and jerk pass quality checks.
+We select configurations on 1,400 development scenes and report all 
+OnTimeBench
+ results on
+1,400 held-out test scenes, 100 per task, shared by all methods.
+
+4.2 
+Evaluation Protocol
+
+Figure 5
+: 
+Native-latency execution.
+ Query 
+ captures a frame at 
+
+and runs for 
+ while the world keeps moving. Its chunk takes over at the next
+control boundary 
+, with 
+,
+where the next query captures. Overdue commands before 
+ are skipped, and the
+previous chunk runs until then.
+
+In 
+Native
+, physics advances during each query by the method’s latency,
+drawn per query from its distribution measured at batch size 1 on one RTX 5090.
+All methods share one executor, which hands over each chunk at the next control
+boundary (Fig. 
+5
+).
+
++150 ms
+ adds 150 ms to the native latency of every method, and 
+Paused
+
+pauses the world during inference.
+We report the task-balanced success rate (SR) and the p95 time-to-action, the time from
+capturing an observation until its first command is available.
+Task definitions and the full protocol are in the supplementary material.
+
+5 
+Experiments
+
+We evaluate FoveaWAM on 
+OnTimeBench
+, on DOMINO 
+[
+14
+]
+, and on a real robot. On 
+OnTimeBench
+,
+the paused, native, and delayed settings separate how well a policy represents the
+target’s motion from how quickly it acts.
+
+5.1 
+Implementation Details
+
+Baselines.
+
+We compare with the reactive policies ACT 
+[
+63
+]
+ and Diffusion Policy (DP)
+
+[
+10
+]
+, the vision–language–action model (VLA) 
+ 
+[
+4
+]
+, the dynamic VLAs DynamicVLA
+
+[
+50
+]
+ and PUMA 
+[
+14
+]
+, the WAM OpenWAM-
+ 
+[
+45
+]
+,
+and the dynamic WAM DynamicWAM 
+[
+29
+]
+. Each baseline keeps its official
+architecture and training recipe and is trained on the same demonstrations. To isolate
+the effect of target-motion input, 
+ and DynamicWAM also run with our SE(3)
+history tokens (+SE(3)). OpenWAM-
+ also runs without its official caching and
+compilation (off).
+
+Model and training.
+
+The FoveaWAM transformer has 12 layers of width 1024 with 16
+heads and 271.8M trainable parameters on top of the frozen
+MAE ViT-B/16. On 
+OnTimeBench
+, it is trained from scratch on the agent view for 10 epochs (25,870 updates) and runs in compiled BF16.
+
+Table 1
+: 
+Quantitative comparison on 
+OnTimeBench
+.
+ SR (%) at native latency, with 150 ms added, and with the world paused. p95: time-to-action on one RTX 5090. Baselines use only the main view. Best and second best are highlighted.
+
+History
+
+SR (%) 
+
+Method
+
+RGB
+
+Flow
+
+SE(3)
+
+Native
+
+ 
+
++150
+
+ms
+
+Paused
+
+ 
+
+p95
+
+(ms)
+
+ACT 
+[
+63
+]
+
+41.6
+
+24.6
+
+40.6
+
+5.8
+
+DP 
+[
+10
+]
+
+31.9
+
+16.1
+
+32.0
+
+68.9
+
+ 
+[
+4
+]
+
+54.4
+
+28.1
+
+66.6
+
+59.6
+
++SE(3)
+
+58.7
+
+28.0
+
+76.0
+
+61.2
+
+DynamicVLA 
+[
+50
+]
+
+51.1
+
+23.5
+
+54.9
+
+97.3
+
+PUMA 
+[
+14
+]
+
+61.4
+
+31.1
+
+53.1
+
+60.6
+
+OpenWAM-
+ 
+[
+45
+]
+
+46.1
+
+24.8
+
+58.7
+
+151.7
+
+OpenWAM-
+ (off)
+
+15.8
+
+10.4
+
+58.4
+
+466.3
+
+DynamicWAM 
+[
+29
+]
+
+41.1
+
+20.6
+
+49.6
+
+149.6
+
+DynamicWAM+SE(3)
+
+41.7
+
+24.9
+
+64.0
+
+153.3
+
+FoveaWAM (Ours)
+
+82.1
+
+34.1
+
+90.3
+
+15.1
+
+Figure 6
+: 
+Latency on 
+OnTimeBench
+.
+ (a, b) SR versus added delay, for all policies (a) and for base versus +SE(3) variants (b), with 95% CIs. (c) Paused
+and native SR, colored by class as in Fig. 
+1
+, with rank changes
+(
+/
+).
+
+5.2 
+Dynamic Manipulation Results
+
+Results on 
+OnTimeBench
+.
+
+As shown in Table 
+1
+, FoveaWAM achieves the highest SR in all three settings.
+At native latency, it reaches 82.1%, 20.8 points above the strongest baseline, PUMA
+(61.4%), and it has the highest or tied-highest SR on 13 of the 14 tasks, as
+reported in the supplementary material. The margins are largest where a moving receptacle
+or the target’s orientation decides success. They reach 30 and 55 points on placement
+into translating and rotating receptacles and 28 points on full wire passage. This
+lead comes from the role-aware design. Given the same SE(3) history as input,
+
+ and DynamicWAM reach 58.7% and 41.7%, which is 23.4 and 40.4 points below
+FoveaWAM.
+
+Representation and latency.
+
+FoveaWAM leads both in how it represents the target’s motion and in how quickly it acts.
+With the world paused, inference costs no time, and FoveaWAM still leads 
++SE(3), which reads the same target poses, by 14.3 points. This
+gap reflects the representation alone. At native latency, FoveaWAM loses 8.1 points and
+
++SE(3) loses 17.3, so the gap widens to 23.4 points. Low latency alone is not
+enough. ACT is the only method faster than FoveaWAM, but it reaches 41.6%, which is 40.5
+points below FoveaWAM. FoveaWAM leads at every added delay (Fig. 
+6
+a). With 150 ms
+added, each chunk must cover a longer open-loop interval. Every method falls to
+35% or below, and the margin over PUMA narrows to 3.0 points.
+
+Table 2
+: 
+Quantitative comparison on DOMINO
+ 
+[
+14
+]
+. SR (%) on its 24 single-arm tasks, 8 Intercept and 16 Track. MS: manipulation score. Best and second best are highlighted.
+
+Method
+
+Intercept
+
+Track
+
+All 
+
+MS 
+
+23.8
+
+8.1
+
+13.3
+
+27.8
+
+DynamicWAM
+
+16.8
+
+31.9
+
+26.9
+
+41.4
+
+PUMA
+
+36.3
+
+12.2
+
+20.2
+
+35.4
+
+FoveaWAM (Ours)
+
+29.4
+
+55.5
+
+46.8
+
+62.0
+
+Motion input under latency.
+
+Precise motion input helps only when the action arrives in time
+(Fig. 
+6
+b). The SE(3) history raises 
+ by 9.4 points with the
+world paused but by only 4.3 points at native latency. With 50 and 100 ms added, it
+lowers the SR of 
+ by 5.7 and 7.5 points, and the 95% intervals do not
+overlap. The history describes the target at capture time, so its value decays as the
+action is delayed. FoveaWAM is designed to keep this value. It encodes the history
+in 16 tokens and acts within one control period, so the history is still current when
+the action executes. The history therefore adds 19.6 points to FoveaWAM at native latency,
+against 4.3 points for 
+ (Table 
+3
+).
+
+Paused evaluation.
+
+Pausing the world hides the cost of latency and reorders 9 of the 11 methods
+(Fig. 
+6
+c). The two OpenWAM-
+ deployments share one policy and
+reach 58.7% and 58.4% with the world paused. At native latency, with p95 of 151.7 and
+466.3 ms, they reach 46.1% and 15.8%. The three slowest methods all lose
+rank, and the strongest baseline changes from 
++SE(3) to PUMA.
+
+Results on DOMINO.
+
+DOMINO 
+[
+14
+]
+ has its own tasks, demonstrations, and evaluator. We train FoveaWAM,
+
+, DynamicWAM, and PUMA on its 24 single-arm Franka tasks. FoveaWAM achieves
+46.8% SR and 62.0 MS, 19.9 and 20.6 points above the strongest baseline, DynamicWAM
+(Table 
+2
+). The evaluator pauses physics during inference, so latency
+brings no advantage. This lead therefore shows the value of the role-aware
+representation itself. With its lead in the paused setting of 
+OnTimeBench
+, FoveaWAM leads
+whether or not latency is counted. The margin is largest on the 16
+Track tasks, where the robot must keep a consistent pose relative to the moving target.
+The SE(3) trajectory describes the target’s future poses directly, and FoveaWAM reaches
+55.5% against 31.9%. PUMA leads on the 8 Intercept tasks, which require a
+single contact with the target (36.3% against 29.4%).
+
+5.3 
+Ablation Study
+
+Table 
+3
+ ablates each part of the role-aware design. All
+variants except 
+w/o history
+ change only the training supervision and run at the
+latency of FoveaWAM.
+
+Table 3
+: 
+Ablation results on 
+OnTimeBench
+.
+ SR (%) of FoveaWAM and 
+ (points) for each variant. Rot./Ctx.: rotation-sensitive and context-active tasks.
+
+Success rate, all tasks
+
+Groups (Native)
+
+Paused
+
+Native
+
++150 ms
+
+Rot.
+
+Ctx.
+
+FoveaWAM
+
+90.3
+
+82.1
+
+34.1
+
+80.4
+
+82.7
+
+Target motion history
+
+w/o history
+
+19.5
+
+19.6
+
++0.2
+
+24.0
+
+2.3
+
+Precision allocation
+
+Uniform coarse flow
+
++4.4
+
+4.5
+
+0.5
+
+8.6
+
+4.6
+
+Uniform fine flow
+
++1.3
+
++0.8
+
+0.9
+
+3.4
+
+2.6
+
+w/o flow
+
++3.1
+
+4.2
+
+1.4
+
+11.7
+
+3.9
+
+Future supervision
+
+w/o future
+
++0.2
+
+4.3
+
+3.4
+
+12.6
+
+2.1
+
+w/o 
+
+3.8
+
+2.6
+
+1.9
+
+11.6
+
++0.1
+
+Effect of target motion history.
+
+The pose history is the most important input. Removing it while keeping the
+current pose reduces SR by 19.6 points at native latency and by 24.0 points on
+rotation-sensitive tasks. The drop is the same with the world paused (19.5 points). A
+single pose shows where the target is but not how it moves. The history supplies the
+velocity and acceleration that commands must anticipate.
+
+Effect of role-aware prediction.
+
+Each role needs its own form of prediction. Replacing the SE(3) trajectory with flow at
+the density of the surroundings reduces SR by 4.5 points, and by 8.6 points on
+rotation-sensitive tasks. At this density, the few patches on the target cannot
+determine its rotation. A 
+ denser flow recovers the overall SR but still
+trails FoveaWAM by 3.4 and 2.6 points on rotation-sensitive and context-active tasks.
+Removing the sparse flow reduces SR by 4.2 points, and by 11.7 points on
+rotation-sensitive tasks, because the flow shapes the patch tokens that the action
+stream reads near contact. One target trajectory and 196 flow points thus match
+3,136 uniform flow points overall and surpass them where rotation and context matter.
+
+Effect of future supervision.
+
+Supervising only the current target state instead of its future reduces SR by 4.3
+points, and by 12.6 points on rotation-sensitive tasks, although the prediction heads
+never run at deployment. Prediction thus helps through the representation it
+shapes. The appearance losses 
+ also help,
+mainly on rotation-sensitive tasks.
+
+Prediction in a moving world.
+
+The three variants that weaken future prediction (
+uniform coarse flow
+,
+
+w/o flow
+, 
+w/o future
+) each lose more than 4 points at native latency
+but none with the world paused. With the world paused, a policy replans every 50 ms
+and executes only the command for the capture time. At native latency, the
+15.1 ms inference of FoveaWAM delays execution to the next control boundary, 50 ms after
+capture. The representation must then encode where the target will be. Removing the history or
+
+ instead lowers SR in both settings. Paused evaluation hides the
+value of prediction, and 
+OnTimeBench
+ reveals it.
+
+5.4 
+Real-Robot Evaluation
+
+Figure 7
+: 
+Real-robot tasks.
+ Arrows show the motion of the target or the moving
+box before contact.
+
+We evaluate on six dynamic tasks with a Flexiv Rizon 4s arm with a GN01 gripper (Fig. 
+7
+). All methods are trained on the same 600 teleoperated
+demonstrations and evaluated for 20 trials per task. FoveaWAM starts from a
+DROID-pretrained base 
+[
+21
+]
+ and uses RGB-D and online target pose estimates from
+one fixed camera. ACT and 
+ use RGB images from the fixed and wrist cameras. Further
+details on the tasks and platform are in the supplementary material.
+
+Table 4
+: 
+Real-robot results.
+ SR (%) over 20 trials per task.
+
+Method
+
+ 
+
+Conveyor
+
+grasp
+
+ 
+
+Box
+
+place
+
+ 
+
+Turntable
+
+grasp
+
+ 
+
+Toy car
+
+grasp
+
+ 
+
+Ball
+
+intercept
+
+ 
+
+Ramp cart
+
+grasp
+
+All 
+
+ACT
+
+0
+
+0
+
+0
+
+0
+
+10
+
+0
+
+1.7
+
+45
+
+75
+
+30
+
+20
+
+15
+
+0
+
+30.8
+
+FoveaWAM
+
+(Ours)
+
+70
+
+80
+
+60
+
+35
+
+35
+
+10
+
+48.3
+
+On the robot, the scene keeps moving during inference, as in 
+Native
+. FoveaWAM achieves the highest SR on all six tasks and 48.3% overall, 17.5 points above
+
+ (Table 
+4
+). The largest gains, 30 and 25 points, are on
+turntable and conveyor grasping. ACT, the fastest policy, succeeds in only 2 of 120
+trials. On ramp cart grasping, the hardest task, only FoveaWAM succeeds
+(2 of 20 trials).
+
+6 
+Conclusion
+
+We presented FoveaWAM, a native 4D world–action model that allocates prediction precision
+by role, with precise prediction for the target, coarse prediction for its surroundings,
+and none for the static scene. This allocation alleviates the tension between accurate
+prediction and timely action. FoveaWAM acts in 15.1 ms and outperforms the strongest
+baselines on 
+OnTimeBench
+, DOMINO, and real robots. We also introduced 
+OnTimeBench
+, which evaluates
+every policy at its native latency and shows that paused evaluation overestimates slow
+policies. FoveaWAM currently assumes a rigid target whose pose can be tracked online, and
+we leave articulated and deformable targets to future work.
+
+LLM Usage Statement
+
+We used OpenAI Codex to assist with literature review, code implementation and
+debugging, experiment execution, and language editing of the manuscript. Codex
+also assisted in developing plotting code and refining figure and manuscript
+layouts. The authors reviewed AI-assisted content, checked references against
+original sources, and validated the implementation through testing and experiments.
+The authors take full responsibility for the final manuscript, experimental
+results, and conclusions.
+
+References
+
+[1]
+
+P. K. Allen, A. Timcenko, B. Yoshimi, and P. Michelman
+ (1993)
+
+Automated tracking and grasping of a moving object with a robotic hand-eye system
+.
+
+IEEE Transactions on Robotics and Automation
+ 
+9
+ (
+2
+), 
+pp. 152–165
+.
+
+External Links: 
+Document
+
+Cited by: 
+§2
+.
+
+[2]
+
+B. Bäuml, T. Wimböck, and G. Hirzinger
+ (2010)
+
+Kinematically optimal catching a flying ball with a hand-arm-system
+.
+
+In 
+IEEE/RSJ International Conference on Intelligent Robots and Systems
+,
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+[3]
+
+H. Bharadhwaj, R. Mottaghi, A. Gupta, and S. Tulsiani
+ (2024)
+
+Track2Act: predicting point tracks from internet videos enables generalizable robot manipulation
+.
+
+In 
+European Conference on Computer Vision
+,
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+[4]
+
+K. Black, N. Brown, J. Darpinian, 
+et al.
+ (2025)
+
+: A vision-language-action model with open-world generalization
+.
+
+In 
+Proceedings of The 9th Conference on Robot Learning
+,
+
+Proceedings of Machine Learning Research
+, Vol. 
+305
+, 
+pp. 17–40
+.
+
+External Links: 
+Link
+
+Cited by: 
+Table S5
+,
+
+§1
+,
+
+§5.1
+,
+
+Table 1
+.
+
+[5]
+
+K. Black, M. Galliker, and S. Levine
+ (2025)
+
+Real-time execution of action chunking flow policies
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+Vol. 
+38
+, 
+pp. 33383–33407
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§B.3
+,
+
+§2
+.
+
+[6]
+
+A. Byravan and D. Fox
+ (2017)
+
+SE3-Nets: learning rigid body motion using deep neural networks
+.
+
+In 
+IEEE International Conference on Robotics and Automation
+,
+
+pp. 173–180
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+[7]
+
+A. Byravan, F. Leeb, F. Meier, and D. Fox
+ (2018)
+
+SE3-Pose-Nets: structured deep dynamics models for visuomotor control
+.
+
+In 
+IEEE International Conference on Robotics and Automation
+,
+
+pp. 3339–3346
+.
+
+External Links: 
+Document
+
+Cited by: 
+§2
+.
+
+[8]
+
+C. Chang and Z. Deng
+ (2026)
+
+DynaWM: a base-VLA-guided world foundation model for moving-object manipulation
+.
+
+arXiv preprint arXiv:2607.02604
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+[9]
+
+H. K. Cheng, S. W. Oh, B. Price, J. Lee, and A. Schwing
+ (2024)
+
+Putting the object back into video object segmentation
+.
+
+In 
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition
+,
+
+pp. 3151–3161
+.
+
+External Links: 
+Document
+
+Cited by: 
+Appendix D
+.
+
+[10]
+
+C. Chi, S. Feng, Y. Du, Z. Xu, E. Cousineau, B. C. M. Burchfiel, and S. Song
+ (2023)
+
+Diffusion policy: visuomotor policy learning via action diffusion
+.
+
+In 
+Proceedings of Robotics: Science and Systems
+,
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+Table S5
+,
+
+§1
+,
+
+§5.1
+,
+
+Table 1
+.
+
+[11]
+
+I. Chuang, J. Zou, A. Lee, D. Gao, and I. Soltani
+ (2026)
+
+Look, focus, act: efficient and robust robot learning via human gaze and foveated vision transformers
+.
+
+In 
+IEEE International Conference on Robotics and Automation
+,
+
+pp. 18506–18513
+.
+
+External Links: 
+Document
+
+Cited by: 
+§2
+.
+
+[12]
+
+C. A. Curcio, K. R. Sloan, R. E. Kalina, and A. E. Hendrickson
+ (1990)
+
+Human photoreceptor topography
+.
+
+Journal of Comparative Neurology
+ 
+292
+ (
+4
+), 
+pp. 497–523
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+.
+
+[13]
+
+D. Emukpere, R. Deffayet, B. Wu, R. Brégier, M. Niemaz, J. Meunier, D. Proux, J. Renders, and S. Kim
+ (2025)
+
+Disentangled object-centric image representation for robotic manipulation
+.
+
+In 
+IEEE/RSJ International Conference on Intelligent Robots and Systems
+,
+
+pp. 15873–15879
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+[14]
+
+H. Fang, S. Li, S. Wang, X. Xi, D. Liang, and X. Bai
+ (2026)
+
+Towards generalizable robotic manipulation in dynamic environments
+.
+
+In 
+European Conference on Computer Vision
+,
+
+Lecture Notes in Computer Science
+, Vol. 
+17023
+, 
+pp. 314–333
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+Table S5
+,
+
+§C.2
+,
+
+Figure 2
+,
+
+Figure 2
+,
+
+§1
+,
+
+§1
+,
+
+§1
+,
+
+§1
+,
+
+§2
+,
+
+§2
+,
+
+Figure 4
+,
+
+Figure 4
+,
+
+§4
+,
+
+§5.1
+,
+
+§5.2
+,
+
+Table 1
+,
+
+Table 2
+,
+
+Table 2
+,
+
+§5
+.
+
+[15]
+
+J. Guo, X. Ma, Y. Wang, M. Yang, H. Liu, and Q. Li
+ (2026)
+
+FlowDreamer: a RGB-D world model with flow-based motion representations for robot manipulation
+.
+
+IEEE Robotics and Automation Letters
+ 
+11
+ (
+3
+), 
+pp. 2466–2473
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+[16]
+
+K. He, X. Chen, S. Xie, Y. Li, P. Dollár, and R. Girshick
+ (2022)
+
+Masked autoencoders are scalable vision learners
+.
+
+In 
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition
+,
+
+pp. 16000–16009
+.
+
+External Links: 
+Link
+
+Cited by: 
+§A.2
+,
+
+§3.2
+.
+
+[17]
+
+C. Hsu, B. Wen, J. Xu, Y. Narang, X. Wang, Y. Zhu, J. Biswas, and S. Birchfield
+ (2025)
+
+SPOT: SE(3) pose trajectory diffusion for object-centric manipulation
+.
+
+In 
+IEEE International Conference on Robotics and Automation
+,
+
+pp. 4853–4860
+.
+
+External Links: 
+Document
+
+Cited by: 
+Figure 2
+,
+
+Figure 2
+,
+
+§1
+,
+
+§2
+.
+
+[18]
+
+W. Huang, Y. Chao, A. Mousavian, M. Liu, D. Fox, K. Mo, and L. Fei-Fei
+ (2026)
+
+PointWorld: scaling 3D world models for in-the-wild robotic manipulation
+.
+
+In 
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition
+,
+
+pp. 20765–20779
+.
+
+External Links: 
+Link
+
+Cited by: 
+Appendix D
+,
+
+§2
+.
+
+[19]
+
+N. Karaev, Y. Makarov, J. Wang, N. Neverova, A. Vedaldi, and C. Rupprecht
+ (2025)
+
+CoTracker3: simpler and better point tracking by pseudo-labelling real videos
+.
+
+In 
+Proceedings of the IEEE/CVF International Conference on Computer Vision
+,
+
+pp. 6013–6022
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+Appendix D
+.
+
+[20]
+
+J. Kerr, K. Hari, E. Weber, C. M. Kim, B. Yi, T. Bonnen, K. Goldberg, and A. Kanazawa
+ (2025)
+
+Eye, robot: learning to look to act with a BC-RL perception-action loop
+.
+
+In 
+Proceedings of The 9th Conference on Robot Learning
+,
+
+Proceedings of Machine Learning Research
+, Vol. 
+305
+, 
+pp. 3647–3664
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+[21]
+
+A. Khazatsky, K. Pertsch, S. Nair, 
+et al.
+ (2024)
+
+DROID: a large-scale in-the-wild robot manipulation dataset
+.
+
+In 
+Proceedings of Robotics: Science and Systems
+,
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+Appendix D
+,
+
+§5.4
+.
+
+[22]
+
+H. Kim, Y. Ohmura, and Y. Kuniyoshi
+ (2021)
+
+Gaze-based dual resolution deep imitation learning for high-precision dexterous robot manipulation
+.
+
+IEEE Robotics and Automation Letters
+ 
+6
+ (
+2
+), 
+pp. 1630–1637
+.
+
+External Links: 
+Document
+
+Cited by: 
+§2
+.
+
+[23]
+
+S. Li, Y. Gao, D. Sadigh, and S. Song
+ (2025)
+
+Unified video action model
+.
+
+In 
+Proceedings of Robotics: Science and Systems
+,
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+,
+
+§3.4
+.
+
+[24]
+
+H. Liao, P. Wang, S. Chen, K. Cheng, X. Chen, Y. Lin, M. Lin, Z. Liang, X. Fan, C. Xing, D. Niu, Y. Wei, and W. Zheng
+ (2026)
+
+DynamicManip: enabling dynamic manipulation from a single static demonstration
+.
+
+arXiv preprint arXiv:2608.01452
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+[25]
+
+Y. Lipman, R. T. Q. Chen, H. Ben-Hamu, M. Nickel, and M. Le
+ (2023)
+
+Flow matching for generative modeling
+.
+
+In 
+International Conference on Learning Representations
+,
+
+External Links: 
+Link
+
+Cited by: 
+§3.4
+.
+
+[26]
+
+S. Liu, Z. Zeng, T. Ren, F. Li, H. Zhang, J. Yang, Q. Jiang, C. Li, J. Yang, H. Su, J. Zhu, and L. Zhang
+ (2024)
+
+Grounding DINO: marrying DINO with grounded pre-training for open-set object detection
+.
+
+In 
+European Conference on Computer Vision
+,
+
+pp. 38–55
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+Appendix D
+.
+
+[27]
+
+Y. Liu, J. Hamid, A. Xie, Y. Lee, M. Du, and C. Finn
+ (2025)
+
+Bidirectional decoding: improving action chunking via guided test-time sampling
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Vol. 
+2025
+, 
+pp. 4594–4627
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+[28]
+
+Y. Liu, P. Sun, S. Li, Y. Xie, L. Zhang, X. Chao, S. Dong, F. Chen, X. Zhang, and W. Ding
+ (2026)
+
+OA-WAM: object-addressable world action model for robust robot manipulation
+.
+
+arXiv preprint arXiv:2605.06481
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+[29]
+
+Y. Lou, H. Gao, X. Zhu, Z. Qiao, X. Han, Y. Yang, Y. Ye, B. Yao, and Z. Pang
+ (2026)
+
+DynamicWAM: dual-path motion conditioning for world-action models in dynamic manipulation
+.
+
+arXiv preprint arXiv:2608.00793
+.
+
+External Links: 
+Link
+
+Cited by: 
+Table S5
+,
+
+§1
+,
+
+§1
+,
+
+§2
+,
+
+§5.1
+,
+
+Table 1
+.
+
+[30]
+
+S. Ma, Y. Zhang, B. Zhang, Q. Wu, J. Zhai, D. Wei, and X. Huang
+ (2026)
+
+ForeTime-VLA: causal future-token distillation from a world action model for conveyor-belt manipulation
+.
+
+arXiv preprint arXiv:2608.20735
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+[31]
+
+L. Manuelli, W. Gao, P. Florence, and R. Tedrake
+ (2022)
+
+kPAM: keypoint affordances for category-level robotic manipulation
+.
+
+In 
+Robotics Research: The 19th International Symposium ISRR
+,
+
+Springer Proceedings in Advanced Robotics
+, Vol. 
+20
+, 
+pp. 132–157
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+[32]
+
+N. Marturi, M. Kopicki, A. Rastegarpanah, 
+et al.
+ (2019)
+
+Dynamic grasp and trajectory planning for moving objects
+.
+
+Autonomous Robots
+ 
+43
+ (
+5
+), 
+pp. 1241–1256
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+[33]
+
+N. Ravi, V. Gabeur, Y. Hu, R. Hu, C. Ryali, T. Ma, H. Khedr, R. Rädle, C. Rolland, L. Gustafson, E. Mintun, J. Pan, K. V. Alwala, N. Carion, C. Wu, R. Girshick, P. Dollár, and C. Feichtenhofer
+ (2025)
+
+SAM 2: segment anything in images and videos
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Vol. 
+2025
+, 
+pp. 28085–28128
+.
+
+External Links: 
+Link
+
+Cited by: 
+Appendix D
+.
+
+[34]
+
+R. Rosenholtz
+ (2016)
+
+Capabilities and limitations of peripheral vision
+.
+
+Annual Review of Vision Science
+ 
+2
+, 
+pp. 437–457
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+.
+
+[35]
+
+M. Shridhar, L. Manuelli, and D. Fox
+ (2023)
+
+Perceiver-actor: a multi-task transformer for robotic manipulation
+.
+
+In 
+Conference on Robot Learning
+,
+
+Proceedings of Machine Learning Research
+, Vol. 
+205
+, 
+pp. 785–799
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+[36]
+
+M. Shukor, D. Aubakirova, F. Capuano, P. Kooijmans, S. Palma, 
+et al.
+ (2025)
+
+SmolVLA: a vision-language-action model for affordable and efficient robotics
+.
+
+arXiv preprint arXiv:2506.01844
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+[37]
+
+O. Siméoni, H. V. Vo, M. Seitzer, F. Baldassarre, M. Oquab, C. Jose, V. Khalidov, M. Szafraniec, S. Yi, M. Ramamonjisoa, 
+et al.
+ (2026)
+
+DINOv3
+.
+
+Transactions on Machine Learning Research
+.
+
+External Links: 
+Link
+
+Cited by: 
+§A.3
+.
+
+[38]
+
+R. Soraki, H. Bharadhwaj, A. Farhadi, and R. Mottaghi
+ (2026)
+
+ObjectForesight: predicting future 3D object trajectories from human videos
+.
+
+In 
+European Conference on Computer Vision
+,
+
+Lecture Notes in Computer Science
+, Vol. 
+17062
+, 
+pp. 437–453
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+[39]
+
+H. Strasburger, I. Rentschler, and M. Jüttner
+ (2011)
+
+Peripheral vision and pattern recognition: a review
+.
+
+Journal of Vision
+ 
+11
+ (
+5
+), 
+pp. 13
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+.
+
+[40]
+
+Y. Su, S. Chen, H. Shi, M. Liu, Z. Zhang, N. Huang, W. Zhong, Z. Zhu, Y. Liu, and X. Liu
+ (2026)
+
+World guidance: world modeling in condition space for action generation
+.
+
+In 
+Proceedings of the 43rd International Conference on Machine Learning
+,
+
+Proceedings of Machine Learning Research
+, Vol. 
+306
+, 
+pp. 115917–115933
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+[41]
+
+S. N. Syed, A. Jakobsson, H. Hao, and J. Ichnowski
+ (2026)
+
+Intercepting the future: latent-space predictive world model for dynamic VLA manipulation
+.
+
+In 
+Conference on Robot Learning
+,
+
+External Links: 
+Link
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+[42]
+
+J. Tang, Y. Sun, Y. Zhao, S. Yang, Y. Lin, Z. Zhang, J. Hou, Y. Lu, Z. Liu, and S. Han
+ (2025)
+
+VLASH: real-time VLAs via future-state-aware asynchronous inference
+.
+
+arXiv preprint arXiv:2512.01031
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+[43]
+
+Y. Tian, S. Yang, J. Zeng, P. Wang, D. Lin, H. Dong, and J. Pang
+ (2025)
+
+Predictive inverse dynamics models are scalable learners for robotic manipulation
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Vol. 
+2025
+, 
+pp. 92033–92052
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+[44]
+
+E. Todorov, T. Erez, and Y. Tassa
+ (2012)
+
+MuJoCo: a physics engine for model-based control
+.
+
+In 
+IEEE/RSJ International Conference on Intelligent Robots and Systems
+,
+
+pp. 5026–5033
+.
+
+External Links: 
+Document
+
+Cited by: 
+§B.2
+,
+
+§4.1
+.
+
+[45]
+
+Y. Wang, S. Huang, M. Li, C. Zhang, J. Liang, W. Jin, Y. Chen, X. Chi, D. Zhou, Q. Yu, Y. Wang, Y. Rui, S. Yao, Z. Yuan, Z. Shen, K. Zhu, Z. Zhu, N. Gao, X. Chi, G. He, S. Zhang, H. Dong, L. Shao, and H. Zhao
+ (2026)
+
+OpenWAM: an open, modular exploration towards systematic world-action model pretraining
+.
+
+Note: 
+CoRL 2026 Workshop on From Generative Models to Robot Actions (G2A)Non-archival workshop paper. arXiv:2609.07398
+
+External Links: 
+Link
+
+Cited by: 
+Table S5
+,
+
+Figure 2
+,
+
+Figure 2
+,
+
+§1
+,
+
+§2
+,
+
+§5.1
+,
+
+Table 1
+.
+
+[46]
+
+B. Wen, M. Trepte, J. Aribido, J. Kautz, O. Gallo, and S. Birchfield
+ (2025)
+
+FoundationStereo: zero-shot stereo matching
+.
+
+In 
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition
+,
+
+pp. 5249–5260
+.
+
+External Links: 
+Link
+
+Cited by: 
+Appendix D
+.
+
+[47]
+
+B. Wen, W. Yang, J. Kautz, and S. Birchfield
+ (2024)
+
+FoundationPose: unified 6D pose estimation and tracking of novel objects
+.
+
+In 
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition
+,
+
+pp. 17868–17879
+.
+
+External Links: 
+Link
+
+Cited by: 
+Appendix D
+.
+
+[48]
+
+C. Wen, X. Lin, J. I. R. So, K. Chen, Q. Dou, Y. Gao, and P. Abbeel
+ (2024)
+
+Any-point trajectory modeling for policy learning
+.
+
+In 
+Proceedings of Robotics: Science and Systems
+,
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+[49]
+
+H. Wu, Y. Jing, C. Cheang, G. Chen, J. Xu, X. Li, M. Liu, H. Li, and T. Kong
+ (2024)
+
+Unleashing large-scale video generative pre-training for visual robot manipulation
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Vol. 
+2024
+, 
+pp. 10641–10662
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+[50]
+
+H. Xie, B. Wen, J. Zheng, Z. Chen, F. Hong, H. Diao, and Z. Liu
+ (2026)
+
+DynamicVLA: a vision-language-action model for dynamic object manipulation
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+External Links: 
+Link
+
+Cited by: 
+§B.3
+,
+
+Table S5
+,
+
+§1
+,
+
+§2
+,
+
+§5.1
+,
+
+Table 1
+.
+
+[51]
+
+M. Xu, Z. Xu, Y. Xu, C. Chi, G. Wetzstein, M. Veloso, and S. Song
+ (2025)
+
+Flow as the cross-domain manipulation interface
+.
+
+In 
+Conference on Robot Learning
+,
+
+Proceedings of Machine Learning Research
+, Vol. 
+270
+, 
+pp. 2475–2499
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+[52]
+
+W. Yan and J. Chu
+ (2025)
+
+FoundationPose++
+.
+
+Note: 
+https://github.com/teal024/FoundationPose-plus-plus
+
+Cited by: 
+Appendix D
+.
+
+[53]
+
+S. Ye, Y. Ge, K. Zheng, S. Gao, S. Yu, G. Kurian, S. Indupuru, 
+et al.
+ (2026)
+
+World action models are zero-shot policies
+.
+
+In 
+Conference on Robot Learning
+,
+
+External Links: 
+Link
+
+Cited by: 
+Figure 2
+,
+
+Figure 2
+,
+
+§1
+,
+
+§2
+.
+
+[54]
+
+H. Yu, H. Lin, J. Zhang, W. Zhang, C. Gu, H. Li, and P. Tan
+ (2026)
+
+MaskWAM: unifying mask prompting and prediction for world-action models
+.
+
+In 
+Conference on Robot Learning
+,
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+[55]
+
+C. Yuan, C. Wen, T. Zhang, and Y. Gao
+ (2025)
+
+General flow as foundation affordance for scalable robot learning
+.
+
+In 
+Conference on Robot Learning
+,
+
+Proceedings of Machine Learning Research
+, Vol. 
+270
+, 
+pp. 1541–1566
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+[56]
+
+S. Yuan, W. Zhao, X. Shi, H. Jiang, X. Guo, L. Liu, W. Liu, W. Sui, and X. Wang
+ (2026)
+
+DreamWAM: beyond RGB future prediction for world action models
+.
+
+arXiv preprint arXiv:2608.04996
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+[57]
+
+T. Yuan, Z. Dong, Y. Liu, and H. Zhao
+ (2026)
+
+Fast-WAM: do world action models need test-time future imagination?
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+External Links: 
+Link
+
+Cited by: 
+§2
+,
+
+§3.4
+.
+
+[58]
+
+P. Yun, S. Huang, H. Li, J. Li, J. Wang, and B. Yang
+ (2026)
+
+PhysMani: physics-principled 3D world model for dynamic object manipulation
+.
+
+In 
+European Conference on Computer Vision
+,
+
+Lecture Notes in Computer Science
+, Vol. 
+17074
+, 
+pp. 20–39
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§1
+,
+
+§1
+,
+
+§2
+,
+
+§2
+,
+
+§4
+.
+
+[59]
+
+Y. Ze, G. Zhang, K. Zhang, C. Hu, M. Wang, and H. Xu
+ (2024)
+
+3D diffusion policy: generalizable visuomotor policy learning via simple 3D representations
+.
+
+In 
+Proceedings of Robotics: Science and Systems
+,
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+[60]
+
+W. Zhang, H. Liu, Z. Qi, Y. Wang, X. Yu, J. Zhang, R. Dong, J. He, H. Wang, Z. Zhang, L. Yi, W. Zeng, and X. Jin
+ (2025)
+
+DreamVLA: a vision-language-action model dreamed with comprehensive world knowledge
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+Vol. 
+38
+, 
+pp. 24195–24228
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+[61]
+
+Y. Zhang, R. Wang, and X. Chen
+ (2025)
+
+Dynamic behavior cloning with temporal feature prediction: enhancing robotic arm manipulation in moving object tasks
+.
+
+IEEE Robotics and Automation Letters
+ 
+10
+ (
+6
+), 
+pp. 5209–5216
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+.
+
+[62]
+
+R. Zhao, Z. Zhang, Y. Su, W. Wang, J. Li, Z. Yang, F. E. H. Tay, M. H. Ang, and H. Zhu
+ (2026)
+
+SG-WAM: self-guided world modeling in geometry-aware policy space
+.
+
+arXiv preprint arXiv:2608.01397
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+[63]
+
+T. Z. Zhao, V. Kumar, S. Levine, and C. Finn
+ (2023)
+
+Learning fine-grained bimanual manipulation with low-cost hardware
+.
+
+In 
+Proceedings of Robotics: Science and Systems
+,
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+Table S5
+,
+
+§5.1
+,
+
+Table 1
+.
+
+[64]
+
+R. Zheng, J. Wang, S. Reed, 
+et al.
+ (2025)
+
+FLARE: robot learning with implicit world modeling
+.
+
+In 
+Proceedings of The 9th Conference on Robot Learning
+,
+
+Proceedings of Machine Learning Research
+, Vol. 
+305
+, 
+pp. 3952–3971
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2
+.
+
+[65]
+
+C. Zhu, R. Yu, S. Feng, B. Burchfiel, P. Shah, and A. Gupta
+ (2025)
+
+Unified world models: coupling video and action diffusion for pretraining on large robotic datasets
+.
+
+In 
+Proceedings of Robotics: Science and Systems
+,
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+[66]
+
+Y. Zhu, J. Wong, A. Mandlekar, R. Martín-Martín, A. Joshi, K. Lin, A. Maddukuri, S. Nasiriany, and Y. Zhu
+ (2020)
+
+Robosuite: a modular simulation framework and benchmark for robot learning
+.
+
+arXiv preprint arXiv:2009.12293
+.
+
+External Links: 
+Link
+
+Cited by: 
+§B.2
+,
+
+§4.1
+.
+
+Appendix A 
+Method and Training Details
+
+A.1 
+Contact Error Analysis
+
+Sec. 
+1
+ argues that prediction requirements differ by role.
+This section derives the allocation from the error at contact. We bound the error
+between the end effector and the target at the time a command executes, and assign
+each term to the target, the context, or the static scene
+(Sec. 
+3.1
+). Three conclusions follow. Target errors enter the
+contact directly and grow with the time between capture and execution, so the target
+requires a precise forecast and a short latency. Context errors change the outcome only
+when they exceed the clearance, so a coarse forecast suffices. The static scene
+contributes no error that grows over time, so the current frame suffices.
+Table 
+S1
+ summarizes this correspondence.
+
+A command of query 
+ executes at time 
+, where 
+ is the capture
+time of the frame. We call 
+ the lead of the command. A command can execute only
+after inference ends, so the lead is at least the inference latency and grows with it.
+Hats denote the estimates behind a policy’s commands.
+
+Target position.
+
+The target position at execution is 
+, where 
+ is the velocity at capture and 
+ is
+the remaining motion. Its estimate is 
+. Adding and subtracting 
+ bounds the position
+error by
+
+(S1)
+
+with 
+,
+
+, 
+, and
+
+. Each term requires different
+information. The localization error 
+ depends only on the current pose. The
+velocity term 
+ requires the recent motion of the target, which a single
+frame does not show. The dynamics term 
+ requires knowing how this motion
+will change. Under a constant acceleration 
+, 
+, and the history reveals 
+ as well. Collisions, rolling contact, and
+pushes depend on the context instead. The history matters
+even without inference delay, because the robot needs time to reach a moving target.
+Removing it therefore costs about as much with the world paused as at native latency (Table 
+3
+).
+
+Target orientation.
+
+We write the orientation at execution as 
+ and define its estimate in the same way. For rotations about
+a common axis, the orientation error 
+ satisfies
+
+(S2)
+
+where 
+, 
+, and 
+ correspond to the translation terms.
+General rotations add only terms of second order in the angles. Orientation error
+reaches the contact through a lever arm. A contact point at 
+ in the target
+frame, with 
+, lies at 
+ in the base frame. Its error is
+
+. The operator norm of
+
+ is 
+, so
+
+(S3)
+
+An error of 
+ at 
+ cm moves the contact by 8.7 mm. The target therefore
+needs an explicit rigid pose. Points sampled on the target determine its rotation only
+if they span this lever arm, and the few patches on a small target do not.
+
+Context.
+
+The context affects contact in two ways. It can block the path of the robot, and it can
+drive the target. Suppose the executed path keeps the robot and the carried object at
+least 
+ away from the predicted positions of the context. A collision then requires a
+context point to deviate from its prediction by at least 
+, so smaller errors do not
+change the outcome. When the clearance 
+ is much larger than the contact tolerance
+
+, a coarse forecast suffices for the context, whereas the target must still
+be predicted within 
+. A finer context forecast becomes necessary only when
+the clearance approaches the error of the coarse one. A context that drives the target,
+such as a conveyor or a ramp, enters through 
+ instead. Its effect appears in
+the motion of the target, so the future trajectory of the target already carries it.
+
+Static scene.
+
+The static scene does not move. The current frame gives its geometry up to sensing
+error, and none of its terms grows with the lead. It needs no forecast.
+
+Latency.
+
+Every target term except 
+ and 
+ grows with the lead. The
+velocity terms grow linearly, and 
+ grows faster when the target
+accelerates or is struck. A shorter latency reduces all of these terms at once. Conversely,
+a policy with 
+ times the latency of another has about 
+ times the lead, so it needs
+an 
+ times more accurate velocity estimate to keep the same velocity term.
+FoveaWAM therefore keeps both its inputs and its predictions compact. The remaining
+term 
+ comes from an error in the execution time. It vanishes when each command executes at its intended time, as for every method here (Appendix 
+B.3
+).
+
+Table S1
+: 
+Error terms and the parts of FoveaWAM that address them.
+ The terms come
+from Eqs. (
+S1
+)–(
+S3
+). The last column gives
+the ablation in Table 
+3
+ that removes each part.
+
+Term
+
+Role
+
+Part of FoveaWAM
+
+Ablation
+
+target
+
+current-pose token
+
+–
+
+target
+
+SE(3) pose history
+
+w/o history
+
+target
+
+future SE(3) supervision
+
+w/o future
+
+target
+
+SE(3) trajectory
+
+uniform coarse flow
+
+error below 
+
+context
+
+sparse 3D flow
+
+w/o flow
+
+geometry
+
+static
+
+current RGB-D frame
+
+–
+
+A.2 
+Architecture
+
+Table 
+S2
+ lists the hyperparameters of FoveaWAM.
+
+Table S2
+: 
+Hyperparameters of FoveaWAM on 
+OnTimeBench
+.
+
+Parameter
+
+Value
+
+Model
+
+Input image
+
+ RGB-D, one view
+
+Visual encoder
+
+MAE ViT-B/16, frozen
+
+History length
+
+8 steps
+
+Forecast horizons
+
+8
+
+Summary tokens
+
+16
+
+Layers
+
+12
+
+Width
+
+1024
+
+Heads
+
+16
+
+Feed-forward width
+
+4096
+
+Trainable parameters
+
+271.8M
+
+Action
+
+Action dimension
+
+7
+
+Chunk length
+
+8
+
+Euler steps
+
+5
+
+Training
+
+Optimizer
+
+Fused AdamW
+
+Betas
+
+Weight decay
+
+Learning rate
+
+LR schedule
+
+cosine, 5,174 warm-up updates
+
+Batch size
+
+512 windows
+
+Noise draws per query
+
+8
+
+Epochs
+
+10
+
+Reported checkpoint
+
+25,870 updates
+
+Gradient clipping
+
+0.1
+
+0.1
+
+Training precision
+
+BF16 compute, FP32 parameters
+
+Training hardware
+
+16 NVIDIA RTX PRO 6000 GPUs
+
+Training time
+
+about 24 h
+
+Scene tokens.
+
+The frozen MAE ViT-B/16 
+[
+16
+]
+ turns the RGB image into 196 patch
+tokens. Each patch token receives a learned view embedding and two linear embeddings.
+One embeds the mean valid depth of the patch. The other embeds the base-frame position
+
+ of its center pixel, back-projected with the depth map. A patch without
+valid depth at its center receives no position embedding. Only the patch tokens carry 3D
+rotary embeddings, computed from 
+. The same points
+
+ are the source points of the sparse 3D flow.
+
+State tokens.
+
+The 8 target-state tokens describe the target at the offsets
+
+ ms. Each is a 25-dimensional vector
+
+. Slots 0–6 describe the seven intervals between consecutive
+offsets, and slot 7 holds the current pose. Velocities and
+accelerations are finite differences over the elapsed times. Each dimension is
+standardized, and invalid dimensions are set to zero. Three
+flags mark whether the pose, the interval, and the acceleration are valid. A slot with
+no valid feature is masked out of attention. The robot tokens hold the end-effector
+position, rotation vector, and gripper opening at the same offsets.
+The 16 summary tokens are learned embeddings.
+
+Backbone and heads.
+
+In each layer, world and action tokens attend under the mask of
+Fig. 
+3
+(b). The two streams share the query, key, value, and
+output projections of the attention. Each stream has its own feed-forward network with
+SiLU activation and a hidden width of 4096. World tokens use layer normalization, and
+action tokens use adaptive layer normalization conditioned on the flow time 
+. Each
+prediction head is a linear layer on the final world-stream states, except the target
+reconstruction, which is a two-layer MLP. The pose head reads the mean summary state
+(
+, Eq. 
+3
+). The flow head reads each patch state and
+gives the displacement and visibility logit of its point at every horizon
+(
+, Eq. 
+2
+). All heads are skipped at deployment.
+
+Inference time.
+
+For each of the 900 profiled queries in Table 
+S3
+, we subtract the three stage times from the query’s wall time to obtain other query time.
+
+Table S3
+: 
+FoveaWAM timing.
+ The benchmark and stage profile use separate runs of the compiled BF16 policy at batch size 1 on one RTX 5090. Prediction heads were timed in eager BF16 on cached world features from one fixed window.
+
+Time in ms
+
+p50
+
+p95
+
+Table 
+1
+ benchmark
+
+14.59
+
+15.11
+
+Full query with profiling
+
+14.66
+
+15.57
+
+Observation encoding and H2D
+
+4.83
+
+5.28
+
+World stream
+
+3.93
+
+4.22
+
+Action stream
+
+4.27
+
+4.41
+
+Other query time
+
+1.64
+
+1.73
+
+Prediction heads, forward only
+
+0.37
+
+0.41
+
+A.3 
+Training
+
+Action labels.
+
+Each action token embeds one seven-dimensional command, which consists of a
+base-frame translation increment, a rotation vector that left-multiplies the current
+orientation, and a gripper command. Both increments are relative to the measured
+end-effector pose when the command is applied. Command 
+ of query 
+ is labeled with
+the demonstration command issued at 
+. In the post-impact grasp, labels follow the issue time (Eq. (
+S4
+)). Commands are
+standardized with training statistics.
+
+Prediction labels.
+
+Flow labels come from the simulator. The surface point at each patch center
+follows the ground-truth rigid motion of its MuJoCo geometry. A future point is visible
+if it projects onto the same geometry within a depth tolerance of
+
+, where 
+ is its depth. Invisible points still supervise displacement, with visibility label zero. Displacements are divided
+by the scale 
+ m, and the visibility term has weight 1. Pose labels are the target’s ground-truth poses. Horizons beyond the last frame of a demonstration are
+excluded from both losses.
+
+Auxiliary losses.
+
+ sums four terms. Three of them are squared errors on future
+metric depth at valid pixels, on the future RGB of surfaces that move by more than
+1 mm, and on future layer-normalized DINOv3 features 
+[
+37
+]
+.
+The fourth reconstructs the RGB of the current target region from the mean summary
+state with an absolute error.
+
+Optimization.
+
+Each batch holds 512 windows. A window contains up to eight consecutive queries from
+one demonstration, and each query has its own causal history. The world stream runs
+once per query, as at inference. Its keys and values are reused for eight independent
+draws of action noise and flow time, and the action loss averages over these draws.
+All experiments, including the baselines, the ablations, and DROID pretraining, ran on
+64 NVIDIA RTX PRO 6000 and 32 NVIDIA H100 GPUs. One training run of FoveaWAM takes about
+24 h on 16 of these RTX PRO 6000 GPUs.
+
+Appendix B 
+OnTimeBench
+ and Evaluation Protocol
+
+B.1 
+Tasks
+
+Table 
+S4
+ lists the target and context of each task (Sec. 
+3.1
+).
+
+The tasks differ in which terms of the decomposition in
+Appendix 
+A.1
+ matter. The target moves in every task, so the velocity
+term always applies. In the seven rotation-sensitive tasks, the target also rotates, and
+its orientation matters at contact. In the nine context-active tasks, the context
+limits the clearance or drives the target. In the oscillating, capture, and impact tasks, the motion of the target changes within the episode through oscillation, gravity, or a collision, so its current velocity is not enough. Fig. 
+4
+c shows all tasks.
+
+Table S4
+: 
+The fourteen 
+OnTimeBench
+ tasks.
+
+The target is the body whose pose the policy receives. For placement, it is the receptacle. For wire passage, it is the wire entry, and the rest of the wire is context.
+The context contains the obstacles and drivers of each task, and a dash means none.
+Speed is the linear speed of the target in m/s, or the angular speed of the wire. For the capture tasks, it is the speed at which the target leaves the ramp, measured over 100 held-out reference trajectories.
+A grasp requires contact on both fingerpads, a lift of at least 0.05 m, and a continuous hold of 0.5 s.
+An episode fails on unsafe contact, on leaving the workspace, on a drop, or at the time limit.
+Rot. marks the rotation-sensitive tasks, in which the target rotates before contact and
+its orientation matters at contact. Ctx. marks the context-active tasks, which have a
+context. Table 
+3
+ reports both groups.
+
+Task
+
+Target
+
+Context
+
+Motion
+
+Speed
+
+Success
+
+Limit (s)
+
+Group
+
+Grasp
+
+Harmonic grasp
+
+block
+
+–
+
+harmonic
+
+0.03–0.20
+
+grasp
+
+8
+
+Rot.
+
+Conveyor grasp
+
+part
+
+belt
+
+belt
+
+0.04–0.10
+
+grasp
+
+8
+
+Ctx.
+
+Translating grasp
+
+part
+
+–
+
+oscillating
+
+0.04–0.15
+
+grasp
+
+8
+
+–
+
+Rotating grasp
+
+part
+
+–
+
+oscillating, yaw
+
+0.04–0.15
+
+grasp
+
+8
+
+Rot.
+
+Occluded grasp
+
+part
+
+belt, canopy
+
+belt
+
+0.04–0.10
+
+grasp without canopy contact
+
+8
+
+Ctx.
+
+Place
+
+Moving receptacle
+
+receptacle
+
+–
+
+linear
+
+0.03–0.06
+
+held object at rest inside
+
+10
+
+–
+
+Rotating receptacle
+
+T-shaped receptacle
+
+–
+
+linear and yaw
+
+0.03–0.06
+
+held T-part at rest inside
+
+10
+
+Rot.
+
+Pass
+
+Wire passage
+
+wire entry
+
+wire
+
+rotation
+
+2.5–7.5
+∘
+/s
+
+align within 30 mm, pass without contact
+
+21
+
+Rot., Ctx.
+
+Full wire passage
+
+wire entry
+
+wire
+
+rotation
+
+2.5–7.5
+∘
+/s
+
+grasp wand, pass, exit, release
+
+32
+
+Rot., Ctx.
+
+Capture
+
+Ball capture
+
+ball
+
+ramp
+
+rolling
+
+0.67–1.14
+
+grasp before the tray
+
+6
+
+Ctx.
+
+Ball capture on table
+
+ball
+
+ramp
+
+rolling
+
+0.59–1.03
+
+grasp while rolling
+
+6
+
+Ctx.
+
+Slider capture
+
+slider
+
+ramp
+
+sliding
+
+0.55–1.12
+
+grasp while sliding
+
+6
+
+Ctx.
+
+Can capture
+
+can
+
+ramp
+
+rolling
+
+0.59–0.97
+
+grasp before tipping
+
+6
+
+Rot., Ctx.
+
+Impact
+
+Post-impact grasp
+
+part
+
+belt, striker
+
+impact
+
+0.12–0.14
+
+grasp along its axis
+
+6
+
+Rot., Ctx.
+
+B.2 
+Construction
+
+Simulation.
+
+The tasks run in MuJoCo 3.11.0 and robosuite 1.5.2 
+[
+44
+, 
+66
+]
+ with a
+Franka Panda arm and a parallel gripper. The operational-space controller of robosuite
+tracks the commanded end-effector pose. The control period is 50 ms, and the physics
+step is 2 ms. A fixed third-person camera with a 
+ vertical field of view
+renders 
+ RGB-D images. Actions are the seven-dimensional commands of
+Appendix 
+A.3
+. Each translation component is clipped to 0.10 m, and each
+rotation component to 0.5 rad.
+
+Scenes.
+
+Each scene samples the target’s initial state and motion parameters uniformly
+within task-specific ranges. Table 
+S4
+ gives the speed ranges. Other sampled
+parameters include harmonic amplitudes of up to 35 mm at 0.25–0.7 Hz, yaw rates of up
+to 1.2 rad/s, and ramp slopes of 
+, 
+, or 
+. In the occluded grasp, the target is
+hidden for 0.5–3.0 s and then reappears. Only physically feasible scenes are kept, and every method replays the same stored scenes.
+
+Demonstrations.
+
+The expert is a task-specific closed-loop state machine. It reads the privileged
+simulator state and anticipates the motion of the target, for example by predicting the
+interception point in the capture tasks. A demonstration is kept if the expert succeeds,
+if a replay of its actions reproduces the episode, and if its path and jerk pass quality
+checks. The training set holds 800 demonstrations per task, 11,200 in total. They are
+recorded at 20 Hz with RGB-D images, robot states, commands, and simulator ground
+truth.
+
+Splits.
+
+We select configurations on 1,400 development scenes, 100 per task. All results come from 1,400 held-out test scenes, also 100 per task, sampled from the same ranges with seeds unused in training and development.
+
+B.3 
+Evaluation Protocol
+
+Table S5
+: 
+Baseline training on 
+OnTimeBench
+.
+ Updates
+batch gives the optimizer updates and the global batch size.
+
+ is the number of commands returned per query. The parameter counts include trainable parameters only.
+
+Method
+
+Initialization
+
+Updates
+batch
+
+Params
+
+ACT 
+[
+63
+]
+
+scratch
+
+100
+
+83.9M
+
+DP 
+[
+10
+]
+
+scratch
+
+15
+
+288.7M
+
+ 
+[
+4
+]
+
+pi05_base
+
+10
+
+3,353.4M
+
++SE(3)
+
+pi05_base
+
+10
+
+3,357.7M
+
+DynamicVLA 
+[
+50
+]
+
+official
+
+20
+
+99.1M
+
+PUMA 
+[
+14
+]
+
+official
+
+16
+
+4,516.5M
+
+OpenWAM-
+ 
+[
+45
+]
+
+official
+
+32
+
+6,021.2M
+
+DynamicWAM 
+[
+29
+]
+
+official
+
+16
+
+988.8M
+
+DynamicWAM+SE(3)
+
+official
+
+16
+
+989.4M
+
+FoveaWAM (Ours)
+
+scratch
+
+8
+
+271.8M
+
+Table S6
+: 
+Per-task SR
+ (%) on 
+OnTimeBench
+ at native latency. Each method is evaluated on the same 100 held-out scenes per task. The last two rows give the first-contact position error 
+ (mm), averaged over the 13 tasks with a contact, and the number of episodes with a contact out of 1,400. A dash marks a method that makes no contact on some task. DP: Diffusion Policy. DVLA: DynamicVLA. OWAM: OpenWAM-
+. OW-off: OpenWAM-
+ without cache and compilation. DWAM: DynamicWAM. +: with our SE(3) history tokens. Bold and light blue mark the best and second-best values.
+
+Task
+
+ACT
+
+DP
+
++
+
+DVLA
+
+PUMA
+
+OWAM
+
+OW-off
+
+DWAM
+
+DWAM+
+
+ 
+
+FoveaWAM
+
+(Ours)
+
+Harmonic grasp
+
+49
+
+31
+
+51
+
+84
+
+39
+
+85
+
+41
+
+1
+
+50
+
+47
+
+99
+
+Conveyor grasp
+
+45
+
+45
+
+96
+
+62
+
+89
+
+89
+
+62
+
+0
+
+59
+
+60
+
+100
+
+Translating grasp
+
+14
+
+33
+
+59
+
+42
+
+61
+
+51
+
+53
+
+0
+
+53
+
+18
+
+77
+
+Rotating grasp
+
+24
+
+20
+
+32
+
+53
+
+26
+
+67
+
+42
+
+3
+
+30
+
+35
+
+71
+
+Occluded grasp
+
+30
+
+28
+
+37
+
+60
+
+80
+
+84
+
+34
+
+0
+
+44
+
+38
+
+100
+
+Moving receptacle
+
+26
+
+24
+
+34
+
+63
+
+41
+
+24
+
+27
+
+0
+
+8
+
+6
+
+93
+
+Rotating receptacle
+
+0
+
+0
+
+1
+
+11
+
+1
+
+0
+
+0
+
+0
+
+0
+
+0
+
+66
+
+Wire passage
+
+99
+
+99
+
+100
+
+89
+
+99
+
+87
+
+50
+
+58
+
+23
+
+78
+
+100
+
+Full wire passage
+
+0
+
+3
+
+1
+
+0
+
+12
+
+0
+
+0
+
+0
+
+0
+
+0
+
+40
+
+Ball capture
+
+36
+
+16
+
+46
+
+29
+
+41
+
+39
+
+45
+
+13
+
+24
+
+20
+
+38
+
+Ball capture on table
+
+71
+
+81
+
+100
+
+100
+
+88
+
+100
+
+99
+
+88
+
+98
+
+100
+
+100
+
+Slider capture
+
+56
+
+30
+
+58
+
+62
+
+28
+
+76
+
+71
+
+31
+
+47
+
+63
+
+79
+
+Can capture
+
+91
+
+31
+
+98
+
+99
+
+72
+
+100
+
+100
+
+5
+
+96
+
+100
+
+100
+
+Post-impact grasp
+
+42
+
+5
+
+49
+
+68
+
+39
+
+57
+
+21
+
+22
+
+43
+
+19
+
+87
+
+Task-balanced
+
+41.6
+
+31.9
+
+54.4
+
+58.7
+
+51.1
+
+61.4
+
+46.1
+
+15.8
+
+41.1
+
+41.7
+
+82.1
+
+ (mm)
+
+32.2
+
+36.1
+
+31.3
+
+34.8
+
+30.0
+
+27.2
+
+31.8
+
+–
+
+31.2
+
+36.1
+
+22.0
+
+Contacts
+
+1110
+
+946
+
+1237
+
+1191
+
+1204
+
+1272
+
+1115
+
+493
+
+1193
+
+1029
+
+1285
+
+Table S7
+: 
+Per-task SR
+ (%) 
+and MS
+ on DOMINO over 100 scenes per task. MS: manipulation score. Bold marks the best value.
+
+DynamicWAM
+
+PUMA
+
+FoveaWAM (Ours)
+
+Task
+
+SR
+
+MS
+
+SR
+
+MS
+
+SR
+
+MS
+
+SR
+
+MS
+
+Intercept
+
+Adjust Bottle
+
+20
+
+39.8
+
+19
+
+34.3
+
+68
+
+80.1
+
+37
+
+57.7
+
+Move Can Pot
+
+18
+
+44.0
+
+7
+
+40.0
+
+28
+
+51.0
+
+52
+
+67.7
+
+Move Playingcard Away
+
+7
+
+42.9
+
+9
+
+36.8
+
+18
+
+51.4
+
+18
+
+59.1
+
+Place A2B Left
+
+0
+
+21.7
+
+4
+
+32.6
+
+11
+
+41.4
+
+17
+
+47.8
+
+Place A2B Right
+
+2
+
+26.6
+
+1
+
+35.6
+
+3
+
+34.7
+
+19
+
+46.9
+
+Rotate QRcode
+
+11
+
+32.9
+
+4
+
+25.0
+
+19
+
+40.1
+
+18
+
+53.1
+
+Shake Bottle
+
+68
+
+73.9
+
+56
+
+64.1
+
+76
+
+82.4
+
+41
+
+66.5
+
+Shake Bottle Horiz.
+
+64
+
+69.5
+
+34
+
+45.8
+
+67
+
+76.3
+
+33
+
+61.5
+
+Track
+
+Beat Block Hammer
+
+0
+
+12.8
+
+30
+
+42.4
+
+16
+
+29.9
+
+96
+
+96.6
+
+Click Alarmclock
+
+35
+
+38.9
+
+30
+
+35.9
+
+8
+
+13.2
+
+55
+
+61.3
+
+Click Bell
+
+10
+
+21.3
+
+35
+
+43.1
+
+0
+
+10.5
+
+26
+
+40.5
+
+Move Pillbottle Pad
+
+1
+
+11.0
+
+34
+
+41.7
+
+11
+
+20.0
+
+52
+
+59.4
+
+Move Stapler Pad
+
+0
+
+13.7
+
+1
+
+21.4
+
+0
+
+18.3
+
+7
+
+28.7
+
+Place Bread Basket
+
+2
+
+13.6
+
+43
+
+51.0
+
+17
+
+27.0
+
+60
+
+67.0
+
+Place Container Plate
+
+8
+
+17.0
+
+65
+
+70.4
+
+62
+
+67.4
+
+88
+
+90.3
+
+Place Empty Cup
+
+2
+
+18.1
+
+34
+
+45.5
+
+20
+
+35.3
+
+94
+
+95.5
+
+Place Fan
+
+0
+
+16.1
+
+2
+
+16.3
+
+5
+
+18.4
+
+61
+
+70.7
+
+Place Mouse Pad
+
+1
+
+12.8
+
+27
+
+41.5
+
+4
+
+21.8
+
+16
+
+32.6
+
+Place Object Scale
+
+0
+
+8.8
+
+10
+
+23.3
+
+2
+
+12.5
+
+21
+
+32.9
+
+Place Object Stand
+
+4
+
+16.7
+
+24
+
+34.8
+
+3
+
+18.2
+
+70
+
+76.9
+
+Place Phone Stand
+
+0
+
+13.3
+
+17
+
+25.8
+
+1
+
+13.0
+
+45
+
+57.0
+
+Place Shoe
+
+27
+
+39.8
+
+42
+
+55.2
+
+31
+
+44.2
+
+47
+
+59.4
+
+Press Stapler
+
+33
+
+41.7
+
+65
+
+70.4
+
+2
+
+15.6
+
+69
+
+74.1
+
+Stamp Seal
+
+7
+
+19.6
+
+52
+
+60.7
+
+13
+
+27.1
+
+81
+
+84.6
+
+Intercept mean
+
+23.8
+
+43.9
+
+16.8
+
+39.3
+
+36.3
+
+57.2
+
+29.4
+
+57.6
+
+Track mean
+
+8.1
+
+19.7
+
+31.9
+
+42.5
+
+12.2
+
+24.5
+
+55.5
+
+64.2
+
+All
+
+13.3
+
+27.8
+
+26.9
+
+41.4
+
+20.2
+
+35.4
+
+46.8
+
+62.0
+
+Executor.
+
+All methods share one executor on the 50 ms control clock
+(Algorithm 
+S1
+). Command 
+ of query 
+ is meant for the control
+boundary 
+ and executes at
+
+(S4)
+
+In the post-impact grasp, the environment applies each command 50 ms after it is
+issued, so 
+ ms. In the other tasks, 
+. A query with
+latency 
+ hands over its chunk at the first boundary at or after its end, which lies
+
+ periods after capture. Latency thus counts in whole
+control periods, as in RTC 
+[
+5
+]
+. Execution starts from command 
+ and skips the commands for earlier boundaries. The next query captures its frame at this boundary. While it runs, the current chunk continues, so each policy
+replans as often as its latency allows. A chunk holds 
+ commands, the native chunk
+length of each method (Table 
+S5
+), and is dropped if 
+. When
+no chunk is active, the controller holds the current arm target and gripper command.
+Inference runs asynchronously with execution, as in DynamicVLA 
+[
+50
+]
+. No method uses RTC’s chunk inpainting.
+
+Algorithm S1
+ 
+ 
+Execution at native latency.
+ All methods share this executor. 
+ is drawn from the latencies measured for each method.
+
+1:
+
+capture an observation at 
+ and start query 0
+
+2:
+
+for
+ each control boundary 
+ 
+do
+
+3:
+
+   
+if
+ query 
+ has ended, that is, 
+ 
+then
+
+4:
+
+    
+
+5:
+
+    
+if
+ 
+ 
+then
+
+6:
+
+      switch to chunk 
+, starting from command 
+
+7:
+
+    
+else
+
+8:
+
+      clear the active chunk
+    
+
+9:
+
+    capture an observation at 
+ and start query 
+
+   
+
+10:
+
+   
+if
+ the active chunk has a command for 
+ 
+then
+
+11:
+
+    issue this command, which executes at 
+
+12:
+
+   
+else
+
+13:
+
+    hold the current arm target and gripper command
+   
+
+14:
+
+   advance physics by 
+ in steps of 2 ms
+
+Protocols.
+
+In 
+Native
+, each query draws 
+ from the latencies of its method measured on
+one RTX 5090. Physics advances by this amount, however long the rollout actually takes
+on the RTX PRO 6000. The latency sweep adds 50, 100, 150, or
+200 ms to every 
+. Its 150 ms point is the +150 ms setting of
+Table 
+1
+. In 
+Paused
+, physics stops during each query. The policy observes at every control boundary, and its chunk starts at once from command 0.
+
+Latency measurement.
+
+We time each method alone on one RTX 5090 at batch size 1. Each baseline runs in the
+precision of its release, and FoveaWAM runs in compiled BF16 with TF32 disabled. Each
+method runs three rounds of 30 warm-up calls and 300 measured calls on recorded observations with their causal history. A timed query starts from the newest
+observation and ends when its first command is available. We call this interval the
+time-to-action. It includes all computation that needs the newest frame, namely preprocessing, image encoding, the online flow
+and motion descriptors of PUMA and DynamicWAM, sampling, and action decoding. PUMA is
+timed with its three official cameras and the other baselines with two, which changes
+their p95 time-to-action by at most 3.8 ms relative to the agent view.
+
+B.4 
+Metrics
+
+The success rate (SR) weights the 14 tasks equally. We report the 95th percentile (p95) of the time-to-action. The position error at first contact 
+ is the distance of the end effector from the expert’s contact frame on the target. In the placement tasks, 
+ uses the first contact of the held object with
+the receptacle and the expert’s placement pose. 
+ averages over all tasks
+except the wire passage, which succeeds without contact, and over episodes with contact. Paired 95% intervals resample held-out scenes per task.
+
+B.5 
+Baselines
+
+Common conditions.
+
+Each baseline keeps its official architecture, chunk length, initialization, and
+training recipe (Table 
+S5
+). It trains on the same 11,200
+demonstrations, mapped to its action space through the same Cartesian controller, and
+is configured on the development scenes. Baselines are trained and evaluated on the
+agent view, and any wrist-camera slot is masked. The histories follow
+Table 
+1
+. DP uses the DDIM sampler of its
+real-robot release with 16 steps. OpenWAM-
+ runs with video decoding disabled and
+is timed with and without its official cache and compilation.
+
+SE(3)-augmented baselines.
+
++SE(3) and DynamicWAM+SE(3) receive the eight target-state tokens of
+Appendix 
+A.2
+ from the same pose source and with the same validity flags. A
+two-layer MLP with a zero-initialized output layer maps them to the width of each model.
+In 
+, they follow the image tokens in the prefix, where the action expert
+attends to them. In DynamicWAM, they join its kinematic descriptors. Training follows
+the recipe of the base model.
+
+Appendix C 
+Additional Simulation Results
+
+C.1 
+Per-Task Results
+
+Table 
+S6
+ reports the per-task SR of every method in Table 
+1
+.
+
+C.2 
+Results on DOMINO
+
+We use the 24 single-arm Franka tasks of the clean level-1 setting of DOMINO
+
+[
+14
+]
+ with its demonstrations, scenes, and native evaluator. The evaluator pauses
+physics during inference. The manipulation score (MS) scales route completion by
+penalties for leaving the workspace or view and for collisions. FoveaWAM reads the ground-truth pose of the instructed target.
+Table 
+S7
+ gives per-task results.
+
+Data and training.
+
+The data split has 1,200 training and 240 validation demonstrations, and the test uses
+another 2,400 scenes, 100 per task. Policies execute absolute joint-position targets
+with DOMINO’s native controller. Their state and action projections use its
+eight-dimensional joint space, normalized on training data. The baselines use their official recipes. DynamicWAM and PUMA are initialized from
+their official checkpoints and fine-tuned on our Franka demonstrations. These
+checkpoints were trained on ALOHA-AgileX simulation demonstrations of all 35 dynamic
+tasks of DOMINO. 
+ starts from the openpi 
+pi05_base
+ checkpoint, and FoveaWAM uses no robot pretraining.
+
+C.3 
+Rollouts and Forecasts
+
+Fig. 
+S1
+ shows rollouts of FoveaWAM on eight tasks from all five families, with the forecast at each frame.
+
+Appendix D 
+Real-Robot Experiments
+
+Platform and tasks.
+
+The robot is a Flexiv Rizon 4s arm with a GN01 gripper. Policies send tool-center-point poses and gripper targets at 20 Hz. Two RealSense D435 cameras observe the scene. One is fixed
+and calibrated to the robot base, and the other is mounted on the wrist.
+FoveaWAM uses RGB-D from the fixed camera, and the baselines use RGB from both cameras.
+Table 
+S8
+ lists the tasks.
+
+Table S8
+: 
+Real-robot tasks.
+ A grasp succeeds when the robot holds the target
+stably and lifts it clear of its support. Box placement requires the block to stay in the
+box, turntable grasp a grasp across the short sides, and ball intercept a stop or deflection
+by the gripper. Each task has a 30 s limit, and timeouts, operator interventions, and
+safety stops count as failures.
+
+Task
+
+Target motion
+
+Conveyor grasp
+
+Block on a conveyor belt
+
+Moving box placement
+
+Open box on a conveyor belt
+
+Turntable grasp
+
+Rectangular block on a turntable
+
+Toy car grasp
+
+Toy car driving on the table
+
+Ball intercept
+
+Tennis ball rolling at random speed and heading
+
+Ramp cart grasp
+
+Block on a cart rolling down a ramp
+
+Data and training.
+
+We collect 100 demonstrations per task by teleoperation. FoundationPose
+
+[
+47
+]
+ tracks the target offline in the fixed view, with masks from Grounding DINO 
+[
+26
+]
+ and SAM 2.1 
+[
+33
+]
+ and depth
+from FoundationStereo 
+[
+46
+]
+. Sparse 3D flow comes from CoTracker3
+
+[
+19
+]
+ tracks, lifted to the robot base with stereo depth. The base of FoveaWAM is pretrained on DROID 
+[
+21
+]
+, with flow labels from the 3D point tracks of PointWorld 
+[
+18
+]
+. DROID has no object poses, so the base has no
+target-state tokens and no pose head. For each task, we add them and fine-tune the base on its demonstrations. ACT and 
+ are trained on the same
+demonstrations with their official recipes.
+
+Deployment.
+
+At test time, FoundationPose tracks the target online in the fixed view.
+Grounding DINO and SAM 2.1 give the first-frame mask, Cutie 
+[
+9
+]
+ tracks it in
+later frames, and FP++ 
+[
+52
+]
+ gives the initial pose for refinement in each
+frame. The tracker and FoveaWAM run one after the other on one RTX 5090. The tracker estimates the target pose in each aligned RGB-D frame, and FoveaWAM takes this pose and the robot state of the same frame. From the ready frame to the full chunk of eight
+commands on the CPU, the latency is 23.92 ms at the median and 25.17 ms at p95.
+With asynchronous inference, one tracking process and three FoveaWAM processes can share
+the GPU and reach a throughput of 100.39 frames/s. Fig. 
+S2
+ shows
+a successful trial of FoveaWAM and a failed trial of 
+ on each task.
+
+Figure S1
+: 
+Rollouts and forecasts of FoveaWAM on 
+OnTimeBench
+.
+ Each row shows five frames
+of one rollout. Red shows the forecast path of the target and its forecast pose at the
+end, and arrows show the forecast sparse 3D flow.
+
+Figure S2
+: 
+Real-robot trials.
+ For each task, the upper row shows a successful
+trial of FoveaWAM and the lower row a failed trial of 
+. Circles mark the targets
+in selected frames.
+

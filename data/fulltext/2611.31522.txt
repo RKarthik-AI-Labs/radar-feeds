@@ -1,0 +1,2770 @@
+One Step, Four Clocks: How GUI Agents Fall Out of Step
+https://arxiv.org/abs/2611.31522
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+\code
+
+https://github.com/hadronresearch/chronotope
+
+One Step, Four Clocks: How GUI Agents Fall Out of Step
+
+Zhanwen Chen
+
+Affiliation: 
+Hadron
+
+  
+
+Tianchun Wang
+#
+
+Affiliation: 
+Johns Hopkins University
+
+Abstract
+
+GUI agents can choose correct actions yet fail as interfaces change during deliberation. Latency alone cannot explain these failures because actions may become invalid at different interaction stages. We model four events: environment change, observation availability, decision commitment, and action receipt (EODA). We introduce 
+ChronotopeGym
+ to study these failures under Paused, Replay, and Live execution. Across five tasks, agents can fail in Live despite succeeding when responses remain valid, even when actions meet deadlines. On Moving Balloon, updating a pending click raises success from 0% to 100% without changing response time. Our accelerator-resident GUI controller, 
+Chronotope
+, maintains compact interaction history and selectively keeps, updates, or redecides pending actions. Compared with Agent S3, Chronotope reduces median end-to-end latency by 85.5% for a 27B model, expanding its performance envelope to 100% Live success at an 8-second deadline versus 0%. Chronotope enables real-time GUI control through compact interaction history, knowing when to preserve, revise, or replace actions, and an overall efficient architectural design that obviates verbose reflection, reasoning, and grounding calls.
+
+†
+†
+$^{\#}$Correspondence: 
+Tianchun Wang at 
+tcwangai@gmail.com
+
+Figure 1
+: 
+When a screen keeps changing, agents must act in time and update their actions to match it. 
+(a)
+ In Disappearing Notification, an Agent S3 model must click a notification before it disappears. We shorten this time limit and compare success when the interface waits while the agent thinks (Paused) against when it keeps running (Live). Success stays at 96% in Paused but falls in Live as notifications disappear sooner, showing how pausing can hide timing failures. 
+(b)
+ In Moving Balloon, a Qwen3.8-27B agent must click a moving balloon. We increase its speed and compare clicks aimed at its original versus latest observed positions. The model call takes the same time in both cases. At higher speeds (4, 8, and 16 pixels/s), updating the position raises success from 0% to 100%. 
+(c)
+ We test the same update across three tasks. With Qwen3.8-27B, success rises from 0% to 99–100%, showing that the update helps with both changing positions and changing text. The update method generalizes to another model, UI-TARS-1.5-7B, whose success increased from 0% to 69%. Each point represents 100 trials, and error bars 95% confidence intervals. See §
+5
+ for experiment details.
+
+1 
+Introduction
+
+Graphical user interface (GUI) agents are typically evaluated as if the interface waits for them. The agent observes a screen, thinks, produces an action, and is judged on whether that action was correct 
+(
+Deng et al., 2023
+; 
+Zhou et al., 2024
+; 
+Zheng et al., 2024a
+; 
+Rawles et al., 2025
+; 
+Xie et al., 2024
+; 
+Qin et al., 2025
+; 
+Li and Shi, 2026
+)
+. Real interfaces continue evolving independently. A page may finish loading, a notification may disappear, a target may move away from its observed position, or an earlier click may keep the player character advancing while the agent reacts to enemy fire. A click can thus be right for the frame the agent saw and wrong for the state in which it lands. Figure 
+2
+ illustrates this with a moving balloon: the agent chooses the correct click position for its initial image, but the click misses because the balloon has moved by the time it arrives. This reveals a gap between solving a GUI task when the interface waits and solving it while the interface continues to evolve.
+
+A natural explanation is that the agent is too slow. Sometimes the action simply reaches the application after the deadline. But model latency alone does not tell us what went wrong, because a response does not fail at a single moment. It unfolds through a lifecycle in which the interface changes, information becomes available to the controller, a decision becomes fixed, and the resulting action reaches the application. Correctness can be lost at different points along this lifecycle, even when the model takes the same amount of time. Figure 
+3
+ shows that the the same model latency can cause different failures. Diagnosing a timing failure therefore requires knowing not only how long computation took, but where the response correctness is lost.
+
+We describe this lifecycle using four events. 
+ marks when a task-relevant environment change occurs, 
+, when an observation becomes available to the controller, 
+, when the action can no longer be changed, and 
+, when the application receives the action. Figure 
+3
+ illustrates four timing failure modes:
+
+•
+
+Missed
+. Relevant evidence disappears before it is observed.
+
+•
+
+Stale
+. The agent acts based on an outdated observation when newer evidence is available.
+
+•
+
+Invalidated
+. A correct action at 
+ becomes wrong before the application receives it at 
+.
+
+•
+
+Late
+. A response reaches 
+ after its opportunity has closed.
+
+A single latency number tells how long a response took. It cannot tell us where correctness was lost.
+
+(a)
+ 
+The agent sees the balloon at its original position
+
+(b)
+ 
+The balloon moves while the agent reasons
+
+(c)
+ 
+The agent’s click misses the balloon by 84 pixels
+
+Figure 2
+: 
+Correct for the observed screen, wrong on arrival.
+ In Moving Balloon, the agent must click a moving balloon. The agent chooses the correct position for its initial observation, but the interface continues evolving while it computes, so the same position is wrong when the click arrives. The faded balloon marks the initially observed position. The crosshair marks where the click lands.
+
+Figure 3
+: 
+The same model latency conceals four timing failures.
+ Four Moving Balloon examples share the same observation-to-decision interval but fail for different reasons. 
+Missed.
+ Relevant evidence disappears before the agent observes it. 
+Stale.
+ Newer evidence is available before commitment. The agent still uses an earlier observation. 
+Invalidated.
+ The action is correct when committed. It becomes wrong before the application receives it. 
+Late.
+ The action reaches the application after the response deadline. The timelines mark environment changes (
+), observation availability (
+), decision commitment (
+), and application receipt (
+). They show which observation supports each decision. 
+Model latency alone does not decide timing failure.
+
+The four failures require different remedies. A missed event requires observation to continue while the agent deliberates. But continued observation is not enough to prevent a stale decision if new evidence can affect only the next decision. Relevant evidence arriving before 
+ must therefore be able to change the decision already underway. Once an action is committed, an unexpected change after 
+ cannot be repaired by revising that decision, and a late response still has to reach 
+ sooner. We investigate these failures and their remedies in three steps:
+
+•
+
+Control the temporal structure of GUI interaction
+. ChronotopeGym evaluates tasks under three conditions: Paused, Replay, and Live. Paused freezes task progression during deliberation. Replay and Live deliver the same observations on the same schedule, but only Live allows the conditions for a successful response to change during deliberation.
+
+•
+
+Isolate the effect of newer evidence
+. We change the observation supporting a pending decision while holding decision start, commitment, and application receipt fixed. This separates the benefit of newer evidence from that of a faster response.
+
+•
+
+Check pending decisions before commitment
+. Chronotope continues observing during deliberation, maintains the current control state and pending decision, and checks that decision against the newest relevant evidence before commitment.
+
+Our diagnosis and control approach are both based on the EODA framework. Specifically, 
+ChronotopeGym
+ is a test bed for diagnosing and evaluating timing failures in GUI agents. It uses EODA to separate the timing of environment change, observation, decision, and action receipt during GUI interaction. It changes when evidence becomes available, when a decision becomes fixed, and when an action reaches the application, allowing us to test where correctness is lost. 
+Our approach, Chronotope,
+ keeps an unfinished decision current as the interface changes, preserving what remains correct and updating information that has become outdated before commitment. 
+Across five temporally dynamic GUI tasks, our experimental results show that these timing distinctions matter.
+ A planner-grounder agent drops from 
+96% success in Replay to 29% in Live
+ when the same evidence arrives at the same times but the response opportunity continues advancing. On the Moving Balloon task, using an updated observation to locate the target 
+raises success from 0% to 100%
+. Our contributions are as follows:
+
+•
+
+We introduce the EODA temporal framework and the ChronotopeGym benchmark to identify and systematically investigate temporal failures in GUI agents, demonstrating that correct and timely actions can fail when environments change during deliberation.
+
+•
+
+We propose Chronotope, an easy-to-use GUI agent controller that expands the performance envelope of traditional GUI agents, enabling the same VLM models to achieve 100% success rate on latency-sensitive tasks where they otherwise result in 0% under tight deadlines.
+
+•
+
+Chronotope’s efficient control architecture substantially reduces redundant model-side computation through compact interaction history representation, decision meta-control, and GPU-resident execution. Its overall efficiency leads to 85.5% lower end-to-end latency and up to 87.5% lower token consumption than Agent S3.
+
+2 
+Related Work
+
+GUI agents solve computer tasks by observing the screen and taking actions 
+(
+Qin et al., 2025
+; 
+Gonzalez-Pumariega et al., 2026
+)
+, but an interface can change before an action takes effect 
+(
+Liu et al., 2026
+; 
+Yao et al., 2026
+)
+. We review how existing benchmarks evaluate this timing problem and how latency control methods address it.
+
+Time in GUI-agent benchmarks
+. Recent works study timing in GUI interaction with benchmark-specific tasks and metrics 
+(
+Liu et al., 2026
+; 
+Yao et al., 2026
+; 
+Li and Shi, 2026
+; 
+Dong et al., 2026
+)
+. However, a benchmark score alone does not tell us whether the agent failed due to missed changes, outdated information, or late actions. We address this gap with an event-stream view that diagnoses temporal failures across environment change, observation, decision commitment, and action receipt, enabling controlled studies under a common measurement scheme. §
+A.2
+ compares eighteen benchmarks on these criteria.
+
+Latency control in GUI agents
+. Latency can cause GUI agents to act on outdated information, miss action windows, or respond too late to unexpected changes. Existing methods supply newer evidence through AOI 
+(
+Li and Shi, 2026
+)
+, predict future states through MobileDreamer and TraceR1 
+(
+Cao et al., 2026
+; 
+Liang et al., 2026
+)
+, or prepare and reuse computation before execution through UFO2 and AAPT 
+(
+Zhang et al., 2025b
+; 
+Dong et al., 2026
+)
+. However, newer evidence may go unused, and planning ahead alone does not update where the agent clicks or types when the screen changes. As a result, an agent may preserve the right high-level intent but still execute an outdated or mistimed action. Our event-stream view identifies where these failures arise and which interventions address them. This enables targeted control at the stage where timing causes correctness to break down. §
+A.3
+ and Table 
+2
+ provide extended discussion and comparisons.
+
+3 
+Where is Correctness Lost?
+
+Existing methods cannot identify where temporal correctness is lost between observation and action. We dissect this process into environment change 
+, observation availability 
+, decision commitment 
+, and action receipt 
+, allowing us to localize where an otherwise valid response becomes incorrect. To achieve this goal, we build 
+ChronotopeGym
+ as a diagnostic test bed that controls the timing of these events.
+
+3.1 
+From Observation-Action to EODA
+
+To identify why the same response time can produce different failures, we separate the events hidden within observation-to-action latency. Figure 
+4
+ shows two 
+Disappearing Notification
+ executions with the same 
+ ms latency. In the first, the decision is committed while the notification is still present, but the notification disappears before the click arrives. In the second, the notification disappears before commitment, but that change has not yet appeared in the agent’s latest observation. Observation-to-action timing assigns the same latency to both executions, even though correctness is lost at different stages. By collapsing these distinct failure mechanisms into a single end-to-end measurement, it cannot identify which part of the response caused the failure.
+
+We therefore dissect the response into four events: environment change 
+, observation availability 
+, decision commitment 
+, and action receipt 
+. This decomposition exposes when relevant state changes relative to what the agent observes, decides, and executes. As Figure 
+4
+(c) shows, the same 
+ latency can contain different 
+ and 
+ intervals. EODA thus distinguishes whether correctness is lost because relevant evidence was unavailable to the decision, because the decision became outdated, or because the environment changed after commitment but before action receipt.
+
+Figure 4
+: 
+
+EODA distinguishes failures hidden by the same observation-to-action latency.
+
+Data are from two runs of the 
+Disappearing Notification
+ experiment in ChronotopeGym.
+
+(a)
+ Run 1 and Run 2 both have 
+ ms latency and both fail, so observation-to-action timing treats them identically.
+
+(b)
+ ChronotopeGym records the environment-change event 
+ when the notification disappears, allowing EODA to localize where each failure occurs.
+In Run 1, 
+ occurs after decision commitment 
+ but before action receipt 
+, so the committed action is invalidated before execution.
+In Run 2, 
+ occurs before 
+, but the latest observation available at commitment still shows the notification, so the agent misses relevant evidence.
+These diagnoses indicate different mitigation targets: reducing action-delivery delay in the first case and obtaining or incorporating fresher observations in the second.
+
+(c)
+ Generally, even when 
+ is fixed at 400 ms, different allocations of time to computation 
+ and delivery 
+ can produce different failure modes.
+
+3.2 
+Controlling Timing with Paused, Replay, and Live
+
+In order to control timing within EODA, we introduce three execution conditions, 
+Paused
+, 
+Replay
+, and 
+Live
+. In Paused, task-relevant state is held fixed while the agent computes and acts. In Replay, the agent receives the same changing observations as in a corresponding Live execution at the same cadence, but the response opportunity remains valid until the agent acts. In Live, both the observations and the underlying task state continue advancing while the agent computes and acts. These conditions let us vary whether task evolution is observed and whether that evolution can invalidate the response.
+
+Comparing the three conditions separates different effects of task evolution. Paused versus Replay tests whether changing observations alone affect the agent when the response remains valid. Replay versus Live then tests what changes when the same evolving evidence is coupled to an underlying task that can invalidate the response before action receipt. Paused, Replay, and Live therefore let us distinguish failures caused by processing evolving evidence from failures caused by the task continuing to change while the agent responds.
+
+We choose five tasks to represent different ways a GUI response can become invalid over time: 
+Disappearing Notification
+, where the opportunity to respond closes, 
+Moving Balloon
+, where the target location changes, 
+Expiring Authenticator Code
+, where an observed value becomes invalid, 
+Displaced Button
+, where the location of the intended control changes, and 
+Reversing Trading Signal
+, where the required action itself changes. Together, they cover changes to the opportunity, target, value, control location, and action rather than particular application domains. Appendix 
+B
+ details task definitions, action spaces, success criteria, and implementation. After Paused, Replay, and Live establish whether task evolution changes the outcome, we use finer EODA interventions to vary which observation can affect the decision, when the decision is committed, or when the action is received while holding the remaining timing fixed. This lets us localize whether correctness is lost from missed evidence, an outdated decision at commitment, or invalidation after commitment.
+
+4 
+Chronotope: Towards Control in Physical Time
+
+§
+3
+ uses EODA to identify where GUI responses become incorrect as the interface changes. Its diagnosis reveals that sequential GUI control cannot incorporate observations arriving during inference into a decision already underway. To address this limitation, we introduce 
+Chronotope
+, a clock-decoupled controller that plans from EODA interaction history while continuously monitoring for new observations, updates provisional actions with newer observations before commitment, and keeps this control path on the accelerator (Figure 
+5
+). Its interaction history relates new observations to unfinished decisions and previously committed actions (§
+4.1
+), enabling decision meta-control to determine whether to keep a proposed action, update its arguments, or restart inference before commitment (§
+4.2
+). Appendix 
+C
+ specifies the Chronotope algorithm and analyzes its time complexity, space complexity, and communication overhead.
+
+Figure 5
+: 
+Chronotope’s accelerator-resident fused control pipeline
+ (§
+4.3
+). The controller discards duplicate screenshots, updates the interaction history, and supplies the latest observation directly to the updater. The planner reads this history to propose an action, which the updater reconciles with the latest observation. The Commit stage finalizes the action at 
+. The actuator delivers the committed input to the task runner, which records environment changes (
+) and action receipts (
+) in the interaction history. The interaction history comprises 
+ event streams and an Event Dependency Matrix (EDM), where each cell indicates that the row event directly depends on the column event.
+
+4.1 
+Interaction Temporal Dependency
+
+GUI agents interact with a changing environment by observing screenshots and issuing actions. Each screenshot captures the interface state at the time of capture but not the history of observations, decisions, and actions preceding it. An agent using screenshots without linking them to its decisions and actions would fail to capture temporal dependencies during inference. For example, the agent may still be choosing its next action based on a screenshot when an earlier click reaches the application. The click or an unrelated event may change the interface and leave the unfinished decision using an outdated target position or input value. To plan new actions from prior interactions and update decisions as new observations arrive, Chronotope maintains an interaction history that relates these observations to unfinished decisions and previously committed actions.
+
+To represent both when events occur and which events depend on others, Chronotope organizes this interaction history as EODA event streams and their Event Dependency Matrix (EDM) representation shown in 
+4.1
+ of Figure 
+5
+. The EDM records direct dependencies between events. For example, decision 
+ uses both observations 
+ and 
+. As new observations arrive, the Update Observation stage records observation events (
+) and relevant state changes in the interaction history. The history also links an action receipt to the resulting environment change and its observation, as in 
+. The planner reads this history to propose an action, which the updater checks against the latest relevant observation before commitment.
+
+4.2 
+Decisions Meta Control
+
+An interface change may require a new click coordinate or input value while leaving the intended operation unchanged. For example, in Moving Balloon, the agent should still click the same balloon, but its movement can make the proposed click coordinate outdated. Another example is Expiring Authenticator Code, where the agent should still type into the same field, but a code change can make the proposed value outdated. One naïve solution is 
+restarting inference
+ with the new observation, where the controller asks the planner model again what to do. However, only the click coordinate or input value needs updating, wasting inference tokens and incurring the latency of extra model calls. Chronotope instead preserves the intended operation and updates only its outdated arguments before commitment, conserving tokens and reducing latency.
+
+To allow argument updates without restarting inference, Chronotope keeps proposed actions open to revision until commitment (shown as 
+4.2
+ inside Figure 
+5
+). The planner proposes an action, and the updater checks its intended operation and arguments against the latest relevant observation. If both remain valid, Chronotope keeps the action unchanged. If only an argument is outdated, revision replaces it while preserving the operation. Instead of specifying an argument early and revising it later, late binding leaves a state-dependent argument unspecified and resolves it from the newest relevant observation just before commitment. If the operation is no longer appropriate, updating its arguments is insufficient, so re-decision restarts inference. Once the operation and arguments are resolved, the Commit stage finalizes the the action and records it in the interaction history.
+
+4.3 
+Accelerator-Resident Fused Control
+
+Figure 6
+: 
+Host-orchestrated (a) versus accelerator-resident (b) control.
+ Chronotope keeps the decision, interaction history, and meta-control operations on the accelerator, reducing host-device transfers represented by dashed arrows.
+
+Updating an unfinished decision is useful only if the resulting action can still arrive in time. Maintaining interaction state and reconciling a decision introduce additional computation while the interface continues to change. A correct update can therefore still fail if this added work delays the action beyond its useful response window. Chronotope therefore executes history maintenance and decision meta-control on the accelerator to reduce host-side orchestration overhead.
+
+In the host-orchestrated pipeline, model output returns from the GPU to the CPU for parsing, reconciliation, and action construction (Figure 
+6
+(a)). Chronotope instead keeps the provisional decision and interaction history on the accelerator, where it updates the action before committing it at 
+ (Figure 
+6
+(b)). This reduces control-state transfers and host–device synchronization before commitment. Reducing this overhead can help the updated action reach the application before further interface changes invalidate it.
+
+5 
+Experiments
+
+To study how interface changes affect GUI-agent success and how agents can respond to these changes, we ask three questions. First, what determines whether an agent can still solve a task when the interface no longer waits for its response? Second, if the interface changes while the agent is still reasoning from earlier observations, how should the agent respond? Third, can an agent respond to interface changes and still deliver its action before the response window closes? We describe the common experimental setup in §
+5.1
+ and answer these questions in §
+5.2
+–
+5.4
+.
+
+5.1 
+Experimental Setup
+
+Tasks and agents.
+ We evaluate Chronotope on five temporally dynamic GUI tasks introduced in §
+3
+: Disappearing Notification, Moving Balloon, Expiring Authenticator Code, Displaced Button, and Reversing Trading Signal. On the agent controller level, we compare Accelerator-Resident Fused Control (§
+4.3
+), i.e., Chronotope, against Agent S3 
+(
+Gonzalez-Pumariega et al., 2026
+)
+. On the model level, Chronotope primarily uses Qwen3.8-27B 
+(
+Qwen Team, 2026
+)
+, Gemma-4-31B 
+(
+Gemma Team et al., 2026
+)
+, and UI-TARS-1.5-7B 
+(
+Qin et al., 2025
+)
+, while Agent S3 
+(
+Gonzalez-Pumariega et al., 2026
+)
+ primarily uses EvoCUA-8B 
+(
+Xue et al., 2026
+)
+ and UI-TARS-1.5-7B 
+(
+Qin et al., 2025
+)
+. To separate temporal failure from ordinary task incompetence, each agent configuration enters a timing study only after passing the corresponding Paused qualification check.
+
+Study Design and Metrics.
+ We evaluate each task under the three timing conditions introduced in §
+3
+. In 
+Paused
+, the interface waits while the agent decides. In 
+Replay
+, the agent receives the same sequence of observations as in Live, at the same times, but the response remains valid while it thinks. In 
+Live
+, both the observations and the task continue advancing: a target may move, a value may change, or an opportunity may close before the action arrives. We also use 
+controlled comparisons
+ that rerun the same task instance while changing one part of the interaction. We vary which observation supplies the final action or how long a committed action takes to reach the application, while holding the task, model call, and other event times fixed. Each experiment is evaluated on 100 random seeds separate from seeds used in development. We report success and task return at action receipt, together with the 
+, 
+, 
+, and 
+ intervals.
+
+Environment.
+ All experiments run on one NVIDIA GB10 GPU with local models deployed via vLLM and TensorRT.
+
+5.2 
+Claim 1. Live Execution Exposes Failures That Response Time Alone Cannot Explain
+
+An agent may succeed when the interface waits, but can it do so when the interface keeps changing during its response? If it fails, was the action wrong, or did the changing environment invalidate it before execution? To distinguish these cases, we evaluate the same agent and task under three conditions: Paused, Replay, and Live. In Paused, the interface remains unchanged until the agent responds. In Replay, it evolves as in Live but accepts actions valid for the initial observation. In Live, an action succeeds only if it remains valid upon application receipt. On Disappearing Notification, a baseline Qwen3.8-27B-BF16 agent succeeds in every Paused and Replay trial but fails in every Live trial because its 5.3 s response arrives after the notification’s 4 s deadline, despite identifying the correct target. 
+Even a correct action fails if it arrives too late.
+
+More surprisingly, an action can fail despite arriving on time. On Moving Balloon and Reversing Trading Signal, success drops from 100% in Paused and Replay to 0% in Live despite the agent meeting the response deadline. In Moving Balloon, the agent clicks where the balloon used to be as it moves at 8 pixels/s, so the coordinates are outdated even though clicking remains appropriate. In Reversing Trading Signal, the signal reverses after 2 s, invalidating the agent’s original decision.
+
+We isolate the effect of observation freshness from response time by fixing the model call, decision commitment time, and action receipt time, varying only which observation supplies click coordinates. On Moving Balloon, higher speeds (4–16 pixels/s), clicks based on the initial observation always miss, while those based on the latest observation before commitment always hit (Figure 
+1
+(b)). 
+Even at identical response times, observation freshness can determine whether actions succeed.
+
+5.3 
+Claim 2. Restarting Inference Can Turn Success Into Failure
+
+Claim 1 establishes that outdated observations can cause actions to fail, but leaves open how a controller should respond when an observation becomes outdated during inference. A natural response is to restart inference using a newer observation. However, another model call takes time, during which the interface may change again. We compare three responses: keeping the original action, restarting inference, and updating the pending action before commitment (Table 
+1
+).
+
+Restarting inference can turn a successful action into a failure. On Moving Balloon at 2 pixels/s, Qwen3.8-27B succeeds in every trial by keeping its original action, but restarting inference introduces enough delay to cause every trial to fail. When the balloon’s speed doubles to 4 pixels/s, the original click also becomes outdated, causing keeping to fail alongside restarting. Updating the pending click avoids both problems by refreshing its coordinates without restarting inference, succeeding in every trial at both speeds. Restarting only succeeds reliably when the changed state persists, as when the balloon jumps 96 pixels and remains stationary, yielding 99% success rate. 
+Restarting only works when the interface becomes static, suggesting that agents should update actions instead when the interface keeps changing.
+
+Updating an action also requires computation, but its execution cost is small compared with another model call. Chronotope adds 
+ s of overhead when no update is needed and takes a median of 
+ s to update an action. In contrast, restarting inference with Qwen3.8-27B more than doubles the latency on both Moving Balloon and Expiring Authenticator Code, adding up to 6.1 s. This additional delay can cause the replacement action to become outdated as the interface continues changing, explaining why restarting fails under continuous movement. However, updating action arguments alone cannot fix an outdated decision. On Reversing Trading Signal, the signal itself reverses, requiring the controller to reconsider the intended operation. 
+Updating pending actions avoids the cost and staleness risk of restarting inference, but changes to the intended operation still require a new decision.
+
+Task
+
+Setting
+
+ 
+
+Keep
+
+action
+
+ 
+
+Restart
+
+model
+
+ 
+
+Update
+
+action
+
+Qwen3.8-27B
+
+Moving Balloon
+
+1 pixel/s
+
+100
+
+100
+
+100
+
+Moving Balloon
+
+2 pixels/s
+
+100
+
+0
+
+100
+
+Moving Balloon
+
+4 pixels/s
+
+0
+
+0
+
+100
+
+Moving Balloon
+
+One 96-pixel jump at 2 s
+
+0
+
+99
+
+100
+
+Expiring Authenticator Code
+
+Code replaced once at 2 s
+
+0
+
+98
+
+100
+
+Displaced Button
+
+Banner moves button at 2 s
+
+0
+
+—
+
+100
+
+Moving Balloon (Select)
+
+Named target moves among
+
+other balloons at 8 pixels/s
+
+0
+
+0
+
+99
+
+UI-TARS-1.5-7B
+
+Moving Balloon
+
+8 pixels/s
+
+0
+
+—
+
+69
+
+Table 1: 
+Updating a pending action can recover success when both keeping it unchanged and restarting the model fail.
+ The screen changes while the model chooses an action for the task shown in each row. 
+Keep action
+ executes the action chosen from the initial screenshot. 
+Restart model
+ runs the model again on a newer screenshot after detecting a change. 
+Update action
+ uses a newer screenshot to change only the click position or typed code, without another model call. Each entry counts successful trials out of 100. Success is checked when the application receives the action: the click must hit the intended target, or the entered code must match the code then displayed. Results are grouped by model. The changes marked 2 s occur 2 s after the balloon, code, or page first appears. For balloon tasks, restarting is triggered by a 6-pixel change in the target’s position. A dash indicates an unreported result.
+
+5.4 
+Claim 3. Our Faster Control Expands the Performance Envelope
+
+Claim 2 shows that updating a pending action can prevent failures caused by outdated action arguments, but the updated action can still fail if it reaches the application after its response deadline. Under a tight deadline, a smaller model may respond in time but choose an incorrect action, whereas a larger model may choose the correct action but respond too late, indicating a capability-latency trade-off. We thus ask whether Chronotope’s faster responses let larger models achieve higher Live task success under tight deadlines, i.e., 
+expand their performance envelope
+. We compare Chronotope’s accelerator-resident controller with the host-orchestrated Agent S3 controller 
+(
+Gonzalez-Pumariega et al., 2026
+)
+. We study Live task performance under varying deadlines for models of different sizes, and compare their original latencies under the baseline controller against Chronotope’s accelerator-resident fused control. We report Live task success rate (SR), their original end-to-end latency (
+) under Agent S3, and the task response window. Figure 
+7
+ visualizes this performance envelope comparison.
+
+We observe that Chronotope substantially expands the Live task success attainable with each model in Figure 
+7
+. At the same response window, Chronotope consistently envelopes Agent S3’s performance envelope. At the 16 s response window, both controllers achieve high Live task success, with Chronotope reaching 100% compared with 88% for Agent S3. Halving the window to 8 s reveals a sharp divergence, as Chronotope maintains perfect success while Agent S3 drops to zero. As the window tightens further, Chronotope continues to succeed despite declining performance, until neither controller succeeds at 1 s. 
+Chronotope expands the performance envelope by enabling the larger model to maintain high Live task success under deadlines that the host-orchestrated controller cannot meet.
+ This suggests that practitioners can favor intermediate-sized models with Chronotope to balance decision quality and responsiveness under tight deadlines.
+
+Figure 7
+: 
+Chronotope expands the performance envelope under tight response deadlines.
+ The main panel illustrates Live task success across original baseline end-to-end latency and response windows, with Chronotope (blue) sustaining higher success across a wider range of deadlines than Agent S3 (red). While both controllers perform well under relaxed deadlines, their performance diverges sharply as windows tighten. Chronotope maintains 100% success for Qwen3.8-27B at 8 s and 96% for Qwen3.5-0.8B at 2 s, while Agent S3 drops to zero in both cases. 
+
+Chronotope achieves this expanded performance envelope by substantially reducing response latency. For the same 27B model, Chronotope achieves a 6.9
+ speedup in end-to-end latency over Agent S3, bringing the response times below the 4 s deadline while Agent S3’s median remains above it. Chronotope shortens the decision path by replacing full interaction histories with compact representations and cheap action updates instead of re-grounding them through another model call, reducing token usage by up to 87.5%. Under continuous movement, these updates consistently shorten time to commitment relative to re-grounding, with a peak reduction of 70.7% at 8 pixels/s. This advantage persists as the target moves because Chronotope can revise an existing action without restarting inference. Chronotope maintains interaction history and performs decision reconciliation on the accelerator, reducing host-side orchestration and CPU–GPU synchronization (§
+4.3
+).
+
+5.5 
+Additional Claims
+
+We conducted experiments on of varying Chronotope’s history capacity and on the sources of Chronotope’s overall latency reduction. We claim that Chronotope’s EODA/EDM mechanism provides a efficient history representation, mitigating token usage growth and latency as history capacity increases. In addition, we find that Chronotope’s overall architecture obviates repeated reflection, reasoning, and grounding calls, while achieving higher success rates on DynaCU-Bench 
+(
+Li and Shi, 2026
+)
+. We encourage readers to refer to Appendix 
+D.1
+ and 
+D.2
+ for details.
+
+6 
+Conclusion
+
+GUI agents can fail despite choosing correct actions because interfaces continue changing during inference. We model the timing of environment changes, observations, decisions, and action receipt, and introduce ChronotopeGym to expose failures that response time alone cannot explain. Chronotope addresses these failures through compact interaction history, selective KEEP/UPDATE/REDECIDE meta-control, and accelerator-resident execution. On ChronotopeGym, selective meta-control matches or exceeds fixed-policy success by adapting pending actions to environmental changes. Chronotope further reduces end-to-end latency by 6.9
+ for a 27B model, expanding its performance envelope under tight deadlines.
+
+Limitations and future work.
+ The decision updates used in our experiments are lightweight but task-specific. Another multimodal model could infer what information in an unfinished decision should be preserved or replaced, but repeatedly invoking such a model would add inference cost and latency. Our current design therefore favors inexpensive task-specific updates while demonstrating that revising unfinished decisions can recover Live performance. Future work can study more general update mechanisms that retain this low-latency property and can additionally predict changes that occur before the action reaches the interface.
+
+References
+
+Agashe 
+et al.
+ (2025)
+
+S. Agashe, J. Han, S. Gan, J. Yang, A. Li, and X. E. Wang
+
+Agent s: an open agentic framework that uses computers like a human
+.
+
+In 
+International Conference on Learning Representations
+,
+
+External Links: 
+Link
+
+Cited by: 
+§A.1
+.
+
+Bonatti 
+et al.
+ (2024)
+
+R. Bonatti, D. Zhao, F. Bonacci, D. Dupont, S. Abdali, Y. Li, Y. Lu, J. Wagle, K. Koishida, A. Bucker, L. Jang, and Z. Hui
+
+Windows agent arena: evaluating multi-modal OS agents at scale
+.
+
+arXiv preprint arXiv:2409.08264
+.
+
+Cited by: 
+§A.2
+,
+
+Table 2
+.
+
+Brown 
+et al.
+ (2001)
+
+L. D. Brown, T. T. Cai, and A. DasGupta
+
+Interval estimation for a binomial proportion
+.
+
+Statistical Science
+ 
+16
+ (
+2
+), 
+pp. 101–133
+.
+
+Cited by: 
+§B.2
+.
+
+Cao 
+et al.
+ (2026)
+
+Y. Cao, Y. Zhong, Z. Zeng, L. Zheng, J. Huang, H. Qiu, P. Shi, W. Mao, and W. Guanglu
+
+MobileDreamer: generative sketch world model for gui agent
+.
+
+arXiv preprint arXiv:2601.04035
+.
+
+External Links: 
+2601.04035
+
+Cited by: 
+§A.3
+,
+
+§2
+.
+
+Chen 
+et al.
+ (2025)
+
+D. Chen, Y. Huang, S. Wu, J. Tang, H. Zhou, Q. Zhang, Z. He, Y. Bai, C. Gao, L. Chen, Y. Li, C. Wang, Y. Yu, T. Zhou, Z. Li, Y. Gui, Y. Wan, P. Zhou, J. Gao, and L. Sun
+
+GUI-world: a video benchmark and dataset for multimodal gui-oriented understanding
+.
+
+In 
+The Thirteenth International Conference on Learning Representations
+,
+
+External Links: 
+Link
+
+Cited by: 
+§A.2
+,
+
+Table 2
+.
+
+Cheng 
+et al.
+ (2024)
+
+K. Cheng, Q. Sun, Y. Chu, F. Xu, Y. Li, J. Zhang, and Z. Wu
+
+SeeClick: harnessing GUI grounding for advanced visual GUI agents
+.
+
+arXiv preprint arXiv:2401.10935
+.
+
+Cited by: 
+§A.2
+,
+
+Table 2
+.
+
+Deng 
+et al.
+ (2023)
+
+X. Deng, Y. Gu, B. Zheng, S. Chen, S. Stevens, B. Wang, H. Sun, and Y. Su
+
+Mind2Web: towards a generalist agent for the web
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+Vol. 
+36
+.
+
+External Links: 
+Link
+
+Cited by: 
+§A.1
+,
+
+§A.2
+,
+
+Table 2
+,
+
+§1
+.
+
+Dong 
+et al.
+ (2026)
+
+Z. Dong, R. Qian, Q. Zhan, D. Peng, K. Li, and Y. Li
+
+Why are gui agents correct but late? decode on the decision-time critical path, tested with pre-compiled policy trees
+.
+
+arXiv preprint arXiv:2607.28399
+.
+
+External Links: 
+2607.28399
+,
+
+Link
+
+Cited by: 
+§A.2
+,
+
+§A.3
+,
+
+Table 2
+,
+
+§2
+,
+
+§2
+.
+
+Drouin 
+et al.
+ (2024)
+
+A. Drouin, M. Gasse, M. Caccia, I. H. Laradji, M. D. Verme, T. Marty, D. Vazquez, N. Chapados, and A. Lacoste
+
+WorkArena: how capable are web agents at solving common knowledge work tasks?
+.
+
+In 
+Proceedings of the 41st International Conference on Machine Learning
+,
+
+Proceedings of Machine Learning Research
+, Vol. 
+235
+, 
+pp. 11642–11662
+.
+
+Cited by: 
+§A.2
+.
+
+Gao 
+et al.
+ (2024)
+
+D. Gao, L. Ji, Z. Bai, M. Ouyang, P. Li, D. Mao, Q. Wu, W. Zhang, P. Wang, X. Guo, H. Wang, L. Zhou, and M. Z. Shou
+
+AssistGUI: task-oriented pc graphical user interface automation
+.
+
+In 
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition
+,
+
+pp. 13289–13298
+.
+
+Cited by: 
+§A.2
+.
+
+Gemma Team 
+et al.
+ (2026)
+
+Gemma Team, S. El Abd, V. Aggarwal, R. Algayres, A. Andreev, 
+et al.
+
+Gemma 4 technical report
+.
+
+arXiv preprint arXiv:2607.02770
+.
+
+Cited by: 
+§5.1
+.
+
+Gonzalez-Pumariega 
+et al.
+ (2026)
+
+G. Gonzalez-Pumariega, V. Tu, C. Lee, J. Yang, A. Li, and X. E. Wang
+
+Scaling agents for computer use
+.
+
+Transactions on Machine Learning Research
+.
+
+External Links: 
+2510.02250
+
+Cited by: 
+§2
+,
+
+§5.1
+,
+
+§5.4
+.
+
+Gou 
+et al.
+ (2025)
+
+B. Gou, R. Wang, B. Zheng, Y. Xie, C. Chang, Y. Shu, H. Sun, and Y. Su
+
+Navigating the digital world as humans do: universal visual grounding for GUI agents
+.
+
+In 
+International Conference on Learning Representations
+,
+
+External Links: 
+Link
+
+Cited by: 
+§A.1
+.
+
+He 
+et al.
+ (2024)
+
+H. He, W. Yao, K. Ma, W. Yu, Y. Dai, H. Zhang, Z. Lan, and D. Yu
+
+WebVoyager: building an end-to-end web agent with large multimodal models
+.
+
+arXiv preprint arXiv:2401.13919
+.
+
+Cited by: 
+Table 2
+.
+
+Hong 
+et al.
+ (2024)
+
+W. Hong, W. Wang, Q. Lv, J. Xu, W. Yu, J. Ji, Y. Wang, Z. Wang, Y. Dong, M. Ding, and J. Tang
+
+CogAgent: a visual language model for GUI agents
+.
+
+In 
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition
+,
+
+pp. 14281–14290
+.
+
+Cited by: 
+§A.1
+.
+
+Kapoor 
+et al.
+ (2024)
+
+R. Kapoor, Y. P. Butala, M. Russak, J. Y. Koh, K. Kamble, W. Alshikh, and R. Salakhutdinov
+
+OmniACT: a dataset and benchmark for enabling multimodal generalist autonomous agents for desktop and web
+.
+
+arXiv preprint arXiv:2402.17553
+.
+
+Cited by: 
+§A.2
+,
+
+Table 2
+.
+
+Koh 
+et al.
+ (2024)
+
+J. Y. Koh, R. Lo, L. Jang, V. Duvvur, M. C. Lim, P. Huang, G. Neubig, S. Zhou, R. Salakhutdinov, and D. Fried
+
+VisualWebArena: evaluating multimodal agents on realistic visual web tasks
+.
+
+arXiv preprint arXiv:2401.13649
+.
+
+Cited by: 
+§A.2
+,
+
+Table 2
+.
+
+Li and Shi (2026)
+
+B. Li and N. Shi
+
+Agent-computer observation interfaces enable dynamic computer use
+.
+
+arXiv preprint arXiv:2606.29472
+.
+
+External Links: 
+2606.29472
+,
+
+Document
+
+Cited by: 
+§A.2
+,
+
+§A.3
+,
+
+Table 2
+,
+
+§1
+,
+
+§2
+,
+
+§2
+,
+
+§5.5
+.
+
+Li 
+et al.
+ (2025)
+
+K. Li, Z. Meng, H. Lin, Z. Luo, Y. Tian, J. Ma, Z. Huang, and T. Chua
+
+ScreenSpot-pro: GUI grounding for professional high-resolution computer use
+.
+
+arXiv preprint arXiv:2504.07981
+.
+
+Cited by: 
+§A.2
+,
+
+Table 2
+.
+
+Liang 
+et al.
+ (2026)
+
+Y. Liang, S. Zhou, Y. Gu, H. Tan, G. Wu, F. Dernoncourt, J. Kil, R. A. Rossi, and R. Zhang
+
+Anticipatory planning for multimodal ai agents
+.
+
+arXiv preprint arXiv:2603.16777
+.
+
+External Links: 
+2603.16777
+
+Cited by: 
+§A.3
+,
+
+§2
+.
+
+Lin 
+et al.
+ (2024)
+
+K. Q. Lin, L. Li, D. Gao, Q. Yang, S. Wu, Z. Bai, W. Lei, L. Wang, and M. Z. Shou
+
+VideoGUI: a benchmark for GUI automation from instructional videos
+.
+
+arXiv preprint arXiv:2406.10227
+.
+
+Cited by: 
+§A.2
+,
+
+Table 2
+.
+
+Lin 
+et al.
+ (2025)
+
+K. Q. Lin, L. Li, D. Gao, Z. Yang, S. Wu, Z. Bai, S. W. Lei, L. Wang, and M. Z. Shou
+
+ShowUI: one vision-language-action model for GUI visual agent
+.
+
+In 
+Proceedings of the IEEE/CVF Conference on Computer Vision and Pattern Recognition
+,
+
+pp. 19498–19508
+.
+
+External Links: 
+Document
+
+Cited by: 
+§A.1
+,
+
+§A.3
+.
+
+Liu 
+et al.
+ (2026)
+
+E. Liu, L. Pan, Z. Gao, Y. Yang, C. Shi, Y. Liu, J. Wu, and Q. Li
+
+Benchmarking and improving gui agents in high-dynamic environments
+.
+
+arXiv preprint arXiv:2604.25380
+.
+
+External Links: 
+2604.25380
+,
+
+Link
+
+Cited by: 
+§A.2
+,
+
+Table 2
+,
+
+§2
+,
+
+§2
+.
+
+Liu 
+et al.
+ (2018)
+
+E. Z. Liu, K. Guu, P. Pasupat, T. Shi, and P. Liang
+
+Reinforcement learning on web interfaces using workflow-guided exploration
+.
+
+In 
+International Conference on Learning Representations
+,
+
+External Links: 
+Link
+
+Cited by: 
+§A.2
+,
+
+§A.2
+,
+
+Table 2
+.
+
+Pan 
+et al.
+ (2024)
+
+Y. Pan, D. Kong, S. Zhou, C. Cui, Y. Leng, B. Jiang, H. Liu, Y. Shang, S. Zhou, T. Wu, and Z. Wu
+
+WebCanvas: benchmarking web agents in online environments
+.
+
+arXiv preprint arXiv:2406.12373
+.
+
+Cited by: 
+§A.2
+,
+
+Table 2
+.
+
+Qin 
+et al.
+ (2025)
+
+Y. Qin, Y. Ye, J. Fang, H. Wang, S. Liang, S. Tian, J. Zhang, J. Li, Y. Li, S. Huang, 
+et al.
+
+UI-tars: pioneering automated gui interaction with native agents
+.
+
+arXiv preprint arXiv:2501.12326
+.
+
+External Links: 
+2501.12326
+,
+
+Link
+
+Cited by: 
+§A.1
+,
+
+§A.1
+,
+
+§1
+,
+
+§2
+,
+
+§5.1
+.
+
+Qwen Team (2026)
+
+Qwen Team
+
+Qwen3.8-Max: a new bar for coding and cowork
+.
+
+External Links: 
+Link
+
+Cited by: 
+§5.1
+.
+
+Rawles 
+et al.
+ (2025)
+
+C. Rawles, S. Clinckemaillie, Y. Chang, J. Waltz, G. Lau, M. Fair, A. Li, W. Bishop, W. Li, F. Campbell-Ajala, D. Toyama, R. Berry, D. Tyamagundlu, T. Lillicrap, and O. Riva
+
+AndroidWorld: a dynamic benchmarking environment for autonomous agents
+.
+
+In 
+The Thirteenth International Conference on Learning Representations
+,
+
+External Links: 
+Link
+
+Cited by: 
+§A.2
+,
+
+Table 2
+,
+
+§1
+.
+
+Rawles 
+et al.
+ (2023)
+
+C. Rawles, A. Li, D. Rodriguez, O. Riva, and T. Lillicrap
+
+Android in the wild: a large-scale dataset for android device control
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+External Links: 
+Link
+
+Cited by: 
+§A.2
+,
+
+Table 2
+.
+
+Wang 
+et al.
+ (2025)
+
+X. Wang, B. Wang, D. Lu, J. Yang, T. Xie, J. Wang, J. Deng, X. Guo, Y. Xu, C. Wu, Z. Shen, Z. Li, R. Li, X. Li, J. Chen, B. Zheng, P. Li, F. Lei, R. Cao, Y. Fu, D. Shin, M. Shin, J. Hu, Y. Wang, J. Chen, Y. Ye, D. Zhang, Y. Wang, H. Wang, D. Yang, V. Zhong, Y. Charles, Z. Yang, and T. Yu
+
+OpenCUA: open foundations for computer-use agents
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+Vol. 
+38
+.
+
+External Links: 
+Document
+
+Cited by: 
+§A.1
+.
+
+Wu 
+et al.
+ (2025)
+
+Z. Wu, Z. Wu, F. Xu, Y. Wang, Q. Sun, C. Jia, K. Cheng, Z. Ding, L. Chen, P. P. Liang, and Y. Qiao
+
+OS-ATLAS: a foundation action model for generalist GUI agents
+.
+
+In 
+International Conference on Learning Representations
+,
+
+External Links: 
+Link
+
+Cited by: 
+§A.1
+.
+
+Xie 
+et al.
+ (2024)
+
+T. Xie, D. Zhang, J. Chen, X. Li, S. Zhao, R. Cao, T. J. Hua, Z. Cheng, D. Shin, F. Lei, Y. Liu, Y. Xu, S. Zhou, S. Savarese, C. Xiong, V. Zhong, and T. Yu
+
+OSWorld: benchmarking multimodal agents for open-ended tasks in real computer environments
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+Vol. 
+37
+.
+
+External Links: 
+Link
+
+Cited by: 
+§A.1
+,
+
+§A.2
+,
+
+Table 2
+,
+
+§1
+.
+
+Xu 
+et al.
+ (2025)
+
+Y. Xu, Z. Wang, J. Wang, D. Lu, T. Xie, A. Saha, D. Sahoo, T. Yu, and C. Xiong
+
+Aguvis: unified pure vision agents for autonomous GUI interaction
+.
+
+In 
+Proceedings of the 42nd International Conference on Machine Learning
+,
+
+Proceedings of Machine Learning Research
+, Vol. 
+267
+, 
+pp. 69772–69805
+.
+
+Cited by: 
+§A.1
+.
+
+Xue 
+et al.
+ (2026)
+
+T. Xue, C. Peng, M. Huang, L. Guo, T. Han, H. Wang, J. Wang, X. Zhang, X. Yang, D. Zhao, 
+et al.
+
+EvoCUA: evolving computer use agents via learning from scalable synthetic experience
+.
+
+arXiv preprint arXiv:2601.15876
+.
+
+Cited by: 
+§5.1
+.
+
+Xue 
+et al.
+ (2025)
+
+T. Xue, W. Qi, T. Shi, C. H. Song, B. Gou, D. Song, H. Sun, and Y. Su
+
+An illusion of progress? assessing the current state of web agents
+.
+
+arXiv preprint arXiv:2504.01382
+.
+
+Cited by: 
+Table 2
+.
+
+Yao 
+et al.
+ (2026)
+
+J. Yao, H. Huang, D. Wu, W. Chen, H. Ai, H. Wen, Z. Liu, and Y. Guo
+
+Benchmarking living-screen-native gui agents on short-video platforms
+.
+
+arXiv preprint arXiv:2606.04701
+.
+
+External Links: 
+2606.04701
+,
+
+Link
+
+Cited by: 
+§A.2
+,
+
+Table 2
+,
+
+§2
+,
+
+§2
+.
+
+Zhang 
+et al.
+ (2025a)
+
+C. Zhang, S. He, J. Qian, B. Li, L. Li, S. Qin, Y. Kang, M. Ma, G. Liu, Q. Lin, S. Rajmohan, D. Zhang, and Q. Zhang
+
+Large language model-brained GUI agents: a survey
+.
+
+Transactions on Machine Learning Research
+.
+
+External Links: 
+2411.18279
+
+Cited by: 
+§A.1
+.
+
+Zhang 
+et al.
+ (2025b)
+
+C. Zhang, H. Huang, C. Ni, J. Mu, S. Qin, S. He, L. Wang, F. Yang, P. Zhao, B. Qiao, C. Du, L. Li, Y. Kang, Z. Jiang, S. Zheng, R. Wang, J. Qian, M. Ma, J. Lou, Q. Lin, S. Rajmohan, and D. Zhang
+
+UFO
+: the desktop agentos
+.
+
+arXiv preprint arXiv:2504.14603
+.
+
+External Links: 
+2504.14603
+
+Cited by: 
+§A.3
+,
+
+§2
+.
+
+Zheng 
+et al.
+ (2024a)
+
+B. Zheng, B. Gou, J. Kil, H. Sun, and Y. Su
+
+GPT-4V(ision) is a generalist web agent, if grounded
+.
+
+In 
+Proceedings of the 41st International Conference on Machine Learning
+,
+
+Proceedings of Machine Learning Research
+, Vol. 
+235
+, 
+pp. 61349–61385
+.
+
+External Links: 
+Link
+
+Cited by: 
+§A.1
+,
+
+§A.1
+,
+
+§1
+.
+
+Zheng 
+et al.
+ (2024b)
+
+L. Zheng, Z. Huang, Z. Xue, X. Wang, B. An, and S. Yan
+
+AgentStudio: a toolkit for building general virtual agents
+.
+
+arXiv preprint arXiv:2403.17918
+.
+
+Cited by: 
+§A.2
+,
+
+Table 2
+.
+
+Zhong 
+et al.
+ (2026)
+
+H. Zhong, F. Faisal, L. França, T. Leesatapornwongsa, A. Szekeres, K. Rong, and S. Nath
+
+ActionEngine: from reactive to programmatic GUI agents via state machine memory
+.
+
+External Links: 
+2602.20502
+
+Cited by: 
+§A.3
+.
+
+Zhou 
+et al.
+ (2024)
+
+S. Zhou, F. F. Xu, H. Zhu, X. Zhou, R. Lo, A. Sridhar, X. Cheng, T. Ou, Y. Bisk, D. Fried, U. Alon, and G. Neubig
+
+WebArena: a realistic web environment for building autonomous agents
+.
+
+In 
+The Twelfth International Conference on Learning Representations
+,
+
+External Links: 
+Link
+
+Cited by: 
+§A.2
+,
+
+Table 2
+,
+
+§1
+.
+
+Appendix A 
+Extended Related Works
+
+A.1 
+GUI Agents
+
+GUI agents translate high-level user goals into interactions with graphical interfaces 
+(
+Deng et al., 2023
+; 
+Xie et al., 2024
+; 
+Qin et al., 2025
+)
+. A typical system receives a screenshot, sometimes together with structured interface information such as the DOM or accessibility tree, reasons about the next step, grounds that step to an interface element, and emits mouse, keyboard, touch, or hybrid GUI and API actions 
+(
+Zheng et al., 2024a
+; 
+Qin et al., 2025
+; 
+Zhang et al., 2025a
+)
+. This interface-level abstraction allows generalist agents to operate across websites, desktop applications, and operating systems rather than requiring a task-specific API for every application 
+(
+Deng et al., 2023
+; 
+Xie et al., 2024
+)
+.
+
+Existing systems realize this loop in several ways. SeeAct couples multimodal planning with interface grounding 
+(
+Zheng et al., 2024a
+)
+, while Agent S combines experience-augmented hierarchical planning with an agent–computer interface 
+(
+Agashe et al., 2025
+)
+. A complementary line trains GUI-specialized visual action models. CogAgent and UGround emphasize visual GUI understanding and grounding 
+(
+Hong et al., 2024
+; 
+Gou et al., 2025
+)
+, while OS-ATLAS, ShowUI, Aguvis, UI-TARS, and OpenCUA extend toward cross-platform or end-to-end action prediction 
+(
+Wu et al., 2025
+; 
+Lin et al., 2025
+; 
+Xu et al., 2025
+; 
+Qin et al., 2025
+; 
+Wang et al., 2025
+)
+. Despite these advances, most GUI agents still form each action from observations collected before or at the start of the current reasoning step. They improve what the agent perceives, plans, or predicts, but generally do not update an unfinished decision when relevant interface state changes during computation. As a result, an action can be correct for the state that originally supported it yet become outdated before commitment or execution. 
+Chronotope
+ addresses this limitation by keeping an unfinished decision current as new evidence arrives, preserving information that remains valid while updating information that has become outdated before commitment.
+
+A.2 
+GUI-Agent Benchmarks and Time
+
+GUI-agent benchmarks cover different parts of this stack. MiniWoB++ provides controlled browser tasks 
+(
+Liu et al., 2018
+)
+. Mind2Web and Android in the Wild collect multi-step web or mobile trajectories 
+(
+Deng et al., 2023
+; 
+Rawles et al., 2023
+)
+. ScreenSpot and ScreenSpot-Pro isolate GUI grounding 
+(
+Cheng et al., 2024
+; 
+Li et al., 2025
+)
+. OmniACT, VideoGUI, and GUI-World evaluate richer action or video-based understanding 
+(
+Kapoor et al., 2024
+; 
+Lin et al., 2024
+; 
+Chen et al., 2025
+)
+. Interactive environments then test task completion in running software, including WebArena and VisualWebArena for the web 
+(
+Zhou et al., 2024
+; 
+Koh et al., 2024
+)
+, WorkArena for enterprise browser tasks 
+(
+Drouin et al., 2024
+)
+, AndroidWorld for mobile applications 
+(
+Rawles et al., 2025
+)
+, and OSWorld, Windows Agent Arena, AgentStudio, and AssistGUI for desktop or cross-application control 
+(
+Xie et al., 2024
+; 
+Bonatti et al., 2024
+; 
+Zheng et al., 2024b
+; 
+Gao et al., 2024
+)
+. These benchmarks have been central to progress in grounding, planning, and end-to-end task success, but their use of a live application does not by itself specify what happens to task time while the agent is computing.
+
+Time therefore needs to be investigated as a distinct dimension of GUI-agent evaluation. Many interactive harnesses remain step-synchronous: they capture an observation, block while the agent returns an action, execute that action, and only then request the next observation. Mind2Web-Live evaluates agents against changing online websites 
+(
+Pan et al., 2024
+)
+, but does not expose within-decision observation updates or score action arrival time. MiniWoB++ is an earlier exception in which its default positive reward is scaled by remaining wall-clock time, although most prior publications use a binary reward that removes this time penalty 
+(
+Liu et al., 2018
+)
+. Recent benchmarks make temporal change more explicit. DynamicGUIBench scripts transient events 
+(
+Liu et al., 2026
+)
+, LivingScreen uses continuously playing interfaces 
+(
+Yao et al., 2026
+)
+, DynaCU-Bench includes timed dynamic tasks 
+(
+Li and Shi, 2026
+)
+, and AAPT evaluates deadline-sensitive reactions 
+(
+Dong et al., 2026
+)
+. Table 
+2
+ compares how these benchmarks represent, measure, and score time. Despite these advances, existing benchmarks either constrain interaction to a sequential observation–action loop or evaluate timing through aggregate latency and task success. As a result, they can show that timing matters without distinguishing whether correctness was lost because a change was missed, a decision became outdated, or an action arrived too late. 
+ChronotopeGym
+ addresses this gap by controlling and measuring environment change, observation availability, decision commitment, and action receipt separately, allowing timing failures to be localized within a response.
+
+Benchmark
+
+Task state
+
+during compute
+
+Observation updates
+
+during decision
+
+Timing
+
+recorded
+
+Late action
+
+affects success?
+
+Distinguishes timing
+
+failure modes?
+
+Static benchmarks
+
+Mind2Web 
+(
+Deng et al., 2023
+)
+
+Frozen
+
+No
+
+None
+
+No
+
+No
+
+GUI-World 
+(
+Chen et al., 2025
+)
+
+Frozen
+
+No
+
+None
+
+No
+
+No
+
+ScreenSpot 
+(
+Cheng et al., 2024
+)
+
+Frozen
+
+No
+
+None
+
+No
+
+No
+
+ScreenSpot-Pro 
+(
+Li et al., 2025
+)
+
+Frozen
+
+No
+
+None
+
+No
+
+No
+
+OmniACT 
+(
+Kapoor et al., 2024
+)
+
+Frozen
+
+No
+
+None
+
+No
+
+No
+
+VideoGUI 
+(
+Lin et al., 2024
+)
+
+Frozen
+
+No
+
+None
+
+No
+
+No
+
+Android in the Wild 
+(
+Rawles et al., 2023
+)
+
+Frozen
+
+No
+
+None
+
+No
+
+No
+
+Live sequential benchmarks
+
+OSWorld 
+(
+Xie et al., 2024
+)
+
+Advances
+
+No
+
+Runtime
+
+only
+
+No
+
+No
+
+WebArena 
+(
+Zhou et al., 2024
+)
+
+Advances
+
+No
+
+None
+
+No
+
+No
+
+VisualWebArena 
+(
+Koh et al., 2024
+)
+
+Advances
+
+No
+
+None
+
+No
+
+No
+
+AndroidWorld 
+(
+Rawles et al., 2025
+)
+
+Advances
+
+No
+
+Runtime
+
+only
+
+No
+
+No
+
+Mind2Web-Live 
+(
+Pan et al., 2024
+)
+
+Advances
+
+No
+
+None
+
+No
+
+No
+
+Windows Agent Arena 
+(
+Bonatti et al., 2024
+)
+
+Advances
+
+No
+
+Action
+
+timestamps
+
+No
+
+No
+
+WebVoyager 
+(
+He et al., 2024
+)
+
+Advances
+
+No
+
+None
+
+No
+
+No
+
+AgentStudio 
+(
+Zheng et al., 2024b
+)
+
+Advances
+
+No
+
+Action
+
+timestamps
+
+Yes
+
+(optional timeout)
+
+No
+
+Online-Mind2Web 
+(
+Xue et al., 2025
+)
+
+Advances
+
+No
+
+None
+
+No
+
+No
+
+Benchmarks with explicit timing
+
+MiniWoB++ 
+(
+Liu et al., 2018
+)
+
+Advances
+
+(timer)
+
+No
+
+Remaining
+
+task time
+
+Yes
+
+(reward)
+
+No
+
+DynamicGUIBench 
+(
+Liu et al., 2026
+)
+
+Advances
+
+(scripted)
+
+No
+
+None
+
+No
+
+No
+
+LivingScreen 
+(
+Yao et al., 2026
+)
+
+Advances
+
+(continuous)
+
+Yes
+
+(on request)
+
+None
+
+No
+
+No
+
+DynaCU-Bench 
+(
+Li and Shi, 2026
+)
+
+Advances
+
+(timers)
+
+No
+
+Decision
+
+latency
+
+Yes
+
+No
+
+AAPT 
+(
+Dong et al., 2026
+)
+
+Advances
+
+(deadlines)
+
+Yes
+
+(30 FPS)
+
+Action
+
+receipt
+
+Yes
+
+No
+
+ChronotopeGym
+ (Ours)
+
+Advances
+
+(controlled)
+
+Yes
+
+(controlled)
+
+Yes
+
+Yes
+
+Table 2: 
+How GUI-agent benchmarks handle time while an agent computes.
+
+Mind2Web, GUI-World, ScreenSpot, ScreenSpot-Pro, OmniACT, VideoGUI, and Android in the Wild use static data, so task state cannot change during an unfinished response. 
+ChronotopeGym
+ instead allows environment state to change while the agent computes.
+OSWorld, WebArena, VisualWebArena, AndroidWorld, Mind2Web-Live, Windows Agent Arena, WebVoyager, AgentStudio, and Online-Mind2Web evaluate GUI interaction as a 
+sequential, synchronous
+ 
+ loop, where each observation is followed by one action before the next observation is obtained. 
+ChronotopeGym
+ instead allows observation and action events to occur independently in time, exposing timing failures that this strict alternation cannot represent.
+MiniWoB++ makes remaining task time affect its default reward, but does not identify where within a response correctness is lost. 
+ChronotopeGym
+ separately measures environment change, observation availability, decision commitment, and action receipt.
+DynamicGUIBench and LivingScreen introduce explicit temporal changes, but do not evaluate whether an action arrives before the relevant state changes. In contrast, 
+ChronotopeGym
+ measures action receipt against the evolving task state.
+DynaCU-Bench and AAPT make latency consequential, so they can show that acting later changes overall success. However, overall success conflates whether failure arose because the agent missed a change, committed an outdated decision, or delivered an action too late. 
+ChronotopeGym
+ separates these cases by locating failure relative to environment change, observation, decision commitment, and action receipt.
+
+A.3 
+Latency and Temporal Control in GUI Agents
+
+Recent methods address temporal failures at different points in the interaction path. We organize them by their 
+temporal intervention point
+: 
+observation-path methods
+, which change when or how observations are acquired and processed, 
+anticipatory methods
+, which predict future interface states before execution, and 
+decision-path acceleration methods
+, which reduce or move computation away from the online response path.
+
+Observation-path methods
+ improve what the agent can observe or how efficiently observations are processed. 
+Li and Shi (2026)
+ decouple observation from action so transient visual and audio evidence can be captured between model calls, while 
+Lin et al. (2025)
+ reduces visual-token computation through UI-guided token selection. However, increasing observation frequency or reducing perception cost does not determine whether newly available evidence can revise a decision already in progress. Consequently, an agent may observe a relevant change yet still execute a decision formed from an earlier state. Chronotope addresses this limitation by representing observation availability and decision commitment as separate events, allowing us to test whether newly observed evidence reaches and revises an unfinished decision.
+
+Anticipatory methods
+ compensate for future interface change by predicting what may happen before execution. 
+Cao et al. (2026)
+ predicts post-action interface states with a learned world model, while 
+Liang et al. (2026)
+ trains agents to forecast short-horizon trajectories before execution. However, prediction concerns expected future states rather than the actual changes that occur while inference and execution are underway. Consequently, prediction error or unmodeled change can still invalidate a planned action without revealing when correctness was lost. Chronotope addresses this limitation by representing environment change independently from observation and decision events, allowing correctness to be evaluated against the state that actually evolves during execution.
+
+Decision-path acceleration methods
+ reduce the amount of computation required after relevant state becomes available. 
+Zhang et al. (2025b)
+ amortizes model calls through speculative multi-action planning, 
+Zhong et al. (2026)
+ reuses an explored state-machine representation to synthesize executable programs, and 
+Dong et al. (2026)
+ precompute bounded conditional policies so expensive decoding need not occur after a transient event appears. However, reducing decision latency changes how quickly an action can be produced without identifying which temporal boundary caused a remaining failure. Consequently, a failed action may still result from missing evidence, an outdated decision, invalidation after commitment, or arrival after the response opportunity has closed. Chronotope addresses this limitation by separating environment change, observation availability, decision commitment, and action receipt, so failures can be attributed to the event boundary at which correctness is lost.
+
+Appendix B 
+ChronotopeGym Tasks and Experimental Design
+
+To study how an agent can choose the right action yet fail because the interface changes, we designed the five ChronotopeGym tasks introduced in §
+3.2
+. The tasks distinguish four reasons for which an initially correct action may fail, including arriving after the opportunity closes, aiming at an outdated location, entering an outdated value, or no longer being the action the task requires. These distinctions matter because a pending action may need to be delivered sooner, updated with new information, or replaced altogether. We vary when and how the interface changes within each task to measure these failure mechanisms separately. Figure 
+8
+ illustrates the five tasks through representative GUI interactions.
+
+Disappearing Notification
+
+Opportunity closes
+
+Moving Balloon
+
+Target position changes
+
+Expiring Authenticator Code
+
+Required value changes
+
+Displaced Button
+
+Page layout changes
+
+Reversing Trading Signal
+
+Required action changes
+
+Figure 8
+: 
+Five ChronotopeGym tasks illustrating how interface changes can invalidate an agent’s response.
+
+Each row shows the interface initially observed by the agent (left), its changed state during deliberation (middle), and the outcome when the action reaches the application (right).
+The tasks investigate closing response opportunities, moving targets, changing input values, layout-induced displacement, and changes to the required action.
+
+B.1 
+Task Design and Variants
+
+Disappearing Notification.
+
+The agent must click a temporary button before it disappears. A click can be correct for the observed screenshot but fail if the button disappears during inference or action delivery. A click succeeds only if the application receives it inside the button before the response window closes. The button’s position and function remain unchanged while it is available, allowing us to study a closing response window without also changing the action the agent must take.
+
+In the Card variant, a notification card with a blue button disappears when its response window closes. In the Video Player variant, a video is already playing when a sponsor banner and a temporary skip button appear. Unlike the Card variant, the skip button can appear while the agent is still completing an earlier decision, leaving less time to respond before the button disappears. In both variants, we test response windows of 1, 2, 4, 8, and 16 s to determine when the agent’s response time exceeds the time available to act. For example, with a 4 s response window, a click produced after 5.1 s succeeds in Paused because the task clock stops during deliberation, but fails in Live because the notification has already disappeared.
+
+Moving Balloon.
+
+The agent must click a balloon that can move while the agent thinks. The agent can aim at the balloon’s position in the screenshot and still miss if the balloon moves before the click arrives. A click succeeds only if it lands inside the intended balloon when the application receives it. By varying when and how fast the balloon moves, we measure how its displacement during the agent’s response affects click accuracy.
+
+In the Drift variant, the balloon moves horizontally at a constant speed throughout the agent’s response. We test a stationary balloon (0 pixels/s) and speeds of 1, 2, 4, 8, and 16 pixels/s to identify when the balloon moves far enough during the response for the original click to miss. In the Jump variant, the balloon shifts 96 pixels and then remains stationary, allowing us to compare updating the pending click with restarting inference. We trigger the jump at 2 s during deliberation or at 14 s after the agent’s typical response, testing whether movement before versus after the click changes its outcome. In the Select variant, the agent must identify and click the balloon named in the instruction while other balloons cross its path. This distinguishes choosing the wrong balloon from choosing the right one but clicking at its previous position.
+
+Expiring Authenticator Code.
+
+The agent must type the displayed four-digit verification code into a text field. The code may change while the agent thinks, so the value it first reads may be wrong by the time it is entered. The agent succeeds only if the entered code matches the code displayed when the application receives it. This task tests whether the agent can preserve its decision to type into the same field while updating only the code value.
+
+In the early-replacement condition, the code changes 2 s after appearing, during deliberation, allowing us to compare retaining the original value, updating it before commitment, and restarting the decision. As controls, we either replace the code 14 s after it appears, well after the agent’s typical response, or leave it unchanged throughout the response window. Comparing early replacement with these controls distinguishes failures caused by the code changing during deliberation from errors in reading or entering an otherwise valid code. As shown in Figure 
+8
+, the code changes from 5858 to 2860 while the agent reasons, but the agent still enters the outdated value 5858.
+
+Displaced Button.
+
+The agent must click the Continue button on a form page. A notice banner can appear above the button during deliberation, pushing it downward. A click succeeds only if it lands inside the button when the application receives it. Unlike Moving Balloon, this task tests whether changes elsewhere on the page can move the target and cause an otherwise correct click to miss.
+
+In the early-insertion condition, the banner appears 2 s after the page is displayed while the agent is deliberating, allowing us to compare retaining the original click coordinate, updating it before commitment, and restarting inference. In the late-insertion condition, the banner appears 14 s after the page is displayed, providing a control in which the button remains at its original position throughout the agent’s typical response. Comparing the two conditions distinguishes misses caused by the button moving during the response from errors in locating the button initially. Figure 
+8
+ shows a click aimed at the Continue button’s original position landing on the newly inserted banner instead.
+
+Reversing Trading Signal.
+
+The agent sees a simulated price chart and must buy, sell, or wait according to a prescribed trading rule. A buy signal can turn into a sell signal while the agent is deciding or while its order is being delivered. The task tests whether the agent follows the current trading signal, not whether it predicts future prices. An action succeeds only if it matches the signal when it reaches the application. Unlike a moving target or changing code, a signal reversal can make the agent’s choice of action itself incorrect, rather than merely changing its coordinates or input values.
+
+In the Fixed Signal condition, the required action remains the same throughout the agent’s response. If the signal reverses before decision commitment 
+, an order based on the earlier signal is already incorrect when committed. If the signal instead reverses after commitment but before action receipt 
+, an order that was correct when committed can become invalid before reaching the application. If the reversal occurs after action receipt, the same order remains valid because it reached the application before the signal changed. In a scripted-controller experiment, we hold the committed order and its commitment and receipt times fixed, varying only when the signal reverses to isolate the effect of environment-change timing on action correctness. In a second experiment, we hold the order, commitment time, and signal reversal fixed while varying the action-delivery delay from 0 to 40 ms, testing whether the same order succeeds or fails depending on when it arrives.
+
+B.2 
+Metrics
+
+Success rate.
+
+Success rate is the proportion of trials in which the action satisfies the task-specific success criterion at application receipt 
+. An action that was correct for the observed screenshot but no longer satisfies that criterion when received counts as a failure. We report successful trials out of the total number evaluated, separately for each task, agent configuration, and timing condition. We use Wilson 95% confidence intervals for success rates 
+(
+Brown et al., 2001
+)
+.
+
+Task return.
+
+Mean task return, 
+, complements binary success by measuring the outcome in task-specific units. For the Card variant of Disappearing Notification and for Moving Balloon, return is the negative click error in pixels, measured against the target’s position at receipt. If the target is absent at receipt or no click is received, the error is set to the display diagonal. For the Video Player variant of Disappearing Notification, return is the negative number of seconds of sponsor content watched. For Reversing Trading Signal, a received order earns 
+ if it matches the current signal and 
+ otherwise. A trial with no order receives a return of 0. We average returns across trials within each condition. Higher values indicate better outcomes within the same task.
+
+Timing intervals.
+
+We report the elapsed time from environment change to observation availability 
+, from observation availability to decision commitment 
+, and from commitment to application receipt 
+. We also report the total response time 
+. These measurements distinguish delays in obtaining an observation, producing a committed action, and delivering that action to the application.
+
+Receipt-time slack.
+
+For tasks with a response window, receipt-time slack measures how much time remains before the window closes when the action reaches the application. Positive slack indicates arrival before the deadline. Negative slack indicates arrival after it.
+
+Supporting observation and revision measurements.
+
+We record the source timestamp of the observation supporting the committed action to distinguish the effect of newer evidence from that of a shorter response time. For Moving Balloon, we also report the change from the proposed click coordinate to the committed coordinate and the number of model calls. These measurements show how much the action was revised and whether the revision required another model invocation.
+
+Appendix C 
+Algorithm and Complexity
+
+Overview.
+
+Algorithm 
+1
+ expresses Chronotope as an asynchronous control procedure. Observation admission continues while the planner computes a provisional action. The controller maintains the admitted interaction history and checks the provisional action against newer evidence before commitment. If the intended operation remains appropriate, the controller preserves supported arguments, revises outdated arguments, and resolves arguments left open for late binding. If the operation itself is no longer appropriate, the controller starts a new planning call. These operations act on the provisional action rather than assuming that an external planner’s hidden states or generated tokens can be edited in place.
+
+Interaction history and commitment.
+
+The history 
+ contains observation records, decision commitments, available action-receipt reports, and their dependencies. Environment changes are inferred from observations unless independently exposed to the controller. Evaluator-only environment timestamps and task manifests are not controller inputs. An action receipt is recorded only when receipt information becomes available, not when delivery is requested. Repeated screenshot content can share image storage without deleting distinct observation timestamps or receipt records. The snapshot 
+ denotes a consistent admitted history used by the updater. It does not imply access to every physical change before commitment. The task-specific resolver may update an argument or leave it unresolved when the available evidence is insufficient. Commitment fixes the resulting action at 
+. Subsequent receipt at 
+ remains a separate event, and changes after the updater’s snapshot can still invalidate the action.
+
+Algorithm 1
+ 
+ Chronotope: asynchronous observation and pre-commit action reconciliation
+
+1:
+
+              
+              
+            Task 
+, planner 
+, task-specific checks and argument resolvers
+
+2:
+
+              
+              
+            Initialize event dependency matrix 
+
+3:
+
+              
+              
+            Provisional action 
+, planner handle 
+
+4:
+
+while
+ 
+TaskActive
+(
+) 
+do
+
+5:
+
+              
+              
+              
+
+6:
+
+              
+              
+              
+
+7:
+
+              
+              
+              
+if
+ 
+ and 
+ and 
+DecisionNeeded
+(
+) 
+then
+
+8:
+
+              
+              
+               
+ 
+ Nonblocking
+
+9:
+
+              
+              
+              
+end
+ 
+if
+
+10:
+
+              
+              
+              
+if
+ 
+ and 
+PlannerReady
+(
+) 
+then
+
+11:
+
+              
+              
+               
+, 
+
+12:
+
+              
+              
+              
+end
+ 
+if
+
+13:
+
+              
+              
+              
+if
+ 
+ 
+then
+
+14:
+
+              
+              
+               
+
+15:
+
+              
+              
+               
+if
+ 
+OperationInvalid
+(
+) 
+then
+
+16:
+
+              
+              
+                 
+
+17:
+
+              
+              
+                 
+ 
+ Re-decision
+
+18:
+
+              
+              
+               
+else
+
+19:
+
+              
+              
+                 
+
+20:
+
+              
+              
+                 
+for
+ each argument 
+ 
+do
+
+21:
+
+              
+              
+                  
+ 
+ Revise or late bind
+
+22:
+
+              
+              
+                 
+end
+ 
+for
+
+23:
+
+              
+              
+                 
+if
+ 
+CompleteAndSupported
+(
+) 
+then
+
+24:
+
+              
+              
+                  
+ 
+ 
+ records 
+ and evidence used
+
+25:
+
+              
+              
+                  
+
+26:
+
+              
+              
+                  
+EnqueueDelivery
+(
+) 
+ Does not imply receipt at 
+
+27:
+
+              
+              
+                  
+
+28:
+
+              
+              
+                 
+end
+ 
+if
+
+29:
+
+              
+              
+               
+end
+ 
+if
+
+30:
+
+              
+              
+              
+end
+ 
+if
+
+31:
+
+              
+              
+              
+AwaitNextEvent
+ 
+ Input, planner completion, or task event
+
+32:
+
+end
+ 
+while
+
+Time complexity.
+
+Let 
+ denote the maximum number of retained fixed-size event records, 
+ the decoded frame size, and 
+ the provisional-action size. With preallocated storage and precomputed metadata, incremental dependency maintenance costs 
+ per inserted event. A full scan of the dependency matrix and action bookkeeping cost 
+ per reconciliation. Bytewise duplicate detection costs 
+ per received frame. Perception, semantic checks, argument resolution, and planner inference contribute additional costs. Re-decision adds another planner invocation.
+
+Space complexity.
+
+With at most 
+ retained image buffers, additional controller memory is 
+, where 
+ includes feature buffers and temporary perception and resolver storage. Model parameters, activations, and inference caches contribute additional memory. Bounding controller memory independently of session duration requires limits on retained data and temporary state, including data referenced by active snapshots.
+
+Host–device communication.
+
+For 
+ intermediate host–device transfers carrying at most 
+ bytes each, intermediate communication is 
+. A fully resident control path eliminates these transfers. Observation input, finalized-action output, receipt information, and any runtime copies or managed-memory migrations must be counted separately. The latency saving depends on the transferred buffers and per-transfer overhead.
+
+Device-memory traffic.
+
+With a bounded number of metadata passes, each reconciliation accesses 
+ logical bytes, excluding visual processing and model inference. Actual DRAM traffic depends on cache behavior. Accelerator residency does not imply that intermediate state remains on chip. Kernel fusion can avoid intermediate DRAM writes and reads when that state remains on chip without spilling. These work and traffic bounds do not directly predict elapsed latency because computation and transfers can overlap, while scheduling and synchronization add overhead.
+
+Appendix D 
+Additional Results
+
+D.1 
+Claim 4: EODA Enables Efficient Interaction History
+
+EODA (§
+4.1
+) concisely represents interaction history by organizing dependencies among environment events, observations, decisions, and action receipts. Unlike conventional chronological text history, EODA explicitly represents relationships between previous interactions and their outcomes, allowing the planner to use past actions when generating subsequent decisions. The representation maintains a bounded set of changed observations with GPU-resident textual and visual embeddings, allowing relevant observations to be reused without recomputation. To examine the effect of retained history, we vary capacity 
+ on DynaCU-Bench Standard and report task success, input token consumption, and median end-to-end latency per sent action.
+
+Capacity
+
+DynaCU-Bench
+
+Standard SR
+
+Input tokens
+
+per episode
+
+End-to-end latency
+
+per sent action, median (ms)
+
+0
+
+41/100 (41%)
+
+54,996
+
+1,574
+
+1
+
+45/100 (45%)
+
+56,586
+
+1,596
+
+2
+
+48/100 (48%)
+
+58,136
+
+1,603
+
+4
+
+49/100 (49%)
+
+63,267
+
+1,616
+
+8
+
+46/100 (46%)
+
+71,227
+
+1,668
+
+16
+
+47/100 (47%)
+
+84,435
+
+1,732
+
+Table 3: 
+Effect of interaction-history capacity on DynaCU-Bench Standard.
+ We vary the retained history capacity and report task success, input tokens per episode, and median end-to-end latency per sent action.
+
+As shown in Table 
+3
+, increasing history capacity from 
+ to 
+ improves task success by 19.5%, while increasing input token consumption by 15.0% and median per-action latency by only 2.7%. Beyond 
+, larger history capacities do not yield further improvements in task success, despite continued increases in token consumption and latency. At 
+, token consumption increases by 33.5% relative to 
+, while task success slightly decreases. 
+These results suggest that a modest history capacity provides a favorable balance between retained context, task success, and computational efficiency.
+
+D.2 
+Claim 5: Chronotope Reduces End-to-End Latency through Architectural Efficiency
+
+Chronotope’s main latency advantage stems from changing how control is performed. Traditional reflection-based agents such as Agent S3 repeatedly use model inference for verification, screenshot analysis, planning, and target localization. In contrast, Chronotope maintains interaction history, decision dependencies, and pending actions through EODA/EDM and selective meta-control (KEEP, UPDATE, REDECIDE). This allows it to reuse previous decisions, reconcile pending actions with new observations, and avoid repeatedly invoking the VLM for reflection and separate grounding. As a result, Chronotope substantially reduces expensive model-side computation while preserving the ability to adapt actions online.
+
+We profile both GUI agents across 100 paired Live trials using Qwen3.8-27B. Figure 
+9
+ compares their functional latency breakdowns. Agent S3 spends 
+51.9%
+ of its end-to-end latency on verification, analysis, and planning prose, 
+16.2%
+ on target localization thro
