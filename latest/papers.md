@@ -1,20 +1,30 @@
-# Paper candidates — 2026-11-24 (IST)
+# Paper candidates — 2026-11-25 (IST)
 
-Generated 2026-11-24 11:33 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
-Totals: 35 new topic matches · 0 other new cs.IR · 20 seen in earlier runs.
+Generated 2026-11-25 01:11 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Totals: 35 new topic matches · 16 other new cs.IR · 17 seen in earlier runs.
 Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
 
 ## New papers matching your topics (35), highest score first
 
 ### Fetch, Read, Reuse: How AI Search Agents Bend the Web's Rules
-- arXiv 2611.30546v1 · v1 2026-11-23 11:55 UTC · cs.NI, cs.IR
+- arXiv 2611.30546v1 · v1 2026-11-23 11:55 UTC · cs.IR, cs.NI
 - Authors: Yixi Chen, Zafar A. Qazi, Marco Canini, Suhaib A. Fahmy
-- Topics: GEO/AEO, Query fan-out, Brand/product recommendation, Crawl · score 28 · found via search abs:"robots.txt"
+- Topics: GEO/AEO, Query fan-out, Brand/product recommendation, Crawl · score 28 · found via cs.IR, search abs:"robots.txt"
 - Link: https://arxiv.org/abs/2611.30546
 - arXiv comment: 29 pages, 11 figures
 - Full text: data/fulltext/2611.30546.txt
 
 > AI search agents form a new and fast-growing class of web traffic. Like a browser, they fetch pages on demand for one user; like a transcoding proxy, they rewrite what they fetch; and like a shared cache, they answer other users' questions from the stored copy. The rules publishers rely on, such as robots.txt, Retry-After, and Cache-Control, were written for more familiar clients, so the agent's vendor decides which of them to follow. We present a black-box measurement study of how these agents fetch, read, and reuse pages, covering the search APIs of OpenAI, Anthropic, xAI, and Google and the consumer apps of ten services. We find that OpenAI and xAI do not honor robots.txt, and no service acts on Retry-After. Services silently read less than the origin served: OpenAI drops some formats, no service reads JavaScript-only content, and xAI reads only the first 0.5 MB of a page. OpenAI, Anthropic, and xAI share fetched pages across users and largely ignore Cache-Control, so answers can reflect outdated pages for 30 minutes to a day or more. Publishers therefore lack effective control: directives are advisory and followed selectively, describe the served page rather than the rewritten copy, and bound how long a copy is reused but not how many answers it serves. We release our code and data.
+
+### DM-Lab at TREC 2026 RAG: Multi-Query Retrieval, Ensemble Judging, and Claim-Pack Generation
+- arXiv 2611.28233v1 · v1 2026-11-20 19:07 UTC · cs.IR
+- Authors: Elyas Irankhah, Muhammad Arif, Sreeraj Ramachandran, Samah Fodeh-Jarad
+- Topics: Citation & source selection, RAG (generic), Query fan-out · score 16 · found via cs.IR
+- Link: https://arxiv.org/abs/2611.28233
+- arXiv comment: 8 pages, 1 figure, 8 tables. TREC 2026 RAG Track. Code: https://github.com/Elyasirankhah/TREC-RAG-2026
+- Full text: not stored: license is arxiv-default, which does not allow redistribution; read it on arXiv
+
+> We present DM-Lab-RAG-2026, a framework developed for the TREC 2026 Retrieval-Augmented Generation (RAG) track. The framework integrates large-scale evidence retrieval and citation-grounded answer generation over the 553-million-document ClimbMix-400B corpus. The retrieval architecture combines multi-query BM25, reciprocal rank fusion, ensemble relevance assessment, listwise reranking, and adaptive retrieval depth. The generation pipeline employs a claim-first strategy to extract evidence-linked atomic claims, construct cited responses, and verify source support. Across 22 development topics, the retrieval system achieved a mean nDCG@30 of 0.604. In the official evaluation, it attained a set precision of 0.455 and a manual nugget gain of 0.910. Additional experiments examine the influence of reranking, evidence selection, and citation verification on system performance. The evaluation demonstrates the potential of diversified lexical retrieval and language-model-based relevance assessment for large-scale evidence discovery. It further identifies evidence preservation and structured answer construction as key considerations for reliable RAG. This work provides a reproducible framework for investigating retrieval effectiveness and evidence-grounded generation.
 
 ### Benchmarking Web Agent Defenses Against Adaptive Visual Prompt Injection
 - arXiv 2611.29268v1 · v1 2026-11-22 06:20 UTC · cs.CR, cs.LG
@@ -24,6 +34,16 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Full text: data/fulltext/2611.29268.txt
 
 > Multimodal web agents automate website interactions but remain vulnerable to visual prompt injection (VPI), where malicious webpage content manipulates their visual processing and induces unintended actions. Although several defenses focus on detecting injected instructions in screenshots, malicious destinations such as phishing URLs embedded in HTML can remain hidden yet accessible through agent interactions. Existing evaluations have also not sufficiently examined adaptive attackers who know the defense mechanisms. To address these limitations, we introduce AdaptiveVPI, the first benchmark for systematically evaluating adaptive VPI threats in web agents. Specifically, we present a dataset of 360 webpage instances spanning 6 distinct hijack strategies across 10 real-world websites, with malicious destinations not visible in screenshots. We design an adaptive attack framework that iteratively refines malicious instructions based on feedback from the defense mechanism being evaluated. We also introduce three metrics to measure the extent of agent hijacking at three different levels. Across 10 defense configurations for computer-use agents and 11 defense configurations for browser-use agents, our adaptive attacks achieve average success rates of 91.87% and 91.99%, respectively. These results reveal a gap between current VPI defenses and realistic threats and highlight the need for defenses designed with adaptive attackers in mind.
+
+### Can Search Agents Correct Their Own Errors? Evaluating Retrieval, Evidence Delivery, and Answer Completion
+- arXiv 2611.30243v1 · v1 2026-11-23 08:08 UTC · cs.IR
+- Authors: Venkata Pagadala, K. Rajasekhara Rao, Pratyay Ganguly
+- Topics: Query fan-out, Agents · score 14 · found via cs.IR
+- Link: https://arxiv.org/abs/2611.30243
+- arXiv comment: 28 pages, 7 figures
+- Full text: data/fulltext/2611.30243.txt
+
+> A search agent can leave an earlier error unresolved by missing the right source, overlooking a relevant passage, or failing to revise and deliver the answer after receiving the evidence. We evaluate these possibilities on BrowseComp-Plus by replaying each model's own wrong closed-book answer in conversation and intervening on what evidence reaches the model. In a supplied-evidence study spanning four open-weight checkpoints, 709 questions and 26,665 test conditions, a confident assistant prior reduced Nemotron's paired accuracy by 16.1 percentage points despite answer-bearing passages in context. When the user insisted on the prior, accuracy fell by 32.9 points for Nemotron and 12.6 for gpt-oss. Among gpt-oss responses that lost correctness in that condition, abstention was more common than repeating the prior. In separate search interventions with Qwen3.5 and Nemotron, placing a gold page first often left the decisive source unopened. Delivering a decisive passage in context improved accuracy over neutral delivery by 51.0 percentage points for Qwen3.5 and 22.4 for Nemotron. Even with the passage in context, Nemotron exhausted its search budget and returned no answer in 19 of 51 episodes. The tests distinguish failures of retrieval, passage delivery, correction and answer completion, giving system builders a way to test which changes resolve a recurring error.
 
 ### Bug Bounty Programs in the AI Era: How Does Platform Anti-Spam Friction Affect Vendor Profitability?
 - arXiv 2611.30615v1 · v1 2026-11-23 12:49 UTC · cs.CR
@@ -47,16 +67,16 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 ### CO-GRAFT: Attributing Reinforcement Learning Gains in Search Agents via Role-Level Policy Grafting
 - arXiv 2611.31185v1 · v1 2026-11-23 18:38 UTC · cs.AI, cs.CL, cs.IR
 - Authors: Ramraj Chandradevan, Sayontan Ghosh, Vinoth Selvendran
-- Topics: Citation & source selection, Query fan-out · score 14 · found via cs.AI, cs.CL
+- Topics: Citation & source selection, Query fan-out · score 14 · found via cs.AI, cs.CL, cs.IR
 - Link: https://arxiv.org/abs/2611.31185
 - Full text: data/fulltext/2611.31185.txt
 
 > Reinforcement learning (RL) improves large language model search agents by up to 32 exact-match (EM) points over their pre-RL initializations, yet overall accuracy gains do not identify which underlying functional capabilities improve or interact during training. We introduce CO-GRAFT, a reward-agnostic interventional attribution framework in which an RL-trained agent and its pre-RL initialization jointly generate a single trajectory under closed-loop execution with live retrieval. Each policy controls a mutually exclusive subset of four functional roles: intermediate reasoning, search-or-answer decision, search query generation, and final answer extraction. Evaluating all 2^4=16 role assignments without modifying weights or retraining defines a cooperative game whose Shapley values decompose the total RL gain across roles, while M"obius interaction terms distinguish standalone role improvements from multi-role coupling. Applying CO-GRAFT to Search-R1 agents across Qwen2.5 and Llama-3.2 models (spanning two sizes, base and instruction-tuned initializations, GRPO and PPO optimizers, and NQ and HotpotQA datasets), we show that query generation never exceeds 15% of the total gain; instead, gains are governed by pre-RL answer validity, search retention, model scale, and fixed task-level search budgets, shifting credit from reasoning toward answer extraction in larger or well-formatted answer response checkpoints while smaller base models rely on reasoning--decision coupling.
 
 ### Ask Again: Answer-List Instability in Generative Engines
-- arXiv 2611.30819v1 · v1 2026-11-23 15:11 UTC · cs.IR, cs.CL
+- arXiv 2611.30819v1 · v1 2026-11-23 15:11 UTC · cs.CL, cs.IR
 - Authors: Björn Busch-Geertsema, David Antony Selby, Sebastian Vollmer
-- Topics: GEO/AEO, Citation & source selection, Brand/product recommendation · score 13 · found via cs.CL
+- Topics: GEO/AEO, Citation & source selection, Brand/product recommendation · score 13 · found via cs.CL, cs.IR
 - Link: https://arxiv.org/abs/2611.30819
 - arXiv comment: 9 pages, 4 figures. Code and data: https://anonymous.4open.science/r/ask-again-2DE6/
 - Full text: not stored: license is arxiv-default, which does not allow redistribution; read it on arXiv
@@ -85,7 +105,7 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 ### SHAKTI: Evidence-Grounded Conversational AI for Nutrition and Health
 - arXiv 2611.29988v1 · v1 2026-11-23 03:51 UTC · cs.CL, cs.IR
 - Authors: Chaitanya Pallerla, Dongyi Wang
-- Topics: Citation & source selection, RAG (generic), Query fan-out · score 10 · found via cs.CL
+- Topics: Citation & source selection, RAG (generic), Query fan-out · score 10 · found via cs.CL, cs.IR
 - Link: https://arxiv.org/abs/2611.29988
 - Full text: not stored: license is by-nc-nd, which does not allow redistribution; read it on arXiv
 
@@ -123,11 +143,21 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 ### ToolSmith: An Automatic Tool-Generation Framework for Multimodal Search Agents
 - arXiv 2611.31198v1 · v1 2026-11-23 18:48 UTC · cs.AI, cs.CL, cs.CV
 - Authors: Rui Sun, Junhua Huang, Luca Zancato, Md Mofijul Islam et al.
-- Topics: Query fan-out · score 10 · found via cs.AI, cs.CL
+- Topics: Query fan-out · score 10 · found via HF daily papers, cs.AI, cs.CL
 - Link: https://arxiv.org/abs/2611.31198
 - Full text: data/fulltext/2611.31198.txt
 
 > Recent multimodal search agents use reasoning, vision, and live web search across many turns to answer questions beyond parametric knowledge by orchestrating a small library of hand-crafted search and visual tools. However, the library is laborious to create and maintain, and frozen when new query types, evidence formats, and failure modes are encountered in the wild. Human practitioners, by contrast, cope with insufficient tools by fashioning new ones from familiar parts and reusing them across tasks. Inspired by this, we propose ToolSmith, an automatic tool-generation framework that grows and reuses modules on top of a lean base tool library. We evaluate ToolSmith on three in-domain multimodal search benchmarks and ten out-of-domain benchmarks under a VLM-as-a-Judge protocol. ToolSmith consistently improves over the base library across deployed agents of varying scales, with larger backbones reaping greater gains, demonstrating the scalability of the approach. Our code and data are available at https://threesr.github.io/toolsmith/.
+
+### PROSPER: LLMs as Sparse Retrievers for First-Stage Product Search
+- arXiv 2611.28645v1 · v1 2026-11-21 08:14 UTC · cs.IR
+- Authors: Hongru Song, Yu-An Liu, Ruqing Zhang, Jiafeng Guo et al.
+- Topics: RAG (generic), Brand/product recommendation · score 9 · found via cs.IR
+- Link: https://arxiv.org/abs/2611.28645
+- arXiv comment: Accepted at WSDM 2027(oral)
+- Full text: data/fulltext/2611.28645.txt
+
+> Product search is a crucial component of large-scale e-commerce platforms, where first-stage retrieval should achieve high recall while ensuring efficient online deployment. Sparse retrieval remains attractive for this setting due to its interpretability and deployability, yet it suffers from severe vocabulary mismatch challenges, especially for short queries and product titles. Large language models (LLMs) offer strong semantic capabilities, but directly applying them to sparse retrieval in product search introduces new challenges: (i) semantic expansion may distort critical literal signals such as brand names and model identifiers; and (ii) learning meaningful sparse representations is difficult in the high-dimensional vocabulary space induced by LLMs.To address these challenges, we propose PROSPER, a framework that uses LLMs as sparse retrievers for product search while explicitly preserving lexical fidelity. PROSPER combines (i) a literal residual network that alleviates lexical expansion hallucination by reinforcing underweighted literal terms through a residual compensation mechanism; and (ii) a lexical focusing window that uses top-k selection for rapid early sparsification and effective training initialization. Extensive offline evaluations and large-scale online A/B tests demonstrate that PROSPER consistently improves over existing sparse retrievers, and provides revenue gains for industrial hybrid retrieval systems.
 
 ### Can Cities Have Personalities? Introducing the SCD City Personality Assessment
 - arXiv 2611.30733v1 · v1 2026-11-23 14:12 UTC · cs.AI, cs.CY
@@ -169,9 +199,9 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 > Conversational product search lets users find products through a multi-turn dialogue instead of a single keyword query, but Persian lacks the large conversational datasets needed to train and evaluate such systems; existing Persian e-commerce dialogue resources cover few categories and small catalogs. We present a framework that builds such a dataset automatically from a real e-commerce catalog and release the resulting dataset. The framework crawls 12,926 products in seven categories of the Digikala marketplace, groups them into 170 semantically coherent clusters, and selects the question the assistant asks at every turn with the Regularized Partition Balance (RPB) score. The RPB score accounts for feature coverage, the probability that the user can answer and the number of values, and generalizes entropy-based question selection. An LLM then verbalizes each question plan into a natural Persian dialogue. In a simulation on the full catalog, the RPB score needs 0.11 fewer turns than the strongest entropy baseline when the difficulty of answering differs between features, and is practically equivalent to it when it does not. Using only a free LLM API, we generated 1,000 requirement-driven dialogues covering all 170 clusters, with turn-level feature annotations; automatic checks and an LLM judge confirm their consistency with the catalog, while their realism is lower than that of the first, GPT-4o-generated version. Code and data are publicly available.
 
 ### Weight Coding: Evolving Web-Scale Recommenders through Direct Weight Edits with LLM Agents
-- arXiv 2611.29613v1 · v1 2026-11-22 17:11 UTC · cs.IR, cs.AI, cs.LG
+- arXiv 2611.29613v1 · v1 2026-11-22 17:11 UTC · cs.AI, cs.IR, cs.LG
 - Authors: Junpeng Hou, Jiaxing Qu, Derek Cheng, Jaewon Yang et al.
-- Topics: Brand/product recommendation · score 8 · found via cs.AI
+- Topics: Brand/product recommendation · score 8 · found via cs.AI, cs.IR
 - Link: https://arxiv.org/abs/2611.29613
 - Full text: not stored: license is arxiv-default, which does not allow redistribution; read it on arXiv
 
@@ -237,17 +267,8 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Authors: Nuonan Ouyang, Bonan Zhang, Adrian Shatte, Zhigang Lu et al.
 - Topics: Citation & source selection, Clicks & measurement · score 7 · found via cs.AI
 - Link: https://arxiv.org/abs/2611.29968
-- Full text: not stored: license is by-nc-nd, which does not allow redistribution; read it on arXiv
 
 > Runtime model selection trades detection quality against energy and latency. However, comparing a selector only with a more costly static detector conflates detector choice with the benefit of adaptation. We present a framework for analysis and physical measurement that combines a pairwise reward criterion, matched static controls, paired blocks, a fixed load-prevalence factorial design, and reporting of actions outside training support. On one Raspberry Pi 4B with four frozen TON-IoT detectors, tabular Q-learning and a deep Q-network (DQN) both select LightLR throughout. A retrospective audit using validation data only rules out preference reversals for MedRF versus LightLR and HeavyMLP versus LightLR. However, TinyDT has a higher reward than LightLR in seven of the 2,500 windows, so the audit does not establish global LightLR optimality. We also evaluate a causal DeadlineGuard rule under a fixed factorial design with three arrival rates (50, 100, and 4,000 rows/s) and three attack prevalences (0.10, 0.50, and 0.90). Compared with Static-MedRF, DeadlineGuard saves 43.7 J per 500-s run (2.98%; 95% paired CI 41.4--46.0 J) and eliminates all 512 deadline misses among 5,000 windows, at a cost of 1.373 percentage points in F1. Outside training support, Tabular-Q's deterministic tie-breaking rule selects TinyDT, resulting in a false-positive rate of 67.76%. These single-board results motivate joint audits of reward attainability, realized actions, attribution against matched static controls, service feasibility, and default actions outside training support.
-
-### UniVEP: Unifying Velocity and Endpoint Prediction for Robot Manipulation
-- arXiv 2611.26103 · v1 2026-11-19 00:00 UTC · 
-- Authors: Zhengtu Liang, Qiwei Liang, Tao Lin, Shihang Weng et al.
-- Topics: Manipulation · score 6 · found via HF daily papers
-- Link: https://arxiv.org/abs/2611.26103
-
-> Flow-matching robot policies usually use one prediction target throughout action generation, even though recovering actions from noise and polishing nearly clean actions bring different challenges. We systematically compare velocity prediction (V), endpoint prediction (X), and velocity-weighted endpoint prediction (X--V) across multiple robot policies, benchmarks, and inference budgets. On StarVLA and LiLa-WAM, X--V works best for few-step generation, while V gains more from iterative refinement. We further uncover their complementary strengths across noise levels: clean actions have concentrated covariance spectra, endpoint predictions stay more stable under high noise, and velocity predictions offer more accurate corrections near clean actions. Inspired by these findings, we introduce UniVEP, which learns both prediction targets together with consistency supervision and switches from endpoint recovery to velocity refinement as noise drops. Each step only needs one network run, and joint training also boosts single-step endpoint generation. Tests on simulated and real-world manipulation show better success rates and efficiency. On RoboTwin, UniVEP hits 61.36% success with one StarVLA run, beating the best single-target baseline at sixteen runs (59.96%). With LiLa-WAM, two runs outperform the best sixteen-step single-target baseline and cut inference latency by 77.1%.
 
 ### Targeted In-Context Poisoning of Tabular Foundation Models: An Empirical Study
 - arXiv 2611.28396v1 · v1 2026-11-20 23:03 UTC · cs.AI, cs.CR
@@ -306,49 +327,53 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 
 > Harnesses secure Computer-Using Agents by enforcing security constraints and defending against prompt injection attacks. However, we find that two core security mechanisms of agent harnesses remain vulnerable. First, consistency checking prevents agents from deviating from legitimate user objectives, while attackers can bypass it by embedding malicious actions that appear logically consistent with legitimate task execution. Second, risk auditing proactively examines high-risk operations. Yet, the auditing process itself would introduce additional exploitable actions that violate security boundaries. To evaluate above defects we found, we propose Conartist, a cascaded adaptive prompt injection framework comprising two progressive stages. First, Conartist employs a goal-pollution strategy to establish deceptive causal dependencies between legitimate user objectives and malicious operations, progressively embedding attack steps into legitimate task workflows. However, these task-coupled attacks remain susceptible to risk auditing. To address this limitation, Conartist further analyzes security-auditing feedback from controlled attack exploration to identify exploitable auditing patterns. Conartist then adaptively refines its deception strategies to either avoid triggering risk auditing or induce additional high-risk operations. Extensive experiments across five backbone models demonstrate the effectiveness of Conartist, achieving attack success rates of 32.12% on 576-instance tool use benchmark and 66.67% in the Reddit GUI benchmark, outperforming the SOTA attack by 14.41 and 29.17, respectively. By analyzing one of the most popular Agent, Openclaw, we furthermore concluded seven realistic exploitable attack patterns, which reveals that security mechanisms designed to prevent malicious actions can themselves be manipulated to facilitate attacks.
 
-### Spiking World-Action Models for Robotic Manipulation
-- arXiv 2611.30041v1 · v1 2026-11-23 04:48 UTC · cs.RO, cs.AI
-- Authors: Mingquan Liu, Peng Zhou, Shanming Yao, Shuai Wang et al.
-- Topics: Manipulation · score 6 · found via cs.AI
-- Link: https://arxiv.org/abs/2611.30041
-
-> World action models (WAMs) predict how the world responds to actions and offer a promising path toward general embodied intelligence, but they are large and run the network many times per plan, so they are hard to deploy on robots. Spiking neural networks (SNNs) compute with sparse binary spikes and use additions instead of multiplications, which saves power. However, existing WAMs use dense videos as the world state, so a spiking version would spend most of its computation on the background. We therefore introduce SpikingWAM, the first spiking WAM, which uses a sparse task skeleton as the world state. Inspired by biological motor control, which attends only to the key positions of a task, the Task Skeleton State (TSS) keeps the keypoints of the arm and the task objects, and a small spiking front end estimates the object keypoints from images. Body Frame Spike Coding (BFSC) and Grid Coincidence Attention (GCA) keep millimetre precision, and the Persistent Single Step Readout (PSR) runs the network once per plan. On the simulated benchmarks LIBERO, LIBERO-Plus and RoboTwin 2.0, SpikingWAM achieves competitive success rates with far less energy than ANN methods and surpasses all compared methods on LIBERO-Plus. Real robot experiments further confirm its effectiveness. These results show that a task skeleton lets spiking networks implement WAMs at very low energy, offering a new solution for low power embodied intelligence. Project page: https://wxqnl.github.io/spikingwam/
-
-### A statistical measure of trust in generative AI
-- arXiv 2611.30286v1 · v1 2026-11-23 08:43 UTC · cs.AI
-- Authors: Alina Ermilova, Valeria Yakupova, Nikita Sushko, Andrey Lovyagin et al.
-- Topics: GEO/AEO, RAG (generic) · score 6 · found via cs.AI
-- Link: https://arxiv.org/abs/2611.30286
-
-> Trustworthiness is a crucial issue for generative AI, as modern models can produce convincing and confident responses even when their outputs are incomplete, unsupported, or wrong. The frequent absence of ground-truth knowledge or labels complicates verification of generative AI outputs. To address this issue, we propose a trustworthiness framework grounded in model-internal confidence calibrated against an external expert reference. We estimate per-token trustworthiness of a student generative model as the statistical typicality of each generated token relative to an expert model's distribution, where the expert is used as a distributional reference rather than as a source of factual verification labels. To this end, we introduce an AI ontology calibrator that leverages the student model's internal latent features and token-level output statistics to compute expert-reference acceptance scores. Combined with traditional token-level confidence, entropy, and perplexity statistics, calibrator scores yield a compact set of $15$ response-level indicators for correctness classification. Evaluated across BF program generation, mathematical problem solving, and medical question answering, combined calibrator and traditional indicators provide complementary reliability signal which could be used to build detectors of untrustworthy outputs and hallucinations. Remarkably, our experiments show that these detectors are transferable across domains, although transferability is not always symmetric.
-
-## More new topic matches, lower score, title only (5)
+## More new topic matches, lower score, title only (16)
+- Spiking World-Action Models for Robotic Manipulation — https://arxiv.org/abs/2611.30041 (score 6; Manipulation)
+- A statistical measure of trust in generative AI — https://arxiv.org/abs/2611.30286 (score 6; GEO/AEO, RAG (generic))
 - Automated Call for Action: RAG-Based Environmental Law Enforcement Screening System — https://arxiv.org/abs/2611.30423 (score 6; Citation & source selection, RAG (generic))
 - JEPA-ICL: Progress-Aligned Latent Plans for In-Context Robotic Manipulation — https://arxiv.org/abs/2611.30516 (score 6; Manipulation)
 - RoboInF: A Benchmark for Instruction Fidelity in Robotic Manipulation — https://arxiv.org/abs/2611.30555 (score 6; Manipulation)
 - How Many Parameters Does Forecasting Need? A Survey and Code-Level Audit of Lightweight Long-Term Time Series Forecasting — https://arxiv.org/abs/2611.30685 (score 6; Clicks & measurement)
+- Orthogonally Mixed Sign Coding with Progressive Residual Refinement for Transformer Weight Compression — https://arxiv.org/abs/2611.31089 (score 5; GEO/AEO)
 - Beyond Relevance: An Empirical Study of Multimodal LLMs for Diversity-Aware Recommendation Reranking — https://arxiv.org/abs/2611.28379 (score 4; Brand/product recommendation)
+- ChatGPT Can't Sell (And That's Probably a Good Thing): Buyer-Aligned AI Advice, the Sales-Representative Gap, and Evidence from Commercial Conversations — https://arxiv.org/abs/2611.28946 (score 4; Brand/product recommendation)
+- Where Do Fact-Checking Errors Arise? Separating Retrieval, Search Control and Judgement in Evidence-Grounded Verification — https://arxiv.org/abs/2611.29697 (score 4; Citation & source selection)
+- DataRecycle: Trustworthy Distillation of Structured Data from Scattered Web Evidence — https://arxiv.org/abs/2611.29206 (score 3; Clicks & measurement)
+- SuSi-RAG: A Hybrid Graph RAG for Equipment Maintenance — https://arxiv.org/abs/2611.30588 (score 2; RAG (generic))
+- GERF: A Token-Efficient Multimodal Retrieval Framework for Schema-Guided Scientific Information Extraction — https://arxiv.org/abs/2611.28295 (score 1; RAG (generic))
+- MADRec: Reliable Multi-Agent Reasoning with Evidence-Grounded Debate for Recommendation — https://arxiv.org/abs/2611.28604 (score 1; RAG (generic))
+- LLM-Based Assistant for Dog Care Guidance — https://arxiv.org/abs/2611.29286 (score 1; RAG (generic))
+- Structure-Exploiting Hierarchical Retrieval for Long Narrative Documents: A Precision-Oriented Alternative to Learned Abstraction Trees — https://arxiv.org/abs/2611.29966 (score 1; RAG (generic))
 
-## Other new cs.IR papers, title only (0)
+## Other new cs.IR papers, title only (16)
+- Evaluating Memanto on DolphinBench for AI Agents — https://arxiv.org/abs/2611.28231
+- The abc index: Exact Retrieval for Learned Sparse Representations — https://arxiv.org/abs/2611.28555
+- Who Gets Re-ranked When a Clinical Model Gains New Data? — https://arxiv.org/abs/2611.28968
+- HME-PFD: Heterogeneous Mixture-of-Experts Privileged Feature Distillation — https://arxiv.org/abs/2611.29094
+- Bridging Blind Spots With Words: Decentralized Multi-View Spatial Reasoning via Language-Constrained Communication — https://arxiv.org/abs/2611.29112
+- Zarc: Exact Nearest Neighbors over a Billion Vectors in Seconds — https://arxiv.org/abs/2611.29252
+- NoeVera: Can Knowledge Guide Experiments and Experiments Refine Knowledge? — https://arxiv.org/abs/2611.29255
+- VistaTree: Question Answering over Long Multimodal Documents with Image-Derived Summary Trees — https://arxiv.org/abs/2611.29419
+- MoR4Rec: Mixture-of-Recursion for Sequential Recommendation — https://arxiv.org/abs/2611.29462
+- Look Before You Leap: Re-Architecting Disk-Resident Vector Search with TriVS — https://arxiv.org/abs/2611.29948
+- STUN-Bench: Truly Unseen Tools for Evaluating Shared Tool Experience — https://arxiv.org/abs/2611.30034
+- Pixel as the Common Language: Unified Multimodal Embedding via Visual Rendering — https://arxiv.org/abs/2611.30069
+- Beyond Knowledge Transfer: How User Overlap Shapes Diversity in Cross-Domain Recommendation — https://arxiv.org/abs/2611.30156
+- Ontology-Compiled 2D Clinical State Fields with Bidirectional Diffusion Encoders for Zero-Training Cross-Ontology Medical Coding — https://arxiv.org/abs/2611.30218
+- Trallie: from Free-Form Text to Structured Data with LLMs — https://arxiv.org/abs/2611.30773
+- From Head to Tail: LLM-Augmented Sequential Recommendation and Trade-off Optimization — https://arxiv.org/abs/2611.31052
 
-## Already listed on an earlier day, still inside the look-back window (20)
-- GEOHunter: Mapping a Generative Engine Optimization Network in the Wild — https://arxiv.org/abs/2611.26564 (score 14)
-- Seer: Guiding Small Deep-Research Agents with Shared Decision Models — https://arxiv.org/abs/2611.26423 (score 10)
+## Already listed on an earlier day, still inside the look-back window (17)
 - When Do LLM-Elicited Priors Help? A Controlled Audit of Language Models as Priors for Small-Sample Bayesian Regression — https://arxiv.org/abs/2611.27075 (score 10)
 - Embodied-Harness: Towards Recursive Self-Improvement for Robotic Manipulation — https://arxiv.org/abs/2611.27689 (score 10)
-- How Complete Must an Environment Be to Train a Capable GUI Agent? — https://arxiv.org/abs/2611.23946 (score 8)
-- RouterWeave: A Unified Observation Layer for Cross-Platform Activity Analysis via Home Routers — https://arxiv.org/abs/2611.26134 (score 8)
-- Visual Attribution Limits and Graded Provenance Auditing in Commercial Video-Generation APIs — https://arxiv.org/abs/2611.26508 (score 8)
-- Modeling Attributional Style at Scale: A Dataset and Analysis for Psychological Attribution Assessment and Reframing — https://arxiv.org/abs/2611.26900 (score 8)
 - EcomWriteBench: A Real-World Benchmark for E-commerce Writing Tasks — https://arxiv.org/abs/2611.27349 (score 8)
 - Detecting Word-Substitution Poisoning of a RAG Knowledge Base with Relative Entropy and Runtime Verification — https://arxiv.org/abs/2611.27410 (score 8)
 - The Dual-Tier Sentiment Framework: Scalable Multimodal UX Attribution in Web Search — https://arxiv.org/abs/2611.27899 (score 8)
-- Replication of Agentic Security Events: Audit and Investigation (ROGUE-AI) — https://arxiv.org/abs/2611.26553 (score 7)
 - Poisoning Attacks and Collaborative Defense Framework for LightRAG-Based Construction Regulation Knowledge — https://arxiv.org/abs/2611.27460 (score 7)
-- Mind2Act World: A Diagnostic Benchmark for Embodied Mind, Physical Action, and Mind-Action Composition in Robotic Manipulation — https://arxiv.org/abs/2611.26444 (score 6)
-- PGX: Physically Grounded Execution for Long-Horizon Humanoid Loco-Manipulation — https://arxiv.org/abs/2611.26596 (score 6)
 - MomentMem: Memorizing Key Moments for Robot Manipulation — https://arxiv.org/abs/2611.26745 (score 6)
 - Same Facts, Different Decision: Fact-Invariant Manipulation and Provenance-Based Defense in Typed Decision Models — https://arxiv.org/abs/2611.27016 (score 6)
 - Subverting Tool Arguments: Defense-Evading Metadata Poisoning in LLM Agents — https://arxiv.org/abs/2611.27041 (score 6)
 - Manipulation-resistant reputation for peer-to-peer scientific publishing: a combination-therapy approach — https://arxiv.org/abs/2611.27625 (score 6)
 - Redesigning Neural Networks to Not be Confidently Wrong even to Strong Adversarial Attacks — https://arxiv.org/abs/2611.27811 (score 6)
+- Pre-Crawl Prioritization and Seed Classification for Large-Scale Web Archiving — https://arxiv.org/abs/2611.27743 (score 4)
+- Explicit Style Extraction for Personalized Long-Form Text Generation — https://arxiv.org/abs/2611.27211 (score 1)
