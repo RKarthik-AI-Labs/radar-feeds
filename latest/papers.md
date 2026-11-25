@@ -1,7 +1,7 @@
 # Paper candidates — 2026-11-25 (IST)
 
-Generated 2026-11-25 09:16 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
-Totals: 32 new topic matches · 15 other new cs.IR · 80 seen in earlier runs.
+Generated 2026-11-25 09:53 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Totals: 32 new topic matches · 15 other new cs.IR · 79 seen in earlier runs.
 Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
 
 ## New papers matching your topics (32), highest score first
@@ -327,7 +327,7 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Speculative Decoding for Semantic-ID-Based Generative Recommendations — https://arxiv.org/abs/2611.32855
 - SAG-Mem-1.0 Technical Report — https://arxiv.org/abs/2611.33124
 
-## Already listed on an earlier day, still inside the look-back window (80)
+## Already listed on an earlier day, still inside the look-back window (79)
 - Fetch, Read, Reuse: How AI Search Agents Bend the Web's Rules — https://arxiv.org/abs/2611.30546 (score 28)
 - DM-Lab at TREC 2026 RAG: Multi-Query Retrieval, Ensemble Judging, and Claim-Pack Generation — https://arxiv.org/abs/2611.28233 (score 16)
 - Benchmarking Web Agent Defenses Against Adaptive Visual Prompt Injection — https://arxiv.org/abs/2611.29268 (score 14)
@@ -346,7 +346,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - ToolSmith: An Automatic Tool-Generation Framework for Multimodal Search Agents — https://arxiv.org/abs/2611.31198 (score 10)
 - PROSPER: LLMs as Sparse Retrievers for First-Stage Product Search — https://arxiv.org/abs/2611.28645 (score 9)
 - Can Cities Have Personalities? Introducing the SCD City Personality Assessment — https://arxiv.org/abs/2611.30733 (score 9)
-- EcomWriteBench: A Real-World Benchmark for E-commerce Writing Tasks — https://arxiv.org/abs/2611.27349 (score 8)
 - Detecting Word-Substitution Poisoning of a RAG Knowledge Base with Relative Entropy and Runtime Verification — https://arxiv.org/abs/2611.27410 (score 8)
 - The Dual-Tier Sentiment Framework: Scalable Multimodal UX Attribution in Web Search — https://arxiv.org/abs/2611.27899 (score 8)
 - Don't Sleep, Keep Watch: Proactive Perception for Computer-Use Agents — https://arxiv.org/abs/2611.28947 (score 8)
