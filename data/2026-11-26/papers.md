@@ -1,10 +1,10 @@
 # Paper candidates — 2026-11-26 (IST)
 
-Generated 2026-11-26 08:56 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
-Totals: 28 new topic matches · 9 other new cs.IR · 103 seen in earlier runs.
+Generated 2026-11-26 09:36 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Totals: 29 new topic matches · 9 other new cs.IR · 103 seen in earlier runs.
 Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
 
-## New papers matching your topics (28), highest score first
+## New papers matching your topics (29), highest score first
 
 ### Real Package, Wrong Controller: Static Auditing of Vendor--Protocol Mismatches in LLM-Generated PLC Code
 - arXiv 2611.33227v1 · v1 2026-11-24 08:53 UTC · cs.CR, cs.LG, cs.SE, eess.SY
@@ -46,7 +46,7 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 ### When Every Rollout Fails: Splicing Learner-Conditioned Options into Long-Horizon Agent RL
 - arXiv 2611.34777v1 · v1 2026-11-25 17:38 UTC · cs.AI, cs.CL, cs.LG
 - Authors: Haowen Hou, Yicheng Liu, Zhen Huang, Jiaqi Wang
-- Topics: Query fan-out, Agents · score 9 · found via cs.AI, cs.CL
+- Topics: Query fan-out, Agents · score 9 · found via HF daily papers, cs.AI, cs.CL
 - Link: https://arxiv.org/abs/2611.34777
 - arXiv comment: 16 pages
 - Full text: not stored: license is arxiv-default, which does not allow redistribution; read it on arXiv
@@ -149,6 +149,15 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Full text: data/fulltext/2611.33144.txt
 
 > Learning for dexterous manipulation is limited by the scarcity of high-quality demonstrations: retargeting from human video is imprecise, teleoperation gives no force feedback to the operator, and exoskeleton-based collection is hard to scale up. We present PyRUA-Dex, a framework that enables coding agents to develop dexterous manipulation through programmatic policy, without the need of demonstrations. The programmatic policy is developed in two stages: during exploration, multiple agents explore in parallel for task skills and ways to compose them, and a distilling agent condenses the successful attempts into a task library and one program. During refinement, this program is improved through randomized layouts for enhanced robustness and execution efficiency. In simulated environments, PyRUA-Dex achieves SOTA on Bench2Dex with a score of 72.9 and reaches 81.0% success on DexJoCo under full randomization, ahead of every trained policy on both benchmarks. In real world experiments on a bimanual platform with two 22-DoF hands, PyRUA-Dex learns to play piano, write calligraphy, and other tasks efficiently: learning a new piece from sheet music takes as little as 30 minutes. These results suggest that PyRUA-Dex is an effective framework for developing dexterous manipulation policies with coding agents in the absence of high quality dexterous manipulation demonstrations.
+
+### Simulator-as-Proxy World Model for Robot Manipulation
+- arXiv 2611.32786 · v1 2026-11-24 00:00 UTC · 
+- Authors: Tingting Liao, Mingjia Huo, Hao Li, Zhengzhong Liu et al.
+- Topics: Manipulation · score 6 · found via HF daily papers
+- Link: https://arxiv.org/abs/2611.32786
+- Full text: not stored: license is arxiv-default, which does not allow redistribution; read it on arXiv
+
+> Video world models for robots are increasingly conditioned on a simulated or rendered proxy of the scene, on the assumption that the video will show what the proxy shows. Testing this assumption requires a proxy whose state is explicit and can be perturbed. We present SimPWM (Simulator-as-Proxy World Model): given a calibrated camera, it represents, from the first frame alone, the robot by its 3D model and the objects the gripper may touch as 3D points; a rule-based simulator with no trained parameters moves them under the actions, and a video model renders the result. SimPWM returns the realistic video together with the simulated state. We then freeze the simulated objects while the arm moves as recorded and check whether the video still shows the object lifted. On DROID episodes from unseen setups, the answer differs for the arm and for the objects. With each of three base video models, the arm follows the proxy (robot IoU 0.75-0.78, against at most 0.69 for end-to-end models); rendering the robot alone already gives this. What the simulated objects add is the object state: against a robot-only proxy, they cut missed pick-ups from 54% to 38%, and the video follows them only with some base models: on rigid objects, freezing them lowers the lift rate of MiniMax-H3, fine-tuned on episodes whose simulation agrees with the real video, from 42% to 10%, but that of LTX-2.3, trained on the same episodes, only from 57% to 49%, as if it inferred the grasp from the arm motion; more than half of the remaining lifts of MiniMax-H3 are of cloth and rope, which the simulator carries rigidly. With any base model, the simulated state records what the simulation did; under perturbed actions, a video that disagrees with it reveals that the video ignores the simulated state.
 
 ### A comprehensive survey of deep face verification systems adversarial attacks and defense strategies
 - arXiv 2611.33231v1 · v1 2026-11-24 10:38 UTC · cs.CV, cs.CR
