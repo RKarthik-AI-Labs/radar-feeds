@@ -1,7 +1,7 @@
-# Paper candidates — 2026-11-25 (IST)
+# Paper candidates — 2026-11-26 (IST)
 
-Generated 2026-11-25 10:22 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
-Totals: 32 new topic matches · 15 other new cs.IR · 78 seen in earlier runs.
+Generated 2026-11-26 01:10 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Totals: 32 new topic matches · 15 other new cs.IR · 60 seen in earlier runs.
 Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
 
 ## New papers matching your topics (32), highest score first
@@ -327,9 +327,8 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Speculative Decoding for Semantic-ID-Based Generative Recommendations — https://arxiv.org/abs/2611.32855
 - SAG-Mem-1.0 Technical Report — https://arxiv.org/abs/2611.33124
 
-## Already listed on an earlier day, still inside the look-back window (78)
+## Already listed on an earlier day, still inside the look-back window (60)
 - Fetch, Read, Reuse: How AI Search Agents Bend the Web's Rules — https://arxiv.org/abs/2611.30546 (score 28)
-- DM-Lab at TREC 2026 RAG: Multi-Query Retrieval, Ensemble Judging, and Claim-Pack Generation — https://arxiv.org/abs/2611.28233 (score 16)
 - Benchmarking Web Agent Defenses Against Adaptive Visual Prompt Injection — https://arxiv.org/abs/2611.29268 (score 14)
 - Can Search Agents Correct Their Own Errors? Evaluating Retrieval, Evidence Delivery, and Answer Completion — https://arxiv.org/abs/2611.30243 (score 14)
 - Bug Bounty Programs in the AI Era: How Does Platform Anti-Spam Friction Affect Vendor Profitability? — https://arxiv.org/abs/2611.30615 (score 14)
@@ -337,7 +336,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - CO-GRAFT: Attributing Reinforcement Learning Gains in Search Agents via Role-Level Policy Grafting — https://arxiv.org/abs/2611.31185 (score 14)
 - Ask Again: Answer-List Instability in Generative Engines — https://arxiv.org/abs/2611.30819 (score 13)
 - Adaptation or Poisoning? Security Risks of Conversational Test-Time Learning in Large Language Models — https://arxiv.org/abs/2611.29532 (score 11)
-- Embodied-Harness: Towards Recursive Self-Improvement for Robotic Manipulation — https://arxiv.org/abs/2611.27689 (score 10)
 - CompareDR: Benchmarking Deep Research Reports from Individual Quality to Comparative Merit — https://arxiv.org/abs/2611.29549 (score 10)
 - SHAKTI: Evidence-Grounded Conversational AI for Nutrition and Health — https://arxiv.org/abs/2611.29988 (score 10)
 - Disclosure Bias in AI Reviewers — https://arxiv.org/abs/2611.30410 (score 10)
@@ -346,7 +344,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - ToolSmith: An Automatic Tool-Generation Framework for Multimodal Search Agents — https://arxiv.org/abs/2611.31198 (score 10)
 - PROSPER: LLMs as Sparse Retrievers for First-Stage Product Search — https://arxiv.org/abs/2611.28645 (score 9)
 - Can Cities Have Personalities? Introducing the SCD City Personality Assessment — https://arxiv.org/abs/2611.30733 (score 9)
-- The Dual-Tier Sentiment Framework: Scalable Multimodal UX Attribution in Web Search — https://arxiv.org/abs/2611.27899 (score 8)
 - Don't Sleep, Keep Watch: Proactive Perception for Computer-Use Agents — https://arxiv.org/abs/2611.28947 (score 8)
 - Elicitation format changes zero-shot classification accuracy in a medical vision-language model: a two-center evaluation on colorectal histopathology — https://arxiv.org/abs/2611.28997 (score 8)
 - Automatic Construction of Persian E-Commerce Dialogue Datasets for Conversational Product Search — https://arxiv.org/abs/2611.29356 (score 8)
@@ -357,17 +354,10 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - WeMM-Ecom: Advancing Multimodal Content Understanding for WeChat E-Commerce — https://arxiv.org/abs/2611.30662 (score 8)
 - Self-Evolving Evaluation Environments for Computer-Use Agents — https://arxiv.org/abs/2611.30962 (score 8)
 - MedUIGym: Evaluating and Training GUI Agents for Clinical Workflows — https://arxiv.org/abs/2611.30983 (score 8)
-- Poisoning Attacks and Collaborative Defense Framework for LightRAG-Based Construction Regulation Knowledge — https://arxiv.org/abs/2611.27460 (score 7)
 - When Learned IDS Model Selection Collapses to a Static Choice: A Measurement Study at the Edge — https://arxiv.org/abs/2611.29968 (score 7)
-- MomentMem: Memorizing Key Moments for Robot Manipulation — https://arxiv.org/abs/2611.26745 (score 6)
-- Manipulation-resistant reputation for peer-to-peer scientific publishing: a combination-therapy approach — https://arxiv.org/abs/2611.27625 (score 6)
-- Redesigning Neural Networks to Not be Confidently Wrong even to Strong Adversarial Attacks — https://arxiv.org/abs/2611.27811 (score 6)
-- Targeted In-Context Poisoning of Tabular Foundation Models: An Empirical Study — https://arxiv.org/abs/2611.28396 (score 6)
-- A Glimpse of Training VLMs as Foundation Models for Robotic Manipulation — https://arxiv.org/abs/2611.29338 (score 6)
 - More Than Picturing the Future: Motion-Oriented Latent Reasoning for Generalizable Robot Manipulation — https://arxiv.org/abs/2611.29339 (score 6)
 - MAWAM: Joint Imagination for Collaborative Robot Manipulation with a Multi-Agent World Action Model — https://arxiv.org/abs/2611.29501 (score 6)
 - Relativising Integrity and Robustness: Prompt Injection and Partitioned Enclaves — https://arxiv.org/abs/2611.29802 (score 6)
-- HIVE-Bench: Evaluating Patch-Level Visual Representations for Egocentric Robot Manipulation — https://arxiv.org/abs/2611.30813 (score 6)
 - Conartist: Adaptive Agentic Red-Teaming of Computer-Using Agents against Multi-Step Prompt Injection — https://arxiv.org/abs/2611.29977 (score 6)
 - Spiking World-Action Models for Robotic Manipulation — https://arxiv.org/abs/2611.30041 (score 6)
 - A statistical measure of trust in generative AI — https://arxiv.org/abs/2611.30286 (score 6)
@@ -376,13 +366,10 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - RoboInF: A Benchmark for Instruction Fidelity in Robotic Manipulation — https://arxiv.org/abs/2611.30555 (score 6)
 - How Many Parameters Does Forecasting Need? A Survey and Code-Level Audit of Lightweight Long-Term Time Series Forecasting — https://arxiv.org/abs/2611.30685 (score 6)
 - Orthogonally Mixed Sign Coding with Progressive Residual Refinement for Transformer Weight Compression — https://arxiv.org/abs/2611.31089 (score 5)
-- Pre-Crawl Prioritization and Seed Classification for Large-Scale Web Archiving — https://arxiv.org/abs/2611.27743 (score 4)
-- Beyond Relevance: An Empirical Study of Multimodal LLMs for Diversity-Aware Recommendation Reranking — https://arxiv.org/abs/2611.28379 (score 4)
 - ChatGPT Can't Sell (And That's Probably a Good Thing): Buyer-Aligned AI Advice, the Sales-Representative Gap, and Evidence from Commercial Conversations — https://arxiv.org/abs/2611.28946 (score 4)
 - Where Do Fact-Checking Errors Arise? Separating Retrieval, Search Control and Judgement in Evidence-Grounded Verification — https://arxiv.org/abs/2611.29697 (score 4)
 - DataRecycle: Trustworthy Distillation of Structured Data from Scattered Web Evidence — https://arxiv.org/abs/2611.29206 (score 3)
 - SuSi-RAG: A Hybrid Graph RAG for Equipment Maintenance — https://arxiv.org/abs/2611.30588 (score 2)
-- GERF: A Token-Efficient Multimodal Retrieval Framework for Schema-Guided Scientific Information Extraction — https://arxiv.org/abs/2611.28295 (score 1)
 - MADRec: Reliable Multi-Agent Reasoning with Evidence-Grounded Debate for Recommendation — https://arxiv.org/abs/2611.28604 (score 1)
 - LLM-Based Assistant for Dog Care Guidance — https://arxiv.org/abs/2611.29286 (score 1)
 - Structure-Exploiting Hierarchical Retrieval for Long Narrative Documents: A Precision-Oriented Alternative to Learned Abstraction Trees — https://arxiv.org/abs/2611.29966 (score 1)
