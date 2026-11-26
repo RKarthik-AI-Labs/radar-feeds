@@ -1,0 +1,1561 @@
+Real Package, Wrong Controller: Static Auditing of Vendor--Protocol Mismatches in LLM-Generated PLC Code
+https://arxiv.org/abs/2611.33227
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+Real Package, Wrong Controller: Static Auditing of Vendor–Protocol
+Mismatches in LLM-Generated PLC Code
+
+S M Zia Ur Rashid
+1,
+,
+Sazidul Islam Hira
+2
+, and
+Suman Rath
+1
+
+Affiliation: 
+1
+Department of Electrical and Computer Engineering, The University of Tulsa, Tulsa, OK, USA
+
+2
+Department of Computer Science and Engineering, International Islamic University Chittagong, Chittagong, Bangladesh
+
+Email: 
+1
+{ziaur-rashid, suman-rath}@utulsa.edu, 
+2
+sazidulislam.mail@gmail.com
+
+Abstract
+
+Language models can generate Python that drives industrial protocols on
+programmable logic controllers, yet existing code-grounding checks ask whether
+an imported package or symbol exists rather than whether it suits the declared
+industrial target. We define 
+metadata-conditioned, import-level
+vendor–protocol incompatibility
+ and build 
+Proteus-OT
+, a label-free
+static verifier over a version-pinned graph of documented bindings. Across 883
+generated scripts, 180 carry an import-level mismatch against the declared
+target (20.4%); restricting to
+single-vendor targets gives 16.3%, and additionally requiring the offending
+library to reach a protocol communication call gives
+14.2%, which we read as conditional on the corpus
+metadata rather than on verified intent. None of the 28 adjudicable human
+control files carries one, a sample too small to estimate a prevalence. Within
+the balanced subset, 96.6% of mismatching scripts
+import packages and call methods that exist, so an existence baseline does not
+represent them, and every positive ships with an inspectable witness. We also
+audit machine-versus-human classification on the same corpus, where character
+
+-grams reach macro-F1 1.000 under task, model and vendor-disjoint
+partitions and survive comment removal, an AST round trip and identifier
+anonymisation. The trailing newline present in 95.2% of human files and in none
+of the generated ones separates the classes on its own. Vendor–protocol
+consistency is a useful static audit target, whereas provenance classification
+on repository-labelled corpora is not authorship detection.
+
+Index Terms: 
+industrial control systems, operational technology security, large language
+models, static analysis, dataset artifacts, programmable logic controllers.
+
+I 
+Introduction
+
+Programmable logic controllers sit where computation meets physical process,
+which is why they have been decisive in the most consequential intrusions on
+record 
+[
+2
+, 
+3
+]
+. Mounting such an operation has
+historically demanded process knowledge, vendor-specific protocol familiarity
+and time with real hardware. Cook et al. 
+[
+1
+]
+ report that
+general-purpose language models supply part of that combination, generating PLC
+attack scripts from prompts and validating them against live controllers, so
+model assistance may lower the barrier to entry.
+
+We ask the defensive question of whether such code can be checked in a form an
+engineer can act on. Existing tooling reasons about token style or package
+existence 
+[
+9
+]
+, and neither engages with what makes an
+operational-technology (OT) script wrong. Industrial libraries are
+vendor-bound, so 
+snap7
+ speaks Siemens’ S7comm and 
+pycomm3
+ speaks
+Rockwell’s EtherNet/IP–CIP, yet a model prompted for a Schneider Modicon device
+will often import one of them regardless, producing code that parses and calls
+real methods while the documented bindings do not list that package for the
+declared target. Existence checkers confirm the package and the symbol, then
+stop. The gap we address is the
+absence, across the venues we surveyed, of any static, pre-execution analysis
+that reasons about the vendor–protocol suitability of the attack script itself
+rather than about style, package existence, or run-time network behaviour.
+
+We formalise this problem as a metadata-conditioned, import-level
+incompatibility and build 
+Proteus-OT
+ around it, a static and label-free
+auditor for operational-technology scripts that pairs a typed graph of public
+bindings carrying per-edge sources with a verifier emitting a twelve-component
+readable vector, where every positive carries an inspectable witness. We also
+examined whether the same grounded features help a machine-versus-human
+classifier separate the two provenance classes. That earlier experiment reported
+a 4.2 macro-
+ point improvement, which we now retract, because the
+component meant to flag hallucinated packages was firing on intra-repository
+sibling imports and so keyed on repository structure rather than authorship. More
+fundamentally, provenance classification proves degenerate on corpora of this
+construction, and we report the corrected, non-significant gap together with the
+artifact analysis that explains it, since an improvement over a defective
+baseline is not a contribution.
+
+This paper makes four contributions.
+
+•
+
+We define a metadata-conditioned, import-level vendor–protocol mismatch
+predicate over a version-pinned binding graph, decidable from source with no
+labels or trained model, where every positive carries an inspectable witness.
+
+•
+
+We audit 883 machine-generated scripts, reporting a 14.2% use-level rate
+against a 20.4% inclusive upper bound, with 96.6% of flagged scripts falling
+outside the evaluated existence baseline.
+
+•
+
+We show that machine-versus-human provenance classification on
+repository-labelled corpora separates the classes by
+construction rather than authorship, and reduce the confound to a single serialisation byte.
+
+•
+
+We bound recall by graph coverage and evasion by measurement, and release
+the binding graph, evidence table, adjudication worksheet, splits, environment
+and pipeline.
+
+The remainder of the paper proceeds as follows.
+Section 
+II
+ positions the work against generation,
+package-existence and evaluation-hygiene literature.
+Section 
+III
+ presents the threat model, the mismatch predicate and
+the verifier. Section 
+IV
+ reports the audit and the provenance
+negative result. Section 
+V
+ discusses which claims survive,
+and Section 
+VI
+ concludes.
+
+II 
+Related Work
+
+Models produce phishing material, scanners and simple exploits under mild
+prompting 
+[
+6
+]
+, and later systems automate larger stretches of
+the intrusion lifecycle 
+[
+7
+, 
+8
+]
+. Cook et al. 
+[
+1
+]
+
+extend this to OT, evaluating five models on PLC attack techniques from ATT&CK
+for ICS 
+[
+4
+]
+ across three vendors and three levels of supplied
+target information, and their corpus is our positive class. All of this work
+studies generation rather than defence.
+
+Code models hallucinate 
+[
+10
+, 
+11
+]
+, most relevantly by importing
+packages that do not exist, at rates sufficient to support supply-chain attacks
+on the invented names 
+[
+9
+]
+. The unit of analysis there is
+
+existence
+, which is the wrong question in OT, where the problematic
+scripts import entirely real packages belonging to another vendor. Our
+contribution swaps the grounding oracle from “does this symbol exist” to “do
+the documented bindings list this library as supporting the declared target”.
+Defensive ICS research meanwhile concentrates on network- and process-level
+detection at run time, with adjacent work on model reliability for legitimate
+PLC logic 
+[
+12
+]
+, which targets correctness of generated control logic
+rather than pre-execution auditing of an attack script. In the venues we
+surveyed we found no static, pre-execution analysis of the attack script itself.
+
+Our second result connects to work on evaluation hygiene. It builds on recurring
+pitfalls in security machine learning 
+[
+18
+]
+, malware results that do
+not survive realistic partitions 
+[
+19
+]
+, duplication inflating
+measured accuracy on code beyond what exact-hash deduplication
+removes 
+[
+20
+]
+, and leakage as a cause of
+irreproducibility 
+[
+21
+]
+. The closest analogue is linguistic, where
+annotation artifacts let hypothesis-only models beat chance on inference
+benchmarks 
+[
+22
+]
+, as a newline-only model does on ours. For
+generated text, reliable detection faces fundamental limits 
+[
+23
+]
+
+and deployed detectors encode confounds 
+[
+24
+]
+.
+Table 
+I
+ positions the work along OT domain, whether the method
+detects rather than only generates, vendor semantics, label-free operation,
+leakage control and an artifact audit, adding the last two columns we find
+missing from generated-code detection work, and its marks report what each paper
+states rather than what its method could in principle support.
+
+TABLE I: 
+Positioning against representative prior work, where 
+●
+ marks a
+property present, 
+◐
+ partial and 
+○
+ absent.
+
+Work
+
+OT domain
+
+Detects
+
+Vendor sem.
+
+Label-free
+
+Leakage ctrl.
+
+Artifact audit
+
+Ben-Moshe et al. 
+[
+6
+]
+
+○
+
+○
+
+○
+
+○
+
+○
+
+○
+
+AutoAttacker 
+[
+7
+]
+
+○
+
+○
+
+○
+
+○
+
+○
+
+○
+
+Cook et al. 
+[
+1
+]
+
+●
+
+○
+
+◐
+
+○
+
+○
+
+○
+
+Spracklen et al. 
+[
+9
+]
+
+○
+
+●
+
+○
+
+◐
+
+◐
+
+○
+
+Fakih et al. 
+[
+12
+]
+
+●
+
+○
+
+○
+
+○
+
+○
+
+○
+
+Pendlebury et al. 
+[
+19
+]
+
+○
+
+●
+
+○
+
+○
+
+●
+
+◐
+
+Allamanis 
+[
+20
+]
+
+○
+
+○
+
+○
+
+○
+
+●
+
+●
+
+Ours
+
+●
+
+●
+
+●
+
+●
+
+●
+
+●
+
+III 
+Methodology
+
+III-A
+ 
+Threat Model and Objectives
+
+We adopt the OT threat model of 
+[
+1
+]
+, in which an adversary prompts a
+model and receives a Python script intended to speak an industrial protocol to a
+controller. Following the SANS ICS kill chain 
+[
+5
+]
+ we address the
+payload, not the foothold. The defender inspects a script statically, before any
+packet reaches equipment.
+
+Let 
+ be a script, 
+ the vendor set, and 
+ the
+declared target where one exists (
+ otherwise). We separate two objectives.
+RQ1 asks, given 
+ and 
+,
+whether 
+ imports a library that the documented bindings do not list as
+supporting 
+, and emits a witness a human can inspect without labels. RQ2
+asks, given labels 
+ that indicate machine or human authorship, to learn
+
+, where the labels must mean what they claim. The
+deterministic RQ1 result is not evidence for RQ2. RQ1 is our contribution, and
+RQ2 is reported as a case study in why such corpora do not support the claim.
+
+When the predicate fires, it establishes only that, under the encoded bindings
+and the declared metadata, the imported library is not documented as supporting
+the target. Firing does 
+not
+ establish that the script cannot communicate
+with the device, that no gateway or translation layer mediates, that the library
+lacks an undocumented mode, that the declared target is correct, or that the
+model hallucinated rather than erring otherwise.
+
+III-B
+ 
+Binding Graph and Mismatch Predicate
+
+The backbone is a typed graph over
+
+(vendors, protocols, libraries, symbols). Modelling the library–protocol
+binding as a function 
+ is too strong, since a
+package may implement several protocols or expose vendor-specific extensions
+beside generic ones. We use a relation and make
+vendor validity conditional on a context 
+ carrying package version,
+transport and device family,
+
+(1)
+
+where 
+ marks a vendor-neutral protocol. Validity is 
+existential
+
+over the protocols a library implements,
+
+(2)
+
+Libraries offering any protocol that is vendor-neutral, or valid for the
+declared vendor, are therefore never witnesses. Validity here turns on vendor
+identity, a necessary but not sufficient compatibility check that
+Section 
+IV-E
+ bounds. The witness set and the three-valued predicate
+follow, with 
+ the OT libraries a script imports,
+
+(3)
+
+(4)
+
+The undefined case fixes the denominator, so rates are taken over
+
+, 883 of 883 machine scripts but only 28 of 190 human ones.
+
+The predicate is cheap to decide. With a finite AST, recognised import set and
+binding graph and fixed target and context metadata, 
+ is decidable
+in time linear in AST size plus imported OT libraries, a bounded lookup per
+import, and concerns a syntactic metadata-conditioned predicate rather than
+protocol compatibility, runtime reachability or exploitability. Here 
+ is
+fixed (pinned versions, default transport, no device family), so the
+context-conditioning of Eqs. (
+1
+) and (
+2
+) is specified
+for future use and does not bear on the results.
+
+III-C
+ 
+Verifier and Features
+
+The verifier parses 
+ to an AST, never executing it, excludes relative imports
+as package-internal siblings, and emits 
+
+(Table 
+II
+), partitioned as 
+,
+where the existence-only part 
+ (column G) holds only what an
+existence detector 
+[
+9
+]
+ could compute and the OT part isolates
+what grounding contributes.
+
+One component required correction. Any import absent from a whitelist previously
+counted as invented, which on a flattened corpus mount fired on intra-repository
+modules and keyed on repository structure, so we now build, per repository 
+,
+the set 
+ of module names genuinely present there,
+
+(5)
+
+with 
+ the pinned known-package registry. Repository-local scoping
+preserves genuine signal, and 
+pyopcuapy
+, occurring nowhere in the
+generating corpus, still fires. Class means moved from 0.000/0.155
+(machine/human) to 0.000/0.042.
+
+TABLE II: 
+The twelve groundedness components with their definitions and ranges.
+
+Component
+
+Set
+
+Definition (range)
+
+imaginary_library
+
+G
+
+Eq. (
+5
+), import absent from registry and from 
+ {0,1}
+
+nonexistent_symbol
+
+G
+
+invented methods on real OT libraries, count 
+
+placeholder_comment
+
+G
+
+comment matching insert/TODO/your-code {0,1}
+
+redundant_import
+
+G
+
+duplicate top-level import {0,1}
+
+comment_density
+
+G
+
+comment lines / total lines 
+
+cross_vendor_mismatch
+
+OT
+
+Eq. (
+4
+) {0,1,
+}
+
+port_protocol_conflict
+
+OT
+
+declared port is a known OT port other than the protocol’s {0,1}
+
+addressing_violation
+
+OT
+
+Modbus-style 4xxxx address with S7comm {0,1}
+
+imaginary_protocol
+
+OT
+
+protocol token with no graph node {0,1}
+
+tag_fabrication_risk
+
+OT
+
+tag-like literals disjoint from supplied tags, e.g. 
+"Motor7"
+ {0,1}
+
+ungrounded_ratio
+
+OT
+
+attribute accesses absent from pinned symbol tables, e.g. a misspelled method 
+
+n_ot_libs
+
+–
+
+III-D
+ 
+Witness Depth
+
+Imports are not functional dependencies, so each positive is classified by how
+deeply the script uses the offending library. With alias tracking
+(
+import lib as x
+, 
+from lib import X
+) and one level of
+assignment binding, we assign L0 when the alias is never referenced, L1 when it
+is referenced but nothing is called, L2 when a library attribute is called, and
+L3 when a call reaches a symbol on the protocol communication allowlist
+(
+connect
+, 
+db_read
+, 
+read_holding_registers
+ and so
+on), directly or through an object constructed from the library, which is the
+strongest static evidence short of execution that the library sits on the
+communication path.
+
+III-E
+ 
+Corpus and Partitions
+
+The machine class is the attack-synthesis corpus of 
+[
+1
+]
+ and the
+human class is public OT repositories, comprising security tooling and the source
+of the mainstream Python OT libraries, from which we keep only files importing a
+real OT library. Labels are 
+provenance
+ labels, not adjudicated authorship.
+We recover the generating model, ATT&CK technique and supplied-context token
+from file naming to support grouped partitions.
+
+Corpus construction is deterministic and fingerprinted. Discovered paths are
+sorted before use, because enumeration order varies across runs on identical
+data, and during development this moved random-CV macro-
+ by 0.033 and
+flipped the sign of an ablation. Every result below carries fingerprint
+
+1fc2fa6b677c
+ over 1073 files. After exact deduplication (55 files) and
+normalised-token near-duplicate clustering at Jaccard 
+ on 5-shingles
+(12 files, 1.2%), 1006 remain, and balancing yields 336 for classification. The
+audit uses the full unbalanced corpus and needs no labels.
+
+We report five partitions, keeping the random one only to make the drop to
+controlled schemes visible. These are random 5-fold, 
+task-disjoint
+ by
+ATT&CK technique, 
+leave-one-model-out
+ by generator,
+
+leave-one-vendor-out
+ by target vendor with vendor groups over machine rows
+only, and 
+human-repository-disjoint
+. Where a group maps one-to-one onto a
+class we hold out that group and split the other class evenly, discarding and
+counting single-class folds. Leave-one-vendor-out carries a caveat, since vendor
+strings appear in identifiers and paths, so it bounds vendor-idiom transfer
+rather than authorship transfer.
+
+III-F
+ 
+Baselines and Metrics
+
+Against the grounded feature set we evaluate the existence-only restriction, the
+ablation removing 
+, formatting statistics only, a normalised AST
+node histogram, character 
+-gram TF–IDF (
+), frozen
+CodeBERT 
+[
+13
+]
+, and a rule-only comparator on 
+. Every
+vectoriser is fitted inside the fold, and we use
+
+scikit-learn
+ 
+[
+17
+]
+. We report macro-
+ with
+per-class precision and recall, PR-AUC, ROC-AUC, Matthews correlation and
+balanced accuracy, plus per-fold values with bootstrap intervals. Paired
+differences use an exact sign-flip permutation test over folds with Holm
+correction 
+[
+15
+]
+ across the partition family, and
+Wilcoxon 
+[
+14
+]
+ is reported for comparability. Proportions use the
+Wilson interval 
+[
+16
+]
+,
+
+(6)
+
+because several denominators are small and one proportion is exactly zero. Seeds
+measure sensitivity to resampling rather than external robustness.
+
+For the separability diagnostic let 
+ delete comments and docstrings,
+
+ additionally collapse whitespace, 
+ additionally re-emit source
+through an AST round trip destroying all formatting, and 
+ additionally
+anonymise local identifiers; with 
+ we report
+
+.
+Rungs 3 and 4 strip docstrings on the AST of the original source rather than on
+the text-level stripper’s output, because deleting a docstring as text can leave
+an empty block that no longer parses, and that defect previously produced 42%
+self-inflicted parse failures on the human class, which were then encoded as
+empty documents. We also delete the 
+ most heavily weighted features and
+refit, and report the discrimination each surface statistic 
+ achieves
+alone as 
+, where values near 0 and near 1 are equally
+separating.
+
+IV 
+Results
+
+IV-A
+ 
+Audit Rates and Witness Depth
+
+Table 
+III
+ and Fig. 
+1
+ give the audit over the full
+unbalanced corpus. The inclusive rate is 180/883 = 20.4% [17.9, 23.2], every
+positive deriving from path-supplied metadata; 44 flagged scripts name more than
+one vendor, so their target is ambiguous and excluding them gives 16.3% [14.0,
+19.0]; and requiring in addition that the offending library reach a protocol
+communication call gives 14.2% [12.0, 16.7],
+our primary metadata-conditioned estimate, with the inclusive rate as an upper bound. Fig. 
+1
+ shows
+the mismatch concentrated in a few library–target pairings, led by 
+snap7
+
+aimed at Schneider (73 scripts) and 
+pycomm3
+ aimed at Siemens (45), with
+
+snap7
+ at Rockwell (43) and 
+pycomm3
+ at Schneider (19) following.
+
+Witness depth concentrates at full use, with 3 of the 180 witnesses (1.7%) dead
+imports, none referenced-but-uncalled, 19 (10.6%) calling the library without
+reaching a communication symbol, and 158 (87.8% [82.2, 91.8]) reaching one. At
+98% live dependencies, this addresses the objection that an import witness need
+not be functional. Among human controls, 28 of 190 files carry a recoverable
+target and none is flagged (Wilson upper bound 12.1%), too few to estimate a
+prevalence and not evidence that the mismatch is specific to generated code. The
+human class is itself skewed, since 142 of its 190 files (75%) are library source
+and tests rather than standalone attack code, so the 28 adjudicable files
+over-represent code that imports its own vendor’s library by construction, and the
+zero count should be read as the absence of a matched control rather than as
+demonstrated human care.
+
+TABLE III: 
+Audit over the full unbalanced corpus (fingerprint
+
+1fc2fa6b677c
+).
+
+Estimate
+
+Num.
+
+Den.
+
+Rate [95% CI]
+
+Inclusive (all path-derived)
+
+180
+
+883
+
+20.4% [17.9, 23.2]
+
+Single-vendor target only
+
+136
+
+833
+
+16.3% [14.0, 19.0]
+
+Use-level confirmed (L3)
+
+118
+
+833
+
+14.2% [12.0, 16.7]
+
+Human control
+
+0
+
+28
+
+0.0% [0.0, 12.1]
+
+Fig. 1: 
+Inclusive audit rates with Wilson intervals and library–target
+pairings.
+
+Because the declared target comes from file naming, we recovered it independently
+from the code text and compared the two channels on the 318 scripts both can
+adjudicate. The vendors agree on 84.9% of
+those scripts, but the flag disagreement is lopsided, with filename flags at
+23.9% [19.5, 28.9] against code-text at 11.6% [8.6, 15.6], and 41 flagged only
+by filename and 2 only by code text. When a script names a vendor in its own text
+it usually names the vendor of the library it imported, so 14.2% is sensitive to
+which channel supplies the target and should be read as conditional on the corpus
+metadata rather than on independently verified intent.
+
+IV-B
+ 
+The Existence Baseline
+
+The existence baseline flags a script if an imported top-level package is absent
+from the pinned registry, or a called attribute is absent from the introspected
+symbol table of an imported OT library. Within the balanced corpus, 29 of 168
+machine scripts carry an OT-semantic flag, and the baseline is silent on 28 and
+fires on 1, plus 4 scripts with no OT-semantic flag, so 96.6% [82.8, 99.4] are
+not represented by it. The claim concerns the evaluated baseline rather than
+every conceivable existence-based tool, since adding vendor–protocol edges would
+make a tool no longer existence-based.
+
+IV-C
+ 
+Provenance Classification as a Negative Result
+
+Table 
+IV
+ reports every model under every partition, and the pattern
+it shows is separation by construction rather than by authorship. Character
+
+-grams attain macro-
+ 1.000 under random, task-disjoint,
+leave-one-model-out and leave-one-vendor-out partitions and 0.994
+human-repository-disjoint, above frozen CodeBERT and far above every semantic
+feature set. That a pretrained code model is beaten by character 
+-grams is
+hard to reconcile with the label meaning what it claims.
+
+TABLE IV: 
+Macro-
+ fold means for machine-versus-human classification, with
+character 
+-gram values in bold.
+
+Feature space
+
+Rand.
+
+Task
+
+Model
+
+Vendor
+
+Repo
+
+Char 
+-gram TF–IDF
+
+1.000
+
+1.000
+
+1.000
+
+1.000
+
+0.994
+
+CodeBERT (frozen) 
+[
+13
+]
+
+0.988
+
+0.988
+
+0.977
+
+0.978
+
+0.973
+
+Formatting statistics
+
+0.943
+
+0.940
+
+0.900
+
+0.934
+
+0.914
+
+AST node histogram
+
+0.937
+
+0.931
+
+0.911
+
+0.923
+
+0.907
+
+Proteus-OT
+ (MLP)
+
+0.893
+
+0.899
+
+0.861
+
+0.898
+
+0.849
+
+Proteus-OT
+ (LR)
+
+0.881
+
+0.880
+
+0.834
+
+0.892
+
+0.878
+
+Ablation, no OT layer
+
+0.866
+
+0.853
+
+0.845
+
+0.856
+
+0.834
+
+Existence-only
+
+0.854
+
+0.840
+
+0.829
+
+0.848
+
+0.816
+
+Mismatch rule alone
+
+0.500
+
+0.496
+
+0.565
+
+0.538
+
+0.426
+
+Grounded 
+ existence
+
+Permutation 
+
+0.250
+
+0.125
+
+0.813
+
+0.250
+
+0.125
+
+Folds
+
+5
+
+5
+
+5
+
+3
+
+4
+
+The grounded-minus-existence contrast is consistently positive, from 
+ to
+
+ across partitions, and over 25 random-CV seeds it is 
+
+(sd 0.0070), positive in every seed, with the OT-layer ablation at 
+
+(sd 0.0070), also positive in every seed. No partition reaches significance under
+an exact sign-flip permutation test (
+ between 0.125 and 0.813; Holm-adjusted
+0.375 to 1.00), which with three to five folds has very little resolution, since
+
+ folds admit only 
+ sign assignments and the three-fold partitions
+cannot fall below 
+ regardless of effect size. The correct statement is
+that the grounded features are consistently better than existence-only by a
+small margin that this design cannot resolve statistically, and that the
+comparison is made on a task the next subsection shows to be unsound. We withdraw
+the earlier 
+ claim and make no aggregate-accuracy claim in its place.
+
+IV-D
+ 
+Diagnosing Separability
+
+The tokens that separate the classes describe genre rather than authorship, with
+human-class 
+self
+ (0.0% machine / 63.7% human), 
+assert
+
+(0.0/52.4), 
+pytest
+ (0.0/49.4), 
+class
+ (2.4/66.1) and
+
+async def
+ (0.0/31.0) set against machine-class 
+plc_ip
+
+(95.2/0.6), 
+find_plc_ip
+ (57.1/0.0), 
+print
+ (97.6/24.4) and
+
+ip address
+ (85.7/5.4). These are the signatures of a test suite against
+a standalone script, which is what the corpus contains.
+
+Table 
+V
+ reports the normalisation ladder with feature deletion on
+the left and the discrimination of single surface statistics on the right, and
+it shows the separation is neither cosmetic nor carried by a few tokens. Every
+normalisation rung retains macro-
+ 1.000, including the AST round trip that
+destroys all formatting and the anonymisation of every local identifier, and all
+336 scripts round-trip successfully at every rung, so no result is contaminated
+by transform failures. Deleting the 1000 most heavily weighted features leaves
+0.9913, yet a single statistic still suffices, since whether a file ends with a
+newline attains AUC 0.024, with no machine-generated script ending in a newline
+and 95.2% of human files doing so, a serialisation artifact of the generating
+corpus exploitable with no model at all.
+
+TABLE V: 
+Diagnostic on the task-disjoint partition.
+
+Normalisation
+
+Statistic
+
+AUC
+
+ raw
+
+1.0000
+
+Trailing newline
+
+0.024
+
+ no comments
+
+1.0000
+
+Lines per file
+
+0.228
+
+ 
+ whitespace
+
+1.0000
+
+Docstring
+
+0.283
+
+ 
+ AST round trip
+
+1.0000
+
+Shebang
+
+0.432
+
+ 
+ identifiers
+
+1.0000
+
+Non-ASCII
+
+0.432
+
+Features deleted
+
+Mean line length
+
+0.538
+
+10 / 50
+
+1.0000
+
+__main__
+ guard
+
+0.860
+
+200 / 1000
+
+0.9971 / 0.9913
+
+IV-E
+ 
+Evasion and Graph Coverage
+
+We bound the verifier’s scope by measurement rather than assertion, applying
+seven source transformations to the 180 positives and reporting retention over
+the applicable, still-parsing subset. Alias renaming, conditional import,
+function-scoped import and a misleading vendor comment each retain 100%
+detection, whereas dynamic 
+__import__
+, 
+importlib
+ and a
+wrapper module each retain 0%. The first group is within scope, and the second
+defines what the method does not cover. The comment decoy fails because the
+target is path-derived, which is both a strength against text manipulation and
+the source of the metadata dependence noted earlier.
+
+Recall is bounded by the binding table, which covers 7 of 24 mainstream Python OT
+packages and leaves 
+pylogix
+, 
+pyModbusTCP
+, 
+modbus_tk
+,
+
+minimalmodbus
+, 
+opcua
+, 
+asyncua
+, 
+OpenOPC
+, 
+pyads
+ and
+
+pydnp3
+ among others uncovered, so a script using one of them is silently an unaudited negative (a potential false negative) rather than a
+verified pass. All five vendor-lock edges carry a documented source.
+Modbus-TCP is treated as vendor-neutral and never yields a witness, and a
+protocol can be vendor-neutral while a device-family, function-code or
+register-map assumption remains invalid, so vendor identity is a necessary but
+not sufficient compatibility check.
+
+Finally, the mismatch rate by supplied-context level is 14.4% (low,
+
+), 14.2% (medium, 
+) and 37.9% (high, 
+) under the
+reading in which an “easy” task supplies more target information, and reverses
+under the opposite reading. We have not verified which reading the generating
+study intends and assert no direction.
+
+V 
+Discussion
+
+Two of the three claims survive scrutiny, since under the encoded bindings and
+the corpus metadata roughly one machine-generated script in seven uses a library
+not documented as supporting its declared target, with that library on the
+communication path, and most such scripts lie outside an existence baseline, all
+computed without labels or a trained model.
+
+The third does not survive, because the provenance classifier’s accuracy, and
+the improvement attributed to grounding, cannot be read as authorship detection.
+The construction is standard, with generated code from one collection and human
+code from public repositories labelled by origin, yet the collections differ in
+ways unrelated to authorship, since the human class is 75% library and test
+code set against entirely standalone scripts and the serialisation differed, so
+a single byte suffices. Both confounds are invisible to usual reporting, and
+work reporting macro-
+ 0.98 under stratified cross-validation with
+leave-one-model-out as a robustness check would pass review while measuring
+nothing about authorship, as our own leave-one-model-out figure of 1.000 for
+character 
+-grams shows. This is the code analogue of hypothesis-only baselines
+in natural-language inference 
+[
+22
+]
+, within the pattern
+documented for security machine learning 
+[
+18
+, 
+19
+]
+ and
+leakage generally 
+[
+21
+]
+. The episode motivates three cheap sanity
+checks for such studies, a single-statistic AUC over a handful of surface
+features, a character 
+-gram baseline where any figure at or above the
+semantic model signals a failed check, and a normalisation ladder that shows
+which channel carries the signal.
+
+The audit rests on metadata and partial coverage, which bound its claims. Target
+vendors come from file naming, defensible metadata rather than verified intent, so
+the rate depends on that channel and 44 flagged scripts name multiple vendors. We
+release a blind
+two-rater worksheet over all positives and 40 sampled negatives, and the
+adjudicated rate remains future work, while only 28 of 190 human files are
+adjudicable, so a matched corpus of human-written standalone OT scripts is the
+binding constraint on any prevalence comparison. The verifier is as complete as
+its bindings, exercises one context, checks vendor identity as a necessary but
+not sufficient condition, and addresses an error made by a non-adversarial
+generator rather than an adversary who has read this paper. It establishes
+neither safety nor maliciousness, so deployment statements are feasibility
+claims, and the earlier operating-cost argument for interpretability remains a
+hypothesis until review cost is measured with analysts. On dual use, the bindings
+are public and our contribution is their organisation, though we decline the
+earlier assertion that an adversary gains nothing, since a mismatch checker can
+also remove mismatches before deployment. We judge publication net-positive and
+release the graph, evidence table, worksheet, splits, environment and pipeline,
+but no executable attack scripts or live-controller tooling.
+
+VI 
+Conclusion
+
+Proteus-OT
+ decides metadata-conditioned, import-level vendor–protocol
+incompatibility from source text and a documented binding table, without labels
+or a trained model. The mismatch appears in 14.2% of machine-generated scripts
+in this corpus when the target is unambiguous and the offending library reaches a
+communication call, rising to 20.4% under the inclusive definition, and in none
+of the 28 adjudicable human controls, with each positive carrying an inspectable
+witness. On the same corpus, provenance classification separates machine from
+human code almost perfectly but by construction rather than by authorship, with a
+trailing byte alone sufficing, so accuracies reported for generated-code
+detection on repository-labelled corpora reflect corpus construction and call for
+the artifact audit demonstrated here. Where a domain supplies hard documented
+constraints, grounding a check in them yields a decision reproducible by
+construction. Future work should adjudicate the positives, broaden the graph
+beyond its 7-of-24 coverage, exercise conditional context, and build the matched,
+identically-serialised control corpus the provenance question requires.
+
+References
+
+[1]
+
+ M. Cook, A. Stoica, A. Shah, and D. Pezaros, “With Power
+comes Responsibility: Attack Synthesis for Industrial Control Systems using
+Large Language Models,” 
+ACM Trans. Privacy and Security
+, vol. 29,
+no. 3, art. 31, 2026.
+
+[2]
+
+ R. Langner, “Stuxnet: Dissecting a Cyberwarfare
+Weapon,” 
+IEEE Security & Privacy
+, vol. 9, no. 3, pp. 49–51, 2011.
+
+[3]
+
+ B. Johnson, D. Caban, M. Krotofil, D. Scali, N. Brubaker,
+and C. Glyer, “Attackers Deploy New ICS Attack Framework ‘TRITON’,” FireEye
+Threat Research, 2017.
+
+[4]
+
+ MITRE, “ATT&CK for Industrial Control Systems,”
+
+https://attack.mitre.org/matrices/ics/
+, accessed 2026.
+
+[5]
+
+ M. J. Assante and R. M. Lee, “The Industrial Control
+System Cyber Kill Chain,” SANS Institute, 2015.
+
+[6]
+
+ S. Ben-Moshe, G. Gekker, and G. Cohen, “OpwnAI: AI That
+Can Save the Day or Hack It Away,” Check Point Research, 2022.
+
+[7]
+
+ J. Xu et al., “AutoAttacker: A Large Language Model Guided
+System to Implement Automatic Cyber-attacks,” arXiv:2403.01038, 2024.
+
+[8]
+
+ E. Iturbe, O. Llorente-Vazquez, A. Rego, E. Rios, and
+N. Toledo, “Unleashing Offensive Artificial Intelligence: Automated Attack
+Technique Code Generation,” 
+Computers & Security
+, vol. 147,
+art. 104077, 2024.
+
+[9]
+
+ J. Spracklen, R. Wijewickrama, A. H. M. N. Sakib,
+A. Maiti, B. Viswanath, and M. Jadliwala, “We Have a Package for You! A
+Comprehensive Analysis of Package Hallucinations by Code-Generating LLMs,” in
+
+Proc. 34th USENIX Security Symp.
+, 2025, pp. 3687–3706.
+
+[10]
+
+ F. Liu et al., “Exploring and Evaluating Hallucinations in
+LLM-Powered Code Generation,” arXiv:2404.00971, 2024.
+
+[11]
+
+ Y. Tian et al., “CodeHalu: Investigating Code
+Hallucinations in LLMs via Execution-based Verification,” arXiv:2405.00253,
+2024.
+
+[12]
+
+ M. Fakih, R. Dharmaji, Y. Moghaddas, G. Quiros Araya,
+O. Ogundare, and M. A. Al Faruque, “LLM4PLC: Harnessing Large Language Models
+for Verifiable Programming of PLCs in Industrial Control Systems,” in
+
+Proc. ICSE-SEIP
+, 2024.
+
+[13]
+
+ Z. Feng et al., “CodeBERT: A Pre-Trained Model for
+Programming and Natural Languages,” in 
+Findings of EMNLP
+, 2020,
+pp. 1536–1547.
+
+[14]
+
+ F. Wilcoxon, “Individual Comparisons by Ranking
+Methods,” 
+Biometrics Bulletin
+, vol. 1, no. 6, pp. 80–83, 1945.
+
+[15]
+
+ S. Holm, “A Simple Sequentially Rejective Multiple Test
+Procedure,” 
+Scand. J. Statistics
+, vol. 6, no. 2, pp. 65–70, 1979.
+
+[16]
+
+ E. B. Wilson, “Probable Inference, the Law of Succession,
+and Statistical Inference,” 
+J. Amer. Statistical Assoc.
+, vol. 22,
+no. 158, pp. 209–212, 1927.
+
+[17]
+
+ F. Pedregosa et al., “Scikit-learn: Machine Learning
+in Python,” 
+J. Machine Learning Research
+, vol. 12, pp. 2825–2830,
+2011.
+
+[18]
+
+ D. Arp, E. Quiring, F. Pendlebury, A. Warnecke, F. Pierazzi,
+C. Wressnegger, L. Cavallaro, and K. Rieck, “Dos and Don’ts of Machine
+Learning in Computer Security,” in 
+Proc. 31st USENIX Security Symp.
+,
+2022, pp. 3971–3988.
+
+[19]
+
+ F. Pendlebury, F. Pierazzi, R. Jordaney, J. Kinder,
+and L. Cavallaro, “TESSERACT: Eliminating Experimental Bias in Malware
+Classification across Space and Time,” in 
+Proc. 28th USENIX Security
+Symp.
+, 2019, pp. 729–746.
+
+[20]
+
+ M. Allamanis, “The Adverse Effects of Code Duplication
+in Machine Learning Models of Code,” in 
+Proc. ACM SIGPLAN Onward!
+,
+2019, pp. 143–153.
+
+[21]
+
+ S. Kapoor and A. Narayanan, “Leakage and the
+Reproducibility Crisis in Machine-Learning-Based Science,” 
+Patterns
+,
+vol. 4, no. 9, art. 100804, 2023.
+
+[22]
+
+ S. Gururangan, S. Swayamdipta, O. Levy, R. Schwartz,
+S. R. Bowman, and N. A. Smith, “Annotation Artifacts in Natural Language
+Inference Data,” in 
+Proc. NAACL-HLT
+, 2018, pp. 107–112.
+
+[23]
+
+ V. S. Sadasivan, A. Kumar, S. Balasubramanian, W. Wang,
+and S. Feizi, “Can AI-Generated Text be Reliably Detected?,”
+arXiv:2303.11156, 2023.
+
+[24]
+
+ W. Liang, M. Yuksekgonul, Y. Mao, E. Wu, and J. Zou, “GPT
+Detectors Are Biased Against Non-Native English Writers,” 
+Patterns
+,
+vol. 4, no. 7, art. 100779, 2023.
+

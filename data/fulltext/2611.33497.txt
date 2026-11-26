@@ -1,0 +1,3437 @@
+CA-RAG: Constraint-Aligned Retrieval for Structurally Faithful Long-Form Generation
+https://arxiv.org/abs/2611.33497
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+CA-RAG: Constraint-Aligned Retrieval for Structurally Faithful Long-Form Generation
+
+K. Vimal Kumar
+
+Affiliation: 
+Lero – The Research Ireland Centre for Software
+
+  
+
+Meghana Kshirsagar
+
+Affiliation: 
+Department of Computer Science & Information Systems
+
+  
+
+Conor Ryan
+
+Affiliation: 
+University of Limerick, Limerick, Ireland
+
+Abstract
+
+Retrieval-augmented generation (RAG) typically optimises evidence selection
+for semantic relevance, whereas compliance-sensitive long-form generation
+also requires evidence supporting explicit structural obligations.
+Semantically relevant retrieval may therefore omit information needed for
+mandatory downstream clauses. We propose Constraint-Aligned RAG
+(
+CA-RAG
+), a retrieval-conditioning framework that augments
+section-specific queries with ontology-derived structural constraints and
+policy-grounded knowledge-graph relations before evidence selection.
+Retrieval-only evaluation with manually annotated evidence shows
+consistent improvements across retrieval budgets. At 
+, 
+CA-RAG
+
+increases Precision@
+ from 
+ to 
+, pooled Recall@
+ from
+
+ to 
+, and F1@
+ from 
+ to 
+ over standard
+RAG. Generation experiments further show improvements in compliance and
+reliability in several model–domain settings, while generation-only
+constraints achieve higher clause coverage but lower overall compliance and
+reliability. These results indicate that structurally aligned retrieval can improve
+evidence sufficiency in compliance-sensitive long-form generation.
+
+1 
+Introduction
+
+Large language models (LLMs) have demonstrated strong capabilities in conditional text generation and few-shot adaptation on a wide range of natural language processing tasks 
+(
+Brown et al., 2020
+)
+. However, many real-world long-form generation tasks, including contracts, policy reports, clinical documentation, regulatory disclosures, and enterprise workflow artefacts, require outputs that satisfy explicit structural and compliance constraints in addition to factual relevance. In these settings, generation quality depends not only on retrieving semantically related evidence, but also on preserving clause-level completeness and document-level consistency across extended contexts.
+
+Retrieval-augmented generation (RAG) improves grounded generation by incorporating external evidence during decoding 
+Lewis et al. (2021)
+. However, existing RAG pipelines optimise retrieval primarily for semantic similarity to the input query, largely independent of the structural requirements that govern the final document 
+Zhao et al. (2024)
+; 
+Gao et al. (2024)
+. Semantically relevant retrieval may still omit structurally required evidence, leading to omission failures, inconsistent sections, and incomplete policy synthesis in long-form generation settings. We hypothesise that a substantial subset of these failures arises from structurally incomplete retrieval rather than decoding alone.
+
+Recent work has explored integrating structured knowledge graphs (KG) and relational reasoning into language models to improve grounding and interpretability 
+Yasunaga et al. (2022)
+. However, these approaches primarily focus on reasoning and answer selection rather than retrieval for long-form generation. Similarly, existing query expansion, reranking, and prompt-based control methods improve semantic recall or generation control without explicitly conditioning retrieval on downstream structural requirements.
+
+We propose Constraint-Aligned RAG (CA-RAG), a retrieval-conditioning framework that incorporates ontology-derived schema constraints and policy-grounded relational dependencies prior to evidence selection. Unlike query expansion or reranking, CA-RAG does not simply improve semantic recall or reorder retrieved passages. Instead, structural constraints condition which evidence becomes retrievable for downstream generation. Ontology constraints encode document-level structure, while knowledge graph relations capture dependencies between clauses, entities, and policy conditions. By aligning retrieval with downstream requirements, CA-RAG aims to improve structural completeness and reduces omission failures in long-form generation.
+
+We evaluate 
+CA-RAG
+ across education, finance, and healthcare
+using three open-weight LLMs and multiple retrieval baselines. We additionally evaluate retrieval independently using manually judged evidence to isolate retrieval-stage effects. Results show improved conventional retrieval performance and domain-dependent changes in structural evidence sufficiency, with downstream gains in compliance and reliability across several model–domain settings. These findings highlight the value of structurally sufficient evidence for compliance-sensitive long-form generation.
+
+Contributions.
+
+Our contributions are:
+
+1.
+
+We identify a 
+retrieval–generation mismatch
+: semantically relevant evidence may be structurally insufficient for mandatory content.
+
+2.
+
+We propose 
+CA-RAG
+, which conditions retrieval on ontology-derived requirements and policy-grounded KG dependencies.
+
+3.
+
+We evaluate retrieval independently using manually annotated evidence, standard information retrieval (IR) metrics, and structural evidence measures.
+
+4.
+
+Across three domains and three LLMs, we show improved evidence recovery and domain-dependent gains in structural sufficiency, with corresponding downstream improvements in several settings.
+
+2 
+Related Work
+
+Retrieval-Augmented Generation.
+
+Retrieval-augmented generation (RAG) improves grounded text generation by conditioning language models on external evidence retrieved at inference time 
+Lewis et al. (2021)
+. Subsequent work has extended RAG across adaptive retrieval strategies, retrieval architectures, and knowledge-intensive tasks, including question answering, summarisation, and long-context generation 
+Zhao et al. (2024)
+; 
+Gao et al. (2024)
+. However, most RAG systems optimise retrieval primarily for semantic similarity to the input query, without explicitly considering whether the retrieved evidence is structurally sufficient for downstream long-form generation. Consequently, semantically relevant retrieval may still produce incomplete evidence for section-wise synthesis and clause-level consistency.
+
+Controlled, Knowledge-Grounded, and Adaptive Retrieval Methods.
+
+A complementary line of work explores structure-aware and controllable generation through hierarchical planning, dynamic content control, and constrained decoding 
+Hu et al. (2022)
+; 
+You et al. (2023)
+; 
+Stolfo et al. (2025)
+. Other approaches integrate structured knowledge graphs and relational reasoning to improve factual grounding and interpretability 
+Yasunaga et al. (2022)
+; 
+Li et al. (2024)
+. Adaptive retrieval methods such as 
+Self-RAG
+ 
+Asai et al. (2023)
+ and 
+Flare-RAG
+ 
+Jiang et al. (2023b)
+ further refine retrieval dynamically during generation to improve factual consistency and response quality.
+
+Despite these advances, existing approaches generally target semantic relevance, evidence refinement, relational grounding, or generation-time control rather than explicitly conditioning retrieval on the structural requirements of the target document. Query expansion methods typically introduce semantically related terms, KG-based retrieval incorporates structured relational knowledge, and re-ranking methods reorder candidate passages using downstream relevance signals. In contrast, CA-RAG conditions retrieval using ontology-derived and policy-grounded structural constraints before evidence selection, explicitly guiding retrieval toward structurally sufficient evidence for downstream generation.
+
+Positioning of This Work.
+
+CA-RAG therefore shifts the focus from improving semantic relevance alone to enforcing structural sufficiency during retrieval itself. This directly targets omission failures arising from incomplete retrieval by constraining evidence selection before generation begins.
+
+3 
+Methodology
+
+Figure 1: 
+Overview of 
+CA-RAG
+: retrieval conditioned on structural and policy constraints for long-form generation. 
+
+3.1 
+Problem Formulation
+
+We study long-form structured generation, where document validity depends
+not only on semantic relevance, but also on satisfying explicit structural and policy constraints.
+
+Given an input scenario 
+ and an external corpus 
+, the goal is to generate a structured document
+
+composed of multiple sections. Semantically relevant retrieval may still omit structurally required evidence, leading to omission failures, incomplete policy synthesis, and inconsistent sections. Our focus is on fluency, structural completeness, consistency, and grounding.
+
+Let 
+ denote a language model conditioned on context 
+.
+Standard RAG defines
+
+(1)
+
+where retrieval is optimised primarily for semantic similarity. We instead condition retrieval using structured constraints:
+
+(2)
+
+where 
+ denotes ontology-derived and policy-grounded structural constraints.
+
+CA-RAG is a retrieval-conditioning framework rather than a new retriever architecture. It can be viewed as structurally grounded query conditioning: rather than expanding queries with semantically related terms alone, CA-RAG derives additional retrieval terms from ontology-defined document requirements and policy-grounded KG relations.
+
+3.2 
+Baseline Retrieval-Augmented Generation
+
+Our baseline follows a standard dense RAG pipeline. Given scenario context 
+, the retriever selects evidence
+
+(3)
+
+and generation proceeds as
+
+(4)
+
+3.3 
+Constraint-Aligned RAG
+
+CA-RAG conditions evidence retrieval using ontology-derived schema constraints and policy-grounded relational dependencies extracted before retrieval.
+
+Ontology Constraints.
+
+The ontology layer captures schema-level structure, including section types, mandatory fields, and attribute dependencies. For each section heading 
+, relevant ontology concepts are retrieved through semantic matching:
+
+(5)
+
+Policy-Grounded KG Constraints.
+
+We additionally construct policy-grounded knowledge graphs whose nodes represent clauses, entities, and policy attributes, while edges encode relations such as 
+requires
+, 
+permits
+, and 
+prohibits
+. Relevant subgraphs are retrieved as
+
+(6)
+
+The final constraint representation is
+
+(7)
+
+Ontology concepts and KG relations are constructed semi-automatically using LLM-assisted template extraction and semantic matching from domain policy corpora, requiring limited manual curation primarily for ontology schema definition and validation.
+
+3.3.1 
+Constraint-Aligned Retrieval
+
+For each section, we construct a constraint-aligned retrieval query
+
+(8)
+
+and retrieve evidence as
+
+(9)
+
+The query construction stage augments the original section query using ontology concepts and KG-linked policy obligations. Ontology concepts and KG-linked obligations are appended as constraint-aligned retrieval terms, guiding retrieval toward structurally relevant evidence. For example, for a 
+Third-Party Transfer
+ section, standard RAG typically retrieves general data-sharing passages, while CA-RAG augments retrieval using ontology concepts such as 
+Transfer Mechanisms
+ and KG-linked obligations, including 
+data governance regulations
+ and 
+DPIA
+1
+1
+
+1
+
+Data Protection Impact Assessment.
+ requirements. This guides retrieval toward evidence that is more structurally aligned with downstream compliance requirements. Additional implementation details, retrieval traces, and worked query construction examples are provided in Appendix 
+A.2
+.
+
+3.4 
+Section-Wise Generation
+
+Documents are generated section-wise using shared scenario context and section-specific evidence:
+
+(10)
+
+Each section is generated independently using the shared scenario context, retrieved evidence, and structural constraints. An optional lightweight RLHF refinement stage is applied after generation to improve readability and stylistic consistency.
+
+Pipeline Overview.
+
+The CA-RAG pipeline can be summarised as:
+
+Constraint Extraction
+
+Query Construction
+
+Evidence Retrieval
+
+Section Generation
+
+Figure 
+1
+ illustrates the overall CA-RAG framework. Ontology-derived schema constraints and policy-grounded relational dependencies are extracted before retrieval and incorporated into constraint-aligned retrieval queries. The retrieved evidence is then used for section-wise grounded generation. The full algorithmic specification is provided in Appendix 
+A.1
+.
+
+4 
+Experimental Setup
+
+4.1 
+Domains and Tasks
+
+We evaluate 
+CA-RAG
+ on Data Sharing Agreement (DSA) synthesis across three compliance-critical domains: 
+health
+, 
+education
+, and 
+finance
+. These domains exhibit varying levels of regulatory complexity, clause dependency structure, and omission sensitivity, enabling analysis of when retrieval-stage structural alignment is most beneficial. Healthcare emphasises privacy-sensitive compliance, education focuses on governance consistency, and finance contains dense regulatory dependencies. For each domain, we curate corpora of regulatory policies, governance documents, operational guidelines, and domain ontologies. These corpora serve as retrieval sources and inputs for policy-grounded knowledge graph construction.
+
+Clause-level evaluation uses auditing dimensions informed by the clause and
+legal-text taxonomies represented in 
+CUAD
+, 
+LEDGAR
+, and
+
+LexGLUE
+; these resources are not used as direct DSA ground-truth
+annotations. Mandatory clause completeness is assessed using a GPT-4o-mini clause auditor with deterministic prompting and structured outputs. Clause coverage is additionally measured using checklist-based auditing queries (Appendix 
+A.5.2
+), enabling interpretable clause-level analysis beyond aggregate similarity metrics.
+
+Structured Resources.
+
+The shared ontology contains 21 classes, 15 object properties,
+7 datatype properties, and 169 triples. The education, healthcare, and
+finance KGs contain 79, 141, and 267 entities, respectively.
+
+4.2 
+Models, Baselines, and Generation Protocol
+
+We evaluate 
+CA-RAG
+ using 
+Llama-3.1-8B
+ 
+Grattafiori et al. (2024)
+, 
+Llama-3.2-3B
+, and 
+Mistral-7B
+ 
+Jiang et al. (2023a)
+. Dense retrieval uses 
+all-MiniLM-L6-v2
+ for retrieval, ontology matching, and policy subgraph retrieval. We compare standard RAG, ontology-enhanced retrieval (RAG+O), KG-enhanced retrieval (RAG+KG), full CA-RAG, adaptive retrieval baselines (
+Self-RAG
+, 
+Flare-RAG
+), and a generation-only constraint baseline (
+Gen-Constraint
+), in which constraints are injected only during generation while retrieval remains identical to standard 
+RAG
+. Generation proceeds section-wise using shared scenario context, retrieved evidence, and associated structural constraints. For retrieval-conditioned variants, ontology- and policy-grounded constraints are incorporated before retrieval to guide evidence selection. In contrast, 
+Gen-Constraint
+ applies the same constraints only during generation, isolating the effect of retrieval-stage structural alignment.
+
+All methods use the same base models, retriever backbone, decoding settings, prompt scaffold, and evaluation pipeline. An optional lightweight RLHF refinement stage may improve readability without modifying retrieval or evidence support.
+
+4.3 
+Evaluation Metrics
+
+We evaluate generated Data Sharing Agreements (DSAs) using metrics that separately capture surface similarity, structural compliance, document-level reliability, and efficiency. Let 
+ denote a generated DSA and 
+ the corresponding reference agreement.
+
+Similarity Score. (Sim.)
+
+We measure surface and semantic similarity using cosine similarity and ROUGE-LSUM:
+
+(11)
+
+with both components normalised to 
+.
+
+Compliance Score. (Comp.)
+
+To assess structural and regulatory completeness, we aggregate five auditing signals: clause compliance from 
+CUAD
+ 
+Hendrycks et al. (2021)
+, provision coverage from 
+LEDGAR
+ 
+Tuggener et al. (2020)
+, fairness-related signals from 
+LexGLUE-UNFAIR-TOS
+ 
+Lippi et al. (2019)
+, domain-specific policy alignment, and explicit DSA clause coverage:
+
+(12)
+
+where 
+, 
+, and 
+ denote LEDGAR, LexGLUE, and domain-specific compliance scores, respectively.
+We use the geometric mean so that omissions in any required dimension lower the overall compliance score.
+
+Reliability Score. (Rel.)
+
+We define document-level reliability as:
+
+(13)
+
+with 
+ to prioritise structural and compliance completeness over surface similarity. We report 
+ as a summary metric but treat clause coverage and the presence of missing mandatory clauses as the primary evidence of structural robustness. Method rankings remain stable across 
+; full sensitivity results are reported in the Appendix 
+A.6
+.
+
+Clause-Level Robustness.
+
+Because our central claim concerns omission reduction, we report clause coverage, the number of missing mandatory clauses, overall coverage, and dimension-level compliance scores separately.
+
+Implementation details for auditors, compliance scoring, and efficiency measurements, such as latency and empirical throughput, are provided in Appendix 
+A.5
+.
+
+4.4 
+Retrieval-Level Evaluation
+
+To determine whether improvements arise at retrieval time rather than solely
+during generation, we evaluate the retriever independently with generation
+disabled. For each scenario–section pair, we pool and deduplicate the union
+of the top-20 passages retrieved by standard RAG and 
+CA-RAG
+. Each
+unique passage is manually labelled as 
+relevant
+, 
+not relevant
+,
+or 
+uncertain
+ according to whether it provides evidence supporting the
+corresponding scenario–section requirement. Uncertain passages are excluded
+from the primary analysis.
+
+Because exhaustive corpus-level relevance judgements are unavailable, we
+report Precision@
+, pooled Recall@
+, and F1@
+ for
+
+. Pooled Recall@
+ is computed relative to the set of
+passages judged relevant within the pooled top-20 candidate set for each
+scenario–section pair rather than against an exhaustively judged corpus.
+
+We additionally report Constraint Coverage, Clause-Evidence Coverage, and
+Retrieval Omission Rate to evaluate whether retrieved evidence supports the
+structural requirements of downstream generation.
+
+4.5 
+Implementation and Controlled Comparison
+
+All variants use the same retriever backbone, prompt scaffold, decoding
+parameters, retrieval corpus, and evaluation pipeline. Dense retrieval uses
+
+all-MiniLM-L6-v2
+, with 
+ passages and up to 
+ ontology concepts and 
+ KG relations per section. Ground-truth DSAs are excluded
+from the retrieval corpus. Experiments run on NVIDIA A100 80GB GPUs.
+
+5 
+Results
+
+We evaluate 
+CA-RAG
+ across education, finance, and healthcare domains using three open-weight large language models and multiple retrieval-generation baselines. Our analysis focuses on whether retrieval-stage structural conditioning reduces omission failures and improves clause-level completeness in long-form constrained generation. In compliance-critical settings, omission failures are often more consequential than small reductions in semantic similarity. Consequently, our evaluation emphasises structural completeness, clause recovery, and omission robustness in addition to aggregate reliability metrics. Unless otherwise stated, results are macro-averaged within each domain. Full per-domain results are provided in the Appendix 
+A.8
+.
+
+5.1 
+Retrieval-Level Evaluation
+
+We first evaluate retrieval independently of downstream generation.
+Table 
+1
+ reports manually verified retrieval performance
+aggregated across domains. 
+CA-RAG
+ improves Precision@
+, pooled
+Recall@
+, and F1@
+ at every evaluated retrieval depth. At the generation setting (
+), Precision increases from 
+ to 
+, pooled Recall from 
+ to 
+, and F1 from 
+ to 
+. Because generation is disabled in this experiment, these gains cannot be attributed to prompting or decoding and provide direct evidence that structural conditioning changes evidence selection before generation.
+
+Table 1: 
+Retrieval-only evaluation aggregated across domains using manually
+annotated pooled evidence. Pooled Recall is computed relative to relevant
+passages within the judged candidate pool. Higher is better.
+
+Method
+
+P@
+
+Pooled R@
+
+F1@
+
+RAG
+
+3
+
+0.5000
+
+0.2569
+
+0.3966
+
+CA-RAG
+
+3
+
+0.5311
+
+0.2754
+
+0.4193
+
+RAG
+
+6
+
+0.5268
+
+0.5402
+
+0.5389
+
+CA-RAG
+
+6
+
+0.5692
+
+0.5950
+
+0.5672
+
+RAG
+
+9
+
+0.5499
+
+0.8654
+
+0.6506
+
+CA-RAG
+
+9
+
+0.5866
+
+0.9185
+
+0.6938
+
+Figure 2: 
+Structural sufficiency across domains and retrieval budgets
+(
+), measured by Constraint Coverage, Clause-Evidence
+Coverage, and Retrieval Omission Rate. Solid lines denote
+
+CA-RAG
+; dashed lines denote RAG.
+
+5.2 
+Structural Sufficiency of Retrieved Evidence
+
+Standard relevance metrics indicate whether retrieved passages are relevant,
+but not whether they sufficiently support mandatory downstream requirements.
+We therefore evaluate 
+Constraint Coverage
+ (CCov) and
+
+Clause-Evidence Coverage
+ (CECov), and report
+
+Retrieval Omission Rate
+ (ROR) as the complementary measure of missing
+clause-level evidence. CCov measures the proportion of required ontology/KG
+constraints supported by retrieved evidence, while CECov measures the
+proportion of mandatory clause requirements with supporting evidence.
+
+For required constraints 
+ and top-
+ passages 
+,
+
+(14)
+
+For mandatory clauses 
+,
+
+(15)
+
+Retrieval Omission Rate is:
+
+(16)
+
+Support is determined from manual evidence annotations indicating whether a
+retrieved passage directly supports the corresponding constraint or mandatory
+clause. Together, these metrics distinguish relevant retrieval from evidence
+that is structurally sufficient for downstream generation.
+
+Figure 
+2
+ shows substantial domain variation.
+Education maintains high CECov and low omission under both methods, with
+
+CA-RAG
+ providing modest CCov gains. In healthcare,
+
+CA-RAG
+ improves CECov and reduces omissions, particularly at larger
+retrieval budgets. Finance remains more challenging: CCov is comparable to
+RAG, but 
+CA-RAG
+ retrieves less direct clause-supporting evidence.
+Thus, satisfying ontology- and KG-derived constraints does not guarantee
+coverage of every mandatory clause. Overall, constraint alignment can improve
+the structural utility of retrieved evidence, but its effectiveness depends
+on alignment between structural constraints and available domain evidence.
+This also explains why improvements in conventional retrieval metrics do not
+translate uniformly into higher clause-evidence coverage.
+
+5.3 
+Overall Generation Performance
+
+Table 
+2
+ reports document-level reliability across models and domains. 
+CA-RAG
+ achieves the highest mean reliability in six of nine
+model–domain configurations, including all three finance configurations,
+while competing methods remain strongest in the remaining healthcare and
+education settings. These results should be interpreted together with Sections 
+5.1
+–
+5.2
+: retrieval conditioning measurably changes evidence selection before generation, while
+the magnitude of downstream gains remains model and domain dependent. Finance domain provides a particularly informative setting because of its dense
+regulatory dependencies and omission-sensitive requirements. Although
+retrieval remains challenging in this domain, 
+CA-RAG
+ yields strong
+downstream reliability in several model configurations.
+
+Adaptive retrieval methods such as 
+Self-RAG
+ and 
+Flare-RAG
+ improve aggregate reliability in some domains, particularly health, but also exhibit higher variance and latency due to iterative retrieval and refinement. In contrast, 
+CA-RAG
+ maintains comparatively stable performance while reducing omission frequency with lower retrieval overhead. Overall, the primary contribution of 
+CA-RAG
+ lies not in maximising aggregate generation scores, but in explicitly aligning evidence selection with downstream structural requirements, which can improve structural completeness and reduce omission failures.
+
+We additionally performed paired bootstrap significance testing across domains, runs, and model variants using document-level reliability scores. CA-RAG significantly outperformed standard RAG, 
+Self-RAG
+, and 
+Flare-RAG
+, while differences relative to the generation-only constraint baseline were not statistically significant. This suggests that generation-time prompting can partially improve aggregate reliability, whereas retrieval-stage conditioning directly modifies evidence selection and can improve omission robustness and structural completeness. (Section 
+5.5
+). Full paired bootstrap significance results are provided in Appendix 
+A.10
+.
+
+Table 2: 
+Reliability (mean 
+ std over 3 runs). Best results are
+
+bold
+; second-best are 
+underlined
+. 
+
+Llama-3.2-3B
+
+Llama-3.1-8B
+
+Mistral-7B
+
+Method
+
+Finance
+
+Healthcare
+
+Education
+
+Finance
+
+Healthcare
+
+Education
+
+Finance
+
+Healthcare
+
+Education
+
+RAG
+
+0.6156 
+ 0.015
+
+0.6634 
+ 0.012
+
+0.6515 
+ 0.015
+
+0.6259 
+ 0.018
+
+0.6560 
+ 0.034
+
+0.6685 
+ 0.023
+
+0.6051 
+ 0.016
+
+0.6682 
+ 0.017
+
+0.6588 
+ 0.010
+
+Self-RAG
+
+0.6227 
+ 0.023
+
+0.6602 
+ 0.010
+
+0.6167 
+ 0.119
+
+0.6024 
+ 0.023
+
+0.6666 
+ 0.021
+
+0.6772
+ 0.025
+
+0.6106 
+ 0.050
+
+0.6625 
+ 0.019
+
+0.6673 
+ 0.004
+
+Flare-RAG
+
+0.6092 
+ 0.044
+
+0.6604 
+ 0.020
+
+0.6459 
+ 0.016
+
+0.6145 
+ 0.034
+
+0.6793 
+ 0.025
+
+0.6626 
+ 0.027
+
+0.6113 
+ 0.034
+
+0.6780 
+ 0.020
+
+0.6504 
+ 0.052
+
+CA-RAG
+∗
+
+0.6410 
+ 0.006
+
+0.6730 
+ 0.012
+
+0.6521 
+ 0.022
+
+0.6404 
+ 0.008
+
+0.6549 
+ 0.016
+
+0.6830 
+ 0.006
+
+0.6329 
+ 0.021
+
+0.6698 
+ 0.008
+
+0.6653 
+ 0.013
+
+5.4 
+Structural and Compliance Trade-off Analysis
+
+We analyse retrieval conditioning across six auditing metrics: clause compliance, provision coverage, fairness and balance, domain alignment, DSA clause coverage, and overall compliance. Figure 
+3
+ shows results for 
+Llama-3.1-8B
+; additional plots are provided in the appendix. The radar plots reveal complementary behaviour between ontology-derived and policy-grounded constraints. Ontology constraints primarily improve provision coverage and structural completeness, while KG-based constraints strengthen policy-specific obligations and clause-level compliance behaviour. The full 
+CA-RAG
+ configuration generally provides a balanced structural profile across domains. Gains are strongest in finance and education, where omission-sensitive clauses depend on structurally connected evidence across multiple sections. Overall, the analysis highlights the importance of multi-dimensional auditing beyond aggregate similarity metrics.
+
+Figure 3: 
+Structural and compliance trade-offs across retrieval variants for 
+Llama-3.1-8B
+. Scores are normalised across six auditing metrics. Ontology constraints improve structural completeness, while KG constraints strengthen clause compliance.
+
+5.5 
+Ablation: Retrieval-Stage vs Generation-Only Constraints
+
+Generation-only constraints achieve the highest clause coverage
+(
+), showing that explicit structural prompts can encourage clause
+inclusion during decoding. However, 
+CA-RAG
+ achieves higher
+compliance (
+) and reliability (
+). The retrieval-only results provide evidence for a mechanism that generation-only prompting cannot provide: 
+CA-RAG
+ changes the evidence available before decoding. At 
+, it improves both Precision@
+ and pooled Recall@
+, while structural retrieval analysis shows improved availability of clause-supporting evidence. Thus, generation-only and
+retrieval-stage constraints affect different parts of the pipeline.
+
+Table 3: 
+Ablation comparing generation-only constraints and retrieval-stage structural alignment. Higher is better.
+
+Variant
+
+Clause Cov.
+
+Comp.
+
+Rel.
+
+RAG
+
+75.9
+
+0.6571
+
+0.6459
+
+Gen-Constraint
+
+78.7
+
+0.6683
+
+0.6517
+
+CA-RAG
+
+77.8
+
+0.6726
+
+0.6569
+
+5.6 
+Ablation: Retrieval-Budget Sensitivity
+
+On finance with Llama-3.1-8B, standard RAG shows a small compliance gain from
+
+ to 
+ but degrades substantially at 
+, whereas 
+CA-RAG
+ remains comparatively stable. Its best reliability occurs at 
+ (
+), indicating that the gains are not explained simply by retrieving more evidence. Full results are reported in the appendix 
+A.7
+.
+
+5.7 
+Efficiency and Auditor Validation
+
+CA-RAG
+ adds constraint extraction and query-construction overhead but
+avoids the iterative retrieval loops used by 
+Self-RAG
+ and
+
+Flare-RAG
+. Its latency remains closer to standard RAG than to
+adaptive retrieval baselines in most settings; full efficiency results are
+reported in the Appendix 
+A.9
+.
+
+We independently validate automated clause-coverage estimates against
+manual assessment. The auditor obtains MAE 
+ percentage points,
+Pearson 
+ (
+), and Spearman 
+ (
+),
+indicating close agreement with manual evaluation.
+
+6 
+Conclusion
+
+We presented 
+CA-RAG
+, a retrieval-conditioning framework that aligns
+evidence selection with structural and policy requirements for
+compliance-sensitive long-form generation. Retrieval-only evaluation
+with manually annotated evidence shows improved evidence selection across
+
+, with 
+CA-RAG
+ improving Precision@
+, pooled
+Recall@
+, and F1@
+ over standard RAG. Structural evidence sufficiency
+varies across domains, with gains in constraint and clause-evidence coverage
+most apparent in education and healthcare, while finance remains more
+challenging. Generation experiments show corresponding improvements in compliance and reliability in several model–domain settings, although gains remain model and domain dependent. These findings suggest that semantic relevance alone can be insufficient for omission-sensitive long-form generation, and that
+retrieval-stage structural alignment can improve evidence sufficiency before
+generation.
+
+Limitations
+
+While 
+CA-RAG
+ improves structural completeness and reduces omission failures, several limitations remain.
+
+Dependence on structured resources.
+
+Our approach relies on the availability and quality of domain ontologies and policy-grounded knowledge graphs. In domains where such structured resources are incomplete, noisy, or unavailable, retrieval conditioning may be less effective. Although ontology and KG construction are largely automated, missing or incorrect relations can propagate into retrieval conditioning.
+
+No guarantee of complete retrieval.
+
+Constraint-aligned retrieval increases the likelihood of retrieving structurally relevant evidence, but does not guarantee recovery of all required clauses. Even with structural conditioning, omission-sensitive obligations may still be missed when supporting evidence is incomplete or weakly represented in the corpus.
+
+Scope of evaluation.
+
+Our experiments focus on Data Sharing Agreement synthesis across healthcare, finance, and education domains using three open-weight LLM families. While these domains exhibit diverse structural and regulatory characteristics, the findings may not directly generalise to other long-form generation tasks, languages, model scales, or retrieval settings without further evaluation.
+
+Potential evaluation limitations.
+
+Clause-level compliance evaluation relies in part on LLM-based auditing pipelines and benchmark-derived compliance signals. Although the same deterministic evaluation protocol is applied consistently across methods, automatic auditing may still miss subtle legal or domain-specific nuances. In addition, aggregate similarity metrics do not always correlate with structural completeness or omission robustness.
+
+Computational overhead and retrieval scaling.
+
+Ontology matching, KG retrieval, and constraint-aligned query construction introduce additional latency relative to standard RAG pipelines. Retrieval-budget sensitivity experiments further show that increasing retrieval depth does not necessarily improve downstream performance, particularly for standard RAG. Scalability to larger corpora and real-time deployment settings requires further study.
+
+Generality of refinement methods.
+
+Our RLHF experiments suggest that post-generation refinement mainly improves stylistic coherence and local fluency rather than reliably recovering missing evidence-dependent clauses. More advanced refinement or agentic verification mechanisms may therefore be necessary for robust omission-sensitive generation.
+
+Overall, our findings suggest that retrieval-stage structural alignment is a promising direction for improving robustness in long-form generation settings where omission failures and incomplete evidence can lead to unreliable outputs. Future work includes extending retrieval-stage structural conditioning to broader settings, including compliance, policy generation, and agentic document generation.
+
+Ethical Considerations
+
+Constraint-aligned retrieval may improve the reliability of long-form compliance and policy generation systems by reducing omission-sensitive failures. However, generated agreements may still contain incomplete, outdated, or legally insufficient content if supporting evidence is missing or retrieval fails. Such systems should therefore be used as assistive drafting tools rather than substitutes for expert legal or regulatory review. In addition, policy-grounded generation systems could be misused to automate large-scale production of synthetic policies or compliance documents without appropriate human oversight.
+
+References
+
+Asai 
+et al.
+ (2023)
+
+A. Asai, Z. Wu, Y. Wang, A. Sil, and H. Hajishirzi
+
+Self-rag: learning to retrieve, generate, and critique through self-reflection
+.
+
+External Links: 
+2310.11511
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Brown 
+et al.
+ (2020)
+
+T. B. Brown, B. Mann, N. Ryder, M. Subbiah, J. Kaplan, P. Dhariwal, A. Neelakantan, P. Shyam, G. Sastry, A. Askell, S. Agarwal, A. Herbert-Voss, G. Krueger, T. Henighan, R. Child, A. Ramesh, D. M. Ziegler, J. Wu, C. Winter, C. Hesse, M. Chen, E. Sigler, M. Litwin, S. Gray, B. Chess, J. Clark, C. Berner, S. McCandlish, A. Radford, I. Sutskever, and D. Amodei
+
+Language models are few-shot learners
+.
+
+External Links: 
+2005.14165
+,
+
+Link
+
+Cited by: 
+§1
+.
+
+Gao 
+et al.
+ (2024)
+
+Y. Gao, Y. Xiong, X. Gao, K. Jia, J. Pan, Y. Bi, Y. Dai, J. Sun, M. Wang, and H. Wang
+
+Retrieval-Augmented Generation for Large Language Models: A Survey
+.
+
+External Links: 
+2312.10997
+,
+
+Link
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+Grattafiori 
+et al.
+ (2024)
+
+A. Grattafiori, A. Dubey, A. Jauhri, A. Pandey, A. Kadian, A. Al-Dahle, A. Letman, A. Mathur, A. Schelten, A. Vaughan, A. Yang, A. Fan, A. Goyal, A. Hartshorn, A. Yang, A. Mitra, A. Sravankumar, A. Korenev, A. Hinsvark, A. Rao, A. Zhang, A. Rodriguez, A. Gregerson, A. Spataru, B. Roziere, B. Biron, B. Tang, B. Chern, C. Caucheteux, C. Nayak, C. Bi, C. Marra, C. McConnell, C. Keller, C. Touret, C. Wu, C. Wong, C. C. Ferrer, C. Nikolaidis, D. Allonsius, D. Song, D. Pintz, D. Livshits, D. Wyatt, D. Esiobu, D. Choudhary, D. Mahajan, D. Garcia-Olano, D. Perino, D. Hupkes, E. Lakomkin, E. AlBadawy, E. Lobanova, E. Dinan, E. M. Smith, F. Radenovic, F. Guzmán, F. Zhang, G. Synnaeve, G. Lee, G. L. Anderson, G. Thattai, G. Nail, G. Mialon, G. Pang, G. Cucurell, H. Nguyen, H. Korevaar, H. Xu, H. Touvron, I. Zarov, I. A. Ibarra, I. Kloumann, I. Misra, I. Evtimov, J. Zhang, J. Copet, J. Lee, J. Geffert, J. Vranes, J. Park, J. Mahadeokar, J. Shah, J. van der Linde, J. Billock, J. Hong, J. Lee, J. Fu, J. Chi, J. Huang, J. Liu, J. Wang, J. Yu, J. Bitton, J. Spisak, J. Park, J. Rocca, J. Johnstun, J. Saxe, J. Jia, K. V. Alwala, K. Prasad, K. Upasani, K. Plawiak, K. Li, K. Heafield, K. Stone, K. El-Arini, K. Iyer, K. Malik, K. Chiu, K. Bhalla, K. Lakhotia, L. Rantala-Yeary, L. van der Maaten, L. Chen, L. Tan, L. Jenkins, L. Martin, L. Madaan, L. Malo, L. Blecher, L. Landzaat, L. de Oliveira, M. Muzzi, M. Pasupuleti, M. Singh, M. Paluri, M. Kardas, M. Tsimpoukelli, M. Oldham, M. Rita, M. Pavlova, M. Kambadur, M. Lewis, M. Si, M. K. Singh, M. Hassan, N. Goyal, N. Torabi, N. Bashlykov, N. Bogoychev, N. Chatterji, N. Zhang, O. Duchenne, O. Çelebi, P. Alrassy, P. Zhang, P. Li, P. Vasic, P. Weng, P. Bhargava, P. Dubal, P. Krishnan, P. S. Koura, P. Xu, Q. He, Q. Dong, R. Srinivasan, R. Ganapathy, R. Calderer, R. S. Cabral, R. Stojnic, R. Raileanu, R. Maheswari, R. Girdhar, R. Patel, R. Sauvestre, R. Polidoro, R. Sumbaly, R. Taylor, R. Silva, R. Hou, R. Wang, S. Hosseini, S. Chennabasappa, S. Singh, S. Bell, S. S. Kim, S. Edunov, S. Nie, S. Narang, S. Raparthy, S. Shen, S. Wan, S. Bhosale, S. Zhang, S. Vandenhende, S. Batra, S. Whitman, S. Sootla, S. Collot, S. Gururangan, S. Borodinsky, T. Herman, T. Fowler, T. Sheasha, T. Georgiou, T. Scialom, T. Speckbacher, T. Mihaylov, T. Xiao, U. Karn, V. Goswami, V. Gupta, V. Ramanathan, V. Kerkez, V. Gonguet, V. Do, V. Vogeti, V. Albiero, V. Petrovic, W. Chu, W. Xiong, W. Fu, W. Meers, X. Martinet, X. Wang, X. Wang, X. E. Tan, X. Xia, X. Xie, X. Jia, X. Wang, Y. Goldschlag, Y. Gaur, Y. Babaei, Y. Wen, Y. Song, Y. Zhang, Y. Li, Y. Mao, Z. D. Coudert, Z. Yan, Z. Chen, Z. Papakipos, A. Singh, A. Srivastava, A. Jain, A. Kelsey, A. Shajnfeld, A. Gangidi, A. Victoria, A. Goldstand, A. Menon, A. Sharma, A. Boesenberg, A. Baevski, A. Feinstein, A. Kallet, A. Sangani, A. Teo, A. Yunus, A. Lupu, A. Alvarado, A. Caples, A. Gu, A. Ho, A. Poulton, A. Ryan, A. Ramchandani, A. Dong, A. Franco, A. Goyal, A. Saraf, A. Chowdhury, A. Gabriel, A. Bharambe, A. Eisenman, A. Yazdan, B. James, B. Maurer, B. Leonhardi, B. Huang, B. Loyd, B. D. Paola, B. Paranjape, B. Liu, B. Wu, B. Ni, B. Hancock, B. Wasti, B. Spence, B. Stojkovic, B. Gamido, B. Montalvo, C. Parker, C. Burton, C. Mejia, C. Liu, C. Wang, C. Kim, C. Zhou, C. Hu, C. Chu, C. Cai, C. Tindal, C. Feichtenhofer, C. Gao, D. Civin, D. Beaty, D. Kreymer, D. Li, D. Adkins, D. Xu, D. Testuggine, D. David, D. Parikh, D. Liskovich, D. Foss, D. Wang, D. Le, D. Holland, E. Dowling, E. Jamil, E. Montgomery, E. Presani, E. Hahn, E. Wood, E. Le, E. Brinkman, E. Arcaute, E. Dunbar, E. Smothers, F. Sun, F. Kreuk, F. Tian, F. Kokkinos, F. Ozgenel, F. Caggioni, F. Kanayet, F. Seide, G. M. Florez, G. Schwarz, G. Badeer, G. Swee, G. Halpern, G. Herman, G. Sizov, Guangyi, Zhang, G. Lakshminarayanan, H. Inan, H. Shojanazeri, H. Zou, H. Wang, H. Zha, H. Habeeb, H. Rudolph, H. Suk, H. Aspegren, H. Goldman, H. Zhan, I. Damlaj, I. Molybog, I. Tufanov, I. Leontiadis, I. Veliche, I. Gat, J. Weissman, J. Geboski, J. Kohli, J. Lam, J. Asher, J. Gaya, J. Marcus, J. Tang, J. Chan, J. Zhen, J. Reizenstein, J. Teboul, J. Zhong, J. Jin, J. Yang, J. Cummings, J. Carvill, J. Shepard, J. McPhie, J. Torres, J. Ginsburg, J. Wang, K. Wu, K. H. U, K. Saxena, K. Khandelwal, K. Zand, K. Matosich, K. Veeraraghavan, K. Michelena, K. Li, K. Jagadeesh, K. Huang, K. Chawla, K. Huang, L. Chen, L. Garg, L. A, L. Silva, L. Bell, L. Zhang, L. Guo, L. Yu, L. Moshkovich, L. Wehrstedt, M. Khabsa, M. Avalani, M. Bhatt, M. Mankus, M. Hasson, M. Lennie, M. Reso, M. Groshev, M. Naumov, M. Lathi, M. Keneally, M. Liu, M. L. Seltzer, M. Valko, M. Restrepo, M. Patel, M. Vyatskov, M. Samvelyan, M. Clark, M. Macey, M. Wang, M. J. Hermoso, M. Metanat, M. Rastegari, M. Bansal, N. Santhanam, N. Parks, N. White, N. Bawa, N. Singhal, N. Egebo, N. Usunier, N. Mehta, N. P. Laptev, N. Dong, N. Cheng, O. Chernoguz, O. Hart, O. Salpekar, O. Kalinli, P. Kent, P. Parekh, P. Saab, P. Balaji, P. Rittner, P. Bontrager, P. Roux, P. Dollar, P. Zvyagina, P. Ratanchandani, P. Yuvraj, Q. Liang, R. Alao, R. Rodriguez, R. Ayub, R. Murthy, R. Nayani, R. Mitra, R. Parthasarathy, R. Li, R. Hogan, R. Battey, R. Wang, R. Howes, R. Rinott, S. Mehta, S. Siby, S. J. Bondu, S. Datta, S. Chugh, S. Hunt, S. Dhillon, S. Sidorov, S. Pan, S. Mahajan, S. Verma, S. Yamamoto, S. Ramaswamy, S. Lindsay, S. Lindsay, S. Feng, S. Lin, S. C. Zha, S. Patil, S. Shankar, S. Zhang, S. Zhang, S. Wang, S. Agarwal, S. Sajuyigbe, S. Chintala, S. Max, S. Chen, S. Kehoe, S. Satterfield, S. Govindaprasad, S. Gupta, S. Deng, S. Cho, S. Virk, S. Subramanian, S. Choudhury, S. Goldman, T. Remez, T. Glaser, T. Best, T. Koehler, T. Robinson, T. Li, T. Zhang, T. Matthews, T. Chou, T. Shaked, V. Vontimitta, V. Ajayi, V. Montanez, V. Mohan, V. S. Kumar, V. Mangla, V. Ionescu, V. Poenaru, V. T. Mihailescu, V. Ivanov, W. Li, W. Wang, W. Jiang, W. Bouaziz, W. Constable, X. Tang, X. Wu, X. Wang, X. Wu, X. Gao, Y. Kleinman, Y. Chen, Y. Hu, Y. Jia, Y. Qi, Y. Li, Y. Zhang, Y. Zhang, Y. Adi, Y. Nam, Yu, Wang, Y. Zhao, Y. Hao, Y. Qian, Y. Li, Y. He, Z. Rait, Z. DeVito, Z. Rosnbrick, Z. Wen, Z. Yang, Z. Zhao, and Z. Ma
+
+The llama 3 herd of models
+.
+
+External Links: 
+2407.21783
+,
+
+Link
+
+Cited by: 
+§4.2
+.
+
+Hendrycks 
+et al.
+ (2021)
+
+D. Hendrycks, C. Burns, A. Chen, and S. Ball
+
+CUAD: an expert-annotated nlp dataset for legal contract review
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+External Links: 
+2103.06268
+,
+
+Link
+
+Cited by: 
+item 1
+,
+
+§4.3
+.
+
+Hu 
+et al.
+ (2022)
+
+Z. Hu, H. P. Chan, J. Liu, X. Xiao, H. Wu, and L. Huang
+
+PLANET: dynamic content planning in autoregressive transformers for long-form text generation
+.
+
+External Links: 
+2203.09100
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Jiang 
+et al.
+ (2023a)
+
+A. Q. Jiang, A. Sablayrolles, A. Mensch, C. Bamford, D. S. Chaplot, D. de las Casas, F. Bressand, G. Lengyel, G. Lample, L. Saulnier, L. R. Lavaud, M. Lachaux, P. Stock, T. L. Scao, T. Lavril, T. Wang, T. Lacroix, and W. E. Sayed
+
+Mistral 7b
+.
+
+External Links: 
+2310.06825
+,
+
+Link
+
+Cited by: 
+§4.2
+.
+
+Jiang 
+et al.
+ (2023b)
+
+Z. Jiang, F. F. Xu, L. Gao, Z. Sun, Q. Liu, J. Dwivedi-Yu, Y. Yang, J. Callan, and G. Neubig
+
+Active retrieval augmented generation
+.
+
+External Links: 
+2305.06983
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Lewis 
+et al.
+ (2021)
+
+P. Lewis, E. Perez, A. Piktus, F. Petroni, V. Karpukhin, N. Goyal, H. Küttler, M. Lewis, W. Yih, T. Rocktäschel, S. Riedel, and D. Kiela
+
+Retrieval-augmented generation for knowledge-intensive nlp tasks
+.
+
+External Links: 
+2005.11401
+,
+
+Link
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+Li 
+et al.
+ (2024)
+
+X. Li, J. Jin, Y. Zhou, Y. Wu, Z. Li, Q. Ye, and Z. Dou
+
+RetroLLM: empowering large language models to retrieve fine-grained evidence within generation
+.
+
+External Links: 
+2412.11919
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Lippi 
+et al.
+ (2019)
+
+M. Lippi, P. Pałka, G. Contissa, F. Lagioia, H. Micklitz, G. Sartor, and P. Torroni
+
+CLAUDETTE: an automated detector of potentially unfair clauses in online terms of service
+.
+
+Artificial Intelligence and Law
+ 
+27
+ (
+2
+), 
+pp. 117–139
+.
+
+External Links: 
+ISSN 1572-8382
+,
+
+Link
+,
+
+Document
+
+Cited by: 
+item 3
+,
+
+§4.3
+.
+
+Stolfo 
+et al.
+ (2025)
+
+A. Stolfo, V. Balachandran, S. Yousefi, E. Horvitz, and B. Nushi
+
+Improving instruction-following in language models through activation steering
+.
+
+External Links: 
+2410.12877
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Tuggener 
+et al.
+ (2020)
+
+D. Tuggener, P. von Däniken, T. Peetz, and M. Cieliebak
+
+LEDGAR: A Large-Scale Multi-label Corpus for Text Classification of Legal Provisions in Contracts
+.
+
+In 
+Proceedings of the Twelfth Language Resources and Evaluation Conference
+,  
+N. Calzolari, F. Béchet, P. Blache, K. Choukri, C. Cieri, T. Declerck, S. Goggi, H. Isahara, B. Maegaard, J. Mariani, H. Mazo, A. Moreno, J. Odijk, and S. Piperidis (Eds.)
+,
+
+Marseille, France
+, 
+pp. 1235–1241
+ (
+eng
+).
+
+External Links: 
+Link
+,
+
+ISBN 979-10-95546-34-4
+
+Cited by: 
+item 2
+,
+
+§4.3
+.
+
+Yasunaga 
+et al.
+ (2022)
+
+M. Yasunaga, H. Ren, A. Bosselut, P. Liang, and J. Leskovec
+
+QA-gnn: reasoning with language models and knowledge graphs for question answering
+.
+
+External Links: 
+2104.06378
+,
+
+Link
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+You 
+et al.
+ (2023)
+
+W. You, W. Wu, Y. Liang, S. Mao, C. Wu, M. Cao, Y. Cai, Y. Guo, Y. Xia, F. Wei, and N. Duan
+
+EIPE-text: evaluation-guided iterative plan extraction for long-form narrative text generation
+.
+
+External Links: 
+2310.08185
+,
+
+Link
+
+Cited by: 
+§2
+.
+
+Zhao 
+et al.
+ (2024)
+
+P. Zhao, H. Zhang, Q. Yu, Z. Wang, Y. Geng, F. Fu, L. Yang, W. Zhang, J. Jiang, and B. Cui
+
+Retrieval-Augmented Generation for AI-Generated Content: A Survey
+.
+
+External Links: 
+2402.19473
+,
+
+Link
+
+Cited by: 
+§1
+,
+
+§2
+.
+
+Appendix A 
+Appendix
+
+A.1 
+Constraint-Aligned RAG Pipeline
+
+Algorithm 
+1
+ summarises the full 
+CA-RAG
+ retrieval-conditioning pipeline used in all experiments. Ontology concepts and KG relations are automatically constructed via template-driven extraction and semantic matching from domain policy corpora, with minimal manual annotation beyond ontology schema definition.
+
+Algorithm 1
+ 
+ 
+CA-RAG
+: Constraint-Aligned Retrieval-Augmented Generation
+
+1:
+
+              
+              
+            Scenario 
+; corpus 
+; ontology 
+;
+policy corpus 
+; retrieval encoder 
+;
+ontology encoder 
+; LLM 
+; variant 
+;
+top-
+, top-
+
+2:
+
+              
+              
+            Generated document 
+
+3:
+
+4:
+
+5:
+
+6:
+
+Step 1: Section Planning
+
+7:
+
+8:
+
+Step 2: Policy Graph Initialisation
+
+9:
+
+if
+ 
+ 
+then
+
+10:
+
+              
+              
+              
+
+11:
+
+end
+ 
+if
+
+12:
+
+for
+ 
+ to 
+ 
+do
+
+13:
+
+              
+              
+              
+
+14:
+
+              
+              
+              
+
+15:
+
+Step 3: Ontology Constraint Extraction
+
+16:
+
+              
+              
+              
+if
+ 
+ 
+then
+
+17:
+
+              
+              
+               
+
+18:
+
+              
+              
+               
+
+19:
+
+              
+              
+              
+end
+ 
+if
+
+20:
+
+Step 4: KG Constraint Retrieval
+
+21:
+
+              
+              
+              
+if
+ 
+ 
+then
+
+22:
+
+              
+              
+               
+
+23:
+
+              
+              
+               
+
+24:
+
+              
+              
+              
+end
+ 
+if
+
+25:
+
+Step 5: Constraint-Aligned Query Construction
+
+26:
+
+              
+              
+              
+
+27:
+
+              
+              
+              
+
+Append ontology concepts and KG-linked obligations.
+
+28:
+
+Step 6: Evidence Retrieval
+
+29:
+
+              
+              
+              
+
+30:
+
+Step 7: Section Generation
+
+31:
+
+              
+              
+              
+
+32:
+
+              
+              
+              
+
+33:
+
+end
+ 
+for
+
+34:
+
+return
+ 
+
+A.2 
+Extended Query Construction Details
+
+This section provides implementation details for the 
+ConstructQuery
+ stage. 
+CA-RAG
+ combines ontology-derived schema concepts with policy-grounded KG relations before retrieval, thereby conditioning which evidence becomes retrievable for section-wise generation.
+
+A.2.1 
+Ontology Concept Injection
+
+Ontology concepts are extracted from the constructed ontology using semantic matching over OWL classes and properties. For each section heading 
+, ontology labels, local names, and optional comments are embedded using 
+all-MiniLM-L6-v2
+. The implementation combines embedding similarity with lexical similarity:
+
+(17)
+
+where 
+ is cosine similarity and 
+ is Levenshtein similarity. The top-
+ ontology concepts are retained and appended as schema-level retrieval terms.
+
+For example, the ontology contains concepts such as 
+Data Recipient
+, 
+Data Transfer Event
+, 
+Data Flow
+, 
+Audit Trail
+, 
+Risk Assessment
+, and 
+Data Minimisation Rule
+, which provide structural cues for section-specific retrieval.
+
+A.2.2 
+KG Relation Expansion
+
+Policy-grounded KG expansion retrieves relevant RDF triples from the domain KG. Each triple 
+ is scored against the section heading by comparing the heading embedding with the subject, predicate, and object embeddings:
+
+(18)
+
+Triples above a similarity threshold are retained; if no triple satisfies the threshold, the highest-ranked triples are returned to avoid empty constraint contexts. This allows the retriever to recover policy obligations that may not be surfaced by semantic similarity alone.
+
+A.2.3 
+Constraint-aligned Query Construction
+
+The final retrieval query is constructed by concatenating the scenario, section heading, ontology concepts, and KG-linked obligations:
+
+(19)
+
+Duplicate or low-similarity constraints are filtered before dense retrieval. In practice, this yields a constraint-aligned query of the original section query with structural and policy-specific terms.
+
+A.2.4 
+Worked Example
+
+Consider a finance DSA section on 
+Third-Party Transfer
+ or recipient obligations.
+
+Standard RAG query
+
+“Generate a third-party transfer policy for financial data sharing.”
+
+This may retrieve general passages about data sharing or external access.
+
+CA-RAG expansion
+
+Ontology matching may add:
+
+Data Recipient
+, 
+Data Transfer Event
+, 
+Data Flow
+, 
+Audit Trail
+
+KG retrieval may add obligations such as:
+
+•
+
+(
+Recipient Agency
+, 
+prohibits
+, 
+Onward Sharing Without Legal Basis
+)
+
+•
+
+(
+Recipient Agency
+, 
+requires
+, 
+Incident Response Procedures
+)
+
+•
+
+(
+Recipient Agency
+, 
+requires
+, 
+Retention Period Definition
+)
+
+•
+
+(
+Recipient Agency
+, 
+supports
+, 
+Data Subject Rights
+)
+
+The resulting pseudo-query becomes:
+
+Third-party transfer policy for financial data sharing + Data Recipient + Data Transfer Event + Audit Trail + onward sharing restrictions + incident response procedures + retention periods + data subject rights.
+
+This shifts retrieval from generic data-sharing evidence to policy passages that contain transfer restrictions, recipient obligations, incident response duties, and retention requirements.
+
+A.2.5 
+Retrieval Trace Example
+
+Table 
+4
+ illustrates a representative retrieval trace for finance-domain transfer obligations. Standard 
+RAG
+ retrieves semantically related passages describing generic data sharing and recipient access policies, but frequently omits structurally dependent obligations required for downstream compliance generation.
+
+In contrast, 
+CA-RAG
+ expands retrieval by incorporating ontology-derived schema concepts and KG-linked policy relations before evidence selection. This shifts retrieval toward passages containing transfer restrictions, incident response duties, retention requirements, and data-subject-rights obligations. The resulting evidence is therefore more structurally aligned with downstream clause requirements, reducing omission failures during section generation.
+
+Table 4: 
+Representative retrieval trace for finance-domain recipient transfer obligations.
+
+Method
+
+Retrieved Evidence
+
+RAG
+
+General data-sharing and recipient access passages.
+
+CA-RAG
+
+Recipient onward-sharing restrictions, incident response duties, retention-period obligations, and data-subject-rights support.
+
+A.3 
+Additional Worked Retrieval Examples
+
+This section provides qualitative examples illustrating how retrieval-stage structural conditioning affects omission-sensitive clause recovery across finance, healthcare, and education DSAs.
+
+Across domains, standard 
+RAG
+ frequently retrieves semantically related but structurally incomplete evidence, leading to repeated omission of globally dependent obligations such as cross-border transfer safeguards, DPIA/TIA requirements, incident response procedures, and legal basis clauses. In contrast, 
+CA-RAG
+ substantially reduces omission frequency by retrieving evidence aligned with downstream structural dependencies.
+
+Table 5: 
+Representative omission patterns across domains.
+
+Domain
+
+Method
+
+Retrieved Evidence
+
+Representative Missing Clauses
+
+Finance
+
+RAG
+
+General transfer policies, recipient access rules, and generic governance passages
+
+Cross Border Transfers
+,
+
+DPIA/TIA
+,
+
+Data Minimisation
+,
+
+Legal Basis
+,
+
+Onward Disclosure
+,
+
+Subprocessors Third Parties
+
+Finance
+
+CA-RAG
+
+Transfer safeguards, retention obligations, governance dependencies, and audit requirements
+
+Primarily residual administrative clauses such as
+
+Data Format Schema
+,
+
+Attribution Publication
+,
+
+Intellectual Property
+
+Healthcare
+
+RAG
+
+Generic patient-data handling and storage policies
+
+Incident Response
+, 
+Breach Notification
+, 
+Data Subject Rights
+, 
+Transparency Notices
+, 
+Cross Border Transfers
+
+Healthcare
+
+CA-RAG
+
+Incident response duties, breach reporting, governance and audit procedures
+
+Reduced omission frequency, with remaining omissions concentrated in secondary administrative clauses
+
+Education
+
+RAG
+
+Institutional data-access and student-data usage policies
+
+Incident Response
+,
+
+Cross Border Transfers
+,
+
+Legal Basis
+,
+
+Data Subject Rights
+,
+
+Subprocessors Third Parties
+
+Education
+
+CA-RAG
+
+Governance procedures, retention obligations, transfer safeguards, review requirements
+
+Primarily procedural and publication-related clauses, such as
+
+Attribution Publication
+
+and
+
+Sanctions Remediation
+
+The examples in Table 
+5
+ illustrate that the primary advantage of 
+CA-RAG
+ is not simply retrieving more passages, but retrieving evidence structurally aligned with downstream compliance requirements. Standard relevance-based retrieval repeatedly omits globally dependent obligations such as DPIA/TIA requirements, incident-response duties, legal basis clauses, and cross-border transfer safeguards. Retrieval-stage structural conditioning substantially improves recovery of these omission-sensitive clauses before generation begins.
+
+A.4 
+RLHF Refinement Implementation
+
+We implement an optional RLHF refinement module applied after section-wise generation. Domain experts provide scalar quality ratings in 
+ for generated sections, which are used to train a lightweight reward model and perform PPO-style policy refinement while keeping retrieval and constraint injection fixed.
+
+Reward model.
+
+Given prompt–section pairs 
+ and human ratings 
+, the reward model predicts a scalar quality score 
+ and is trained using mean squared error:
+
+(20)
+
+Policy refinement.
+
+We generate multiple candidate rewrites per section using stochastic decoding and score them using the reward model. PPO-style optimisation is then applied using a clipped objective with KL regularisation:
+
+(21)
+
+where 
+ denotes the policy ratio, 
+ the reward-based advantage signal, 
+ the clipping threshold, and 
+ the KL coefficient.
+
+This refinement stage is intended as a lightweight stylistic improvement module rather than a replacement for retrieval-conditioned evidence selection.
+
+A.5 
+Evaluation: Auditors, Metrics, and Implementation
+
+All documents are evaluated on extracted text. PDFs are segmented into overlapping chunks (1000 tokens, overlap 100) for retrieval and downstream evaluation.
+
+A.5.1 
+Reference-Based Similarity Metrics
+
+We compute document-level similarity between generated DSAs 
+ and reference agreements 
+ using cosine similarity over sentence embeddings and ROUGE-LSUM. Cosine similarity measures semantic alignment, while ROUGE-LSUM captures lexical overlap.
+
+A.5.2 
+Compliance Auditing Signals
+
+We compute five compliance-oriented signals, each normalised to 
+:
+
+1.
+
+CUAD-based clause compliance 
+Hendrycks et al. (2021)
+,
+
+2.
+
+LEDGAR 
+Tuggener et al. (2020)
+ provision coverage,
+
+3.
+
+LexGLUE UNFAIR_TOS 
+Lippi et al. (2019)
+ fairness/balance signals,
+
+4.
+
+Domain alignment against in-domain policy PDFs, and
+
+5.
+
+DSA clause coverage via a checklist-driven auditor.
+
+All datasets and benchmark resources used in this work (e.g., CUAD, LEDGAR, LexGLUE) are publicly available research datasets used in accordance with their intended academic and research usage conditions.
+
+DSA Clause Auditor
+
+We measure clause completeness using a checklist-based DSA clause auditor. Given a document split into text chunks 
+, we define a fixed set of clause questions 
+, where 
+ is a clause label and 
+ is a natural-language question.
+
+For each question 
+, we retrieve the top-
+ relevant chunks using TF–IDF retrieval, concatenate them into a context window, and query an LLM-based judge that returns a structured decision containing an 
+answered
+ boolean and supporting evidence spans. This TF–IDF step is used only for selecting chunks within the evaluation auditor and is independent of the dense retriever evaluated in
+
+CA-RAG
+.
+
+Clause coverage is computed as:
+
+(22)
+
+The auditor additionally stores per-question evidence and rationale for downstream error analysis.
+
+A.5.3 
+Aggregate Scores
+
+We report similarity, compliance, reliability, and efficiency metrics as macro-averaged across all domains.
+
+A.5.4 
+Efficiency Measurement
+
+We report average token usage, end-to-end latency, and empirical throughput (effective TFLOPs/s). Latency is measured per section-generation call and includes prompt construction, constraint extraction, retrieval, and decoding:
+
+(23)
+
+Effective TFLOPs/s is reported as an empirical proxy for throughput under a fixed hardware configuration.
+
+A.6 
+Sensitivity to Reliability Weighting
+
+Table 
+6
+ analyses sensitivity to the weighting parameter 
+. Reliability increases with larger 
+ values in finance and education, indicating stronger dependence on compliance-oriented metrics. Healthcare remains comparatively stable across weighting values. We use 
+ to prioritise structural completeness while retaining sensitivity to semantic similarity. Importantly, method rankings remain stable across the tested range, indicating that the gains of 
+CA-RAG
+ are not dependent on a specific weighting choice.
+
+Table 6: 
+Sensitivity analysis of the reliability score with different values of 
+. Results are averaged across all evaluation samples for each domain.
+
+Domain
+
+Comp.
+
+Sim.
+
+Healthcare
+
+0.6617
+
+0.6609
+
+0.6600
+
+0.6592
+
+0.6589
+
+0.6628
+
+Finance
+
+0.5808
+
+0.6002
+
+0.6195
+
+0.6389
+
+0.6486
+
+0.5518
+
+Education
+
+0.6499
+
+0.6557
+
+0.6615
+
+0.6672
+
+0.6701
+
+0.6413
+
+A.7 
+Ablation: Retrieval Budget Sensitivity
+
+The effect of retrieval budget differs across methods. For standard
+
+RAG
+, increasing 
+ from 3 to 6 slightly improves compliance
+(
+), while reliability remains approximately stable
+(
+). At 
+, both compliance and reliability
+decrease substantially. This indicates that increasing retrieval depth alone
+does not guarantee better downstream performance; additional retrieved
+evidence may remain weakly aligned with the structural requirements of the
+generated document.
+
+In contrast, 
+CA-RAG
+ maintains comparatively stable performance across
+retrieval budgets while consistently achieving higher compliance and
+reliability than standard 
+RAG
+. The strongest performance occurs at
+
+, where 
+CA-RAG
+ achieves a reliability score of 
+.
+Even at 
+, 
+CA-RAG
+ preserves higher compliance and reliability
+than standard 
+RAG
+. These findings suggest that the benefits of
+
+CA-RAG
+ arise from structurally conditioned evidence selection rather
+than increased retrieval quantity alone. In omission-sensitive domains such
+as finance, retrieving additional evidence is insufficient when the retrieved
+context remains structurally incomplete or weakly aligned with downstream
+clause requirements.
+
+Table 7: 
+Top-k retrieval sensitivity analysis on the finance domain.
+
+Method
+
+Top-k
+
+Comp.
+
+Rel.
+
+Sim.
+
+RAG
+
+3
+
+0.6547
+
+0.6282
+
+0.5662
+
+6
+
+0.6615
+
+0.6259
+
+0.5427
+
+9
+
+0.5809
+
+0.5741
+
+0.5582
+
+CA-RAG
+
+3
+
+0.6614
+
+0.6306
+
+0.5587
+
+6
+
+0.6742
+
+0.6404
+
+0.5615
+
+9
+
+0.6541
+
+0.6350
+
+0.5904
+
+A.7.1 
+Reproducibility
+
+All variants share the same retriever, base LLM, prompt scaffold, chunking strategy, decoding configuration, and evaluation pipeline. Retrieval uses identical corpora, embedding models, and top-
+ settings across methods. Variants differ only in the source and type of structured constraints injected before retrieval and generation.
+
+To minimise implementation variance, all experiments use deterministic prompting, fixed generation parameters, and identical clause-auditing protocols across domains and runs. Ontology matching and KG construction are largely automated from policy corpora and domain resources, reducing manual engineering requirements.
+
+A.8 
+Full Experimental Results
+
+This appendix presents full per-domain results for all evaluated models and generation variants, complementing the aggregated results reported in Section 
+5
+. We also define all abbreviated metric names that appear in the tables (e.g., Clause Cov. for DSA coverage score, Lat. for latency, TFLOPs/s for effective throughput, Sim. for similarity, Comp. for compliance score), covering the efficiency, compliance, and similarity dimensions. Unless otherwise stated, all results are reported without RLHF refinement.
+
+Table 8: 
+Detailed evaluation results on the 
+Health
+ domain (without RLHF).
+
+Model
+
+Variant
+
+Tokens
+
+Lat (s)
+
+TFLOPs/s
+
+Clause Cov. (%)
+
+Comp.
+
+Sim.
+
+Mistral-7B
+
+RAG
+
+1247
+
+21.60
+
+0.42
+
+74.57
+
+0.6731
+
+0.6569
+
+RAG+O
+
+1363
+
+30.27
+
+0.39
+
+76.30
+
+0.6604
+
+0.6526
+
+RAG+KG
+
+1433
+
+31.57
+
+0.43
+
+78.93
+
+0.6490
+
+0.6574
+
+CA-RAG
+
+1555
+
+27.18
+
+0.73
+
+78.07
+
+0.6727
+
+0.6629
+
+Self-RAG
+
+3236
+
+48.61
+
+2.19
+
+76.30
+
+0.6663
+
+0.6537
+
+Flare-RAG
+
+1603
+
+53.73
+
+0.47
+
+79.83
+
+0.6802
+
+0.6727
+
+Llama-3.1-8B
+
+RAG
+
+1267
+
+16.83
+
+0.63
+
+79.80
+
+0.6479
+
+0.6750
+
+RAG+O
+
+1380
+
+17.10
+
+0.66
+
+80.70
+
+0.6499
+
+0.6699
+
+RAG+KG
+
+1448
+
+18.83
+
+0.62
+
+82.43
+
+0.6143
+
+0.6731
+
+CA-RAG
+
+1577
+
+16.90
+
+0.68
+
+80.70
+
+0.6453
+
+0.6772
+
+Self-RAG
+
+3343
+
+24.16
+
+2.68
+
+80.70
+
+0.6649
+
+0.6707
+
+Flare-RAG
+
+1926
+
+24.67
+
+1.45
+
+77.17
+
+0.6845
+
+0.6670
+
+Llama-3.2-3B
+
+RAG
+
+1256
+
+19.51
+
+0.64
+
+75.43
+
+0.6652
+
+0.6593
+
+RAG+O
+
+1356
+
+16.34
+
+0.71
+
+78.90
+
+0.6586
+
+0.6676
+
+RAG+KG
+
+1387
+
+15.78
+
+0.85
+
+77.17
+
+0.6489
+
+0.6140
+
+CA-RAG
+
+1556
+
+17.83
+
+0.91
+
+78.07
+
+0.6824
+
+0.6512
+
+Self-RAG
+
+3196
+
+28.44
+
+4.32
+
+73.67
+
+0.6637
+
+0.6521
+
+Flare-RAG
+
+1906
+
+42.17
+
+1.06
+
+80.70
+
+0.6554
+
+0.6722
+
+Table 9: 
+Detailed evaluation results on the 
+Finance
+ domain (without RLHF).
+
+Model
+
+Variant
+
+Tokens
+
+Lat (s)
+
+TFLOPs/s
+
+Clause Cov. (%)
+
+Comp.
+
+Sim.
+
+Mistral-7B
+
+RAG
+
+1668
+
+18.37
+
+0.70
+
+74.57
+
+0.6267
+
+0.5546
+
+RAG+O
+
+1709
+
+16.73
+
+0.88
+
+74.57
+
+0.6878
+
+0.5229
+
+RAG+KG
+
+1957
+
+19.07
+
+0.97
+
+78.07
+
+0.6577
+
+0.5214
+
+CA-RAG
+
+2118
+
+20.05
+
+0.99
+
+74.57
+
+0.6780
+
+0.5277
+
+Self-RAG
+
+4425
+
+45.80
+
+2.57
+
+69.30
+
+0.6377
+
+0.5472
+
+Flare-RAG
+
+2374
+
+58.17
+
+0.73
+
+71.97
+
+0.6384
+
+0.5482
+
+Llama-3.1-8B
+
+RAG
+
+1677
+
+18.07
+
+0.78
+
+75.43
+
+0.6615
+
+0.5427
+
+RAG+O
+
+1764
+
+20.37
+
+0.63
+
+70.20
+
+0.6442
+
+0.5613
+
+RAG+KG
+
+1980
+
+24.18
+
+0.63
+
+74.57
+
+0.6571
+
+0.5582
+
+CA-RAG
+
+2064
+
+22.00
+
+0.69
+
+74.57
+
+0.6742
+
+0.5615
+
+Self-RAG
+
+4619
+
+48.03
+
+2.61
+
+76.30
+
+0.6163
+
+0.5700
+
+Flare-RAG
+
+2745
+
+42.40
+
+1.30
+
+74.53
+
+0.6405
+
+0.5537
+
+Llama-3.2-3B
+
+RAG
+
+1668
+
+13.43
+
+0.97
+
+71.07
+
+0.6442
+
+0.5490
+
+RAG+O
+
+1745
+
+13.40
+
+0.92
+
+71.07
+
+0.6384
+
+0.5468
+
+RAG+KG
+
+1932
+
+14.53
+
+0.99
+
+74.53
+
+0.6357
+
+0.5527
+
+CA-RAG
+
+2064
+
+12.77
+
+1.36
+
+78.07
+
+0.6734
+
+0.5653
+
+Self-RAG
+
+4473
+
+26.63
+
+4.41
+
+71.03
+
+0.6421
+
+0.5774
+
+Flare-RAG
+
+2410
+
+31.33
+
+1.33
+
+68.43
+
+0.6320
+
+0.5561
+
+Table 10: 
+Detailed evaluation results on the 
+Education
+ domain (without RLHF).
+
+Model
+
+Variant
+
+Tokens
+
+Lat (s)
+
+TFLOPs/s
+
+Clause Cov. (%)
+
+Comp.
+
+Sim.
+
+Mistral-7B
+
+RAG
+
+1253
+
+20.04
+
+0.39
+
+77.20
+
+0.6705
+
+0.6316
+
+RAG+O
+
+1395
+
+19.75
+
+0.44
+
+73.70
+
+0.6911
+
+0.6240
+
+RAG+KG
+
+1549
+
+21.15
+
+0.49
+
+77.17
+
+0.6551
+
+0.5992
+
+CA-RAG
+
+1694
+
+22.85
+
+0.50
+
+76.30
+
+0.6798
+
+0.6313
+
+Self-RAG
+
+3228
+
+16.36
+
+4.14
+
+78.03
+
+0.6869
+
+0.6216
+
+Flare-RAG
+
+1912
+
+38.65
+
+0.99
+
+70.17
+
+0.6670
+
+0.6115
+
+Llama-3.1-8B
+
+RAG
+
+1302
+
+12.68
+
+0.66
+
+76.30
+
+0.6748
+
+0.6539
+
+RAG+O
+
+1455
+
+10.82
+
+0.87
+
+80.70
+
+0.6339
+
+0.6625
+
+RAG+KG
+
+1539
+
+11.00
+
+0.92
+
+81.57
+
+0.6988
+
+0.6593
+
+CA-RAG
+
+1732
+
+13.34
+
+0.91
+
+81.57
+
+0.6898
+
+0.6671
+
+Self-RAG
+
+3427
+
+66.38
+
+1.30
+
+85.93
+
+0.6857
+
+0.6574
+
+Flare-RAG
+
+2018
+
+62.47
+
+0.70
+
+80.67
+
+0.6607
+
+0.6670
+
+Llama-3.2-3B
+
+RAG
+
+1282
+
+08.01
+
+1.04
+
+78.93
+
+0.6498
+
+0.6554
+
+RAG+O
+
+1435
+
+08.66
+
+1.11
+
+78.03
+
+0.6813
+
+0.6140
+
+RAG+KG
+
+1578
+
+08.75
+
+1.40
+
+78.07
+
+0.6607
+
+0.6419
+
+CA-RAG
+
+1735
+
+10.34
+
+1.23
+
+78.07
+
+0.6579
+
+0.6386
+
+Self-RAG
+
+3139
+
+28.84
+
+2.34
+
+67.57
+
+0.6335
+
+0.5775
+
+Flare-RAG
+
+1915
+
+46.04
+
+0.76
+
+71.07
+
+0.6557
+
+0.6230
+
+A.9 
+Efficiency and Scalability
+
+Table 
+11
+ reports latency and empirical throughput across retrieval variants. Throughput is reported as empirical GPU TFLOPs/s measured during inference under fixed hardware settings. CA-RAG introduces moderate overhead from constraint extraction and query construction, but remains substantially more efficient than adaptive retrieval baselines such as 
+Self-RAG
+ and 
+Flare-RAG
+, which require iterative retrieval and refinement. 
+Self-RAG
+ and 
+Flare-RAG
+ generally incur higher latency than standard RAG and 
+CA-RAG
+, although the magnitude varies across model–domain settings. In contrast, 
+CA-RAG
+ achieves improved omission robustness with comparatively bounded runtime overhead relative to standard 
+RAG
+. These results suggest that retrieval-stage structural conditioning improves structural completeness without requiring expensive iterative retrieval loops, making CA-RAG practical for long-form constrained generation settings.
+
+Table 11: 
+Latency and empirical throughput (TF/s) across domains and retrieval variants. Latency (Lat.) is reported in seconds.
+
+Health
+
+Finance
+
+Edu.
+
+LLM
+
+Method
+
+Lat.
+
+TF/s
+
+Lat.
+
+TF/s
+
+Lat.
+
+TF/s
+
+Mistral-7B
+
+RAG
+
+21.6
+
+0.42
+
+18.4
+
+0.70
+
+20.0
+
+0.39
+
+CA-RAG
+
+27.2
+
+0.73
+
+20.1
+
+0.99
+
+22.8
+
+0.50
+
+Self-RAG
+
+48.6
+
+2.19
+
+45.8
+
+2.57
+
+16.4
+
+4.14
+
+Flare-RAG
+
+53.7
+
+0.47
+
+58.2
+
+0.73
+
+38.6
+
+0.99
+
+Llama-3.1-8B
+
+RAG
+
+16.8
+
+0.63
+
+18.1
+
+0.78
+
+12.7
+
+0.66
+
+CA-RAG
+
+16.9
+
+0.68
+
+22.0
+
+0.69
+
+13.3
+
+0.91
+
+Self-RAG
+
+24.2
+
+2.68
+
+48.0
+
+2.61
+
+66.3
+
+1.30
+
+Flare-RAG
+
+24.6
+
+1.45
+
+42.4
+
+1.30
+
+62.5
+
+0.70
+
+Llama-3.2-3B
+
+RAG
+
+19.5
+
+0.64
+
+13.4
+
+0.97
+
+8.0
+
+1.04
+
+CA-RAG
+
+17.8
+
+0.91
+
+12.8
+
+1.36
+
+10.3
+
+1.23
+
+Self-RAG
+
+28.4
+
+4.32
+
+26.6
+
+4.41
+
+28.8
+
+2.34
+
+Flare-RAG
+
+42.2
+
+1.06
+
+31.3
+
+1.33
+
+46.0
+
+0.76
+
+A.10 
+Bootstrap Significance Testing
+
+We performed paired bootstrap significance testing to evaluate whether improvements in document-level reliability were statistically significant across retrieval variants. Testing was conducted across domains, runs, and model variants using paired document-level reliability scores. Each bootstrap sample preserved document-level pairing between compared methods to isolate relative reliability differences under identical evaluation instances. For each comparison, we computed the mean paired difference and estimated 
+ confidence intervals using 5,000 bootstrap resamples.
+
+Confidence intervals excluding zero were treated as statistically significant. Table 
+12
+ shows that 
+CA-RAG
+ significantly outperformed standard 
+RAG
+, 
+Self-RAG
+, and 
+Flare-RAG
+. In contrast, differences relative to the generation-only constraint baseline were not statistically significant, suggesting that generation-time structural prompting can partially improve aggregate reliability. However, the main paper shows that retrieval-stage structural conditioning more consistently improves omission robustness and clause-level completeness.
+
+Table 12: 
+Paired bootstrap significance testing using document-level reliability scores across domains, runs, and model variants. Confidence intervals excluding zero indicate statistically significant differences.
+
+Baseline
+
+Mean Diff.
+
+95% CI
+
+Significant
+
+RAG
+
++0.0122
+
+[0.0034, 0.0207]
+
+Yes
+
+Self-RAG
+
++0.0171
+
+[0.0024, 0.0352]
+
+Yes
+
+Flare-RAG
+
++0.0116
+
+[0.0002, 0.0236]
+
+Yes
+
+Gen-Constraint
+
++0.0099
+
+[-0.0006, 0.0203]
+
+No
+
+A.11 
+Ablation: Impact of RLHF Refinement
+
+We analyse RLHF as a post-generation refinement stage while keeping retrieval and evidence support fixed. Table 
+13
+ reports reliability scores after RLHF refinement on 
+Llama-3.1-8B
+. The effect of RLHF varies across domains and retrieval settings. In some cases, refinement improves stylistic coherence and local fluency, while in others it slightly reduces reliability, particularly in finance, where compliance-sensitive phrasing is more fragile.
+
+Importantly, RLHF does not alter the relative behaviour of retrieval variants, nor does it consistently recover omitted obligations when supporting evidence is incomplete. Even when readability improves, omission-sensitive clauses such as transfer safeguards, legal-basis requirements, or compliance dependencies remain constrained by the quality and structural completeness of retrieved evidence. These results suggest that RLHF primarily acts as a lightweight stylistic refinement mechanism rather than a substitute for retrieval-stage structural alignment.
+
+Table 13: 
+RLHF ablation on 
+Llama-3.1-8B
+. Values denote reliability scores after RLHF refinement, with relative change 
+ in %.
+
+Method
+
+Health
+
+Finance
+
+Education
+
+RAG
+
+RAG+O
+
+RAG+KG
+
+CA-RAG
+
+A.12 
+Additional Structural and Compliance Trade-off Plots
+
+Figures 
+4
+ and 
+5
+ provide additional radar plots for 
+Mistral-7B
+ and 
+Llama-3.2-3B
+. These plots complement the main paper analysis by showing how retrieval variants trade off clause compliance, provision coverage, fairness and balance, domain alignment, DSA clause coverage, and overall compliance across domains.
+
+Figure 4: 
+Structural and compliance tradeoffs across variants for 
+Mistral-7B
+. Scores are normalised within each domain across six auditing metrics.
+
+Figure 5: 
+Structural and compliance tradeoffs across retrieval variants for 
+Llama-3.2-3B
+. Scores are normalised within each domain across six auditing metrics.
+
+A.13 
+Qualitative Error Analysis
+
+We analyse omission failures across retrieval variants to examine retrieval-stage structural alignment. Table 
+14
+ summarises representative omission patterns across finance, healthcare, and education DSAs. The High/Medium/Low labels provide descriptive summaries of omission patterns observed during qualitative inspection and should not be interpreted as quantitative frequency estimates. Transfer clauses include cross-border transfer obligations and data-sharing conditions; policy clauses include legal basis and compliance requirements; procedural clauses include incident response, audit, and review obligations. Common failures involve structurally dependent clauses such as 
+Cross-Border Transfers
+, 
+Legal Basis
+, 
+DPIA/TIA
+2
+2
+
+2
+
+Transfer Impact Assessment.
+, 
+Incident Response
+, and 
+Audit Requirements
+. These obligations often depend on evidence distributed across multiple policy sections, making them difficult to recover through relevance-only retrieval. Standard 
+RAG
+ frequently produces semantically plausible but structurally incomplete outputs. For example, in 
+Third-Party Transfer
+ section, standard RAG often retrieves general data-sharing policies while omitting safeguards such as SCC
+3
+3
+
+3
+
+              
+              
+              
+            Standard Contractual Clause.
+ or DPIA obligations. In contrast, 
+CA-RAG
+ retrieves evidence linked to transfer mechanisms and compliance dependencies, improving downstream clause recovery.
+
+Adaptive retrieval methods such as 
+Self-RAG
+ and 
+Flare-RAG
+ improve local coherence but still omit globally dependent obligations. Similarly, generation-only constraint injection improves structural phrasing but cannot reliably recover clauses unsupported by retrieved evidence. Overall, 
+CA-RAG
+ reduces omission frequency through retrieval-stage structural conditioning. Such omissions are particularly critical in compliance-sensitive settings, where missing obligations may matter more than small reductions in semantic similarity. Additional retrieval examples and omission traces are provided in Appendix 
+A.3
+.
+
+Table 14: 
+Representative omission patterns across retrieval variants.
+
+Method
+
+Transfer
+
+Policy
+
+Procedural
+
+RAG
+
+High
+
+High
+
+Medium
+
+Self-RAG
+
+Medium
+
+Medium
+
+High
+
+Flare-RAG
+
+Medium
+
+Low
+
+Medium
+
+Gen-Constraint
+
+High
+
+High
+
+Medium
+
+CA-RAG
+
+Low
+
+Low
+
+Low
+

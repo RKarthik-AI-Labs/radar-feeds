@@ -1,0 +1,3174 @@
+Mitigating Overgeneralization in RND via Spectral Target Design
+https://arxiv.org/abs/2611.33850
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+Mitigating Overgeneralization in RND 
+
+via Spectral Target Design
+
+Minseok Jeong
+
+dsa950115@kaist.ac.kr
+
+Affiliation: 
+KAIST
+
+  
+
+Yechan Lee
+
+tuuktuc86@kaist.ac.kr
+
+Affiliation: 
+KAIST
+
+  
+
+Hyewon Choi
+
+chw110825@kaist.ac.kr
+
+Affiliation: 
+KAIST
+
+  
+
+Jeongyong Yang
+
+seiryu@uw.edu
+
+Affiliation: 
+University of Washington
+
+  
+
+SooJean Han
+
+soojean@kaist.ac.kr
+
+Affiliation: 
+KAIST
+
+Abstract
+
+Random Network Distillation (RND) is a scalable novelty signal for RL based on a fixed random target network and a trained predictor. However, it can overgeneralize: the predictor extrapolates the random target off the data manifold, causing novelty scores to collapse on unfamiliar inputs. This paper analyzes this failure through a kernel-theoretic lens. Under a GP target model and an NTK-regime predictor, we show that the RND novelty score is a 
+cross-kernel residual variance
+: it is governed jointly by the 
+target covariance kernel
+ and the 
+predictor NTK
+, rather than by either one alone. This identifies overgeneralization as spectral under-excitation. Motivated by this view, we formulate spectral target design as a principle for shaping RND novelty geometry. As a concrete instance, we replace the implicit random-network target with a bandwidth-controlled Random Fourier Feature (RFF) target, redistributing residual signal toward modes less attenuated by the predictor. Experiments on offline D4RL, online Atari, and Fetch manipulation benchmarks show improved novelty discrimination and downstream RL performance. The code for the RL implementation is available at 
+https://github.com/tuuktuc86/RFF-RND
+.
+
+†
+†
+footnotetext: 
+∗
+Co-first authors. See Appendix 
+A
+ for individual contributions.
+  
+†
+Corresponding author.
+
+1 
+Introduction
+
+Random Network Distillation (RND) 
+(
+Burda et al., 2019b
+)
+ is a simple yet effective novelty signal for reinforcement learning (RL), using the prediction error of a trained network against a fixed random target to measure familiarity. Its scalability and ease of integration have made it a standard component in modern RL pipelines, driving exploration in online settings 
+(
+Burda et al., 2019a
+)
+ and enforcing conservatism in offline ones 
+(
+Rezaeifar et al., 2022
+; 
+Nikulin et al., 2023
+)
+.
+
+Despite its widespread adoption, RND suffers from a fundamental failure mode known as 
+overgeneralization
+: the predictor can extrapolate beyond the data manifold, assigning low novelty scores to inputs beyond the data coverage radius that should be flagged as novel 
+(
+Belkin et al., 2019
+)
+. This undermines the intrinsic reward in both settings — misallocating exploration bonuses toward already-familiar regions and failing to penalize out-of-support actions sufficiently. Prior work has addressed this through
+distributional extensions 
+(
+Yang et al., 2024
+)
+ or architectural modifications 
+(
+Nikulin et al., 2023
+)
+, but these approaches do not explicitly characterize 
+why
+ overgeneralization occurs or provide principled control over the novelty signal’s geometric structure. This raises a natural question:
+
+What governs the discriminative power of RND, and how can it be reliably controlled?
+
+In this work, we answer this question through a kernel-theoretic analysis 
+(
+Rasmussen and Williams, 2006
+; 
+Schölkopf and Smola, 2002
+)
+. We show that overgeneralization arises not from the predictor or target network in isolation, but from their interaction: when the predictor extrapolates the target accurately beyond the data manifold, the novelty score collapses off-manifold. Motivated by this analysis, we propose a spectral target-design principle for RND.
+
+Specifically, directly aligning the target with hard-to-predict modes is impractical, since the predictor spectrum is implicit, architecture-dependent, and generally unknown before training.
+We therefore seek predictor-agnostic target families whose spectra can explicitly control the kernel geometry, and are lightweight to sample.
+Random Fourier Features (RFF) 
+(
+Rahimi and Recht, 2007
+; 
+Rahimi and Recht, 2008
+; 
+Le et al., 2013
+)
+ provide one such concrete example, replacing the random MLP target with a target whose spectral density and coordinate-wise independence are directly specified.
+This method provides an explicit control knob for shaping the novelty scale without changing the downstream RL algorithm.
+
+The rest of the paper is organized as follows.
+Section 
+2
+ defines the coverage-based failure mode we want RND to avoid.
+Section 
+3
+ analyzes why the residual can collapse by expressing RND energy as a cross-kernel residual variance. Section 
+4
+ turns this mechanism into a target-design principle, introduces 
+RFF-RND
+, and provides a frequency-domain interpretation of the same mechanism. Section 
+5
+ diagnoses our theory and empirically evaluates our methods on downstream RL tasks.
+
+2 
+Problem Setup and Motivation
+
+Figure 1: 
+
+Coverage-based diagnostic for standard RND on 
+ data.
+ (a) RND energy heatmap with contours defined by 
+. The blue dashed contour denotes 
+, and the red dash-dotted contour denotes 
+. The interior hole (“low 
+ (failure)”) lies beyond the coverage radius but receives low RND energy. (b) Energy distributions by region. The covered band (blue, 
+) and the interior hole (red, 
+) have overlapping low-energy distributions, illustrating a failure of coverage-based residual separation. The exterior region (gray) is shown only for reference. Energies are scaled by 
+ for visualization since the trained RND energies are small. 
+
+2.1 
+RND for Novelty Detection
+
+Standard RND consists of a fixed target network 
+ and a trainable predictor network 
+, both implemented as multi-layer perceptrons (MLPs) with random initialization. Let 
+ denote an input datapoint, and 
+ denote the dataset. The predictor 
+ is trained to match the output of the target network by minimizing the squared error on 
+:
+
+(1)
+
+where the RND energy 
+ is defined as 
+. When the context is clear, we write 
+ for brevity, i.e., the RND novelty score at a query point 
+ is 
+.
+
+Although standard RND assigns high energy to some exterior regions, it assigns low energy to the region that is poorly covered by the observed data. Thus, reliable novelty detection requires a coverage-based criterion rather than merely assigning high energy somewhere off the data manifold.
+
+2.2 
+A Coverage-Based Separation Criterion
+
+A useful RND score should separate well-covered inputs from poorly-covered ones, i.e., the target should be predictable near visited samples but difficult to extrapolate beyond the data coverage radius. Let 
+ be a task-relevant metric or representation-induced distance on 
+.
+We formalize our desired novelty behavior as follows.
+
+Definition 2.1
+ 
+(Coverage-based residual separation)
+.
+
+Let 
+. We say that RND satisfies 
+coverage-based residual separation
+ if there exist 
+ and 
+ such that
+
+We use this criterion as a diagnostic notion rather than a universal guarantee: both
+the metric 
+ and the relevant coverage parameters 
+ are task-dependent. In Section 
+4
+, we establish a spectral analogue in an idealized setting.
+Figure 
+1
+ intuitively illustrates this coverage-based failure mode on an 
+ toy dataset.
+
+2.3 
+RND Variants through the Lens of Kernel Geometry
+
+We next situate this coverage-based failure mode relative to existing RND variants.
+
+Predictor- and target-focused RND variants.
+
+Many RND variants implicitly modify one side of the kernel geometry. Conditional RND 
+(
+Nikulin et al., 2023
+)
+ conditions the predictor via FiLM-style modulation 
+(
+de Vries et al., 2017
+; 
+Perez et al., 2018
+; 
+Dumoulin et al., 2018
+)
+, inducing a condition-dependent feature map that deforms the resulting geometry. In contrast, Distributional RND (DRND) 
+(
+Yang et al., 2024
+)
+ acts on the target side. It replaces the prediction error induced by a single target network with the ensemble variance induced by multiple target networks, thereby capturing uncertainty across random target draws. Although these approaches showed favorable performance improvements, they did not identify the underlying cause.
+
+Why cross-kernel geometry matters.
+
+These variants suggest that 
+both
+ sides of the RND residual matter: the predictor geometry determines how target values are interpolated, while the target geometry determines what variation is available to be detected. In the following sections, we make this interaction explicit by characterizing RND energy as a cross-kernel residual variance.
+
+3 
+RND Energy as a cross-kernel residual variance
+
+We analyze RND under two idealizations: a GP model for the random target and an NTK approximation for the predictor.
+
+Assumption 3.1
+ 
+(GP target model)
+.
+
+We model each output coordinate of 
+ as an independent GP:
+
+with output coordinates mutually independent.
+
+Assumption 
+3.1
+ is a natural infinite-width idealization of standard RND: a randomly initialized MLP converges to a GP with the associated NNGP kernel 
+(
+Neal, 1996
+; 
+Lee et al., 2018
+; 
+Matthews et al., 2018
+)
+. A key consequence of this is 
+joint Gaussianity
+, that for any query 
+ and dataset inputs 
+, the collection 
+ is jointly Gaussian with cross-covariances
+
+Equivalently, for any inputs 
+, 
+. The induced covariance on the dataset is 
+.
+
+Assumption 3.2
+ 
+(NTK predictor model)
+.
+
+The predictor is analyzed in the lazy-training regime
+ 
+(
+Chizat et al., 2019
+; 
+Lee et al., 2019
+)
+. We use a decoupled multi-output NTK
+approximation, where the squared loss separates across the 
+ output
+coordinates and each coordinate is governed by the same scalar NTK
+
+ 
+(
+Jacot et al., 2018
+; 
+Du et al., 2019
+; 
+Allen-Zhu et al., 2019
+; 
+Arora et al., 2019
+)
+.
+
+0
+0
+
+0
+
+              
+              
+              
+              
+              
+              
+              
+            A fully vector-valued NTK would replace 
+ with an 
+ block kernel over input–output coordinate pairs. We use the decoupled form only to avoid unnecessary notation: the same interpolation argument applies coordinate-wise, while the analysis below focuses on the induced dependence on the target matrix 
+.
+ Under gradient flow with 
+ regularization, this yields kernel ridge regression with respect to 
+:
+
+Define the target matrix
+
+.
+The limiting predictor at a query point 
+ is 
+.
+1
+1
+
+1
+
+              
+              
+              
+              
+              
+              
+              
+            Standard RND training does not include explicit ridge regularization. Here,
+
+ is introduced to ensure that 
+ is invertible;
+the limit 
+ recovers the minimum-norm interpolant. We keep
+
+ throughout for analytical clarity.
+
+ For brevity, define
+
+so that 
+.
+
+Although Assumption 
+3.2
+ is idealized, it provides a natural approximation for RND.
+Because the predictor fits a fixed random target, the supervision signal contains no coherent task-level structure to be extracted through representation learning. So, that predictor only requires adapting the target kernel. A similar perspective has been studied in recent work connecting RND to ensemble and Bayesian interpretations in the infinite-width regime 
+(
+Zanger et al., 2026
+)
+. However, our focus is complementary: we use the NTK view to diagnose why RND can fail as a novelty estimator. We begin by defining the cross-kernel residual variance.
+
+Definition 3.3
+ 
+(cross-kernel residual variance)
+.
+
+Given target kernel 
+ and predictor NTK 
+, the 
+cross-kernel residual variance
+ at 
+ is
+
+We next define the finite-output RND energy under the NTK predictor, which surrogates 
+, by
+
+This leads to the following characterization of its infinite-output limit.
+
+Theorem 3.4
+ 
+(Infinite-dimensional GP target RND energy)
+.
+
+Under the GP target model and NTK-regime predictor,
+
+The proof is provided in Appendix 
+B.1
+. Note that, although our proof exploits the Gaussianity of the target GP, this assumption is stronger than necessary. In fact, the energy formula depends only on the second-order covariance structure 
+ of the target process. In Section 
+4
+, we show that RFF targets implement the same
+covariance structure in expectation, despite not being GP sample paths.
+
+Theorem 
+3.4
+ is the key point of our analysis. It shows that, in the
+infinite-output GP/NTK limit, the RND energy is cross-kernel residual variance, i.e., 
+. The target kernel 
+ determines the covariance of the random target values, whereas the predictor NTK 
+ determines the interpolation weights 
+. These weights specify how the predictor combines the observed target values 
+ to estimate the target at a query point 
+. Hence the RND
+score is governed by the interaction between target variation and predictor interpolation, rather than by either kernel alone.
+
+4 
+Spectral Target Design
+
+We now use this view to derive a target-design principle. The key idea is to treat the target covariance as a spectral design object: rather than inheriting an uncontrolled spectrum from a random network, we seek a target family with an explicit knob for shaping RND energy landscapes.
+
+4.1 
+Residual Collapse as Spectral Under-Excitation
+
+We analyze the induced training residual 
+ whose 
+ is the sum of RND energies over the training set.
+
+Lemma 4.1
+ 
+(Spectral residual decomposition)
+.
+
+Consider the spectral decomposition 
+ with 
+ and let 
+ denote the 
+-th column of 
+. The training residual satisfies 
+, and 
+.
+
+A detailed proof is provided in Appendix 
+B.2
+. Lemma 
+4.1
+ shows that the regularized residual on the training set decomposes naturally in the eigenbasis of the predictor NTK 
+. In addition, since 
+ governs the target covariance globally, the same spectral structure determines residual behavior at query points beyond the training set.
+We can further decompose the training-set residual energy along each predictor NTK eigenmode into a predictor-side and a target-side term.
+
+If 
+ is a predictor-easy mode 
+, the residual filter nearly vanishes, so even a large value of 
+ contributes little to the residual. Conversely, for predictor-hard modes
+
+, the filter remains large; however, when 
+ is small, the target contains little variation along that mode, leaving little residual signal. In this terminology, overgeneralization arises from predictor-hard modes with insufficient target variation.
+This motivates framing target design as a mode-wise spectral allocation problem, which we formalize in the following definition.
+
+Definition 4.2
+ 
+(Target power and residual contribution)
+.
+
+Let 
+, with eigenvectors
+
+ and eigenvalues 
+. For a target Gram matrix 
+, define the 
+target power
+
+assigned to predictor mode 
+ by
+
+.
+For ridge parameter 
+, define the 
+residual contribution
+ of mode
+
+ by 
+.
+
+In standard RND, the target and predictor networks typically share the same architecture, with their parameters independently initialized from the same distribution. Consequently, their associated kernels are expected to exhibit similar spectral densities.
+
+4.2 
+RFF-RND: Target Design as Spectral Allocation
+
+So far, we have analyzed how the RND energy, particularly its spectral properties, is characterized and determined by the interplay between the predictor and target networks. However, the preceding decomposition suggests an ideal but impractical allocation rule: choose 
+ so that 
+ is not concentrated only on predictor-easy modes, but also assigns power to modes where the residual filter is non-negligible. In general, directly optimizing 
+ in the predictor eigenbasis is not practical in standard RND, since 
+, its eigenvectors, and its spectrum are implicit and architecture-dependent. Therefore, a natural extension is to make the target structure explicit in a 
+predictor-agnostic
+ form, with a tunable spectrum for generality rather than inheriting an uncontrolled spectrum from a randomly initialized MLP.
+
+Moreover, the preceding analysis only depends on the 
+target covariance structure
+.
+This motivates replacing the target family with a shift-invariant 
+RFF target
+ (which we call 
+RFF-RND
+), whose spectral density can be controlled directly.
+
+Corollary 4.3
+ 
+(Infinite-output RFF target RND energy)
+.
+
+For the 
+-dimensional RFF target 
+, 
+2
+2
+
+2
+
+Here, we assume 
+ is symmetric, i.e., 
+. For the RBF target kernel, 
+ and 
+. Other variants of shift-invariant kernels are summarized in Appendix 
+C
+.
+, 
+, with independent draws across 
+, the target coordinates are zero mean and satisfy 
+. Therefore, under the same NTK-regime predictor, 
+.
+
+Figure 2: 
+
+Spectral allocation of RBF-RFF targets across predictor NTK modes.
+ (a) Predictor NTK eigenvalues 
+, sorted in descending order. (b) Target power 
+ along predictor NTK
+eigenmodes. (c) Mode-wise residual contribution
+
+.
+
+The proof is provided in Appendix 
+B.3
+. As briefly mentioned earlier, here we exploit the fact that it suffices to match only the second-order moments encoded by the target network’s Gram matrix, without requiring Gaussianity of the target sample paths. For an RFF target, the corresponding covariance is 
+, whose bandwidth 
+ controls the spectral spread of the target kernel.
+
+Therefore, we can easily compare target designs by examining how 
+ allocates power across the empirical predictor NTK eigenbasis, yielding a substantially more flexible target design.
+
+Figure 
+2
+ illustrates this behavior empirically. Consider an RND setup with a large-width MLP predictor and an RFF target. As expected, the predictor NTK spectrum is concentrated on leading modes, so the residual filter strongly suppresses these modes while leaving higher-index modes less attenuated. The RFF bandwidth controls how target power, and consequently residual contribution, is allocated across this basis. Larger bandwidths concentrate power on easy leading modes (
+), whereas smaller bandwidths spread power toward less-attenuated higher-index modes (
+). Specifically, Figure 
+2
+-(c) shows that smaller RFF bandwidths concentrate residual contribution on high-index NTK modes, where small predictor eigenvalues imply weak interpolation.
+
+Remark 4.4
+ 
+(Pretrained feature map)
+.
+
+Pretrained features can also define a target kernel 
+. However, the mode-wise power 
+ is inherited from pretraining and is not directly tunable for novelty detection. This is useful
+when the pretrained invariances match the desired coverage, but unlike RFF
+targets, it does not provide an explicit novelty-scale parameter.
+
+4.3 
+Frequency-Domain Interpretation of Residual Separation
+
+The finite-sample NTK decomposition above is general, but its modes are the empirical eigenvectors of 
+, which need not have an immediate frequency interpretation. To make the spectral mechanism explicit, we consider a clean idealized setting where this eigenbasis is known. On a uniform periodic grid, shift-invariant predictor and target kernels are diagonalized by the Fourier basis. In this case, the general predictor-mode decomposition reduces to a frequency-wise decomposition.
+
+Proposition 4.5
+ 
+(Frequency-wise residual decomposition)
+.
+
+On a uniform periodic grid, suppose 
+ and 
+ are
+shift-invariant, with Fourier eigenvalues
+
+ and 
+. Then
+
+The proof is given in Appendix 
+B.4
+. Proposition 
+4.5
+ is the frequency-domain counterpart of the residual decomposition in Lemma 
+4.1
+. It shows that the residual at frequency 
+ factors into a predictor-side spectral residual filter, 
+, and a target-side spectral power term, 
+. This suggests that target should allocate power 
+broadly enough
+ to cover frequencies that are weakly interpolated by the predictor, rather than concentrating power on a
+narrow, easily interpolated band.
+
+The same mechanism can also be understood intuitively in the spatial domain. For RBF-RFF targets, smaller 
+ makes 
+ decay more rapidly with distance, so target values far from 
+ are harder to infer from observed dataset values. More explicitly, Corollary 
+4.1
+ gives
+
+For out-of-coverage points, the cross-covariance term 
+ is driven toward zero, while the quadratic term 
+ can remain non-negligible even when 
+ is small. The resulting residual increase induces the coverage-based separation in Definition 
+2.1
+, consistent with the empirical diagnostic in Figure 
+3
+.
+
+Figure 3: 
+Energy landscapes (
+, 
+).
+ Top: standard RND exhibits overly confident off-manifold energy patterns. Bottom: 
+RFF-RND
+ produces more consistent landscapes with clearer separation between the data manifold and off-manifold regions.
+
+5 
+Experiments
+
+5.1 
+Diagnostics and Ablations for 
+RFF-RND
+
+We provide diagnostics and ablations for 
+RFF-RND
+, validating the kernel-level predictions and examining the effects of 
+, 
+, and predictor network width 
+ on the induced novelty geometry.
+To keep the main text focused on the empirical narrative, we summarize these diagnostic results here and defer the full ablations to the appendices.
+
+Finite-output concentration.
+
+Appendix 
+D.1
+ verifies the finite-output concentration predicted by Corollary 
+4.3
+.
+We observed that as the RFF output dimension 
+ increases, the empirical energy 
+ aligns more closely with the kernel-level prediction 
+.
+On the Two Moons diagnostic, Pearson agreement increases from about 
+ at
+
+ to about 
+ at 
+, suggesting that moderate output dimensions already provide reliable kernel-level estimates.
+
+Frequency-domain diagnostic.
+
+Appendix 
+D.2
+ visualizes the frequency-wise
+decomposition in Proposition 
+4.5
+. This diagnostic directly checks the product structure of the residual, rather than downstream performance.
+We observe the RFF bandwidth controls the target spectrum, while the predictor
+NTK induces a residual filter that suppresses frequencies it interpolates well. The observed residual power appears where target spectral power overlaps with frequencies that pass this filter, supporting bandwidth as a spectral knob for shaping the RND residual.
+
+Energy-landscape ablations.
+
+Appendix 
+D.3
+ studies how the RFF bandwidth
+
+, output dimension 
+, and predictor width 
+ affect the energy
+landscape. The bandwidth 
+ controls the spatial scale of novelty: small values produce localized but noisy landscapes, while large values over-smooth the energy and blur nearby manifold boundaries. Increasing 
+ stabilizes the finite-output energy, whereas varying 
+ mainly changes the smoothness of the fitted contours without altering the overall manifold-aware separation. Together, these ablations clarify the roles of the main design parameters in
+our diagnostics: 
+ changes the spatial scale of the energy landscape,
+
+ improves finite-output stability, and 
+ mainly affects the smoothness
+of the fitted contours over the tested range.
+
+5.2 
+Additional Comparisons with RND Variants
+
+Appendix 
+E
+ compares 
+RFF-RND
+ with DRND
+and input-conditioned RND variants on synthetic manifolds, including computational and memory costs. DRND improves novelty contrast through a distributional correction over 
+ frozen target networks, while input-conditioned RND reshapes the energy landscape through gating, bilinear, or FiLM-style modulation. However, their novelty geometry remains implicit and architecture-dependent, and both introduce additional overhead. In contrast, 
+RFF-RND
+ replaces the random target network with fixed RFF parameters 
+ and 
+, providing explicit target-kernel control with comparatively small target-side overhead.
+
+5.3 
+Downstream Performance on RL
+
+We compare our method across a range of online and offline RL benchmarks to assess its effect on downstream task performance.
+We consider discounted MDPs 
+(
+Sutton and Barto, 2018
+)
+ 
+ with objective 
+. The RND energy 
+ is used as a unified uncertainty signal 
+: in online RL, it is added as an exploration bonus, 
+; in offline RL, it is used as an anti-exploration penalty in the critic target, 
+. Here, 
+ for online exploration and 
+ for offline conservatism. Detailed RL configurations are provided in Appendix 
+F
+.
+
+We fix the output dimension to 
+ for online RL and 
+ for offline RL experiments, as performance stabilizes once 
+ is sufficiently large. A detailed analysis on the effect of 
+ is provided in Appendix 
+G.1
+. As with other RND-based methods, we calibrate the scale of the intrinsic reward by tuning 
+ and 
+ on a validation grid and selecting dataset-specific values (see Appendix 
+G.2
+).
+
+Figure 4: 
+Mean episode return on online RL tasks.
+
+Top: Atari tasks (
+MontezumaRevenge
+, 
+Frogger
+, 
+Freeway
+, 
+Venture
+); Bottom: Fetch Robotics tasks (
+Reach
+, 
+Push
+, 
+Slide
+,
+
+PickAndPlace
+). Results are averaged over 5 random seeds.
+
+Online RL.
+
+We evaluate 
+RFF-RND
+ on four Atari exploration
+games (
+MontezumaRevenge
+, 
+Frogger
+, 
+Freeway
+, 
+Venture
+)
+and four Fetch manipulation tasks (
+Reach
+, 
+Push
+, 
+Slide
+,
+
+PickAndPlace
+). We use PPO 
+(
+Schulman et al., 2017
+)
+ as the base algorithm
+and compare PPO, PPO
+ 
+(
+Burda et al., 2019b
+)
+,
+PPO
+ 
+(
+Yang et al., 2024
+)
+, and the proposed
+PPO
+, isolating the effect of the intrinsic reward.
+
+As shown in Figure 
+4
+, PPO
+
+generally improves sample efficiency and achieves the best or competitive final
+performance. On sparse-reward Atari tasks, the gains are most visible on
+
+MontezumaRevenge
+, where PPO
+ continues to
+improve while other methods plateau, and on 
+Venture
+ and 
+Freeway
+,
+where it improves earlier during training. On 
+Frogger
+,
+PPO
+ remains consistently
+competitive with other RND-based variants.
+The Fetch tasks show a similar trend in goal-conditioned sparse-reward
+manipulation. PPO
+ solves 
+Reach
+ fastest,
+is the only method to reach 
+ success on 
+Push
+ within the training
+budget, and achieves the best final performance on 
+PickAndPlace
+. On
+
+Slide
+, all methods approach comparable final performance, but
+PPO
+ learns faster early in training. Overall, these
+results indicate that the proposed target-side design yields an intrinsic reward
+that is useful for exploration across various online RL tasks.
+
+Table 1: 
+Normalized D4RL Locomotion scores are reported as mean 
+ std over 10 seeds, with 100 evaluation episodes per seed. Baselines are taken from prior
+work 
+(
+An et al., 2021
+; 
+Tarasov et al., 2023
+; 
+Yang et al., 2024
+)
+.
+
+Bold
+ and 
+underline
+ denote the best and second-best results.
+
+Dataset
+
+SAC
+
+CQL
+
+IQL
+
+ReBRAC
+
+SAC
+
+SAC
+
+SAC
+
+halfcheetah-random
+
+halfcheetah-medium
+
+halfcheetah-expert
+
+halfcheetah-medium-expert
+
+halfcheetah-medium-replay
+
+halfcheetah-full-replay
+
+hopper-random
+
+hopper-medium
+
+hopper-expert
+
+hopper-medium-expert
+
+hopper-medium-replay
+
+hopper-full-replay
+
+walker2d-random
+
+walker2d-medium
+
+walker2d-expert
+
+walker2d-medium-expert
+
+walker2d-medium-replay
+
+walker2d-full-replay
+
+average score
+
+87.8
+
+Table 2: 
+
+Normalized D4RL AntMaze scores are reported as mean 
+ std over 10 seeds,
+with 100 evaluation episodes per seed. Baselines are from prior
+work 
+(
+Nikulin et al., 2023
+; 
+Tarasov et al., 2023
+; 
+Yang et al., 2024
+)
+.
+
+Bold
+ and 
+underline
+ denote the best and second-best results.
+
+Dataset
+
+SAC
+
+CQL
+
+IQL
+
+ReBRAC
+
+SAC
+
+SAC
+
+SAC
+
+antmaze-umaze
+
+0.0
+
+74.0
+
+83.3 
+ 4.5
+
+97.8 
+ 1.0
+
+97.0 
+ 1.5
+
+95.8 
+ 2.4
+
+97.0 
+ 0.9
+
+antmaze-umaze-diverse
+
+0.0
+
+84.0
+
+70.6 
+ 3.7
+
+88.3 
+ 13.0
+
+66.0 
+ 25.0
+
+87.2 
+ 3.2
+
+88.4 
+ 3.9
+
+antmaze-medium-play
+
+0.0
+
+61.2
+
+64.6 
+ 4.9
+
+84.0 
+ 4.2
+
+38.5 
+ 29.4
+
+86.2 
+ 5.4
+
+85.2 
+ 6.1
+
+antmaze-medium-diverse
+
+0.0
+
+53.7
+
+61.7 
+ 6.1
+
+76.3 
+ 13.5
+
+74.7 
+ 10.7
+
+83.0 
+ 3.8
+
+80.5 
+ 5.5
+
+antmaze-large-play
+
+0.0
+
+15.8
+
+42.5 
+ 6.5
+
+60.4 
+ 26.1
+
+43.9 
+ 29.2
+
+53.2 
+ 4.1
+
+57.1 
+ 8.2
+
+antmaze-large-diverse
+
+0.0
+
+14.9
+
+27.6 
+ 7.8
+
+54.4 
+ 25.1
+
+45.7 
+ 28.5
+
+50.8 
+ 10.5
+
+51.6 
+ 9.8
+
+average score
+
+0.0
+
+50.6
+
+58.4
+
+76.9
+
+61.0
+
+76.0
+
+76.6
+
+Offline RL.
+
+We evaluate our method on D4RL locomotion tasks (
+HalfCheetah, Hopper, Walker2d
+) 
+(
+Fu et al., 2020
+)
+, and additionally report results on 
+AntMaze
+ tasks to assess performance in goal-directed exploration settings. We compare against strong ensemble-free offline RL baselines, including SAC 
+(
+Haarnoja et al., 2018
+)
+, CQL 
+(
+Kumar et al., 2020
+)
+, IQL 
+(
+Kostrikov et al., 2021
+)
+, ReBRAC 
+(
+Tarasov et al., 2023
+)
+, and RND-based variants SAC
+ 
+(
+Burda et al., 2019b
+)
+ and SAC
+ 
+(
+Yang et al., 2024
+)
+. All RND-based variants are evaluated under the same SAC backbone and D4RL evaluation protocol to ensure fair comparisons.
+
+As shown in Table 
+1
+,
+SAC
+ achieves the best average score on D4RL
+locomotion among ensemble-free baselines, with an average score of 
+.
+It obtains the best or second-best performance on 17 out of 18 datasets, with
+particularly strong gains on mixed-quality datasets such as
+
+medium-replay
+, 
+full-replay
+, and 
+medium-expert
+. These
+results suggest that 
+RFF-RND
+ provides a support-aware uncertainty
+penalty that helps exploit high-return behavior while discouraging poorly
+supported actions,
+letting the actor more reliably exploit high-quality behavior already in the offline dataset.
+
+Table 
+2
+ reports additional results on
+AntMaze. SAC
+ remains competitive on these
+goal-reaching tasks, achieving an average score of 
+, close to the best
+ensemble-free baseline. This suggests that the proposed uncertainty penalty can
+extend beyond locomotion domains, although further adaptation to sparse-reward,
+long-horizon navigation remains an interesting direction.
+
+6 
+Conclusion and Future Direction
+
+In this paper, we rigorously analyzed random network distillation (RND) overgeneralization under a GP target model and an NTK-regime predictor, showing that the RND score is a cross-kernel residual variance determined by the interaction between target covariance and predictor interpolation. This reveals residual collapse as a spectral under-excitation problem, where the target fails to excite modes in which predictor residuals can survive. Motivated by this mechanism, we proposed 
+RFF-RND
+, a bandwidth-controlled target design that makes the target spectrum and spatial novelty scale explicit. Diagnostics and RL experiments show improved novelty discrimination and downstream performance, highlighting target geometry as a central design choice for reliable RND.
+
+The theoretical framework proposed in this paper imposes no specific restrictions on the input domain. Specializing it to multiple input modalities, such as images, text, and time series, and analyzing the additional structures that arise in each case is therefore an interesting direction for future research.
+
+7 
+Practical Considerations for Spectral Target Design
+
+This section summarizes several practical issues discussed during the rebuttal
+process that further clarify the scope of our spectral target design framework.
+In particular, we consider data-normalized bandwidth selection, the interaction
+between spectral design and stochastic nuisance variation, and the potential
+role of anisotropic target spectra.
+
+Data-normalized bandwidth selection.
+
+The RBF bandwidth 
+ should be interpreted relative to the characteristic
+scale of the input distribution. To obtain a simple data-dependent
+normalization, we standardize each state and action dimension, concatenate them
+into an input vector 
+, and compute the median pairwise distance
+
+We then parameterize the bandwidth as
+
+For the RBF kernel
+
+two samples separated by 
+ have similarity
+
+. Thus, 
+ directly controls the decay of target
+correlation relative to the characteristic geometric scale of the dataset,
+rather than its raw coordinate scale.
+
+We evaluated this normalization on the 17 offline locomotion datasets used in
+our experiments. The single choice 
+ yielded performance comparable to
+the best grid-searched bandwidth on 10 datasets, while the candidate sets
+
+ and 
+ covered 14 and all 17 datasets,
+respectively. These results suggest the compact data-normalized candidate set
+
+which substantially reduces the need for extensive task-specific bandwidth
+search.
+
+Stochastic nuisance variation and the noisy-TV problem.
+
+Spectral target design does not by itself eliminate the classical noisy-TV
+failure mode. Our analysis predicts persistent novelty whenever target
+variation overlaps with directions that remain difficult for the predictor,
+regardless of whether such variation is task-relevant or arises from
+irreducible stochasticity. Hence, allocating more target power to
+predictor-hard directions should not be interpreted as a monotone preference
+for arbitrarily high-frequency target spectra.
+
+To make this trade-off explicit, consider an observation 
+, where
+
+ denotes the task-relevant state and
+
+ is an independent nuisance variable.
+For an isotropic RBF target kernel, two independent observations of the same
+underlying state, 
+, satisfy
+
+Therefore, when 
+ is small relative to the nuisance scale, repeated
+observations of the same underlying state can become nearly uncorrelated in
+the target representation. If these nuisance directions are also difficult
+for the predictor, their residual contribution persists and can be mistaken
+for novelty. Conversely, increasing 
+ suppresses stochastic variation
+but may also smooth over task-relevant differences between states.
+
+This conflict arises because a single isotropic bandwidth controls both types
+of variation. When task-relevant and nuisance directions can be distinguished,
+the same framework naturally admits an anisotropic target kernel,
+
+Here, 
+ can be chosen large enough to suppress nuisance variation,
+while 
+ preserves sensitivity to task-relevant novelty. More broadly,
+our analysis therefore suggests allocating target power to
+
+task-relevant predictor-hard directions
+, rather than indiscriminately
+increasing target frequency. Identifying such directions from side
+information, repeated observations, controlled augmentations, or invariant
+representations provides a natural extension of the present isotropic
+formulation.
+
+Acknowledgement
+
+This work was partly supported by the IITP grant funded by Korean government(MSIT) in 2026 (RS-2022-II220951, LBA, 50%), and in part by the National Research Foundation of Korea (NRF) grant funded by the Korea government (MSIT) (RS-2026-25504174, 50%).
+
+References
+
+Allen-Zhu 
+et al.
+ (2019)
+
+Z. Allen-Zhu, Y. Li, and Z. Song
+
+A convergence theory for deep learning via over-parameterization
+.
+
+In 
+International Conference on Machine Learning
+,
+
+Cited by: 
+Assumption 3.2
+.
+
+An 
+et al.
+ (2021)
+
+G. An, S. Moon, J. Kim, and H. O. Song
+
+Uncertainty-based offline reinforcement learning with diversified q-ensemble
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+Vol. 
+34
+.
+
+Cited by: 
+Table 1
+.
+
+Arora 
+et al.
+ (2019)
+
+S. Arora, S. S. Du, W. Hu, Z. Li, R. Salakhutdinov, and R. Wang
+
+On exact computation with an infinitely wide neural net
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+Vol. 
+32
+.
+
+Cited by: 
+Assumption 3.2
+.
+
+Belkin 
+et al.
+ (2019)
+
+M. Belkin, D. Hsu, S. Ma, and S. Mandal
+
+Reconciling modern machine-learning practice and the classical bias–variance trade-off
+.
+
+Proceedings of the National Academy of Sciences
+ 
+116
+ (
+32
+), 
+pp. 
+15849–15854
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+.
+
+Burda 
+et al.
+ (2019a)
+
+Y. Burda, H. Edwards, D. Pathak, A. Storkey, T. Darrell, and A. A. Efros
+
+Large-scale study of curiosity-driven learning
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Cited by: 
+§1
+.
+
+Burda 
+et al.
+ (2019b)
+
+Y. Burda, H. Edwards, A. Storkey, and O. Klimov
+
+Exploration by random network distillation
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Cited by: 
+§1
+,
+
+§5.3
+,
+
+§5.3
+.
+
+Chizat 
+et al.
+ (2019)
+
+L. Chizat, E. Oyallon, and F. Bach
+
+On lazy training in differentiable programming
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+Cited by: 
+Assumption 3.2
+.
+
+de Vries 
+et al.
+ (2017)
+
+H. de Vries, F. Strub, J. Mary, H. Larochelle, O. Pietquin, and A. Courville
+
+Modulating early visual processing by language
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+Cited by: 
+§2.3
+.
+
+Du 
+et al.
+ (2019)
+
+S. S. Du, X. Zhai, B. Poczos, and A. Singh
+
+Gradient descent provably optimizes over-parameterized neural networks
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Cited by: 
+Assumption 3.2
+.
+
+Dumoulin 
+et al.
+ (2018)
+
+V. Dumoulin, E. Perez, N. Schucher, F. Strub, H. d. Vries, A. Courville, and Y. Bengio
+
+Feature-wise transformations
+.
+
+Distill
+.
+
+External Links: 
+Document
+
+Cited by: 
+§2.3
+.
+
+Fu 
+et al.
+ (2020)
+
+J. Fu, A. Kumar, O. Nachum, G. Tucker, and S. Levine
+
+D4RL: datasets for deep data-driven reinforcement learning
+.
+
+arXiv preprint arXiv:2004.07219
+.
+
+Cited by: 
+§5.3
+.
+
+Gray (2006)
+
+R. M. Gray
+
+Toeplitz and circulant matrices: a review
+.
+
+Foundations and Trends in Communications and Information Theory
+ 
+2
+ (
+3
+), 
+pp. 
+155–239
+.
+
+Cited by: 
+§B.4
+.
+
+Haarnoja 
+et al.
+ (2018)
+
+T. Haarnoja, A. Zhou, P. Abbeel, and S. Levine
+
+Soft actor-critic: off-policy maximum entropy deep reinforcement learning with a stochastic actor
+.
+
+In 
+Proceedings of the 35th International Conference on Machine Learning
+,
+
+Vol. 
+80
+, 
+pp. 
+1861–1870
+.
+
+Cited by: 
+§5.3
+.
+
+Jacot 
+et al.
+ (2018)
+
+A. Jacot, F. Gabriel, and C. Hongler
+
+Neural tangent kernel: convergence and generalization in neural networks
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+Vol. 
+31
+.
+
+Cited by: 
+Assumption 3.2
+.
+
+Kostrikov 
+et al.
+ (2021)
+
+I. Kostrikov, A. Nair, and S. Levine
+
+Offline reinforcement learning with implicit q-learning
+.
+
+In 
+Proceedings of the 38th International Conference on Machine Learning
+,
+
+Vol. 
+139
+, 
+pp. 
+5774–5783
+.
+
+Cited by: 
+§5.3
+.
+
+Kumar 
+et al.
+ (2020)
+
+A. Kumar, A. Zhou, G. Tucker, and S. Levine
+
+Conservative q-learning for offline reinforcement learning
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+Vol. 
+33
+, 
+pp. 
+1179–1191
+.
+
+Cited by: 
+§5.3
+.
+
+Le 
+et al.
+ (2013)
+
+Q. V. Le, T. Sarlós, and A. J. Smola
+
+Fastfood-approximating kernel expansions in loglinear time
+.
+
+In 
+Proceedings of the 30th International Conference on Machine Learning
+,
+
+Vol. 
+28
+, 
+pp. 
+244–252
+.
+
+Cited by: 
+§1
+.
+
+Lee 
+et al.
+ (2018)
+
+J. Lee, J. Sohl-dickstein, J. Pennington, R. Novak, S. Schoenholz, and Y. Bahri
+
+Deep neural networks as gaussian processes
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Cited by: 
+§3
+.
+
+Lee 
+et al.
+ (2019)
+
+J. Lee, L. Xiao, S. S. Schoenholz, Y. Bahri, R. Novak, J. Sohl-Dickstein, and J. Pennington
+
+Wide neural networks of any depth evolve as linear models under gradient descent
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+Vol. 
+32
+.
+
+Cited by: 
+Assumption 3.2
+.
+
+Matthews 
+et al.
+ (2018)
+
+A. G. d. G. Matthews, M. Rowland, J. Hron, R. E. Turner, and Z. Ghahramani
+
+Gaussian process behaviour in wide deep neural networks
+.
+
+In 
+International Conference on Learning Representations
+,
+
+Cited by: 
+§3
+.
+
+Neal (1996)
+
+R. M. Neal
+
+Bayesian learning for neural networks
+.
+
+Lecture Notes in Statistics
+, Vol. 
+118
+,  
+Springer
+, 
+New York
+.
+
+External Links: 
+ISBN 978-0-387-94724-2
+
+Cited by: 
+§3
+.
+
+Nikulin 
+et al.
+ (2023)
+
+A. Nikulin, V. Kurenkov, D. Tarasov, and S. Kolesnikov
+
+Anti-exploration by random network distillation
+.
+
+In 
+Proceedings of the 40th International Conference on Machine Learning
+,
+
+Vol. 
+202
+, 
+pp. 
+26228–26244
+.
+
+Cited by: 
+§E.1
+,
+
+§G.2
+,
+
+§1
+,
+
+§1
+,
+
+§2.3
+,
+
+Table 2
+.
+
+Perez 
+et al.
+ (2018)
+
+E. Perez, F. Strub, H. de Vries, V. Dumoulin, and A. Courville
+
+FiLM: visual reasoning with a general conditioning layer
+.
+
+In 
+Proceedings of the AAAI Conference on Artificial Intelligence
+,
+
+Vol. 
+32
+.
+
+Cited by: 
+§2.3
+.
+
+Rahimi and Recht (2007)
+
+A. Rahimi and B. Recht
+
+Random features for large-scale kernel machines
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+Vol. 
+20
+.
+
+Cited by: 
+§E.2
+,
+
+§1
+.
+
+Rahimi and Recht (2008)
+
+A. Rahimi and B. Recht
+
+Weighted sums of random kitchen sinks: replacing minimization with randomization in learning
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+Vol. 
+21
+.
+
+Cited by: 
+§1
+.
+
+Rasmussen and Williams (2006)
+
+C. E. Rasmussen and C. K. I. Williams
+
+Gaussian processes for machine learning
+.
+
+ 
+MIT Press
+.
+
+Cited by: 
+§1
+.
+
+Rezaeifar 
+et al.
+ (2022)
+
+S. Rezaeifar, R. Dadashi, N. Vieillard, L. Hussenot, O. Bachem, O. Pietquin, and M. Geist
+
+Offline reinforcement learning as anti-exploration
+.
+
+In 
+Proceedings of the AAAI Conference on Artificial Intelligence
+,
+
+pp. 
+8106–8114
+.
+
+Cited by: 
+§1
+.
+
+Schölkopf and Smola (2002)
+
+B. Schölkopf and A. J. Smola
+
+Learning with kernels: support vector machines, regularization, optimization, and beyond
+.
+
+ 
+MIT Press
+.
+
+Cited by: 
+§1
+.
+
+Schulman 
+et al.
+ (2017)
+
+J. Schulman, F. Wolski, P. Dhariwal, A. Radford, and O. Klimov
+
+Proximal policy optimization algorithms
+.
+
+arXiv preprint arXiv:1707.06347
+.
+
+External Links: 
+1707.06347
+
+Cited by: 
+§5.3
+.
+
+Sutton and Barto (2018)
+
+R. S. Sutton and A. G. Barto
+
+Reinforcement learning: an introduction
+.
+
+2
+ edition
+,  
+MIT Press
+.
+
+Cited by: 
+§5.3
+.
+
+Tarasov 
+et al.
+ (2023)
+
+D. Tarasov, V. Kurenkov, A. Nikulin, and S. Kolesnikov
+
+Revisiting the minimalist approach to offline reinforcement learning
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+Vol. 
+36
+, 
+pp. 
+11592–11620
+.
+
+Cited by: 
+§G.2
+,
+
+§5.3
+,
+
+Table 1
+,
+
+Table 2
+.
+
+Yang 
+et al.
+ (2024)
+
+K. Yang, J. Tao, J. Lyu, and X. Li
+
+Exploration and anti-exploration with distributional random network distillation
+.
+
+In 
+Proceedings of the 41st International Conference on Machine Learning
+,
+
+Vol. 
+235
+, 
+pp. 
+56397–56421
+.
+
+Cited by: 
+§E.1
+,
+
+§G.2
+,
+
+§1
+,
+
+§2.3
+,
+
+§5.3
+,
+
+§5.3
+,
+
+Table 1
+,
+
+Table 2
+.
+
+Zanger 
+et al.
+ (2026)
+
+M. A. Zanger, Y. Wu, P. R. V. der Vaart, W. Böhmer, and M. T. J. Spaan
+
+On the equivalence of random network distillation, deep ensembles, and bayesian inference
+.
+
+External Links: 
+2602.19964
+,
+
+Link
+
+Cited by: 
+§3
+.
+
+NeurIPS Paper Checklist
+
+The checklist is designed to encourage best practices for responsible machine learning research, addressing issues of reproducibility, transparency, research ethics, and societal impact. Do not remove the checklist: 
+The papers not including the checklist will be desk rejected.
+ The checklist should follow the references and follow the (optional) supplemental material. The checklist does NOT count towards the page
+limit.
+
+Please read the checklist guidelines carefully for information on how to answer these questions. For each question in the checklist:
+
+•
+
+You should answer 
+[Yes] 
+, 
+[No] 
+, or 
+[N/A] 
+.
+
+•
+
+[N/A] 
+ means either that the question is Not Applicable for that particular paper or the relevant information is Not Available.
+
+•
+
+Please provide a short (1–2 sentence) justification right after your answer (even for 
+[N/A] 
+).
+
+The checklist answers are an integral part of your paper submission.
+ They are visible to the reviewers, area chairs, senior area chairs, and ethics reviewers. You will also be asked to include it (after eventual revisions) with the final version of your paper, and its final version will be published with the paper.
+
+The reviewers of your paper will be asked to use the checklist as one of the factors in their evaluation. While 
+[Yes] 
+ is generally preferable to 
+[No] 
+, it is perfectly acceptable to answer 
+[No] 
+ provided a proper justification is given (e.g., error bars are not reported because it would be too computationally expensive” or “we were unable to find the license for the dataset we used”). In general, answering 
+[No] 
+ or 
+[N/A] 
+ is not grounds for rejection. While the questions are phrased in a binary way, we acknowledge that the true answer is often more nuanced, so please just use your best judgment and write a justification to elaborate. All supporting evidence can appear either in the main paper or the supplemental material, provided in appendix. If you answer 
+[Yes] 
+ to a question, in the justification please point to the section(s) where related material for the question can be found.
+
+IMPORTANT, please:
+
+•
+
+Delete this instruction block, but keep the section heading “NeurIPS Paper Checklist"
+,
+
+•
+
+Keep the checklist subsection headings, questions/answers and guidelines below.
+
+•
+
+Do not modify the questions and only use the provided macros for your answers
+.
+
+1.
+
+Claims
+
+Question: Do the main claims made in the abstract and introduction accurately reflect the paper’s contributions and scope?
+
+Answer: 
+[Yes] 
+.
+
+Justification: The abstract and introduction state the paper’s main contributions: a GP/NTK-based analysis of RND overgeneralization, the resulting spectral interpretation, and the proposed 
+RFF-RND
+ target design. The claims are scoped to RND-style novelty estimation and are supported by the theoretical results and experiments reported in the paper.
+
+Guidelines:
+
+•
+
+The answer 
+[N/A] 
+ means that the abstract and introduction do not include the claims made in the paper.
+
+•
+
+The abstract and/or introduction should clearly state the claims made, including the contributions made in the paper and important assumptions and limitations. A 
+[No] 
+ or 
+[N/A] 
+ answer to this question will not be perceived well by the reviewers.
+
+•
+
+The claims made should match theoretical and experimental results, and reflect how much the results can be expected to generalize to other settings.
+
+•
+
+It is fine to include aspirational goals as motivation as long as it is clear that these goals are not attained by the paper.
+
+2.
+
+Limitations
+
+Question: Does the paper discuss the limitations of the work performed by the authors?
+
+Answer: 
+[Yes] 
+.
+
+Justification: The paper discusses limitations of the present work, including the idealized GP/NTK-regime analysis, the restriction of the theoretical model to target-prediction RND mechanisms, and the fact that the proposed bandwidth-based control is evaluated on a finite set of RL benchmarks. We also discuss practical limitations such as sensitivity to bandwidth selection and the need to further study predictor optimization dynamics and higher-dimensional visual inputs.
+
+Guidelines:
+
+•
+
+The answer 
+[N/A] 
+ means that the paper has no limitation while the answer 
+[No] 
+ means that the paper has limitations, but those are not discussed in the paper.
+
+•
+
+The authors are encouraged to create a separate “Limitations” section in their paper.
+
+•
+
+The paper should point out any strong assumptions and how robust the results are to violations of these assumptions (e.g., independence assumptions, noiseless settings, model well-specification, asymptotic approximations only holding locally). The authors should reflect on how these assumptions might be violated in practice and what the implications would be.
+
+•
+
+The authors should reflect on the scope of the claims made, e.g., if the approach was only tested on a few datasets or with a few runs. In general, empirical results often depend on implicit assumptions, which should be articulated.
+
+•
+
+The authors should reflect on the factors that influence the performance of the approach. For example, a facial recognition algorithm may perform poorly when image resolution is low or images are taken in low lighting. Or a speech-to-text system might not be used reliably to provide closed captions for online lectures because it fails to handle technical jargon.
+
+•
+
+The authors should discuss the computational efficiency of the proposed algorithms and how they scale with dataset size.
+
+•
+
+If applicable, the authors should discuss possible limitations of their approach to address problems of privacy and fairness.
+
+•
+
+While the authors might fear that complete honesty about limitations might be used by reviewers as grounds for rejection, a worse outcome might be that reviewers discover limitations that aren’t acknowledged in the paper. The authors should use their best judgment and recognize that individual actions in favor of transparency play an important role in developing norms that preserve the integrity of the community. Reviewers will be specifically instructed to not penalize honesty concerning limitations.
+
+3.
+
+Theory assumptions and proofs
+
+Question: For each theoretical result, does the paper provide the full set of assumptions and a complete (and correct) proof?
+
+Answer: 
+[Yes] 
+.
+
+Justification: The paper states the assumptions for each theoretical result, including the GP target model, predictor interpolation kernel, regularization, and bandwidth-controlled kernel conditions. Complete proofs are provided in the appendix, with the main text giving the corresponding intuition and implications.
+
+Guidelines:
+
+•
+
+The answer 
+[N/A] 
+ means that the paper does not include theoretical results.
+
+•
+
+All the theorems, formulas, and proofs in the paper should be numbered and cross-referenced.
+
+•
+
+All assumptions should be clearly stated or referenced in the statement of any theorems.
+
+•
+
+The proofs can either appear in the main paper or the supplemental material, but if they appear in the supplemental material, the authors are encouraged to provide a short proof sketch to provide intuition.
+
+•
+
+Inversely, any informal proof provided in the core of the paper should be complemented by formal proofs provided in appendix or supplemental material.
+
+•
+
+Theorems and Lemmas that the proof relies upon should be properly referenced.
+
+4.
+
+Experimental result reproducibility
+
+Question: Does the paper fully disclose all the information needed to reproduce the main experimental results of the paper to the extent that it affects the main claims and/or conclusions of the paper (regardless of whether the code and data are provided or not)?
+
+Answer: 
+[Yes] 
+.
+
+Justification: The paper describes the experimental tasks, baselines, model classes, evaluation protocol, random seeds, and hyperparameter ranges used for the main experiments. Additional implementation details are provided in the appendix and in the accompanying anonymized code package.
+
+Guidelines:
+
+•
+
+The answer 
+[N/A] 
+ means that the paper does not include experiments.
+
+•
+
+If the paper includes experiments, a 
+[No] 
+ answer to this question will not be perceived well by the reviewers: Making the paper reproducible is important, regardless of whether the code and data are provided or not.
+
+•
+
+If the contribution is a dataset and/or model, the authors should describe the steps taken to make their results reproducible or verifiable.
+
+•
+
+Depending on the contribution, reproducibility can be accomplished in various ways. For example, if the contribution is a novel architecture, describing the architecture fully might suffice, or if the contribution is a specific model and empirical evaluation, it may be necessary to either make it possible for others to replicate the model with the same dataset, or provide access to the model. In general. releasing code and data is often one good way to accomplish this, but reproducibility can also be provided via detailed instructions for how to replicate the results, access to a hosted model (e.g., in the case of a large language model), releasing of a model checkpoint, or other means that are appropriate to the research performed.
+
+•
+
+While NeurIPS does not require releasing code, the conference does require all submissions to provide some reasonable avenue for reproducibility, which may depend on the nature of the contribution. For example
+
+(a)
+
+If the contribution is primarily a new algorithm, the paper should make it clear how to reproduce that algorithm.
+
+(b)
+
+If the contribution is primarily a new model architecture, the paper should describe the architecture clearly and fully.
+
+(c)
+
+If the contribution is a new model (e.g., a large language model), then there should either be a way to access this model for reproducing the results or a way to reproduce the model (e.g., with an open-source dataset or instructions for how to construct the dataset).
+
+(d)
+
+We recognize that reproducibility may be tricky in some cases, in which case authors are welcome to describe the particular way they provide for reproducibility. In the case of closed-source models, it may be that access to the model is limited in some way (e.g., to registered users), but it should be possible for other researchers to have some path to reproducing or verifying the results.
+
+5.
+
+Open access to data and code
+
+Question: Does the paper provide open access to the data and code, with sufficient instructions to faithfully reproduce the main experimental results, as described in supplemental material?
+
+Answer: 
+[Yes] 
+.
+
+Justification: We provide an anonymized code package with scripts and instructions for reproducing the main experimental results. The experiments use standard public RL benchmarks, and the supplemental material describes the required dependencies, data access procedures, and commands for running the proposed method and baselines.
+
+Guidelines:
+
+•
+
+The answer 
+[N/A] 
+ means that paper does not include experiments requiring code.
+
+•
+
+Please see the NeurIPS code and data submission guidelines (
+https://neurips.cc/public/guides/CodeSubmissionPolicy
+) for more details.
+
+•
+
+While we encourage the release of code and data, we understand that this might not be possible, so 
+[No] 
+ is an acceptable answer. Papers cannot be rejected simply for not including code, unless this is central to the contribution (e.g., for a new open-source benchmark).
+
+•
+
+The instructions should contain the exact command and environment needed to run to reproduce the results. See the NeurIPS code and data submission guidelines (
+https://neurips.cc/public/guides/CodeSubmissionPolicy
+) for more details.
+
+•
+
+The authors should provide instructions on data access and preparation, including how to access the raw data, preprocessed data, intermediate data, and generated data, etc.
+
+•
+
+The authors should provide scripts to reproduce all experimental results for the new proposed method and baselines. If only a subset of experiments are reproducible, they should state which ones are omitted from the script and why.
+
+•
+
+At submission time, to preserve anonymity, the authors should release anonymized versions (if applicable).
+
+•
+
+Providing as much information as possible in supplemental material (appended to the paper) is recommended, but including URLs to data and code is permitted.
+
+6.
+
+Experimental setting/details
+
+Question: Does the paper specify all the training and test details (e.g., data splits, hyperparameters, how they were chosen, type of optimizer) necessary to understand the results?
+
+Answer: 
+[Yes] 
+.
+
+Justification: The paper specifies the online and offline RL benchmarks, baselines, evaluation metrics, random seeds, training configurations, optimizers, and hyperparameter sweeps used for the proposed method and comparisons. Further details are included in the appendix and accompanying code package.
+
+Guidelines:
+
+•
+
+The answer 
+[N/A] 
+ means that the paper does not include experiments.
+
+•
+
+The experimental setting should be presented in the core of the paper to a level of detail that is necessary to appreciate the results and make sense of them.
+
+•
+
+The full details can be provided either with the code, in appendix, or as supplemental material.
+
+7.
+
+Experiment statistical significance
+
+Question: Does the paper report error bars suitably and correctly defined or other appropriate information about the statistical significance of the experiments?
+
+Answer: 
+[Yes] 
+.
+
+Justification: The experimental figures and tables report performance over multiple random seeds, with variability shown using standard deviations or shaded regions as specified in the corresponding captions. The reported uncertainty reflects variability across random initialization and environment-level randomness.
+
+Guidelines:
+
+•
+
+The answer 
+[N/A] 
+ means that the paper does not include experiments.
+
+•
+
+The authors should answer 
+[Yes] 
+ if the results are accompanied by error bars, confidence intervals, or statistical significance tests, at least for the experiments that support the main claims of the paper.
+
+•
+
+The factors of variability that the error bars are capturing should be clearly stated (for example, train/test split, initialization, random drawing of some parameter, or overall run with given experimental conditions).
+
+•
+
+The method for calculating the error bars should be explained (closed form formula, call to a library function, bootstrap, etc.)
+
+•
+
+The assumptions made should be given (e.g., Normally distributed errors).
+
+•
+
+It should be clear whether the error bar is the standard deviation or the standard error of the mean.
+
+•
+
+It is OK to report 1-sigma error bars, but one should state it. The authors should preferably report a 2-sigma error bar than state that they have a 96% CI, if the hypothesis of Normality of errors is not verified.
+
+•
+
+For asymmetric distributions, the authors should be careful not to show in tables or figures symmetric error bars that would yield results that are out of range (e.g., negative error rates).
+
+•
+
+If error bars are reported in tables or plots, the authors should explain in the text how they were calculated and reference the corresponding figures or tables in the text.
+
+8.
+
+Experiments compute resources
+
+Question: For each experiment, does the paper provide sufficient information on the computer resources (type of compute workers, memory, time of execution) needed to reproduce the experiments?
+
+Answer: 
+[Yes] 
+.
+
+Justification: The appendix reports the compute resources used for the experiments, including GPU type, memory, approximate runtime per run, and estimated total GPU hours. We also indicate that the reported compute corresponds to the experiments included in the paper and does not include all preliminary or failed experiments.
+
+Guidelines:
+
+•
+
+The answer 
+[N/A] 
+ means that the paper does not include experiments.
+
+•
+
+The paper should indicate the type of compute workers CPU or GPU, internal cluster, or cloud provider, including relevant memory and storage.
+
+•
+
+The paper should provide the amount of compute required for each of the individual experimental runs as well as estimate the total compute.
+
+•
+
+The paper should disclose whether the full research project required more compute than the experiments reported in the paper (e.g., preliminary or failed experiments that didn’t make it into the paper).
+
+9.
+
+Code of ethics
+
+Question: Does the research conducted in the paper conform, in every respect, with the NeurIPS Code of Ethics 
+https://neurips.cc/public/EthicsGuidelines
+?
+
+Answer: 
+[Yes] 
+.
+
+Justification: The research uses standard reinforcement learning benchmarks and synthetic or publicly available datasets, and does not involve human subjects, private data, or sensitive personal information. We have reviewed the NeurIPS Code of Ethics and believe the work conforms to it.
+
+Guidelines:
+
+•
+
+The answer 
+[N/A] 
+ means that the authors have not reviewed the NeurIPS Code of Ethics.
+
+•
+
+If the authors answer 
+[No] 
+, they should explain the special circumstances that require a deviation from the Code of Ethics.
+
+•
+
+The authors should make sure to preserve anonymity (e.g., if there is a special consideration due to laws or regulations in their jurisdiction).
+
+10.
+
+Broader impacts
+
+Question: Does the paper discuss both potential positive societal impacts and negative societal impacts of the work performed?
+
+Answer: 
+[Yes] 
+.
+
+Justification: The paper discusses the potential positive impact of more reliable novelty estimation for exploration, offline conservatism, and safety-aware decision making. It also notes that improved exploration and autonomy methods should be carefully evaluated before deployment in safety-critical systems such as robotics or autonomous driving.
+
+Guidelines:
+
+•
+
+The answer 
+[N/A] 
+ means that there is no societal impact of the work performed.
+
+•
+
+If the authors answer 
+[N/A] 
+ or 
+[No] 
+, they should explain why their work has no societal impact or why the paper does not address societal impact.
+
+•
+
+Examples of negative societal impacts include potential malicious or unintended uses (e.g., disinformation, generating fake profiles, surveillance), fairness considerations (e.g., deployment of technologies that could make decisions that unfairly impact specific groups), privacy considerations, and security considerations.
+
+•
+
+The conference expects that many papers will be foundational research and not tied to particular applications, let alone deployments. However, if there is a direct path to any negative applications, the authors should point it out. For example, it is legitimate to point out that an improvement in the quality of generative models could be used to generate Deepfakes for disinformation. On the other hand, it is not needed to point out that a generic algorithm for optimizing neural networks could enable people to train models that generate Deepfakes faster.
+
+•
+
+The authors should consider possible harms that could arise when the technology is being used as intended and functioning correctly, harms that could arise when the technology is being used as intended but gives incorrect results, and harms following from (intentional or unintentional) misuse of the technology.
+
+•
+
+If there are negative societal impacts, the authors could also discuss possible mitigation strategies (e.g., gated release of models, providing defenses in addition to attacks, mechanisms for monitoring misuse, mechanisms to monitor how a system learns from feedback over time, improving the efficiency and accessibility of ML).
+
+11.
+
+Safeguards
+
+Question: Does the paper describe safeguards that have been put in place for responsible release of data or models that have a high risk for misuse (e.g., pre-trained language models, image generators, or scraped datasets)?
+
+Answer: 
+[N/A] 
+.
+
+Justification: The paper does not release high-risk pretrained models, image generators, language models, or scraped datasets. The experiments use standard RL benchmarks and do not introduce assets with a high risk of misuse.
+
+Guidelines:
+
+•
+
+The answer 
+[N/A] 
+ means that the paper poses no such risks.
+
+•
+
+Released models that have a high risk for misuse or dual-use should be released with necessary safeguards to allow for controlled use of the model, for example by requiring that users adhere to usage guidelines or restrictions to access the model or implementing safety filters.
+
+•
+
+Datasets that have been scraped from the Internet could pose safety risks. The authors should describe how they avoided releasing unsafe images.
+
+•
+
+We recognize that providing effective safeguards is challenging, and many papers do not require this, but we encourage authors to take this into account and make a best faith effort.
+
+12.
+
+Licenses for existing assets
+
+Question: Are the creators or original owners of assets (e.g., code, data, models), used in the paper, properly credited and are the license and terms of use explicitly mentioned and properly respected?
+
+Answer: 
+[Yes] 
+.
+
+Justification: The paper cites the original sources for the benchmarks, datasets, and baseline algorithms used in the experiments. The appendix documents the public benchmark environments and software packages used, including their versions and license information where available.
+
+Guidelines:
+
+•
+
+The answer 
+[N/A] 
+ means that the paper does not use existing assets.
+
+•
+
+The authors should cite the original paper that produced the code package or dataset.
+
+•
+
+The authors should state which version of the asset is used and, if possible, include a URL.
+
+•
+
+The name of the license (e.g., CC-BY 4.0) should be included for each asset.
+
+•
+
+For scraped data from a particular source (e.g., website), the copyright and terms of service of that source should be provided.
+
+•
+
+If assets are released, the license, copyright information, and terms of use in the package should be provided. For popular datasets, 
+paperswithcode.com/datasets
+ has curated licenses for some datasets. Their licensing guide can help determine the license of a dataset.
+
+•
+
+For existing datasets that are re-packaged, both the original license and the license of the derived asset (if it has changed) should be provided.
+
+•
+
+If this information is not available online, the authors are encouraged to reach out to the asset’s creators.
+
+13.
+
+New assets
+
+Question: Are new assets introduced in the paper well documented and is the documentation provided alongside the assets?
+
+Answer: 
+[Yes] 
+.
+
+Justification: The paper introduces an implementation of 
+RFF-RND
+ and provides it as part of the anonymized code package. The accompanying documentation describes the method implementation, dependencies, command-line usage, hyperparameters, and scripts for reproducing the main results.
+
+Guidelines:
+
+•
+
+The answer 
+[N/A] 
+ means that the paper does not release new assets.
+
+•
+
+Researchers should communicate the details of the dataset/code/model as part of their submissions via structured templates. This includes details about training, license, limitations, etc.
+
+•
+
+The paper should discuss whether and how consent was obtained from people whose asset is used.
+
+•
+
+At submission time, remember to anonymize your assets (if applicable). You can either create an anonymized URL or include an anonymized zip file.
+
+14.
+
+Crowdsourcing and research with human subjects
+
+Question: For crowdsourcing experiments and research with human subjects, does the paper include the full text of instructions given to participants and screenshots, if applicable, as well as details about compensation (if any)?
+
+Answer: 
+[N/A] 
+.
+
+Justification: The paper does not involve crowdsourcing, human-subject experiments, user studies, or human annotation.
+
+Guidelines:
+
+•
+
+The answer 
+[N/A] 
+ means that the paper does not involve crowdsourcing nor research with human subjects.
+
+•
+
+Including this information in the supplemental material is fine, but if the main contribution of the paper involves human subjects, then as much detail as possible should be included in the main paper.
+
+•
+
+According to the NeurIPS Code of Ethics, workers involved in data collection, curation, or other labor should be paid at least the minimum wage in the country of the data collector.
+
+15.
+
+Institutional review board (IRB) approvals or equivalent for research with human subjects
+
+Question: Does the paper describe potential risks incurred by study participants, whether such risks were disclosed to the subjects, and whether Institutional Review Board (IRB) approvals (or an equivalent approval/review based on the requirements of your country or institution) were obtained?
+
+Answer: 
+[N/A] 
+.
+
+Justification: The paper does not involve human subjects, crowdsourcing, or user studies, so IRB approval or equivalent review is not applicable.
+
+Guidelines:
+
+•
+
+The answer 
+[N/A] 
+ means that the paper does not involve crowdsourcing nor research with human subjects.
+
+•
+
+Depending on the country in which research is conducted, IRB approval (or equivalent) may be required for any human subjects research. If you obtained IRB approval, you should clearly state this in the paper.
+
+•
+
+We recognize that the procedures for this may vary significantly between institutions and locations, and we expect authors to adhere to the NeurIPS Code of Ethics and the guidelines for their institution.
+
+•
+
+For initial submissions, do not include any information that would break anonymity (if applicable), such as the institution conducting the review.
+
+16.
+
+Declaration of LLM usage
+
+Question: Does the paper describe the usage of LLMs if it is an important, original, or non-standard component of the core methods in this research? Note that if the LLM is used only for writing, editing, or formatting purposes and does 
+not
+ impact the core methodology, scientific rigor, or originality of the research, declaration is not required.
+
+Answer: 
+[N/A] 
+.
+
+Justification: The core method, analysis, and experiments do not use LLMs as an important, original, or non-standard component. Any use of general writing or editing assistance, if any, does not affect the scientific methodology, rigor, or originality of the work.
+
+Guidelines:
+
+•
+
+The answer 
+[N/A] 
+ means that the core method development in this research does not involve LLMs as any important, original, or non-standard components.
+
+•
+
+Please refer to our LLM policy in the NeurIPS handbook for what should or should not be described.
+
+Appendix A 
+Contributions
+
+•
+
+Minseok Jeong:
+ Project lead. Developed the core algorithms, conducted the mathematical analysis, and led manuscript preparation.
+
+•
+
+Yechan Lee:
+ Led the downstream offline and online RL experiments.
+
+•
+
+Hyewon Choi:
+ Supported the downstream offline and online RL experiments.
+
+•
+
+Jeongyong Yang:
+ Contributed to manuscript writing and refinement of the technical exposition.
+
+•
+
+SooJean Han:
+ Advised on the project and contributed to manuscript writing.
+
+Appendix B 
+Proofs
+
+B.1 
+Proof of Theorem 
+3.4
+
+Fix an arbitrary query point 
+. By
+Assumption 
+3.2
+, the limiting NTK-regime predictor is
+
+Let 
+ denote the 
+-th coordinate of the target function, and let
+
+be the 
+-th column of 
+. Under the GP target model, the output
+coordinates are independent and identically distributed as
+
+Therefore, for each coordinate 
+,
+
+where 
+.
+
+The 
+-th coordinate of the residual is
+
+Thus, conditional on 
+ and the predictor kernel 
+, the same
+deterministic interpolation weights 
+ are applied to each target
+coordinate. Since 
+ is a linear transformation of a jointly
+Gaussian vector, it is Gaussian. Since the vector is centered, 
+ is
+also centered, and its second moment is its variance:
+
+Expanding this variance gives
+
+where the last equality follows from Definition 
+3.3
+. Hence,
+under the GP target model,
+
+For finite output dimension 
+, the ideal NTK-regime RND energy is
+
+Because the target coordinates 
+ are independent GP
+samples and the same deterministic weights 
+ are applied coordinate-wise,
+the residual coordinates 
+ are i.i.d. centered Gaussian
+random variables with variance
+
+. Therefore,
+
+ are i.i.d. with finite mean
+
+. By the strong law of large
+numbers,
+
+B.2 
+Proof of Lemma 
+4.1
+
+By definition,
+
+Hence the training-set residual is
+
+Using
+
+we obtain
+
+Now let 
+. Then
+
+Therefore, for the 
+-th eigenvector 
+,
+
+Taking squared Euclidean norm gives
+
+Under the GP target model, the output coordinates are independent and each
+column 
+ satisfies
+
+Thus, for each coordinate 
+,
+
+Since 
+, summing over the 
+ output coordinates yields
+
+Combining the two displays,
+
+B.3 
+Proof of Corollary 
+4.3
+
+Fix 
+. Under the NTK-regime predictor, the prediction at 
+
+is obtained by applying the same interpolation weights to each target coordinate:
+
+Let 
+ denote the
+
+-th target coordinate on the dataset. The corresponding residual coordinate is
+
+By the zero-mean and covariance assumptions,
+
+Therefore,
+
+Thus, for finite 
+,
+
+If the target coordinates are i.i.d., then the random variables
+
+ are also i.i.d. with finite mean
+
+. Hence, by the strong law of large
+numbers,
+
+B.4 
+Proof of Proposition 
+4.5
+
+Let 
+ denote the discrete Fourier basis on the periodic grid. Since 
+ is a uniform grid on a periodic domain and both kernels are shift-invariant, the corresponding Gram matrices are circulant. Hence they are simultaneously diagonalized by the discrete Fourier basis 
+[
+Gray, 2006
+]
+.
+
+Equivalently,
+
+where 
+ is the discrete Fourier matrix and 
+, 
+ are diagonal matrices whose diagonal entries are 
+ and
+
+, respectively.
+
+From Lemma 
+4.1
+, the training-set residual satisfies
+
+Projecting this residual onto the Fourier mode 
+ gives
+
+Since 
+ is an eigenvector of 
+,
+
+Therefore,
+
+Taking squared Euclidean norm over the 
+ output coordinates,
+
+Under the GP target model, each output coordinate satisfies
+
+independently. Hence, for each coordinate,
+
+Since 
+ is also an eigenvector of 
+,
+
+where we use the normalization 
+. Summing over the 
+ output coordinates gives
+
+Combining the above displays,
+
+Therefore, the output-normalized residual contribution is
+
+Appendix C 
+Ablation on Target Kernel Structure
+
+Our construction is not tied to a particular target kernel. By Bochner’s
+theorem, any shift-invariant kernel with spectral density 
+ can be
+instantiated through random Fourier features, and is therefore compatible with
+both our analysis and the 
+RFF-RND
+ construction. To test the sensitivity
+to kernel choice, we compare four representative shift-invariant kernels:
+RBF, Laplace, Matérn-
+, and Matérn-
+, all with the
+same bandwidth parameter 
+. Writing 
+, these kernels are
+
+Empirically, the four kernel choices are difficult to distinguish in any
+systematic or significant way. They produce broadly similar energy scales and
+substantially sharper coverage discrimination than standard RND. This suggests
+that the main benefit comes from enforcing a localized, distance-decaying target
+covariance, rather than from a delicate choice of the specific shift-invariant
+kernel family.
+
+Figure 5: 
+Comparison of 
+RFF-RND
+ using four shift-invariant target
+kernels—RBF, Laplace, Matérn-
+, and Matérn-
+—all with the same bandwidth 
+. The four kernel choices show very
+similar behavior, with no significant qualitative difference in discrimination
+performance or overall energy scale. In contrast, all kernelized variants
+provide substantially clearer ID/OOD separation than standard RND.
+
+Appendix D 
+Diagnostics and Ablations for 
+RFF-RND
+
+D.1 
+Diagnostics on Target Output Dimension 
+ and Predictor Layer Width 
+
+Corollary 
+4.3
+ states that, under the RFF target and
+NTK-regime predictor, the ideal infinite-output RND energy satisfies
+
+for each fixed 
+, where 
+. In practice, however, RND uses a single realization of the target with finite output dimension 
+. For a fixed query point 
+, the residual
+coordinates are i.i.d. under the RFF target construction, and hence
+
+Thus, the finite-output empirical energy 
+ should
+approach the theoretical prediction as 
+ increases. We verify this
+concentration empirically by measuring the agreement between
+
+ and 
+ as a
+function of 
+.
+
+Protocol.
+
+We use the Two Moons dataset (
+, 
+). The predictor is a
+2-hidden-layer MLP with hidden width 
+ and output
+dimension 
+. The empirical NTK 
+ is
+computed via full Jacobians at initialization. The theoretical value
+
+ is computed in closed form using
+Definition 
+3.3
+. The RFF target uses bandwidth
+
+ and 
+. Agreement is measured by Pearson 
+
+between 
+ and 
+,
+evaluated on a 
+ grid covering the input space and averaged
+over 5 random seeds.
+
+Figure 6: 
+As the RFF target output dimension 
+ increases, the finite-output
+empirical energy 
+ concentrates around its infinite-output
+limit 
+.
+Since the output coordinates are i.i.d., this concentration follows from
+the law of large numbers and yields higher empirical agreement with the
+theoretical prediction.
+
+Interpretation.
+
+Figure 
+6
+-(a) shows Pearson 
+ as a function of the RFF target output dimension 
+ across three hidden widths. The three curves are nearly indistinguishable across 
+. This suggests that the observed agreement is robust to predictor width. On this low-dimensional two-moons dataset, even the narrow predictors induce sufficiently similar empirical NTK geometry for the residual-variance prediction to remain stable across widths. We note that in higher-dimensional settings, wider networks may be needed to obtain a reliable empirical NTK estimate; we leave this verification to future work.
+
+Figure 
+6
+-(a) also shows the agreement improves consistently as 
+ increases: starting from a relatively noisy finite-output
+estimate at 
+, the correlation rapidly approaches one and reaches nearly perfect agreement by 
+. This trend is consistent with the concentration argument above, since 
+ is an empirical average over 
+
+independent target coordinates. The scatter plots make this effect explicit. At 
+, substantial finite-output fluctuations remain and the empirical energy only coarsely tracks 
+ (Figure 
+6
+(b)). In contrast, at 
+, the scatter is almost linear with Pearson 
+, showing that the finite-output realization closely matches the infinite-output prediction (Figure 
+6
+-(c)).
+
+The key takeaway is that Corollary 
+4.3
+ characterizes the infinite-output limit of NTK predictor RND energy, while practical 
+RFF-RND
+ uses a single finite-dimensional target realization. For small 
+, 
+ has noticeable finite-output variance and therefore only approximately follows its limit. Increasing 
+ reduces this variance and makes a single 
+RFF-RND
+ realization track 
+ more reliably. In practice, the agreement already becomes strong at moderate dimensions, with 
+ yielding high correlations across all hidden widths, and becomes nearly exact by 
+.
+
+D.2 
+Frequency-domain Diagnostic of Proposition 
+4.5
+
+Proposition 
+4.5
+ states that, on a uniform periodic
+grid with shift-invariant predictor and target kernels, the residual power at
+frequency 
+ decomposes as
+
+This experiment verifies the product-form decomposition in the idealized setting
+where the proposition applies exactly. The goal is not to evaluate downstream
+performance, but to visualize how the RFF target spectrum is filtered by the
+predictor residual filter.
+
+Protocol.
+
+We use a one-dimensional uniform periodic grid with 
+ points on
+
+. The predictor kernel is a periodic RBF kernel with bandwidth
+
+, and the ridge parameter is 
+. We vary the target
+RBF bandwidth over
+
+For each 
+, we compute the target spectrum
+
+, the predictor residual filter
+
+and the theoretical residual spectrum
+
+To obtain the empirical residual spectrum, we sample target functions from the
+periodic GP with covariance 
+, apply the NTK residual operator,
+and measure the residual power in each Fourier mode. The empirical curves are
+averaged over Monte Carlo target samples.
+
+Figure 7: 
+
+Frequency-domain residual decomposition on a periodic grid.
+
+Left: changing the target bandwidth 
+ reshapes the target spectrum
+
+. Middle: the predictor kernel induces a
+residual filter
+
+, which suppresses
+frequencies with large predictor spectral mass. Right: the residual spectrum
+is the product of these two terms. Empirical residuals obtained by sampling
+target functions and applying the NTK residual operator follow the predicted
+frequency-wise structure.
+
+Interpretation.
+
+Figure 
+7
+ illustrates that residual signal does not
+appear wherever the target has large spectral power. Low frequencies have large
+target power for smooth targets, but they are strongly suppressed by the
+predictor residual filter. Conversely, very high frequencies pass the filter but
+may receive little target power. Residual power is therefore largest where the
+target spectrum overlaps with frequencies that are not interpolated away by the
+predictor. This supports the interpretation of the RFF bandwidth as a spectral
+knob: changing the target bandwidth moves target power across frequencies and
+thereby controls where RND residual signal can survive.
+
+D.3 
+Ablation on Energy Landscapes Across 
+, 
+, and 
+
+We further examine how the 
+RFF-RND
+ energy landscape changes with the
+target bandwidth 
+, target output dimension 
+, and predictor width
+
+. These ablations are intended to visualize the geometric effect of each
+design parameter, rather than to tune downstream RL performance.
+
+Effect of bandwidth 
+ and output dimension 
+.
+
+Figure 
+8
+ shows energy landscapes on the Two Moons dataset. Varying 
+ changes the spatial scale of the target kernel: smaller 
+ produces more localized energy around the sampled manifold, while larger 
+ over-smooths the landscape and blurs the separation between the manifold and nearby off-manifold regions. Varying 
+ primarily affects finite-output stability. Small 
+ yields noisier energy landscapes,
+whereas larger 
+ gives smoother and more consistent separation, consistent with the concentration behavior in Corollary 
+4.3
+.
+
+Figure 8: 
+Energy landscapes of 
+RFF-RND
+ on the Two Moons dataset
+over varying 
+ and 
+.
+
+(Top Row)
+ Varying the RBF length-scale 
+ with 
+ fixed. 
+(Bottom Row)
+ Varying the RFF feature dimension 
+ with 
+ fixed.
+Overall, smaller 
+ yields more localized (but noisier) energy bands around the manifold, whereas larger 
+ over-smooths the landscape and blurs manifold boundaries. Increasing 
+ improves the kernel approximation and stabilizes the energy, producing smoother and more consistent manifold separation.
+
+Effect of predictor width 
+.
+
+Figure 
+9
+ varies the predictor hidden width while keeping the RFF target fixed. Across widths, 
+RFF-RND
+ preserves a
+localized energy structure around the data manifold. Increasing 
+ slightly smooths the energy contours near the sampled manifold, but the overall manifold-aware separation r

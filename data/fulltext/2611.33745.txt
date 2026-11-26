@@ -1,0 +1,1430 @@
+WhatIf: Counterfactual World Models over Action-Grounded Causal Graphs for Robotic Manipulation
+https://arxiv.org/abs/2611.33745
+License: CC by (redistribution permitted)
+(source: arXiv html)
+
+
+
+WhatIf: Counterfactual World Models over
+
+Action-Grounded Causal Graphs for Robotic Manipulation
+
+Xu Yang
+
+Affiliation: 
+
+Center for Intelligent and Networked Systems, Department of Automation, BNRist,
+
+Tsinghua University, Beijing 100084, China
+
+  
+
+Kailai Sun
+
+†
+†
+thanks: 
+Corresponding authors: Kailai Sun and Qianchuan Zhao.
+
+Affiliation: 
+Singapore-MIT Alliance for Research and Technology Centre (SMART),
+
+Massachusetts Institute of Technology, 138602, Singapore
+
+Affiliation: 
+Urban Mobility Lab, Massachusetts Institute of Technology,
+
+Cambridge, MA 02139, United States
+
+  
+
+Qianchuan Zhao
+1
+1
+footnotemark: 
+
+1
+
+Affiliation: 
+
+Center for Intelligent and Networked Systems, Department of Automation, BNRist,
+
+Tsinghua University, Beijing 100084, China
+
+Abstract
+
+World models predict the consequences of actions, but they are trained on factual transitions and represent the future of each action separately. Decisions, however, are comparisons: would another action have done better in the same physical situation? We introduce WhatIf, a counterfactual world model that represents the joint law of all candidate futures of a manipulation scene by passing one abducted physical situation through an action-grounded causal graph. From a factual history, WhatIf abducts hierarchical latent physics and transition noise; each candidate action generates a sparse object–factor graph whose topology and edge strengths specify the physical pathways it activates; and all candidate futures are rolled out under the shared situation. Shared type-conditioned functions instantiate the graph for any number of objects. Counterfactual predictions are anchored on observed outcomes, and the graph confines each action contrast to the objects that the action reaches. We show that factual data determine only the marginal future of each action, and hence the average action effect but neither the individual effect nor the probability that switching actions causes harm, and that anchoring with the average effect incurs an error equal to the conditional variance of the individual effect. A round-trip loss enforces action-invariant abduction without counterfactual labels. On the coupled futures we build Counterfactual Advantage Planning (CAP), which ranks plans by their advantage over an incumbent within shared situations, constrains the probability of harm, and converts each executed transition into hindsight advantages that update the physics posterior, the plan of the next attempt, and an amortized policy without a learned critic. Paired advantages reduce estimator variance by the factor 
+, where 
+ is the outcome correlation between branches, and cancel model errors common to both branches. We further derive when the observational transition 
+ identifies 
+ and where hidden action confounding or insufficient support breaks this equality. Paired simulator interventions evaluate counterfactual accuracy, graph recovery, compositional generalization, and decision quality.
+
+1 
+Introduction
+
+World models compress past observations into a state from which an agent predicts future trajectories and plans actions 
+[
+9
+, 
+10
+]
+. Their success has largely been driven by expressive sequence models and predictive objectives. Given a history 
+ and the action taken by a behavior policy, a conventional world model learns
+
+(1)
+
+by minimizing error on logged transitions. This objective does not require the model to separate stable physical mechanisms from regularities specific to the training policy, scene distribution, or object arrangement. A predictor may associate a visual configuration with its frequent successor without discovering which object caused which change. Consequently, world models often generalize poorly when masses, friction, object counts, layouts, or contact patterns differ from the training distribution. Scaling the predictor can improve interpolation, but it does not by itself make the learned transition invariant to such mechanism-preserving changes.
+
+This limitation motivates a 
+causal world model
+: a model that represents the mechanisms by which objects and state factors influence one another, and whose predictions are composed from those mechanisms under intervention 
+[
+14
+, 
+17
+]
+. In robotic manipulation, the distinction is concrete. A push creates a gripper–object contact, propagates force through selected object pairs, and leaves unrelated objects unchanged. If the same contact and force-transfer mechanisms are represented explicitly, they can be reused when the scene contains a different number or arrangement of objects. Causal structure is therefore not only an explanation layer; it is a hypothesis about which parts of the dynamics should remain stable across environments.
+
+Mechanism discovery alone, however, does not answer the decision-time question that matters most: 
+what would have happened in the same physical situation had the robot taken another action?
+ Logged data reveal only the outcome of the realized action. Predicting each candidate action independently can change latent context or stochastic realization together with the action, confounding action comparison with scenario variation. Counterfactual prediction instead follows abduction–intervention–prediction: infer the latent physical situation and exogenous realization responsible for the factual transition, replace only the action mechanism, and predict the resulting future 
+[
+14
+, 
+3
+]
+. This distinction becomes decisive for control, because decisions are comparisons. Even a perfect conventional world model supplies only the marginal law of each action’s future. These marginals fix the expected advantage of switching actions, but not how often the switch helps or harms in the same situation, nor which failures the action choice could have avoided. A 
+counterfactual world model
+ must therefore represent the joint law of the futures of all candidate actions, coupled through one shared physical situation. This coupling yields lower-variance action comparisons, cancels model errors common to all candidates, bounds the probability of harm, and turns every executed transition into supervision for many actions that were never executed, without counterfactual 
+-value labels.
+
+Causal world models: progress and unresolved problem.
+
+Existing causal world models have pursued several complementary routes. Causal World Models infer object-level latent physical factors and use a structural model to predict outcomes under intervention 
+[
+12
+]
+. CausalVAE as a plug-in learns a sparse directed acyclic graph over fixed latent dimensions, enforcing sparsity and acyclicity so that latent dependencies can support counterfactual reasoning 
+[
+5
+]
+. DALI infers latent dynamics context from interaction histories to generalize to unseen physical conditions 
+[
+16
+]
+. Object-centric models factor dynamics across entities 
+[
+2
+, 
+7
+]
+; FIOC-WM, Dyn-O, and SPARTAN further expose modular interactions, separate dynamics-relevant factors, or infer sparse local graphs 
+[
+6
+, 
+19
+, 
+11
+]
+. These methods establish that physical context, object factorization, and local structure improve generalization. Nevertheless, they leave a common gap. A fixed latent DAG cannot naturally represent variable object sets or contacts created by a particular action; an unstructured context vector does not specify which edge it modulates; and a learned local graph is not necessarily regenerated under a replacement action while holding the factual physical realization fixed. Thus current causal world models do not yet provide an executable account of how an intervention changes both the topology and strength of a manipulation mechanism.
+
+Counterfactual world models: progress and unresolved problem.
+
+Counterfactually-Guided Policy Search infers exogenous variables from an observed episode and evaluates alternative policies in the same inferred scenario 
+[
+3
+]
+. Work on confounded model-based reinforcement learning studies when logged actions are correlated with privileged latent state and develops causal corrections for policy learning 
+[
+8
+]
+. FOHL, although developed for heterogeneous treatment effects rather than sequential control, provides a relevant factual-abduction principle: infer latent heterogeneity from factual treatment–outcome data before replacing the treatment 
+[
+21
+]
+. Counterfactual Quotient Models directly isolate the part of a future that changes across candidate actions 
+[
+4
+]
+. These approaches clarify how alternative actions should be compared, but they either assume a known or sufficiently accurate structural model, focus on static treatment outcomes, or represent action-dependent outcomes without an object-level causal mechanism. They do not explain which contacts appear, which pathways disappear, and how force propagation changes when a manipulation action is replaced. Their counterfactuals may therefore remain brittle under novel object compositions and mechanism shifts.
+
+We address the intersection of these gaps with WhatIf, a counterfactual world model built on an action-grounded causal graph. The latent physical state 
+ is abducted from factual interaction history and the action acts as a 
+graph generator
+. For each candidate action, the model constructs a sparse graph 
+ and edge weights 
+ over the current robot and object set. 
+ states which causal pathways are active; 
+ states their signed strengths. Shared type-conditioned functions instantiate this graph for any number of objects, and a nested factor graph specifies which state dimensions are transmitted along each active object edge. One physical situation, consisting of latent physics and transition noise, is passed through the graph of every candidate action, so the model represents all candidate futures jointly: replacing 
+ regenerates 
+ and rolls the resulting mechanisms forward under the same situation. Counterfactual predictions are anchored on the observed successor, and the graph confines each action contrast to the objects it reaches. On this model we build Counterfactual Advantage Planning (CAP). Candidate plans are ranked by their advantage over an incumbent plan within shared situations, switches with a high probability of harm are rejected, and each executed transition is converted into hindsight advantages that update the physics posterior, the incumbent of the next attempt, and an amortized proposal policy.
+
+Consider a robot arm facing two blocks. In the factual trajectory, the gripper pushes the red block, which then collides with the blue block. From the observed displacement and contact response, the model infers latent mass, friction, and compliance. The factual action activates gripper
+red and red
+blue edges. To evaluate a counterfactual grasp, the model retains the same latent physical state but regenerates the graph: the pushing edge is replaced by grasp contacts and the collision edge may disappear. To evaluate a stronger push in another direction, the same edge types may remain active while their weights and downstream collision topology change. A planner can compare these complete trajectories, including success, collision, and uncertainty, rather than attempt to fit a scalar counterfactual value that was never observed. If the factual push fails to separate the blocks, the hindsight advantage identifies the push that would have separated them under the same latent physics and contact noise. That push becomes the incumbent of the retry, which reuses the inferred mass and friction, and a stronger alternative is adopted only if it rarely does worse than the incumbent in the same situations.
+
+Our contributions are:
+
+•
+
+We formulate a counterfactual world model as the joint law of all candidate futures, generated by passing one abducted physical situation through an action-grounded causal graph. We show that factual data determine only the marginals of this law, that anchoring with the average effect incurs an error equal to the conditional variance of the individual effect, and we enforce action-invariant abduction with a round-trip loss that needs no counterfactual labels.
+
+•
+
+We introduce a variable-cardinality object–factor graph in which actions control both edge activation and edge strength, enabling topology-changing interventions such as contact creation, removal, and force redirection.
+
+•
+
+We propose Counterfactual Advantage Planning, which ranks plans by paired advantages within shared situations, constrains the individual-level probability of harm, and converts executed transitions into hindsight advantages for physics updates, retries, and critic-free advantage-weighted policy learning. Paired advantages reduce estimator variance by the factor 
+ and cancel model errors common to both branches.
+
+•
+
+We derive sufficient conditions for 
+ and distinguish partial observability from genuine hidden action confounding.
+
+•
+
+We develop a paired-intervention evaluation that measures counterfactual accuracy, graph recovery, compositional generalization, and decision quality against simulator ground truth.
+
+2 
+Related Work
+
+2.1 
+Causal World Models
+
+Structural causal models distinguish conditioning from intervention and counterfactual queries 
+[
+14
+]
+. Causal representation learning extends this distinction to latent variables, seeking independent and reusable mechanisms rather than entangled predictive features 
+[
+17
+]
+. Causal World Models apply these principles to physical scenes by inferring unobserved object properties and predicting intervention outcomes 
+[
+12
+]
+. CausalVAE as a plug-in estimates a sparse latent adjacency matrix and imposes the differentiable acyclicity constraint
+
+(2)
+
+following continuous DAG learning 
+[
+20
+, 
+5
+]
+. This is suitable for directed relations among a fixed set of same-slice latent variables, but its adjacency parameters do not directly transfer when objects enter or leave a scene.
+
+A second line emphasizes physical context and object compositionality. DALI infers latent environment dynamics from interaction history 
+[
+16
+]
+. Factored world models and FOCUS decompose scenes into objects and exploit shared relational dynamics for manipulation and exploration 
+[
+2
+, 
+7
+]
+. FIOC-WM learns modular object interactions, Dyn-O separates dynamics-aware object factors, and SPARTAN learns sparse context-dependent local structures robust to distractors and dynamics changes 
+[
+6
+, 
+19
+, 
+11
+]
+. These models improve transfer, but latent physical context is generally consumed as a global predictor input, while local edges are learned for factual prediction. They do not jointly require that a replacement action regenerate an executable graph under the same abducted physical realization. Our method treats the local graph itself as an action-dependent causal mechanism and separates edge existence from edge strength.
+
+2.2 
+Counterfactual World Models and Control
+
+CF-GPS introduced counterfactual trajectory generation for reinforcement learning by abducting exogenous randomness from an observed trajectory and replacing the policy 
+[
+3
+]
+. This gives lower-variance comparisons because factual and counterfactual trajectories share the inferred scenario, but it relies on a correct causal simulator. Confounded model-based RL highlights a complementary problem: if a behavior policy observes privileged state that is omitted from the learner’s history, observational and interventional action effects can differ 
+[
+8
+]
+. FOHL infers latent heterogeneity from factual observations before treatment replacement 
+[
+21
+]
+; this motivates our physical-state abduction, although sequential manipulation requires time-varying objects, actions, and mechanisms rather than a static treatment–outcome graph.
+
+Counterfactual Quotient Models isolate action-dependent future components by comparing candidate predictions and cancelling their common mode 
+[
+4
+]
+. This is useful for control because action-independent prediction error need not corrupt action ranking. However, an action-effect representation does not identify which object interactions produced the effect and offers no direct mechanism for transfer across changing object sets. Our approach generates structured counterfactual trajectories from an action-conditioned graph and evaluates them with model-predictive control. It therefore complements common-mode cancellation while retaining an inspectable and reusable dynamics mechanism. Model-based agents such as DreamerV3 and TD-MPC2 score imagined rollouts with learned critics and sample the future of each candidate independently 
+[
+9
+, 
+10
+]
+; CAP instead computes advantages from coupled counterfactual rollouts that share an abducted situation, which also exposes the individual-level probability of harm.
+
+3 
+Method
+
+3.1 
+Causal Model
+
+Let 
+ be the complete recorded history before the current action, 
+ the action, and 
+ the task-relevant successor state. 
+ denotes latent physical state, while 
+ and 
+ denote the action-grounded causal graph and its edge strengths. The assumed causal structure is shown first because it determines both the identification result and the architecture.
+
+Figure 1: 
+Two-slice causal model. The behavior policy selects 
+ from the recorded history 
+. Latent physics 
+ affects the history, the action-grounded mechanism 
+, and the successor state, but has no direct edge to 
+ after conditioning on 
+. The current action changes the successor through graph topology and edge strength.
+
+The corresponding structural equations are
+
+(3)
+
+where 
+ is transition-specific exogenous noise. The graph does not forbid 
+ and 
+ from being strongly correlated; that dependence is the policy. It asserts only that all variables used by the behavior policy are contained in 
+.
+
+The physical state is hierarchical,
+
+(4)
+
+where 
+ captures scene-level physics, the rows of 
+ hold object properties such as mass and inertia, and 
+ holds relation properties such as friction or compliance for the candidate pairs 
+, with all other entries masked. The object set 
+, and hence 
+, may change across scenes and time.
+
+3.2 
+From Observational to Interventional Dynamics
+
+We assume consistency, positivity, modularity of the action intervention, and no hidden action confounding:
+
+(5)
+
+The last condition holds in 
+Fig.
+ 
+1
+ because the only incoming arrow to 
+ is from 
+. It does not require 
+ to be observed.
+
+Proposition 1
+ 
+(Identification of the one-step action effect)
+.
+
+Under the assumptions above, for every supported 
+,
+
+(6)
+
+Proof.
+
+Using the mechanism variables explicitly, intervention gives
+
+(7)
+
+where modularity replaces only the action equation. The observational transition is
+
+(8)
+
+The graph entails 
+, so 
+. Substitution into 
+Eq.
+ 
+8
+ yields 
+Eq.
+ 
+6
+. Equivalently, conditioning on 
+ blocks the backdoor paths 
+ and 
+.
+∎
+
+The result separates two issues that are often conflated. Partial observability makes 
+ uncertain and motivates latent-state inference, but it does not create confounding unless unrecorded information also enters the behavior policy. If a privileged variable 
+ causes both 
+ and 
+ after conditioning on 
+, then 
+ and 
+Eq.
+ 
+6
+ fails. Randomized exploration, logged privileged inputs, proxy-variable assumptions, or an explicit confounded model are then required 
+[
+8
+]
+. Positivity is equally essential: a deterministic behavior policy supplies no evidence for unsupported alternatives even when the causal equality is valid.
+
+3.3 
+Factual Physical-State Abduction
+
+The model learns a filter for planning and a smoother for unit-level counterfactuals:
+
+(9)
+
+The smoother explains the realized transition by inferring latent physics and exogenous noise. Its posterior follows the hierarchy in 
+Eq.
+ 
+4
+:
+
+(10)
+
+where the object and relation factors are mean-field over the rows of 
+ and the candidate entries of 
+, respectively, and are produced by shared amortized encoders.
+An amortized filter is trained from the smoother through
+
+(11)
+
+so prospective control does not use future observations. Episode-persistent priors prevent physical latents from absorbing transient appearance noise.
+
+3.4 
+Action-Grounded Object–Factor Graph
+
+An object encoder produces the node matrix 
+, one row per robot part or object in 
+, and a soft type matrix 
+. Types encode interaction roles such as gripper, rigid object, support, or articulated part, rather than instance identity. A shared type template 
+ and a geometric feasibility mask define the candidate adjacency
+
+(12)
+
+The action-conditioned topology and weight matrices are
+
+(13)
+
+(14)
+
+where 
+ apply shared pairwise networks to every ordered pair of rows of 
+. 
+ answers which pathways the action activates; 
+ gives their signed magnitudes. Hard-concrete gates support differentiable 
+ sparsity 
+[
+13
+]
+. Because 
+ and 
+ are shared across instances, object addition changes the number of evaluations rather than the number of learned parameters.
+
+Each active object edge is refined over state factors. Splitting every object state into 
+ factors gives the factor matrix 
+. A Kronecker product lifts the object graph to factor resolution:
+
+(15)
+
+(16)
+
+Here 
+ is the admissible factor-to-factor template, 
+ is the effective weighted adjacency, 
+ evaluates type-conditioned message functions on all factor pairs, 
+ broadcasts over the message dimension, 
+ sums incoming messages over senders, and 
+ updates each row of 
+ with parameters selected by its type.
+The graph connects variables at 
+ to variables at 
+ and is therefore acyclic by temporal construction. Unlike a same-slice latent DAG such as CausalVAE, it does not require a NOTEARS penalty unless instantaneous within-slice edges are introduced. Shared edge functions and symmetric aggregation make the transition permutation equivariant, supporting object permutations and variable cardinality; unseen mechanism types still require adaptation or uncertainty detection.
+
+3.5 
+Counterfactual World Model
+
+Let 
+ denote the physical situation of a transition, consisting of the latent physics and the exogenous noise. Composing the graph generator with the transition in 
+Eq.
+ 
+3
+ gives the action-to-outcome map
+
+(17)
+
+so the potential successor under action 
+ is 
+ and the factual successor is 
+. A conventional world model represents, for each action separately, the marginal law 
+. A counterfactual world model represents the joint law of the potential successors of all candidate actions. WhatIf obtains this joint law from a single generative program: one situation is drawn and passed through the action-grounded causal graph of every candidate action,
+
+(18)
+
+where 
+ is a set of candidate actions. The situation is shared across branches; only the graph 
+ and the mechanisms downstream of it differ. The law 
+ determines which question the model answers:
+
+Prediction:
+
+Intervention:
+
+(19)
+
+Counterfactual:
+
+Prediction conditions on the logged action. Intervention removes the influence of the behavior policy; by 
+Eq.
+ 
+6
+ the two laws coincide when 
+ contains every policy input. The counterfactual additionally conditions on the realized successor, so every alternative action is evaluated under the mass, friction, contacts, and disturbance that actually occurred.
+
+Abduction, intervention, prediction.
+
+For a factual transition 
+, the counterfactual query is executed as
+
+Abduction:
+
+Intervention:
+
+Prediction:
+
+(20)
+
+Holding 
+ fixed makes the comparison unit-level: only the action equation and its downstream graph change. For multi-step counterfactuals, the predicted object set, candidate relations, gates, and weights are recomputed at every step. Thus a new contact may activate an edge, an intervention may sever a parent relation, and subsequent propagation is automatically pruned.
+
+Anchored counterfactual prediction.
+
+The counterfactual successor is written as the observed successor plus an action contrast:
+
+(21)
+
+Under an exact smoother, 
+ and 
+Eq.
+ 
+21
+ coincides with 
+Eq.
+ 
+20
+. Under an approximate smoother, errors common to both actions cancel, and the model is responsible only for the change caused by the replacement action. The graph localizes this change. Let 
+ be the in-degree of each object under the factual and counterfactual graphs. An object with no active incoming edge under either action receives zero messages in both branches and shares 
+ and 
+, so
+
+(22)
+
+where 
+ is arranged with one row per object. Objects outside the regenerated mechanism therefore keep their observed successors exactly.
+
+What factual data determine.
+
+Let 
+ be the individual action effect and 
+ the factual conditional mean. 
+Equation
+ 
+6
+ identifies the average effect,
+
+(23)
+
+and anchoring with this average contrast in place of 
+ incurs
+
+(24)
+
+The individual effect itself lies beyond the reach of factual data.
+
+Proposition 2
+ 
+(Factual data determine marginals, not couplings)
+.
+
+There exist two structural models with identical interventional laws 
+ for every action 
+, and hence identical factual likelihoods and identical average effects, whose individual effects 
+ have different laws.
+
+Proof.
+
+Let 
+. Model 1 sets 
+; Model 2 sets 
+ and 
+. Every marginal is 
+, whereas 
+ under Model 1 and 
+ under Model 2.
+∎
+
+Every quantity that depends on the individual effect, including the error in 
+Eq.
+ 
+24
+, the regret of an executed action, and the probability that switching actions causes harm, is therefore fixed by the coupling in 
+Eq.
+ 
+18
+ rather than by factual fit 
+[
+14
+, 
+18
+]
+. WhatIf determines the coupling structurally: the action enters only through the graph generator, and the situation 
+ is shared by all branches. Manipulation is where this matters. Whether a push transfers motion to a second block depends on mass and friction, so the same action creates a contact edge in one situation and not in another, and 
+ is large. Because 
+ is a deterministic function of 
+, 
+; conditioning on the abducted situation selects the graph that 
+ generates in the realized scene, and 
+Eq.
+ 
+21
+ carries the corresponding situation-specific contrast.
+
+3.6 
+Learning
+
+The model is trained end to end with
+
+(25)
+
+ is a multi-step state and observation likelihood; 
+ regularizes latent physics and noise; 
+ selects compact mechanisms; and 
+ enforces temporal consistency of physical properties.
+
+Factual likelihoods constrain the marginals of 
+Eq.
+ 
+18
+. The coupling additionally requires that the abducted situation not depend on which action was taken. The round-trip loss enforces this without counterfactual labels: an alternative action is sampled, its anchored counterfactual is generated, the situation is abducted back from that counterfactual, and the factual successor must be recovered under the factual action,
+
+(26)
+
+where 
+ is the action proposal. A smoother that stores action-specific information in 
+, or a mechanism that routes situation effects through the action, fails the round trip. When a simulator can clone a factual state and execute another action under a shared random seed,
+
+(27)
+
+provides paired supervision. Without graph labels, 
+ is omitted and graph validity is tested by held-out interventions, object removal, and invariance to non-parent distractors.
+
+3.7 
+Counterfactual Advantage Planning
+
+A decision is a comparison between actions. Counterfactual Advantage Planning (CAP) makes this comparison inside shared physical situations, which a world model with only marginal laws cannot do.
+
+Counterfactual advantage.
+
+For an action sequence 
+ and a situation 
+, let 
+ be the rollout obtained by iterating 
+Eq.
+ 
+17
+ with the graph regenerated at every step, and let 
+ be its return. The counterfactual advantage of 
+ over a reference sequence 
+ is
+
+(28)
+
+Before acting, 
+ is the incumbent plan, namely the previous plan shifted by one step, and 
+. In hindsight, 
+, 
+ for the factual segment 
+, and both branches are anchored on 
+ as in 
+Eq.
+ 
+21
+. The mean 
+ is the interventional advantage and is fixed by the marginals. The distribution of 
+ over 
+ is the individual advantage and exists only in a counterfactual world model. CAP uses both.
+
+Paired estimation.
+
+With 
+ shared draws 
+, the estimator 
+ evaluates both sequences in the same situations.
+
+Proposition 3
+ 
+(Variance of paired advantages)
+.
+
+Let 
+, 
+, and 
+. Then
+
+(29)
+
+whereas evaluating the two sequences on independent draws gives 
+. For 
+, pairing reduces the number of rollouts required for a given ranking accuracy by the factor 
+.
+
+Proof.
+
+The summands are i.i.d. with variance 
+; with independent draws the covariance term is zero. Under the normal approximation, the probability of ranking 
+ and 
+ incorrectly is 
+, which depends on 
+ only through 
+.
+∎
+
+In manipulation, most return variance comes from the shared situation, namely mass, friction, object poses, and disturbances, so 
+ approaches one for nearby action sequences. These are exactly the candidates that CEM and MPPI must discriminate in their final iterations.
+
+Common-mode cancellation.
+
+Write the model return as 
+, where 
+ collects errors that do not depend on the action. The advantage error 
+ does not contain 
+, and ranking by 
+ is correct whenever 
+. The causal graph determines what is common. The objects whose rows can differ between the two branches are tracked by
+
+(30)
+
+which extends 
+Eq.
+ 
+22
+ over the horizon. Rows with 
+ are identical in both branches and are copied from the reference rollout; for object-additive rewards, their errors enter 
+ and cancel. Messages and updates are recomputed only for flagged rows, so the cost of scoring a candidate scales with the part of the scene that its action reaches.
+
+Harm-constrained decision.
+
+The individual advantage gives the probability that switching from the incumbent hurts in the same situation,
+
+(31)
+
+By 
+Proposition
+ 
+2
+, 
+ is not a function of the marginal laws; computing it from independent draws replaces the coupling by independence and misstates harm in both directions. CAP selects
+
+(32)
+
+where 
+ is ensemble disagreement over rollouts. CEM or MPPI scores elites with the Lagrangian of 
+Eq.
+ 
+32
+, estimating both terms from the same 
+ shared draws. The incumbent has 
+ and 
+, so it is always feasible: the controller changes its plan only when the improvement holds within shared situations. It executes the first action of 
+ and replans, and it requires no targets for the unobserved quantity 
+.
+
+Hindsight advantage.
+
+After the factual segment 
+ is observed, the same advantage is evaluated in the abducted situation with the executed sequence as reference:
+
+(33)
+
+The regret is nonnegative because 
+. It separates failures caused by the action choice (
+) from failures that no action could have avoided in that physical situation (
+). The hindsight advantage drives three updates. First, a retry keeps the episode-persistent physics and resamples the transient noise, and it starts from the hindsight-optimal plan as its incumbent:
+
+(34)
+
+Mass, friction, and compliance recur in the next attempt while the previous disturbance does not, so the retry is planned with 
+Eq.
+ 
+32
+ under 
+. Second, a proposal policy 
+ that initializes CEM and MPPI is trained by counterfactual advantage-weighted regression,
+
+(35)
+
+which has the form of advantage-weighted regression 
+[
+15
+]
+ with the advantage computed from coupled counterfactual rollouts in the abducted situation instead of a learned critic. Every logged transition thus supplies advantages for many actions that were never executed. Third, candidate actions whose counterfactual rollouts collide under the abducted physics are added to the safety screen of subsequent decisions.
+
+CAP closes the decision loop: prospective advantages choose the action, the factual outcome updates the situation posterior, and hindsight advantages turn the same outcome into supervision for the next decision.
+
+4 
+Experimental Design
+
+Environments and data.
+
+CausalWorld supplies controlled interventions on masses, sizes, colors, robot properties, and task variables 
+[
+1
+]
+. Multi-task robotic suites such as Meta-World or ManiSkill-style environments add pushing, grasping, placement, articulation, and variable object composition. At selected factual states, the simulator is cloned and alternative actions are executed with matched initial state and random seed. This produces paired unit-level counterfactual trajectories and, when simulator contacts are exposed, graph supervision.
+
+Generalization protocol.
+
+Training and test distributions are separated along object instance, object count, layout, mechanism composition, mass and friction, policy, and distractor dimensions. Interpolation and extrapolation of physical parameters are reported separately. Factual-only training and training with paired counterfactual supervision are also separated so that intervention data requirements remain explicit.
+
+Baselines.
+
+Predictive baselines include recurrent latent world models, TD-MPC-style models, dense Transformers, and fully connected GNNs 
+[
+9
+, 
+10
+]
+. Causal and object-centric baselines include Causal World Models, CausalVAE plug-in, DALI, factored world models, FOCUS, FIOC-WM, Dyn-O, and SPARTAN 
+[
+12
+, 
+5
+, 
+16
+, 
+2
+, 
+7
+, 
+6
+, 
+19
+, 
+11
+]
+. Counterfactual baselines include CF-GPS-style shared-noise rollouts, independent candidate rollouts, and Counterfactual Quotient Models 
+[
+3
+, 
+4
+]
+. Decision baselines include MPC on expected return with independent draws, critic-based advantages from TD-MPC2-style value functions, and advantage-weighted regression with a learned critic 
+[
+10
+, 
+15
+]
+.
+
+Metrics and ablations.
+
+We measure one-step and long-horizon factual error, paired counterfactual state and action-effect error, action-ranking regret, contact prediction, graph precision/recall and structural Hamming distance, calibration, and control success, collision rate, and sample efficiency. Decisions are scored against the cloned simulator. Prospective quality is measured by ranking accuracy as a function of the number of rollouts 
+, which tests 
+Proposition
+ 
+3
+, and by the realized harm rate, the fraction of plan switches that lower the return relative to the incumbent under the same seed, compared with the target 
+ in 
+Eq.
+ 
+32
+. Hindsight quality is measured by the fraction of failed episodes in which 
+ from 
+Eq.
+ 
+33
+ reaches the goal under the factual seed, by the agreement between the estimated regret 
+ and the simulator regret, and by retry success under 
+Eq.
+ 
+34
+ with a fresh seed. Key ablations remove latent physics, graph regeneration, object- or factor-level gates, edge weights, sparsity, smoother-to-filter distillation, type sharing, the round-trip loss 
+Eq.
+ 
+26
+, and paired counterfactual supervision, and replace the abducted contrast 
+ by the average contrast of 
+Eq.
+ 
+23
+. Planner ablations replace shared draws by independent draws, drop the harm constraint, drop the hindsight updates, and replace the counterfactual advantage in 
+Eq.
+ 
+35
+ by a learned critic. A privileged-policy condition deliberately violates 
+Eq.
+ 
+5
+ to test the identification boundary.
+
+5 
+Conclusion
+
+Conventional world models predict what usually follows an action but need not discover why. Causal world models expose reusable mechanisms, while counterfactual models compare alternative actions in the same factual situation. WhatIf combines these requirements in a counterfactual world model: it abducts latent physics, treats the action as a generator of sparse graph topology and edge strength, and passes one shared situation through the regenerated graph of every candidate action. Counterfactual Advantage Planning turns the resulting coupled futures into decisions, comparing plans within shared situations, bounding the probability of harm, and learning from the actions that were not taken. The resulting research question is testable: whether explicit action-grounded mechanisms improve counterfactual accuracy, decision quality, compositional generalization, and robotic control beyond equally expressive predictive, object-centric, and sparse-attention models.
+
+References
+
+[1]
+
+O. Ahmed, F. Tr”auble, A. Goyal, A. Neitz, Y. Bengio, B. Sch”olkopf, M. W”uthrich, and S. Bauer
+ (2020)
+
+CausalWorld: a robotic manipulation benchmark for causal structure and transfer learning
+.
+
+arXiv preprint arXiv:2010.04296
+.
+
+External Links: 
+Link
+
+Cited by: 
+§4
+.
+
+[2]
+
+O. Biza, T. Kipf, D. Klee, R. Platt, J. van de Meent, and L. L. S. Wong
+ (2022)
+
+Factored world models for zero-shot generalization in robotic manipulation
+.
+
+arXiv preprint arXiv:2202.05333
+.
+
+External Links: 
+Link
+
+Cited by: 
+§1
+,
+
+§2.1
+,
+
+§4
+.
+
+[3]
+
+L. Buesing, T. Weber, Y. Zwols, S. Racaniere, A. Guez, J. Lespiau, and N. Heess
+ (2019)
+
+Woulda, coulda, shoulda: counterfactually-guided policy search
+.
+
+In 
+International Conference on Learning Representations
+,
+
+External Links: 
+Link
+
+Cited by: 
+§1
+,
+
+§1
+,
+
+§2.2
+,
+
+§4
+.
+
+[4]
+
+J. Chen, R. Wang, and J. Li
+ (2026)
+
+Counterfactual quotient models: learning what actions change, not what the world does
+.
+
+arXiv preprint arXiv:2608.22092
+.
+
+External Links: 
+Link
+
+Cited by: 
+§1
+,
+
+§2.2
+,
+
+§4
+.
+
+[5]
+
+Z. Ding, X. Lai, W. Chen, X. Zhang, and J. Chen
+ (2026)
+
+CausalVAE as a plug-in for world models: towards reliable counterfactual dynamics
+.
+
+arXiv preprint arXiv:2604.07712
+.
+
+External Links: 
+Link
+
+Cited by: 
+§1
+,
+
+§2.1
+,
+
+§4
+.
+
+[6]
+
+F. Feng, P. Lippe, and S. Magliacane
+ (2025)
+
+Learning interactive world model for object-centric reinforcement learning
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+Vol. 
+38
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§1
+,
+
+§2.1
+,
+
+§4
+.
+
+[7]
+
+S. Ferraro, P. Mazzaglia, T. Verbelen, and B. Dhoedt
+ (2023)
+
+FOCUS: object-centric world models for robotics manipulation
+.
+
+arXiv preprint arXiv:2307.02427
+.
+
+External Links: 
+Link
+
+Cited by: 
+§1
+,
+
+§2.1
+,
+
+§4
+.
+
+[8]
+
+M. Gasse, D. Grasset, G. Gaudron, and P. Oudeyer
+ (2023)
+
+Using confounded data in latent model-based reinforcement learning
+.
+
+Transactions on Machine Learning Research
+.
+
+External Links: 
+Link
+
+Cited by: 
+§1
+,
+
+§2.2
+,
+
+§3.2
+.
+
+[9]
+
+D. Hafner, J. Pasukonis, J. Ba, and T. Lillicrap
+ (2025)
+
+Mastering diverse control tasks through world models
+.
+
+Nature
+ 
+640
+, 
+pp. 647–653
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§1
+,
+
+§2.2
+,
+
+§4
+.
+
+[10]
+
+N. Hansen, H. Su, and X. Wang
+ (2024)
+
+TD-MPC2: scalable, robust world models for continuous control
+.
+
+In 
+International Conference on Learning Representations
+,
+
+External Links: 
+Link
+
+Cited by: 
+§1
+,
+
+§2.2
+,
+
+§4
+.
+
+[11]
+
+A. Lei, B. Sch”olkopf, and I. Posner
+ (2025)
+
+SPARTAN: a sparse transformer world model attending to what matters
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+Vol. 
+38
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§1
+,
+
+§2.1
+,
+
+§4
+.
+
+[12]
+
+M. Li, M. Yang, F. Liu, X. Chen, Z. Chen, and J. Wang
+ (2020)
+
+Causal world models by unsupervised deconfounding of physical dynamics
+.
+
+arXiv preprint arXiv:2012.14228
+.
+
+External Links: 
+2012.14228
+,
+
+Link
+
+Cited by: 
+§1
+,
+
+§2.1
+,
+
+§4
+.
+
+[13]
+
+C. Louizos, M. Welling, and D. P. Kingma
+ (2018)
+
+Learning sparse neural networks through 
+ regularization
+.
+
+In 
+International Conference on Learning Representations
+,
+
+External Links: 
+Link
+
+Cited by: 
+§3.4
+.
+
+[14]
+
+J. Pearl
+ (2009)
+
+Causality: models, reasoning, and inference
+.
+
+2 edition
+,  
+Cambridge University Press
+.
+
+Cited by: 
+§1
+,
+
+§1
+,
+
+§2.1
+,
+
+§3.5
+.
+
+[15]
+
+X. B. Peng, A. Kumar, G. Zhang, and S. Levine
+ (2019)
+
+Advantage-weighted regression: simple and scalable off-policy reinforcement learning
+.
+
+arXiv preprint arXiv:1910.00177
+.
+
+External Links: 
+Link
+
+Cited by: 
+§3.7
+,
+
+§4
+.
+
+[16]
+
+F. R”oder, J. Benad, M. Eppe, and P. Banerjee
+ (2025)
+
+Dynamics-aligned latent imagination in contextual world models for zero-shot generalization
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+Vol. 
+38
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§1
+,
+
+§2.1
+,
+
+§4
+.
+
+[17]
+
+B. Sch”olkopf, F. Locatello, S. Bauer, N. R. Ke, N. Kalchbrenner, A. Goyal, and Y. Bengio
+ (2021)
+
+Toward causal representation learning
+.
+
+Proceedings of the IEEE
+ 
+109
+ (
+5
+), 
+pp. 612–634
+.
+
+External Links: 
+Document
+
+Cited by: 
+§1
+,
+
+§2.1
+.
+
+[18]
+
+J. Tian and J. Pearl
+ (2000)
+
+Probabilities of causation: bounds and identification
+.
+
+Annals of Mathematics and Artificial Intelligence
+ 
+28
+, 
+pp. 287–313
+.
+
+Cited by: 
+§3.5
+.
+
+[19]
+
+Z. Wang, K. Wang, L. Zhao, P. Stone, and J. Bian
+ (2025)
+
+Dyn-O: building structured world models with object-centric representations
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+Vol. 
+38
+.
+
+External Links: 
+Document
+,
+
+Link
+
+Cited by: 
+§1
+,
+
+§2.1
+,
+
+§4
+.
+
+[20]
+
+X. Zheng, B. Aragam, P. K. Ravikumar, and E. P. Xing
+ (2018)
+
+DAGs with NO TEARS: continuous optimization for structure learning
+.
+
+In 
+Advances in Neural Information Processing Systems
+,
+
+Vol. 
+31
+.
+
+External Links: 
+Link
+
+Cited by: 
+§2.1
+.
+
+[21]
+
+H. Zou, H. Wang, R. Xu, B. Li, J. Pei, J. Ye, and P. Cui
+ (2023)
+
+Factual observation based heterogeneity learning for counterfactual prediction
+.
+
+In 
+Proceedings of the Second Conference on Causal Learning and Reasoning
+,
+
+Proceedings of Machine Learning Research
+, Vol. 
+213
+, 
+pp. 350–370
+.
+
+External Links: 
+Link
+
+Cited by: 
+§1
+,
+
+§2.2
+.
+
