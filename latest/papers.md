@@ -1,14 +1,14 @@
 # Paper candidates — 2026-11-27 (IST)
 
-Generated 2026-11-27 09:09 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
-Totals: 0 new topic matches · 0 other new cs.IR · 128 seen in earlier runs.
+Generated 2026-11-27 09:42 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Totals: 0 new topic matches · 0 other new cs.IR · 127 seen in earlier runs.
 Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
 
 ## New papers matching your topics (0), highest score first
 
 ## Other new cs.IR papers, title only (0)
 
-## Already listed on an earlier day, still inside the look-back window (128)
+## Already listed on an earlier day, still inside the look-back window (127)
 - Fetch, Read, Reuse: How AI Search Agents Bend the Web's Rules — https://arxiv.org/abs/2611.30546 (score 28)
 - Can Search Agents Correct Their Own Errors? Evaluating Retrieval, Evidence Delivery, and Answer Completion — https://arxiv.org/abs/2611.30243 (score 14)
 - Bug Bounty Programs in the AI Era: How Does Platform Anti-Spam Friction Affect Vendor Profitability? — https://arxiv.org/abs/2611.30615 (score 14)
@@ -58,7 +58,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Mitigating Overgeneralization in RND via Spectral Target Design — https://arxiv.org/abs/2611.33850 (score 7)
 - MINE: A Training-Free Defense against Indirect Prompt Injection via Mutual Information and Embedding Variance — https://arxiv.org/abs/2611.34188 (score 7)
 - SoK: When FL Clients Cannot Train -- Delegated Federated Learning for IoT — https://arxiv.org/abs/2611.34876 (score 7)
-- More Than Picturing the Future: Motion-Oriented Latent Reasoning for Generalizable Robot Manipulation — https://arxiv.org/abs/2611.29339 (score 6)
 - When Successful Collaboration Becomes an Attack Surface: Insider Memory Poisoning in Multi-Agent Systems — https://arxiv.org/abs/2611.31307 (score 6)
 - MAWAM: Joint Imagination for Collaborative Robot Manipulation with a Multi-Agent World Action Model — https://arxiv.org/abs/2611.29501 (score 6)
 - Relativising Integrity and Robustness: Prompt Injection and Partitioned Enclaves — https://arxiv.org/abs/2611.29802 (score 6)
