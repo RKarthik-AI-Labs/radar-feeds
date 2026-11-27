@@ -1,14 +1,14 @@
 # Paper candidates — 2026-11-27 (IST)
 
-Generated 2026-11-27 09:42 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
-Totals: 0 new topic matches · 0 other new cs.IR · 127 seen in earlier runs.
+Generated 2026-11-27 10:04 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Totals: 0 new topic matches · 0 other new cs.IR · 126 seen in earlier runs.
 Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
 
 ## New papers matching your topics (0), highest score first
 
 ## Other new cs.IR papers, title only (0)
 
-## Already listed on an earlier day, still inside the look-back window (127)
+## Already listed on an earlier day, still inside the look-back window (126)
 - Fetch, Read, Reuse: How AI Search Agents Bend the Web's Rules — https://arxiv.org/abs/2611.30546 (score 28)
 - Can Search Agents Correct Their Own Errors? Evaluating Retrieval, Evidence Delivery, and Answer Completion — https://arxiv.org/abs/2611.30243 (score 14)
 - Bug Bounty Programs in the AI Era: How Does Platform Anti-Spam Friction Affect Vendor Profitability? — https://arxiv.org/abs/2611.30615 (score 14)
@@ -33,7 +33,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Marketing-Bench: Evaluating Frontier Models and Agents on Real-World Marketing Capabilities — https://arxiv.org/abs/2611.32012 (score 9)
 - Welfare-Enhancing Mechanism Design for Agent Ecosystems — https://arxiv.org/abs/2611.33627 (score 9)
 - When Every Rollout Fails: Splicing Learner-Conditioned Options into Long-Horizon Agent RL — https://arxiv.org/abs/2611.34777 (score 9)
-- Automatic Construction of Persian E-Commerce Dialogue Datasets for Conversational Product Search — https://arxiv.org/abs/2611.29356 (score 8)
 - Weight Coding: Evolving Web-Scale Recommenders through Direct Weight Edits with LLM Agents — https://arxiv.org/abs/2611.29613 (score 8)
 - Reducing Authorship Attribution Risk in Student Texts Through Style-Conditioned Rewriting — https://arxiv.org/abs/2611.29642 (score 8)
 - Sánchez, Feijóo, or Abascal? Speaker Attribution and Ideological Congruence in LLM Personas Reading Posts on X of the Leaders of the Three Main Parties of the 29N General Election in Spain — https://arxiv.org/abs/2611.29765 (score 8)
