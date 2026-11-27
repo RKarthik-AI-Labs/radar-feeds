@@ -1,10 +1,10 @@
-# Paper candidates — 2026-11-26 (IST)
+# Paper candidates — 2026-11-27 (IST)
 
-Generated 2026-11-26 09:59 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
-Totals: 29 new topic matches · 9 other new cs.IR · 103 seen in earlier runs.
+Generated 2026-11-27 01:11 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Totals: 27 new topic matches · 9 other new cs.IR · 97 seen in earlier runs.
 Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
 
-## New papers matching your topics (29), highest score first
+## New papers matching your topics (27), highest score first
 
 ### Real Package, Wrong Controller: Static Auditing of Vendor--Protocol Mismatches in LLM-Generated PLC Code
 - arXiv 2611.33227v1 · v1 2026-11-24 08:53 UTC · cs.CR, cs.LG, cs.SE, eess.SY
@@ -150,15 +150,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 
 > Learning for dexterous manipulation is limited by the scarcity of high-quality demonstrations: retargeting from human video is imprecise, teleoperation gives no force feedback to the operator, and exoskeleton-based collection is hard to scale up. We present PyRUA-Dex, a framework that enables coding agents to develop dexterous manipulation through programmatic policy, without the need of demonstrations. The programmatic policy is developed in two stages: during exploration, multiple agents explore in parallel for task skills and ways to compose them, and a distilling agent condenses the successful attempts into a task library and one program. During refinement, this program is improved through randomized layouts for enhanced robustness and execution efficiency. In simulated environments, PyRUA-Dex achieves SOTA on Bench2Dex with a score of 72.9 and reaches 81.0% success on DexJoCo under full randomization, ahead of every trained policy on both benchmarks. In real world experiments on a bimanual platform with two 22-DoF hands, PyRUA-Dex learns to play piano, write calligraphy, and other tasks efficiently: learning a new piece from sheet music takes as little as 30 minutes. These results suggest that PyRUA-Dex is an effective framework for developing dexterous manipulation policies with coding agents in the absence of high quality dexterous manipulation demonstrations.
 
-### Simulator-as-Proxy World Model for Robot Manipulation
-- arXiv 2611.32786 · v1 2026-11-24 00:00 UTC · 
-- Authors: Tingting Liao, Mingjia Huo, Hao Li, Zhengzhong Liu et al.
-- Topics: Manipulation · score 6 · found via HF daily papers
-- Link: https://arxiv.org/abs/2611.32786
-- Full text: not stored: license is arxiv-default, which does not allow redistribution; read it on arXiv
-
-> Video world models for robots are increasingly conditioned on a simulated or rendered proxy of the scene, on the assumption that the video will show what the proxy shows. Testing this assumption requires a proxy whose state is explicit and can be perturbed. We present SimPWM (Simulator-as-Proxy World Model): given a calibrated camera, it represents, from the first frame alone, the robot by its 3D model and the objects the gripper may touch as 3D points; a rule-based simulator with no trained parameters moves them under the actions, and a video model renders the result. SimPWM returns the realistic video together with the simulated state. We then freeze the simulated objects while the arm moves as recorded and check whether the video still shows the object lifted. On DROID episodes from unseen setups, the answer differs for the arm and for the objects. With each of three base video models, the arm follows the proxy (robot IoU 0.75-0.78, against at most 0.69 for end-to-end models); rendering the robot alone already gives this. What the simulated objects add is the object state: against a robot-only proxy, they cut missed pick-ups from 54% to 38%, and the video follows them only with some base models: on rigid objects, freezing them lowers the lift rate of MiniMax-H3, fine-tuned on episodes whose simulation agrees with the real video, from 42% to 10%, but that of LTX-2.3, trained on the same episodes, only from 57% to 49%, as if it inferred the grasp from the arm motion; more than half of the remaining lifts of MiniMax-H3 are of cloth and rope, which the simulator carries rigidly. With any base model, the simulated state records what the simulation did; under perturbed actions, a video that disagrees with it reveals that the video ignores the simulated state.
-
 ### A comprehensive survey of deep face verification systems adversarial attacks and defense strategies
 - arXiv 2611.33231v1 · v1 2026-11-24 10:38 UTC · cs.CV, cs.CR
 - Authors: Sohair Kilany, Ahmed Mahfouz
@@ -204,15 +195,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Full text: not stored: license is arxiv-default, which does not allow redistribution; read it on arXiv
 
 > General-purpose multimodal foundation models enable robots to adapt during deployment from observations and execution feedback, without task-specific demonstrations or training. However, the robot retains what it learns only in the model's working context. Once the task ends, it loses this execution knowledge, such as how to carry a bowl between two grippers. On the next attempt at the task, the robot may take just as long and repeat the same mistakes. To avoid this repetition, robots must retain execution knowledge across attempts. Yet replaying past actions is insufficient, because their effects depend on the current conditions. Procedures that determine actions from the current scene address this, but when they meet conditions that earlier attempts did not cover, revising them requires the measured effects of earlier actions. We therefore propose SEEK, an agentic framework that retains both, enabling robots to improve across attempts while keeping the underlying model fixed. To adapt retained knowledge to the current scene, SEEK adopts a Self-Evolving Programmatic Policy (SEPP) that encodes manipulation as executable procedures and determines each action from current observations. As the robot executes these procedures, SEEK records the measured effects of its actions, including those from failed attempts, in a Persistent Action-Effect Bank (PAEB). Where a retained procedure applies, it acts without a model request; where it meets a condition it does not cover, this evidence guides its revision. On RoboDojo, knowledge retained over ten attempts raises SEEK's average task score from 27.0 to 54.4 and its success rate from 19.7% to 48.0% across all 42 tasks. On 34 of these tasks with GPT-6.2 Astra, SEEK reaches 80.1 after five attempts, against 49.6 for the same model acting directly, and uses 77.6% fewer model requests. https://zeyangguan.github.io/SEEK-Agentic-Robot-Manipulation/
-
-### SOLVE: Sparse, Ordered Keyposes Make LLM Agents Versatile and Efficient Robot Manipulator
-- arXiv 2611.34750 · v1 2026-11-25 00:00 UTC · 
-- Authors: Xiang Li, Hongyu Zhou, Ya-Li Li, Tao Li et al.
-- Topics: Manipulation · score 6 · found via HF daily papers
-- Link: https://arxiv.org/abs/2611.34750
-- Full text: not stored: license is arxiv-default, which does not allow redistribution; read it on arXiv
-
-> LLM agents have made remarkable progress in robot manipulation, yet they suffer from expensive inference, dense step-by-step control, and tool bottlenecks. We introduce SOLVE, a training-free, versatile and efficient agent policy: a multimodal LLM agent writes a sparse, ordered sequence of 6-DoF end-effector keyposes per call, observes the result, and writes the next, while a motion planner interpolates between them. The agent decides the number and spacing of keyposes for both fast long-range motion and fine-grained manipulation. This granularity matches the sparsity of teleoperated manipulation: most demonstrations in DROID can be compressed into a few keyposes instead of dense actions. SOLVE grounds keyposes with sparse depth queries answered by noisy sources, such as multi-view triangulation, stereo, or monocular depth, and copes with that noise itself. It also improves from execution feedback, reflecting on its own rollouts and distilling a few rules per task. SOLVE reaches state-of-the-art performance of 74.5% on RoboDojo and 84.5% on RoboLab, with only $1.7 per episode on average, 12x less than previous dense-control agent policies. On a real robot, the same agent achieves an 88% success rate (75 of 85 episodes) over 16 challenging zero-shot tasks. Our project page is at https://serenos.github.io/solve-website.
 
 ### WhatIf: Counterfactual World Models over Action-Grounded Causal Graphs for Robotic Manipulation
 - arXiv 2611.33745v1 · v1 2026-11-25 04:06 UTC · cs.AI
@@ -292,7 +274,7 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Grounding User Preferences in Shared Multimodal Concepts for Recommendation — https://arxiv.org/abs/2611.34436
 - Procedure Inference as Memory: Learning Recruiter Decision Procedures from OKF-Structured Episodes in Multi-Session Hiring Assistants — https://arxiv.org/abs/2611.34576
 
-## Already listed on an earlier day, still inside the look-back window (103)
+## Already listed on an earlier day, still inside the look-back window (97)
 - Fetch, Read, Reuse: How AI Search Agents Bend the Web's Rules — https://arxiv.org/abs/2611.30546 (score 28)
 - Benchmarking Web Agent Defenses Against Adaptive Visual Prompt Injection — https://arxiv.org/abs/2611.29268 (score 14)
 - Can Search Agents Correct Their Own Errors? Evaluating Retrieval, Evidence Delivery, and Answer Completion — https://arxiv.org/abs/2611.30243 (score 14)
@@ -313,8 +295,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Emerging International Best Practices for AI Model Specs — https://arxiv.org/abs/2611.32768 (score 10)
 - Can Cities Have Personalities? Introducing the SCD City Personality Assessment — https://arxiv.org/abs/2611.30733 (score 9)
 - Marketing-Bench: Evaluating Frontier Models and Agents on Real-World Marketing Capabilities — https://arxiv.org/abs/2611.32012 (score 9)
-- Don't Sleep, Keep Watch: Proactive Perception for Computer-Use Agents — https://arxiv.org/abs/2611.28947 (score 8)
-- Elicitation format changes zero-shot classification accuracy in a medical vision-language model: a two-center evaluation on colorectal histopathology — https://arxiv.org/abs/2611.28997 (score 8)
 - Automatic Construction of Persian E-Commerce Dialogue Datasets for Conversational Product Search — https://arxiv.org/abs/2611.29356 (score 8)
 - Weight Coding: Evolving Web-Scale Recommenders through Direct Weight Edits with LLM Agents — https://arxiv.org/abs/2611.29613 (score 8)
 - Reducing Authorship Attribution Risk in Student Texts Through Style-Conditioned Rewriting — https://arxiv.org/abs/2611.29642 (score 8)
@@ -359,7 +339,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - MRBench: Benchmarking Physical Necessity Reasoning in Heterogeneous Multi-Robot Manipulation — https://arxiv.org/abs/2611.32803 (score 6)
 - Orthogonally Mixed Sign Coding with Progressive Residual Refinement for Transformer Weight Compression — https://arxiv.org/abs/2611.31089 (score 5)
 - Delegent: A Multi-Agent Harness That Reduces Cost without Sacrificing Performance — https://arxiv.org/abs/2611.33098 (score 5)
-- ChatGPT Can't Sell (And That's Probably a Good Thing): Buyer-Aligned AI Advice, the Sales-Representative Gap, and Evidence from Commercial Conversations — https://arxiv.org/abs/2611.28946 (score 4)
 - Where Do Fact-Checking Errors Arise? Separating Retrieval, Search Control and Judgement in Evidence-Grounded Verification — https://arxiv.org/abs/2611.29697 (score 4)
 - Towards Realistic Evaluation of Uncertainty Quantification for LLM-Based Recommender Systems — https://arxiv.org/abs/2611.33036 (score 4)
 - DataRecycle: Trustworthy Distillation of Structured Data from Scattered Web Evidence — https://arxiv.org/abs/2611.29206 (score 3)
