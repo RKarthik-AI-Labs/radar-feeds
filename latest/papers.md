@@ -1,14 +1,14 @@
-# Paper candidates — 2026-11-27 (IST)
+# Paper candidates — 2026-11-28 (IST)
 
-Generated 2026-11-27 10:04 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
-Totals: 0 new topic matches · 0 other new cs.IR · 126 seen in earlier runs.
+Generated 2026-11-28 01:11 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Totals: 0 new topic matches · 0 other new cs.IR · 112 seen in earlier runs.
 Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
 
 ## New papers matching your topics (0), highest score first
 
 ## Other new cs.IR papers, title only (0)
 
-## Already listed on an earlier day, still inside the look-back window (126)
+## Already listed on an earlier day, still inside the look-back window (112)
 - Fetch, Read, Reuse: How AI Search Agents Bend the Web's Rules — https://arxiv.org/abs/2611.30546 (score 28)
 - Can Search Agents Correct Their Own Errors? Evaluating Retrieval, Evidence Delivery, and Answer Completion — https://arxiv.org/abs/2611.30243 (score 14)
 - Bug Bounty Programs in the AI Era: How Does Platform Anti-Spam Friction Affect Vendor Profitability? — https://arxiv.org/abs/2611.30615 (score 14)
@@ -19,8 +19,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - SOARS: System One Assisted Reranking for Agentic Search — https://arxiv.org/abs/2611.32917 (score 14)
 - Brand Recall and Category Accuracy in Language Models: An Audit of 1,000 B2B SaaS Brands — https://arxiv.org/abs/2611.33322 (score 14)
 - Ask Again: Answer-List Instability in Generative Engines — https://arxiv.org/abs/2611.30819 (score 13)
-- Adaptation or Poisoning? Security Risks of Conversational Test-Time Learning in Large Language Models — https://arxiv.org/abs/2611.29532 (score 11)
-- CompareDR: Benchmarking Deep Research Reports from Individual Quality to Comparative Merit — https://arxiv.org/abs/2611.29549 (score 10)
 - SHAKTI: Evidence-Grounded Conversational AI for Nutrition and Health — https://arxiv.org/abs/2611.29988 (score 10)
 - Disclosure Bias in AI Reviewers — https://arxiv.org/abs/2611.30410 (score 10)
 - CocoonBench: Can Multilingual Search Agents Escape Language Information Cocoons? — https://arxiv.org/abs/2611.30727 (score 10)
@@ -33,10 +31,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Marketing-Bench: Evaluating Frontier Models and Agents on Real-World Marketing Capabilities — https://arxiv.org/abs/2611.32012 (score 9)
 - Welfare-Enhancing Mechanism Design for Agent Ecosystems — https://arxiv.org/abs/2611.33627 (score 9)
 - When Every Rollout Fails: Splicing Learner-Conditioned Options into Long-Horizon Agent RL — https://arxiv.org/abs/2611.34777 (score 9)
-- Weight Coding: Evolving Web-Scale Recommenders through Direct Weight Edits with LLM Agents — https://arxiv.org/abs/2611.29613 (score 8)
-- Reducing Authorship Attribution Risk in Student Texts Through Style-Conditioned Rewriting — https://arxiv.org/abs/2611.29642 (score 8)
-- Sánchez, Feijóo, or Abascal? Speaker Attribution and Ideological Congruence in LLM Personas Reading Posts on X of the Leaders of the Three Main Parties of the 29N General Election in Spain — https://arxiv.org/abs/2611.29765 (score 8)
-- MobileGrail: Learning Compact Guardrails for On-Device deployable Mobile GUI Agent Safety — https://arxiv.org/abs/2611.29847 (score 8)
 - WeMM-Ecom: Advancing Multimodal Content Understanding for WeChat E-Commerce — https://arxiv.org/abs/2611.30662 (score 8)
 - Self-Evolving Evaluation Environments for Computer-Use Agents — https://arxiv.org/abs/2611.30962 (score 8)
 - MedUIGym: Evaluating and Training GUI Agents for Clinical Workflows — https://arxiv.org/abs/2611.30983 (score 8)
@@ -57,9 +51,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Mitigating Overgeneralization in RND via Spectral Target Design — https://arxiv.org/abs/2611.33850 (score 7)
 - MINE: A Training-Free Defense against Indirect Prompt Injection via Mutual Information and Embedding Variance — https://arxiv.org/abs/2611.34188 (score 7)
 - SoK: When FL Clients Cannot Train -- Delegated Federated Learning for IoT — https://arxiv.org/abs/2611.34876 (score 7)
-- When Successful Collaboration Becomes an Attack Surface: Insider Memory Poisoning in Multi-Agent Systems — https://arxiv.org/abs/2611.31307 (score 6)
-- MAWAM: Joint Imagination for Collaborative Robot Manipulation with a Multi-Agent World Action Model — https://arxiv.org/abs/2611.29501 (score 6)
-- Relativising Integrity and Robustness: Prompt Injection and Partitioned Enclaves — https://arxiv.org/abs/2611.29802 (score 6)
 - Conartist: Adaptive Agentic Red-Teaming of Computer-Using Agents against Multi-Step Prompt Injection — https://arxiv.org/abs/2611.29977 (score 6)
 - Differential Proteomics to Symbolic Rules: An Audit of SHAP Guidance in Lung Adenocarcinoma — https://arxiv.org/abs/2611.29989 (score 6)
 - Spiking World-Action Models for Robotic Manipulation — https://arxiv.org/abs/2611.30041 (score 6)
@@ -72,7 +63,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - ContextLure: Exploiting Benign Conversation History for Indirect Prompt Injection — https://arxiv.org/abs/2611.31424 (score 6)
 - Frequency-Conditioned Privacy Auditing of Fine-Tuned Language Models — https://arxiv.org/abs/2611.31581 (score 6)
 - FoveaWAM: Role-Aware 4D World-Action Modeling for Dynamic Manipulation — https://arxiv.org/abs/2611.31705 (score 6)
-- PyRUA-Dex: Learning Programmatic Policies for Dexterous Bimanual Manipulation with Coding Agents — https://arxiv.org/abs/2611.33144 (score 6)
 - EffectWAM: Learning Action-Grounded Effects for Robot Manipulation — https://arxiv.org/abs/2611.32053 (score 6)
 - Boundary-Aware Policy Learning for Agent-Orchestrated Robot Manipulation — https://arxiv.org/abs/2611.32238 (score 6)
 - Sparse Poison, Strong Hijack: Efficient Trajectory-Level Backdoors in Vision-Language-Action Models with Only 1\% Poisoning — https://arxiv.org/abs/2611.32304 (score 6)
@@ -87,7 +77,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - RegionAlign: Manipulating Parameter Layouts for Localized Fault Injection on LLMs and VLMs — https://arxiv.org/abs/2611.33370 (score 6)
 - Poisoning Self-Evolving Security Policies in LLM Agents — https://arxiv.org/abs/2611.33385 (score 6)
 - RoboARC: Physical Puzzles for Robotic Manipulation under Spatial Constraints — https://arxiv.org/abs/2611.33390 (score 6)
-- SEEK: Self-Evolution through Execution Knowledge for Agentic Robot Manipulation — https://arxiv.org/abs/2611.33915 (score 6)
 - WhatIf: Counterfactual World Models over Action-Grounded Causal Graphs for Robotic Manipulation — https://arxiv.org/abs/2611.33745 (score 6)
 - Aegis-VLA: Reliability-Gated Action Refinement via a Trajectory World Model for Dynamic Object Manipulation — https://arxiv.org/abs/2611.33993 (score 6)
 - Hijacking 3D Generation: Targeted Adversarial Attacks against Image-to-3D Models via Prefix Trajectory Alignment — https://arxiv.org/abs/2611.34075 (score 6)
@@ -95,7 +84,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - VisualMontage: Manipulating the Beliefs of Vision-Language Agents with Authentic Image Sequences — https://arxiv.org/abs/2611.34603 (score 6)
 - Orthogonally Mixed Sign Coding with Progressive Residual Refinement for Transformer Weight Compression — https://arxiv.org/abs/2611.31089 (score 5)
 - Delegent: A Multi-Agent Harness That Reduces Cost without Sacrificing Performance — https://arxiv.org/abs/2611.33098 (score 5)
-- Where Do Fact-Checking Errors Arise? Separating Retrieval, Search Control and Judgement in Evidence-Grounded Verification — https://arxiv.org/abs/2611.29697 (score 4)
 - Towards Realistic Evaluation of Uncertainty Quantification for LLM-Based Recommender Systems — https://arxiv.org/abs/2611.33036 (score 4)
 - SuSi-RAG: A Hybrid Graph RAG for Equipment Maintenance — https://arxiv.org/abs/2611.30588 (score 2)
 - Unjamming Deferrals: Supporting Students Through JAMN Bot, a Mobile RAG-Grounded Policy Assistant — https://arxiv.org/abs/2611.32266 (score 2)
