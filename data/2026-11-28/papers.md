@@ -1,16 +1,15 @@
 # Paper candidates — 2026-11-28 (IST)
 
-Generated 2026-11-28 01:11 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
-Totals: 0 new topic matches · 0 other new cs.IR · 112 seen in earlier runs.
+Generated 2026-11-28 08:21 UTC. NEW = first seen by the fetcher in the last 18 h (both morning runs).
+Totals: 0 new topic matches · 0 other new cs.IR · 100 seen in earlier runs.
 Abstracts are copied from arXiv. Full text (where saved) is in the repo at the path shown.
 
 ## New papers matching your topics (0), highest score first
 
 ## Other new cs.IR papers, title only (0)
 
-## Already listed on an earlier day, still inside the look-back window (112)
+## Already listed on an earlier day, still inside the look-back window (100)
 - Fetch, Read, Reuse: How AI Search Agents Bend the Web's Rules — https://arxiv.org/abs/2611.30546 (score 28)
-- Can Search Agents Correct Their Own Errors? Evaluating Retrieval, Evidence Delivery, and Answer Completion — https://arxiv.org/abs/2611.30243 (score 14)
 - Bug Bounty Programs in the AI Era: How Does Platform Anti-Spam Friction Affect Vendor Profitability? — https://arxiv.org/abs/2611.30615 (score 14)
 - Leakage-Safe Auditing of Attribution-Driven Data Curation in Medical Imaging — https://arxiv.org/abs/2611.31096 (score 14)
 - CO-GRAFT: Attributing Reinforcement Learning Gains in Search Agents via Role-Level Policy Grafting — https://arxiv.org/abs/2611.31185 (score 14)
@@ -19,7 +18,6 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - SOARS: System One Assisted Reranking for Agentic Search — https://arxiv.org/abs/2611.32917 (score 14)
 - Brand Recall and Category Accuracy in Language Models: An Audit of 1,000 B2B SaaS Brands — https://arxiv.org/abs/2611.33322 (score 14)
 - Ask Again: Answer-List Instability in Generative Engines — https://arxiv.org/abs/2611.30819 (score 13)
-- SHAKTI: Evidence-Grounded Conversational AI for Nutrition and Health — https://arxiv.org/abs/2611.29988 (score 10)
 - Disclosure Bias in AI Reviewers — https://arxiv.org/abs/2611.30410 (score 10)
 - CocoonBench: Can Multilingual Search Agents Escape Language Information Cocoons? — https://arxiv.org/abs/2611.30727 (score 10)
 - ComputeWise: Measuring and Fixing GPU Waste by AI Research Agents — https://arxiv.org/abs/2611.31027 (score 10)
@@ -45,15 +43,11 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - OneQuery: Unified Sequence-to-Structure Generation for Multilingual E-commerce Query Understanding — https://arxiv.org/abs/2611.33653 (score 8)
 - Is Sara Omar the true author of Dødevaskeren (The Dead Washer)? Authorship attribution in Danish literature — https://arxiv.org/abs/2611.34131 (score 8)
 - EgoUseBench: Benchmarking Computer-Use Agents under Evolving First-Person Contexts — https://arxiv.org/abs/2611.34466 (score 8)
-- When Learned IDS Model Selection Collapses to a Static Choice: A Measurement Study at the Edge — https://arxiv.org/abs/2611.29968 (score 7)
 - LLM Agent Authorization Across Context Compaction — https://arxiv.org/abs/2611.32194 (score 7)
 - Anti-AI in the Wild: From Toxic Discourse to Action — https://arxiv.org/abs/2611.33254 (score 7)
 - Mitigating Overgeneralization in RND via Spectral Target Design — https://arxiv.org/abs/2611.33850 (score 7)
 - MINE: A Training-Free Defense against Indirect Prompt Injection via Mutual Information and Embedding Variance — https://arxiv.org/abs/2611.34188 (score 7)
 - SoK: When FL Clients Cannot Train -- Delegated Federated Learning for IoT — https://arxiv.org/abs/2611.34876 (score 7)
-- Conartist: Adaptive Agentic Red-Teaming of Computer-Using Agents against Multi-Step Prompt Injection — https://arxiv.org/abs/2611.29977 (score 6)
-- Differential Proteomics to Symbolic Rules: An Audit of SHAP Guidance in Lung Adenocarcinoma — https://arxiv.org/abs/2611.29989 (score 6)
-- Spiking World-Action Models for Robotic Manipulation — https://arxiv.org/abs/2611.30041 (score 6)
 - A statistical measure of trust in generative AI — https://arxiv.org/abs/2611.30286 (score 6)
 - Automated Call for Action: RAG-Based Environmental Law Enforcement Screening System — https://arxiv.org/abs/2611.30423 (score 6)
 - JEPA-ICL: Progress-Aligned Latent Plans for In-Context Robotic Manipulation — https://arxiv.org/abs/2611.30516 (score 6)
@@ -89,4 +83,3 @@ Abstracts are copied from arXiv. Full text (where saved) is in the repo at the p
 - Unjamming Deferrals: Supporting Students Through JAMN Bot, a Mobile RAG-Grounded Policy Assistant — https://arxiv.org/abs/2611.32266 (score 2)
 - CA-RAG: Constraint-Aligned Retrieval for Structurally Faithful Long-Form Generation — https://arxiv.org/abs/2611.33497 (score 2)
 - Privacy-Aware Adaptive Client Selection for Federated Retrieval-Augmented Generation — https://arxiv.org/abs/2611.33890 (score 2)
-- Structure-Exploiting Hierarchical Retrieval for Long Narrative Documents: A Precision-Oriented Alternative to Learned Abstraction Trees — https://arxiv.org/abs/2611.29966 (score 1)
